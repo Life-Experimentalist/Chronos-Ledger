@@ -72,3 +72,4 @@ backend/uploads/
 certs/*.pem
 certs/*.key
 certs/*.crt
+ui prommpts.md
