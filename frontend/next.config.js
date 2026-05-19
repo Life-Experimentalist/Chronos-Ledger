@@ -40,10 +40,14 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   },
 });
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
+
 module.exports = withPWA({
   reactStrictMode: true,
   output: 'export',
   trailingSlash: true,
+  basePath,
+  assetPrefix: basePath,
   images: { unoptimized: true },
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api/v1',
