@@ -39,6 +39,10 @@ frontend/public/fallback-*.js
 # Build artifacts
 frontend/public/icons/*.png
 
+# Backend
+backend/.ruff_cache
+backend/.venv
+
 # Docker
 .dockerignore
 

@@ -1,18 +1,17 @@
 <div align="center">
-  <img src="assets/logo.svg" alt="Chronos Ledger" width="320" height="80" />
-  <br/><br/>
+  <div style=" display: flex; align-items: center; justify-content: center; gap: 1rem; margin-bottom: 1rem;">
+    <img src="assets/Icon.png" alt="Chronos Ledger" width="120" height="120" />
+  <h1>Chronos Ledger</h1>
+  </div>
+
+  ----
 
   **Campus Schedule & Attendance Management — self-hosted, offline-first, production-ready.**
 
-  <br/>
 
-  [![CI](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml)
-  [![Release](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/release.yml/badge.svg)](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/release.yml)
-  [![License](https://img.shields.io/badge/License-Apache_2.0-14b8a6.svg)](LICENSE)
-  [![Docker — Backend](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-backend/size?label=backend)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-backend)
-  [![Docker — Web](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-web/size?label=web)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-web)
-  [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-10b981.svg)](https://github.com/Life-Experimentalist/chronos-ledger/pulls)
-  [![Views](https://cflair-counter.pages.dev/api/views/chronos-ledger-landing/badge)](https://github.com/Life-Experimentalist/chronos-ledger)
+  [![CI](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml)  [![Release](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/release.yml/badge.svg)](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/release.yml)  [![License](https://img.shields.io/badge/License-Apache_2.0-14b8a6.svg)](LICENSE)
+  [![Docker — Backend](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-backend/size?label=backend)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-backend)  [![Docker — Web](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-web/size?label=web)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-web)
+  [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-10b981.svg)](https://github.com/Life-Experimentalist/chronos-ledger/pulls)  [![Views](https://counter.vkrishna04.me/api/views/chronos-ledger-landing/badge)](https://github.com/Life-Experimentalist/chronos-ledger)
 
 </div>
 
@@ -28,15 +27,15 @@ Universities and colleges track attendance on paper, manage timetables in Excel,
 
 ## Key Metrics
 
-| Metric | Value |
-|---|---|
-| REST API endpoints | 30+ |
-| Role-specific dashboards | 4 |
-| Database tables | 9 |
-| Offline capability | 100% (read + queue writes) |
-| Setup time | < 5 minutes |
-| Runtime dependencies | Docker + Docker Compose only |
-| License | Apache 2.0 |
+| Metric                   | Value                        |
+| ------------------------ | ---------------------------- |
+| REST API endpoints       | 30+                          |
+| Role-specific dashboards | 4                            |
+| Database tables          | 9                            |
+| Offline capability       | 100% (read + queue writes)   |
+| Setup time               | < 5 minutes                  |
+| Runtime dependencies     | Docker + Docker Compose only |
+| License                  | Apache 2.0                   |
 
 ---
 
@@ -124,32 +123,32 @@ Drop a student-centric CSV on the Admin dashboard. One upload creates/updates us
 
 ## Role Dashboards
 
-| Role | Path | Core capabilities |
-|---|---|---|
-| **Super Admin** | `/admin/dashboard` | CSV import, cycle management, proxy assignment, user provisioning |
-| **Dept Admin** | `/admin/dashboard` | Absence approvals, ledger overrides for own department |
-| **Faculty** | `/faculty/dashboard` | Availability switcher, attendance matrix, absence requests, guest desk |
-| **Student** | `/student/dashboard` | Live timeline, geofenced self-mark, faculty locator, offline queue |
-| **Guest** | `/guest/kiosk` | No login — check-in form, real-time faculty notification |
+| Role            | Path                 | Core capabilities                                                      |
+| --------------- | -------------------- | ---------------------------------------------------------------------- |
+| **Super Admin** | `/admin/dashboard`   | CSV import, cycle management, proxy assignment, user provisioning      |
+| **Dept Admin**  | `/admin/dashboard`   | Absence approvals, ledger overrides for own department                 |
+| **Faculty**     | `/faculty/dashboard` | Availability switcher, attendance matrix, absence requests, guest desk |
+| **Student**     | `/student/dashboard` | Live timeline, geofenced self-mark, faculty locator, offline queue     |
+| **Guest**       | `/guest/kiosk`       | No login — check-in form, real-time faculty notification               |
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Backend | Python 3.11 · FastAPI 0.115 · SQLAlchemy 2 · Alembic · APScheduler |
-| Auth | PyJWT 2.10 · bcrypt 4.2 (no CVE-affected packages) |
-| Database | PostgreSQL 17 |
-| Cache / PubSub | Redis 7.4 |
-| Frontend | Next.js 14 App Router · TypeScript · Tailwind CSS |
-| State | Zustand · React Hook Form · Zod |
-| PWA | @ducanh2912/next-pwa (Workbox) · IndexedDB (idb) · Web Push (VAPID) |
-| Reverse proxy | Nginx 1.27 |
-| Packaging | uv (Python) · npm (Node.js) |
-| Container | Docker 24 · Docker Compose 2.20 |
-| CI/CD | GitHub Actions · GHCR |
-| Releases | Release Please (semver, CHANGELOG) |
+| Layer          | Technology                                                          |
+| -------------- | ------------------------------------------------------------------- |
+| Backend        | Python 3.11 · FastAPI 0.115 · SQLAlchemy 2 · Alembic · APScheduler  |
+| Auth           | PyJWT 2.10 · bcrypt 4.2 (no CVE-affected packages)                  |
+| Database       | PostgreSQL 17                                                       |
+| Cache / PubSub | Redis 7.4                                                           |
+| Frontend       | Next.js 14 App Router · TypeScript · Tailwind CSS                   |
+| State          | Zustand · React Hook Form · Zod                                     |
+| PWA            | @ducanh2912/next-pwa (Workbox) · IndexedDB (idb) · Web Push (VAPID) |
+| Reverse proxy  | Nginx 1.27                                                          |
+| Packaging      | uv (Python) · npm (Node.js)                                         |
+| Container      | Docker 24 · Docker Compose 2.20                                     |
+| CI/CD          | GitHub Actions · GHCR                                               |
+| Releases       | Release Please (semver, CHANGELOG)                                  |
 
 ---
 
@@ -262,18 +261,18 @@ GHCR images:
 
 ## Environment Reference
 
-| Variable | Required | Description |
-|---|---|---|
-| `JWT_SECRET_SIGNING_KEY` | **yes** | 64-char hex — `openssl rand -hex 32` |
-| `DB_PASSWORD` | **yes** | PostgreSQL password |
-| `VAPID_PUBLIC_KEY` | recommended | Web Push — `npx web-push generate-vapid-keys` |
-| `VAPID_PRIVATE_KEY` | recommended | Web Push |
-| `VAPID_CONTACT_EMAIL` | recommended | Admin contact for push service |
-| `NEXT_PUBLIC_API_URL` | dev only | Baked in at build time; defaults to `/api/v1` in GHCR image |
-| `NEXT_PUBLIC_WS_URL` | dev only | Defaults to `/ws` in GHCR image |
-| `APP_CORS_ORIGINS` | prod | Comma-separated allowed origins |
-| `GHCR_OWNER` | prod only | GitHub org/username for GHCR image pull |
-| `VERSION` | prod only | Image tag to deploy (default: `latest`) |
+| Variable                 | Required    | Description                                                 |
+| ------------------------ | ----------- | ----------------------------------------------------------- |
+| `JWT_SECRET_SIGNING_KEY` | **yes**     | 64-char hex — `openssl rand -hex 32`                        |
+| `DB_PASSWORD`            | **yes**     | PostgreSQL password                                         |
+| `VAPID_PUBLIC_KEY`       | recommended | Web Push — `npx web-push generate-vapid-keys`               |
+| `VAPID_PRIVATE_KEY`      | recommended | Web Push                                                    |
+| `VAPID_CONTACT_EMAIL`    | recommended | Admin contact for push service                              |
+| `NEXT_PUBLIC_API_URL`    | dev only    | Baked in at build time; defaults to `/api/v1` in GHCR image |
+| `NEXT_PUBLIC_WS_URL`     | dev only    | Defaults to `/ws` in GHCR image                             |
+| `APP_CORS_ORIGINS`       | prod        | Comma-separated allowed origins                             |
+| `GHCR_OWNER`             | prod only   | GitHub org/username for GHCR image pull                     |
+| `VERSION`                | prod only   | Image tag to deploy (default: `latest`)                     |
 
 See [`.env.example`](.env.example) for the full template.
 
@@ -283,10 +282,10 @@ See [`.env.example`](.env.example) for the full template.
 
 The Alembic seed migration creates one super-admin:
 
-| Field | Value |
-|---|---|
-| Email | `admin@college.internal` |
-| Password | `ChronosAdmin2026!` |
+| Field    | Value                    |
+| -------- | ------------------------ |
+| Email    | `admin@college.internal` |
+| Password | `ChronosAdmin2026!`      |
 
 **Change this password immediately** via Admin Portal → Profile → Change Password.
 
@@ -294,19 +293,19 @@ The Alembic seed migration creates one super-admin:
 
 ## Documentation
 
-| Document | Description |
-|---|---|
-| [`docs/openapi.yaml`](docs/openapi.yaml) | OpenAPI 3.1 contract — all endpoints, schemas, enums |
+| Document                                       | Description                                                            |
+| ---------------------------------------------- | ---------------------------------------------------------------------- |
+| [`docs/openapi.yaml`](docs/openapi.yaml)       | OpenAPI 3.1 contract — all endpoints, schemas, enums                   |
 | [`docs/architecture.md`](docs/architecture.md) | System topology, module deps, location resolution, WebSocket lifecycle |
-| [`docs/data-model.md`](docs/data-model.md) | ERD for all 9 database tables |
-| [`docs/flows.md`](docs/flows.md) | Sequence diagrams: attendance, RSVP, guest handshake, ledger cron |
-| [`docs/api.md`](docs/api.md) | Human-readable API reference with examples |
-| [`docs/deployment.md`](docs/deployment.md) | Deployment guide, cycle rollover, TLS, scaling |
-| [`docs/faq.md`](docs/faq.md) | FAQ & troubleshooting — setup, auth, CSV import, geofencing, CI/CD |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Development setup, commit conventions, PR checklist |
-| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Community standards and enforcement |
-| [`SECURITY.md`](SECURITY.md) | Vulnerability reporting and disclosure policy |
-| [`CHANGELOG.md`](CHANGELOG.md) | Release history (managed by Release Please) |
+| [`docs/data-model.md`](docs/data-model.md)     | ERD for all 9 database tables                                          |
+| [`docs/flows.md`](docs/flows.md)               | Sequence diagrams: attendance, RSVP, guest handshake, ledger cron      |
+| [`docs/api.md`](docs/api.md)                   | Human-readable API reference with examples                             |
+| [`docs/deployment.md`](docs/deployment.md)     | Deployment guide, cycle rollover, TLS, scaling                         |
+| [`docs/faq.md`](docs/faq.md)                   | FAQ & troubleshooting — setup, auth, CSV import, geofencing, CI/CD     |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md)           | Development setup, commit conventions, PR checklist                    |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)     | Community standards and enforcement                                    |
+| [`SECURITY.md`](SECURITY.md)                   | Vulnerability reporting and disclosure policy                          |
+| [`CHANGELOG.md`](CHANGELOG.md)                 | Release history (managed by Release Please)                            |
 
 ---
 
@@ -316,10 +315,10 @@ Chronos Ledger collects **anonymous, aggregate view counts** via [CFlair-Counter
 
 ### What is tracked
 
-| Event | Project key |
-|---|---|
-| Landing page visits | `chronos-ledger-landing` |
-| Admin dashboard logins | `chronos-ledger-app` |
+| Event                  | Project key              |
+| ---------------------- | ------------------------ |
+| Landing page visits    | `chronos-ledger-landing` |
+| Admin dashboard logins | `chronos-ledger-app`     |
 
 ### Opt out
 
