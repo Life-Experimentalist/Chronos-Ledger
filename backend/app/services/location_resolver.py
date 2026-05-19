@@ -36,9 +36,16 @@ def determine_faculty_current_state(faculty_id: str, db: Session, redis_cache: R
         if ledger.operational_state == DynamicState.ON_LEAVE:
             return {"resolved_location": "OFF_CAMPUS", "status": "On Approved Leave"}
         if ledger.operational_state == DynamicState.PROXY_SUBSTITUTE:
-            return {"resolved_location": ledger.target_room_identifier, "status": f"Substituting in Room {ledger.target_room_identifier}"}
+            return {
+                "resolved_location": ledger.target_room_identifier,
+                "status": f"Substituting in Room {ledger.target_room_identifier}",
+            }
         if ledger.operational_state == DynamicState.SCHEDULED:
-            offering = db.query(CourseOffering).filter(CourseOffering.id == ledger.course_offering_id).first()
+            offering = (
+                db.query(CourseOffering)
+                .filter(CourseOffering.id == ledger.course_offering_id)
+                .first()
+            )
             return {
                 "resolved_location": ledger.target_room_identifier,
                 "status": f"Teaching {offering.course_code if offering else 'class'} in Room {ledger.target_room_identifier}",

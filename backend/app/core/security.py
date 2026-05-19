@@ -27,14 +27,18 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(subject: str, extra: dict[str, Any] | None = None) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_access_token_expire_minutes)
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.jwt_access_token_expire_minutes
+    )
     payload = {"sub": subject, "exp": expire, **(extra or {})}
     return jwt.encode(payload, settings.jwt_secret_signing_key, algorithm=settings.jwt_algorithm)
 
 
 def decode_token(token: str) -> dict[str, Any] | None:
     try:
-        return jwt.decode(token, settings.jwt_secret_signing_key, algorithms=[settings.jwt_algorithm])
+        return jwt.decode(
+            token, settings.jwt_secret_signing_key, algorithms=[settings.jwt_algorithm]
+        )
     except InvalidTokenError:
         return None
 
@@ -61,6 +65,7 @@ def get_current_user(
     db: Session = Depends(get_db),
 ):
     from app.models.db import User
+
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
@@ -70,6 +75,9 @@ def get_current_user(
 def require_roles(*roles: str):
     def checker(current_user=Depends(get_current_user)):
         if current_user.role_type.value not in roles:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+            )
         return current_user
+
     return checker

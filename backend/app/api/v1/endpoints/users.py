@@ -84,7 +84,10 @@ def get_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.id != user_id and current_user.role_type.value not in ("SUPER_ADMIN", "DEPT_ADMIN"):
+    if current_user.id != user_id and current_user.role_type.value not in (
+        "SUPER_ADMIN",
+        "DEPT_ADMIN",
+    ):
         raise HTTPException(status_code=403, detail="Access denied")
     user = db.query(User).filter(User.id == user_id).first()
     if not user:

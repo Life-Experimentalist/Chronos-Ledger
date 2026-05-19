@@ -6,14 +6,28 @@ import pandas as pd
 from sqlalchemy.orm import Session
 from typing import Any
 
-from app.models.db import User, CourseOffering, CourseRegistration, StructuralMasterSlot, InstitutionalRole
+from app.models.db import (
+    User,
+    CourseOffering,
+    CourseRegistration,
+    StructuralMasterSlot,
+    InstitutionalRole,
+)
 from app.core.security import hash_password
 
 
 REQUIRED_COLUMNS = {
-    "student_id", "student_name", "student_email", "subject_code",
-    "subject_title", "department", "day_of_week_index",
-    "time_window_start", "time_window_end", "teacher_id", "room",
+    "student_id",
+    "student_name",
+    "student_email",
+    "subject_code",
+    "subject_title",
+    "department",
+    "day_of_week_index",
+    "time_window_start",
+    "time_window_end",
+    "teacher_id",
+    "room",
 }
 
 
@@ -64,7 +78,10 @@ class ChronosIngestionEngine:
                 # 2. Upsert course offering
                 offering = (
                     self.db.query(CourseOffering)
-                    .filter(CourseOffering.course_code == str(row["subject_code"]), CourseOffering.cycle_id == cycle_id)
+                    .filter(
+                        CourseOffering.course_code == str(row["subject_code"]),
+                        CourseOffering.cycle_id == cycle_id,
+                    )
                     .first()
                 )
                 if not offering:
@@ -87,7 +104,11 @@ class ChronosIngestionEngine:
                     .first()
                 )
                 if not reg:
-                    self.db.add(CourseRegistration(course_offering_id=offering.id, student_id=str(row["student_id"])))
+                    self.db.add(
+                        CourseRegistration(
+                            course_offering_id=offering.id, student_id=str(row["student_id"])
+                        )
+                    )
 
                 # 4. Upsert master slot (deduplicate by course + day + start time)
                 t_start = _parse_time(row["time_window_start"])
@@ -103,14 +124,16 @@ class ChronosIngestionEngine:
                     .first()
                 )
                 if not slot:
-                    self.db.add(StructuralMasterSlot(
-                        day_of_week_index=int(row["day_of_week_index"]),
-                        time_window_start=t_start,
-                        time_window_end=t_end,
-                        course_offering_id=offering.id,
-                        primary_instructor_id=str(row["teacher_id"]),
-                        target_room_identifier=str(row["room"]),
-                    ))
+                    self.db.add(
+                        StructuralMasterSlot(
+                            day_of_week_index=int(row["day_of_week_index"]),
+                            time_window_start=t_start,
+                            time_window_end=t_end,
+                            course_offering_id=offering.id,
+                            primary_instructor_id=str(row["teacher_id"]),
+                            target_room_identifier=str(row["room"]),
+                        )
+                    )
 
                 records_processed += 1
 

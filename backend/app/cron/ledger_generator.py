@@ -4,8 +4,13 @@
 import datetime
 from sqlalchemy.orm import Session
 from app.models.db import (
-    StructuralMasterSlot, CourseOffering, AcademicCycle,
-    DailyLedger, ReverseRsvpLog, LogVerificationState, DynamicState,
+    StructuralMasterSlot,
+    CourseOffering,
+    AcademicCycle,
+    DailyLedger,
+    ReverseRsvpLog,
+    LogVerificationState,
+    DynamicState,
 )
 
 

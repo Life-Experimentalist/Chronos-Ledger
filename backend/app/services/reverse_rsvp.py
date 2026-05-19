@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session
 from app.models.db import User, ReverseRsvpLog, DailyLedger, LogVerificationState, DynamicState
 
 
-def route_absence_declaration(submitting_user: str, absence_date: str, reasoning: str, db: Session) -> dict:
+def route_absence_declaration(
+    submitting_user: str, absence_date: str, reasoning: str, db: Session
+) -> dict:
     user = db.query(User).filter(User.id == submitting_user).first()
     if not user or not user.reporting_line_manager:
         raise HTTPException(

@@ -7,8 +7,19 @@ from typing import List
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models.db import GuestGateRegistry, User, LogVerificationState, InstitutionalRole, AccessReadiness
-from app.schemas.guest import GuestCheckInRequest, GuestDecisionRequest, GuestResponse, FacultyAvailabilityResponse
+from app.models.db import (
+    GuestGateRegistry,
+    User,
+    LogVerificationState,
+    InstitutionalRole,
+    AccessReadiness,
+)
+from app.schemas.guest import (
+    GuestCheckInRequest,
+    GuestDecisionRequest,
+    GuestResponse,
+    FacultyAvailabilityResponse,
+)
 from app.core.websocket_manager import socket_broker
 
 router = APIRouter()
@@ -24,7 +35,11 @@ _AVAILABILITY_LABELS = {
 @router.post("/register-checkin")
 async def process_guest_entry(payload: GuestCheckInRequest, db: Session = Depends(get_db)):
     faculty = db.query(User).filter(User.id == payload.target_faculty_id).first()
-    if not faculty or faculty.role_type not in (InstitutionalRole.FACULTY, InstitutionalRole.SUPER_ADMIN, InstitutionalRole.DEPT_ADMIN):
+    if not faculty or faculty.role_type not in (
+        InstitutionalRole.FACULTY,
+        InstitutionalRole.SUPER_ADMIN,
+        InstitutionalRole.DEPT_ADMIN,
+    ):
         raise HTTPException(status_code=404, detail="Faculty member not found")
 
     entry = GuestGateRegistry(
@@ -58,10 +73,14 @@ async def decide_guest_entry(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    entry = db.query(GuestGateRegistry).filter(
-        GuestGateRegistry.id == entry_id,
-        GuestGateRegistry.target_faculty_id == current_user.id,
-    ).first()
+    entry = (
+        db.query(GuestGateRegistry)
+        .filter(
+            GuestGateRegistry.id == entry_id,
+            GuestGateRegistry.target_faculty_id == current_user.id,
+        )
+        .first()
+    )
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found or not authorized")
 
@@ -75,10 +94,14 @@ def get_pending_guests(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return db.query(GuestGateRegistry).filter(
-        GuestGateRegistry.target_faculty_id == current_user.id,
-        GuestGateRegistry.handshake_status == LogVerificationState.PENDING_VERIFICATION,
-    ).all()
+    return (
+        db.query(GuestGateRegistry)
+        .filter(
+            GuestGateRegistry.target_faculty_id == current_user.id,
+            GuestGateRegistry.handshake_status == LogVerificationState.PENDING_VERIFICATION,
+        )
+        .all()
+    )
 
 
 @router.get("/directory", response_model=List[FacultyAvailabilityResponse])

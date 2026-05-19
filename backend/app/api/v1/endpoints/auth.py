@@ -35,7 +35,9 @@ def change_password(
     db: Session = Depends(get_db),
 ):
     if not verify_password(payload.current_password, current_user.credential_secure_hash):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect"
+        )
 
     current_user.credential_secure_hash = hash_password(payload.new_password)
     current_user.initial_login_state = False

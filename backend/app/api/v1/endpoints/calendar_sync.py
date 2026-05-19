@@ -7,7 +7,14 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.db import User, DailyLedger, CourseOffering, StructuralMasterSlot, CourseRegistration, InstitutionalRole
+from app.models.db import (
+    User,
+    DailyLedger,
+    CourseOffering,
+    StructuralMasterSlot,
+    CourseRegistration,
+    InstitutionalRole,
+)
 
 router = APIRouter()
 
@@ -21,7 +28,11 @@ def stream_icalendar_feed(user_token_id: str, db: Session = Depends(get_db)):
     start_range = datetime.date.today() - datetime.timedelta(days=7)
     end_range = datetime.date.today() + datetime.timedelta(days=30)
 
-    is_faculty = user.role_type in (InstitutionalRole.FACULTY, InstitutionalRole.SUPER_ADMIN, InstitutionalRole.DEPT_ADMIN)
+    is_faculty = user.role_type in (
+        InstitutionalRole.FACULTY,
+        InstitutionalRole.SUPER_ADMIN,
+        InstitutionalRole.DEPT_ADMIN,
+    )
 
     if is_faculty:
         # Faculty feed: ledger entries where they are instructor or substitute
@@ -30,8 +41,8 @@ def stream_icalendar_feed(user_token_id: str, db: Session = Depends(get_db)):
             .join(CourseOffering, DailyLedger.course_offering_id == CourseOffering.id)
             .outerjoin(StructuralMasterSlot, DailyLedger.master_slot_id == StructuralMasterSlot.id)
             .filter(
-                (DailyLedger.active_instructor_id == user_token_id) |
-                (DailyLedger.substitute_instructor_id == user_token_id),
+                (DailyLedger.active_instructor_id == user_token_id)
+                | (DailyLedger.substitute_instructor_id == user_token_id),
                 DailyLedger.target_date.between(start_range, end_range),
             )
             .all()
@@ -67,12 +78,14 @@ def stream_icalendar_feed(user_token_id: str, db: Session = Depends(get_db)):
 
         if slot:
             dtstart = f"{entry.target_date.strftime('%Y%m%d')}T{slot.time_window_start.strftime('%H%M%S')}"
-            dtend = f"{entry.target_date.strftime('%Y%m%d')}T{slot.time_window_end.strftime('%H%M%S')}"
-            uid_time = slot.time_window_start.strftime('%H%M%S')
+            dtend = (
+                f"{entry.target_date.strftime('%Y%m%d')}T{slot.time_window_end.strftime('%H%M%S')}"
+            )
+            uid_time = slot.time_window_start.strftime("%H%M%S")
         else:
             # Ad-hoc entry without a master slot — use all-day event
-            dtstart = entry.target_date.strftime('%Y%m%d')
-            dtend = entry.target_date.strftime('%Y%m%d')
+            dtstart = entry.target_date.strftime("%Y%m%d")
+            dtend = entry.target_date.strftime("%Y%m%d")
             uid_time = "000000"
 
         summary = f"[{offering.course_code}] {offering.course_title}"
@@ -81,16 +94,18 @@ def stream_icalendar_feed(user_token_id: str, db: Session = Depends(get_db)):
         elif entry.operational_state.value == "ON_LEAVE":
             summary += " [CANCELLED — Faculty Absent]"
 
-        lines.extend([
-            "BEGIN:VEVENT",
-            f"UID:slot_{entry.target_date.strftime('%Y%m%d')}_{offering.course_code}_{uid_time}@chronos.internal",
-            f"DTSTART:{dtstart}",
-            f"DTEND:{dtend}",
-            f"SUMMARY:{summary}",
-            f"LOCATION:Room {entry.target_room_identifier}",
-            f"DESCRIPTION:Status: {entry.operational_state.value} | Synchronized via Chronos Ledger.",
-            "END:VEVENT",
-        ])
+        lines.extend(
+            [
+                "BEGIN:VEVENT",
+                f"UID:slot_{entry.target_date.strftime('%Y%m%d')}_{offering.course_code}_{uid_time}@chronos.internal",
+                f"DTSTART:{dtstart}",
+                f"DTEND:{dtend}",
+                f"SUMMARY:{summary}",
+                f"LOCATION:Room {entry.target_room_identifier}",
+                f"DESCRIPTION:Status: {entry.operational_state.value} | Synchronized via Chronos Ledger.",
+                "END:VEVENT",
+            ]
+        )
 
     lines.append("END:VCALENDAR")
     return Response(content="\r\n".join(lines), media_type="text/calendar")

@@ -9,13 +9,23 @@ from typing import List
 from app.core.database import get_db
 from app.core.security import get_current_user, require_roles
 from app.models.db import (
-    User, DailyLedger, VerificationLedger, ReverseRsvpLog,
-    LedgerAnnotation, VerificationMetric, LogVerificationState,
+    User,
+    DailyLedger,
+    VerificationLedger,
+    ReverseRsvpLog,
+    LedgerAnnotation,
+    VerificationMetric,
+    LogVerificationState,
 )
 from app.schemas.attendance import (
-    AttendanceMarkRequest, AttendanceBatchRequest, AttendanceResponse,
-    ReverseRsvpCreate, ReverseRsvpResponse, RsvpDecision,
-    AnnotationCreate, AnnotationResponse,
+    AttendanceMarkRequest,
+    AttendanceBatchRequest,
+    AttendanceResponse,
+    ReverseRsvpCreate,
+    ReverseRsvpResponse,
+    RsvpDecision,
+    AnnotationCreate,
+    AnnotationResponse,
 )
 from app.services.geo_fence import validate_3d_presence
 from app.services.reverse_rsvp import route_absence_declaration, commit_absence_override
@@ -25,6 +35,7 @@ router = APIRouter()
 
 
 # ── Attendance Marking ────────────────────────────────────────────────────────
+
 
 @router.post("/mark")
 async def mark_attendance(
@@ -39,20 +50,32 @@ async def mark_attendance(
     # Students can only mark their own attendance; must pass geo validation
     if current_user.role_type.value == "STUDENT":
         if payload.student_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Cannot mark attendance for another student")
+            raise HTTPException(
+                status_code=403, detail="Cannot mark attendance for another student"
+            )
 
         if all(v is not None for v in [payload.user_lat, payload.user_lon, payload.user_alt]):
             if ledger.latitude_target and ledger.longitude_target and ledger.altitude_target:
                 valid = validate_3d_presence(
-                    payload.user_lat, payload.user_lon, payload.user_alt,
-                    float(ledger.latitude_target), float(ledger.longitude_target), float(ledger.altitude_target),
+                    payload.user_lat,
+                    payload.user_lon,
+                    payload.user_alt,
+                    float(ledger.latitude_target),
+                    float(ledger.longitude_target),
+                    float(ledger.altitude_target),
                     ledger.precision_radius_meters or 15,
                 )
                 if not valid:
-                    raise HTTPException(status_code=400, detail="Location outside geofence boundary")
+                    raise HTTPException(
+                        status_code=400, detail="Location outside geofence boundary"
+                    )
 
     _upsert_attendance(db, payload, current_user.id)
-    return {"status": "marked", "student_id": payload.student_id, "marking_status": payload.marking_status.value}
+    return {
+        "status": "marked",
+        "student_id": payload.student_id,
+        "marking_status": payload.marking_status.value,
+    }
 
 
 @router.post("/batch")
@@ -77,10 +100,14 @@ def batch_mark_attendance(
 
 
 def _upsert_attendance(db: Session, payload: AttendanceMarkRequest, agent_id: str):
-    existing = db.query(VerificationLedger).filter(
-        VerificationLedger.ledger_instance_id == payload.ledger_instance_id,
-        VerificationLedger.student_id == payload.student_id,
-    ).first()
+    existing = (
+        db.query(VerificationLedger)
+        .filter(
+            VerificationLedger.ledger_instance_id == payload.ledger_instance_id,
+            VerificationLedger.student_id == payload.student_id,
+        )
+        .first()
+    )
 
     if existing:
         if existing.marking_status != payload.marking_status:
@@ -104,10 +131,15 @@ def get_attendance_for_ledger(
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    return db.query(VerificationLedger).filter(VerificationLedger.ledger_instance_id == ledger_id).all()
+    return (
+        db.query(VerificationLedger)
+        .filter(VerificationLedger.ledger_instance_id == ledger_id)
+        .all()
+    )
 
 
 # ── Reverse RSVP (Absence System) ────────────────────────────────────────────
+
 
 @router.post("/absence", response_model=ReverseRsvpResponse)
 async def submit_absence(
@@ -125,7 +157,11 @@ async def submit_absence(
     await socket_broker.forward_direct_message(
         log.authorized_by_user_id,
         "ABSENCE_APPROVAL_REQUIRED",
-        {"log_id": log.id, "from": current_user.full_name, "date": str(payload.target_absence_date)},
+        {
+            "log_id": log.id,
+            "from": current_user.full_name,
+            "date": str(payload.target_absence_date),
+        },
     )
     return log
 
@@ -135,10 +171,14 @@ def get_pending_absences(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return db.query(ReverseRsvpLog).filter(
-        ReverseRsvpLog.authorized_by_user_id == current_user.id,
-        ReverseRsvpLog.approval_state == LogVerificationState.PENDING_VERIFICATION,
-    ).all()
+    return (
+        db.query(ReverseRsvpLog)
+        .filter(
+            ReverseRsvpLog.authorized_by_user_id == current_user.id,
+            ReverseRsvpLog.approval_state == LogVerificationState.PENDING_VERIFICATION,
+        )
+        .all()
+    )
 
 
 @router.patch("/absence/{log_id}/decide")
@@ -148,10 +188,14 @@ async def decide_absence(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    log = db.query(ReverseRsvpLog).filter(
-        ReverseRsvpLog.id == log_id,
-        ReverseRsvpLog.authorized_by_user_id == current_user.id,
-    ).first()
+    log = (
+        db.query(ReverseRsvpLog)
+        .filter(
+            ReverseRsvpLog.id == log_id,
+            ReverseRsvpLog.authorized_by_user_id == current_user.id,
+        )
+        .first()
+    )
     if not log:
         raise HTTPException(status_code=404, detail="Absence request not found or not authorized")
 
@@ -165,6 +209,7 @@ async def decide_absence(
 
 
 # ── Annotations ───────────────────────────────────────────────────────────────
+
 
 @router.post("/annotations", response_model=AnnotationResponse)
 def create_annotation(

@@ -2,7 +2,16 @@
 # Licensed under the Apache License, Version 2.0
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, users, schedule, attendance, guest, ingestion, websocket, calendar_sync
+from app.api.v1.endpoints import (
+    auth,
+    users,
+    schedule,
+    attendance,
+    guest,
+    ingestion,
+    websocket,
+    calendar_sync,
+)
 
 api_router = APIRouter()
 
