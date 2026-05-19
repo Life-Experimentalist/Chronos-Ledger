@@ -2,18 +2,19 @@
 # Licensed under the Apache License, Version 2.0
 
 import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.db import (
-    User,
-    DailyLedger,
     CourseOffering,
-    StructuralMasterSlot,
     CourseRegistration,
+    DailyLedger,
     InstitutionalRole,
+    StructuralMasterSlot,
+    User,
 )
 
 router = APIRouter()

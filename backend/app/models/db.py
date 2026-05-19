@@ -228,9 +228,7 @@ class VerificationLedger(Base):
     student_id = Column(String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     marking_status = Column(Enum(VerificationMetric), nullable=False)
     authorizing_agent_id = Column(String(50), ForeignKey("users.id"), nullable=True)
-    modification_timestamp = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    modification_timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     ledger_instance = relationship("DailyLedger", back_populates="verification_records")
     student = relationship("User", foreign_keys=[student_id])
@@ -247,9 +245,7 @@ class LedgerAnnotation(Base):
     creator_id = Column(String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     classification_tag = Column(String(30), nullable=False)
     annotation_payload = Column(Text, nullable=False)
-    distribution_timestamp = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    distribution_timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     ledger_instance = relationship("DailyLedger", back_populates="annotations")
     creator = relationship("User", foreign_keys=[creator_id])

@@ -3,7 +3,8 @@
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
-from app.models.db import User, ReverseRsvpLog, DailyLedger, LogVerificationState, DynamicState
+
+from app.models.db import DailyLedger, DynamicState, LogVerificationState, ReverseRsvpLog, User
 
 
 def route_absence_declaration(

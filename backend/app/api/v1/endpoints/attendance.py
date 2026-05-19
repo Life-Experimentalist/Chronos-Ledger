@@ -56,19 +56,17 @@ async def mark_attendance(
         if all(v is not None for v in [payload.user_lat, payload.user_lon, payload.user_alt]) and (
             ledger.latitude_target and ledger.longitude_target and ledger.altitude_target
         ):
-                valid = validate_3d_presence(
-                    payload.user_lat,
-                    payload.user_lon,
-                    payload.user_alt,
-                    float(ledger.latitude_target),
-                    float(ledger.longitude_target),
-                    float(ledger.altitude_target),
-                    ledger.precision_radius_meters or 15,
-                )
-                if not valid:
-                    raise HTTPException(
-                        status_code=400, detail="Location outside geofence boundary"
-                    )
+            valid = validate_3d_presence(
+                payload.user_lat,
+                payload.user_lon,
+                payload.user_alt,
+                float(ledger.latitude_target),
+                float(ledger.longitude_target),
+                float(ledger.altitude_target),
+                ledger.precision_radius_meters or 15,
+            )
+            if not valid:
+                raise HTTPException(status_code=400, detail="Location outside geofence boundary")
 
     _upsert_attendance(db, payload, current_user.id)
     return {

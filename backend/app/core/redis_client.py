@@ -1,8 +1,10 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
-import redis
 from functools import lru_cache
+
+import redis
+
 from app.core.config import get_settings
 
 

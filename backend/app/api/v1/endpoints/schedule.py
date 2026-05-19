@@ -2,23 +2,22 @@
 # Licensed under the Apache License, Version 2.0
 
 import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
 
 from app.core.database import get_db
+from app.core.redis_client import get_redis
 from app.core.security import get_current_user, require_roles
-from app.models.db import AcademicCycle, StructuralMasterSlot, DailyLedger, User, CourseOffering
+from app.models.db import AcademicCycle, CourseOffering, DailyLedger, StructuralMasterSlot, User
 from app.schemas.schedule import (
     AcademicCycleCreate,
     AcademicCycleResponse,
-    MasterSlotCreate,
     DailyLedgerUpdate,
-    DailyLedgerResponse,
     FacultyLocationResponse,
+    MasterSlotCreate,
 )
 from app.services.location_resolver import determine_faculty_current_state
-from app.core.redis_client import get_redis
 
 router = APIRouter()
 
@@ -26,7 +25,7 @@ router = APIRouter()
 # ── Academic Cycles ──────────────────────────────────────────────────────────
 
 
-@router.get("/cycles", response_model=List[AcademicCycleResponse])
+@router.get("/cycles", response_model=list[AcademicCycleResponse])
 def list_cycles(db: Session = Depends(get_db), _=Depends(get_current_user)):
     return db.query(AcademicCycle).all()
 
@@ -79,7 +78,7 @@ def clone_cycle_offerings(
 # ── Master Slots ──────────────────────────────────────────────────────────────
 
 
-@router.get("/slots", response_model=List[dict])
+@router.get("/slots", response_model=list[dict])
 def list_master_slots(
     cycle_id: int | None = None,
     db: Session = Depends(get_db),

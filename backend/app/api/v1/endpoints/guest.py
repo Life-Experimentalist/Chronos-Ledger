@@ -1,26 +1,26 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
 
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.core.websocket_manager import socket_broker
 from app.models.db import (
-    GuestGateRegistry,
-    User,
-    LogVerificationState,
-    InstitutionalRole,
     AccessReadiness,
+    GuestGateRegistry,
+    InstitutionalRole,
+    LogVerificationState,
+    User,
 )
 from app.schemas.guest import (
+    FacultyAvailabilityResponse,
     GuestCheckInRequest,
     GuestDecisionRequest,
     GuestResponse,
-    FacultyAvailabilityResponse,
 )
-from app.core.websocket_manager import socket_broker
 
 router = APIRouter()
 
@@ -89,7 +89,7 @@ async def decide_guest_entry(
     return {"status": payload.decision.value, "guest": entry.guest_name}
 
 
-@router.get("/pending", response_model=List[GuestResponse])
+@router.get("/pending", response_model=list[GuestResponse])
 def get_pending_guests(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -104,7 +104,7 @@ def get_pending_guests(
     )
 
 
-@router.get("/directory", response_model=List[FacultyAvailabilityResponse])
+@router.get("/directory", response_model=list[FacultyAvailabilityResponse])
 def get_faculty_directory(name: str | None = None, db: Session = Depends(get_db)):
     q = db.query(User).filter(User.role_type == InstitutionalRole.FACULTY)
     if name:

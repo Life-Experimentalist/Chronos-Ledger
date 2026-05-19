@@ -2,19 +2,19 @@
 # Licensed under the Apache License, Version 2.0
 
 import datetime
-import pandas as pd
-from sqlalchemy.orm import Session
 from typing import Any
 
+import pandas as pd
+from sqlalchemy.orm import Session
+
+from app.core.security import hash_password
 from app.models.db import (
-    User,
     CourseOffering,
     CourseRegistration,
-    StructuralMasterSlot,
     InstitutionalRole,
+    StructuralMasterSlot,
+    User,
 )
-from app.core.security import hash_password
-
 
 REQUIRED_COLUMNS = {
     "student_id",

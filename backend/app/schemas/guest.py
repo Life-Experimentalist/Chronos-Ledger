@@ -1,9 +1,10 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
-from pydantic import BaseModel
-from typing import Optional
 from datetime import datetime
+
+from pydantic import BaseModel
+
 from app.models.db import LogVerificationState
 
 
@@ -35,5 +36,5 @@ class GuestResponse(BaseModel):
 class FacultyAvailabilityResponse(BaseModel):
     faculty_id: str
     full_name: str
-    department_code: Optional[str]
+    department_code: str | None
     availability_label: str

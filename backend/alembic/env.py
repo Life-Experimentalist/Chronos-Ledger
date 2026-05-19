@@ -3,7 +3,9 @@
 
 import os
 from logging.config import fileConfig
+
 from sqlalchemy import engine_from_config, pool
+
 from alembic import context
 
 config = context.config
@@ -16,8 +18,8 @@ db_url = os.getenv("DATABASE_URL")
 if db_url:
     config.set_main_option("sqlalchemy.url", db_url)
 
-from app.core.database import Base  # noqa: E402
 import app.models.db  # noqa: E402, F401 — registers all models with metadata
+from app.core.database import Base  # noqa: E402
 
 target_metadata = Base.metadata
 

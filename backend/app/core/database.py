@@ -2,9 +2,9 @@
 # Licensed under the Apache License, Version 2.0
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
-from app.core.config import get_settings
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
+from app.core.config import get_settings
 
 settings = get_settings()
 

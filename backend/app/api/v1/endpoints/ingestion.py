@@ -3,7 +3,8 @@
 
 import os
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -48,6 +49,7 @@ def trigger_ledger_generation(
     _=Depends(require_roles("SUPER_ADMIN")),
 ):
     import datetime
+
     from app.cron.ledger_generator import generate_daily_ledger_entries
 
     if target_date:

@@ -1,9 +1,10 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
-from app.core.websocket_manager import socket_broker
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+
 from app.core.security import verify_jwt_token_string
+from app.core.websocket_manager import socket_broker
 
 router = APIRouter()
 

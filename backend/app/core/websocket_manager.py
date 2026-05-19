@@ -2,13 +2,13 @@
 # Licensed under the Apache License, Version 2.0
 
 import json
-from typing import Dict
+
 from fastapi import WebSocket
 
 
 class CampusConnectionManager:
     def __init__(self):
-        self.active_sockets: Dict[str, WebSocket] = {}
+        self.active_sockets: dict[str, WebSocket] = {}
 
     async def establish_session(self, user_id: str, websocket: WebSocket):
         await websocket.accept()

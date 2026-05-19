@@ -2,9 +2,11 @@
 # Licensed under the Apache License, Version 2.0
 
 import datetime
-from sqlalchemy.orm import Session
+
 from redis import Redis
-from app.models.db import DailyLedger, StructuralMasterSlot, CourseOffering, User, DynamicState
+from sqlalchemy.orm import Session
+
+from app.models.db import CourseOffering, DailyLedger, DynamicState, StructuralMasterSlot, User
 
 
 def determine_faculty_current_state(faculty_id: str, db: Session, redis_cache: Redis) -> dict:

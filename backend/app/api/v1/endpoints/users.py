@@ -1,19 +1,19 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
 
 from app.core.database import get_db
-from app.core.security import get_current_user, require_roles, hash_password
-from app.models.db import User, InstitutionalRole, AccessReadiness
-from app.schemas.users import UserCreate, UserUpdate, UserStatusUpdate, UserResponse
+from app.core.security import get_current_user, hash_password, require_roles
+from app.models.db import InstitutionalRole, User
+from app.schemas.users import UserCreate, UserResponse, UserStatusUpdate, UserUpdate
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[UserResponse])
+@router.get("/", response_model=list[UserResponse])
 def list_users(
     role: str | None = None,
     department: str | None = None,

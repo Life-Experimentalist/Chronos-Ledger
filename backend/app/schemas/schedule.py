@@ -1,9 +1,10 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
-from pydantic import BaseModel
-from typing import Optional
 from datetime import date, time
+
+from pydantic import BaseModel
+
 from app.models.db import DynamicState, ExecutionMode
 
 
@@ -29,35 +30,35 @@ class MasterSlotCreate(BaseModel):
     time_window_start: time
     time_window_end: time
     course_offering_id: int
-    primary_instructor_id: Optional[str] = None
+    primary_instructor_id: str | None = None
     target_room_identifier: str
 
 
 class DailyLedgerUpdate(BaseModel):
-    operational_state: Optional[DynamicState] = None
-    substitute_instructor_id: Optional[str] = None
-    delivery_format: Optional[ExecutionMode] = None
-    virtual_connection_string: Optional[str] = None
-    latitude_target: Optional[float] = None
-    longitude_target: Optional[float] = None
-    altitude_target: Optional[float] = None
-    precision_radius_meters: Optional[int] = None
+    operational_state: DynamicState | None = None
+    substitute_instructor_id: str | None = None
+    delivery_format: ExecutionMode | None = None
+    virtual_connection_string: str | None = None
+    latitude_target: float | None = None
+    longitude_target: float | None = None
+    altitude_target: float | None = None
+    precision_radius_meters: int | None = None
 
 
 class DailyLedgerResponse(BaseModel):
     id: int
     target_date: date
     course_offering_id: int
-    active_instructor_id: Optional[str]
-    substitute_instructor_id: Optional[str]
+    active_instructor_id: str | None
+    substitute_instructor_id: str | None
     target_room_identifier: str
     delivery_format: ExecutionMode
-    virtual_connection_string: Optional[str]
+    virtual_connection_string: str | None
     operational_state: DynamicState
-    course_code: Optional[str] = None
-    course_title: Optional[str] = None
-    time_window_start: Optional[time] = None
-    time_window_end: Optional[time] = None
+    course_code: str | None = None
+    course_title: str | None = None
+    time_window_start: time | None = None
+    time_window_end: time | None = None
 
     model_config = {"from_attributes": True}
 
