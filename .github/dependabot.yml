@@ -1,0 +1,116 @@
+# Copyright 2026 Chronos Ledger Contributors
+# Licensed under the Apache License, Version 2.0
+#
+# Dependabot configuration for automated dependency updates.
+# Security alerts are filed as PRs immediately; version updates are weekly.
+# Grouped updates reduce PR noise — all non-security bumps arrive as a
+# single "chore: bump X dependencies" PR per ecosystem per week.
+
+version: 2
+
+updates:
+  # ── Python / uv (pip ecosystem) ───────────────────────────────────────
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 5
+    groups:
+      python-deps:
+        patterns: ["*"]
+        exclude-patterns:
+          # Security fixes must not be grouped — they get their own PRs
+          - "PyJWT"
+          - "bcrypt"
+          - "cryptography"
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  # ── Node.js / npm ─────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 5
+    versioning-strategy: "increase"
+    groups:
+      react-ecosystem:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react*"
+          - "next"
+      ui-libs:
+        patterns:
+          - "framer-motion"
+          - "lucide-react"
+          - "tailwindcss"
+          - "@tailwindcss/*"
+          - "postcss"
+          - "autoprefixer"
+      form-and-validation:
+        patterns:
+          - "react-hook-form"
+          - "@hookform/*"
+          - "zod"
+      state-and-data:
+        patterns:
+          - "zustand"
+          - "axios"
+          - "date-fns"
+          - "idb"
+      pwa:
+        patterns:
+          - "@ducanh2912/next-pwa"
+          - "workbox-*"
+      typescript-toolchain:
+        patterns:
+          - "typescript"
+          - "@types/*"
+          - "eslint*"
+          - "@eslint*"
+    labels:
+      - "dependencies"
+      - "javascript"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  # ── Docker / GitHub Actions ────────────────────────────────────────────
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "chore(ci)"

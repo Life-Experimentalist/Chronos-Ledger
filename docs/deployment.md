@@ -1,0 +1,223 @@
+# Deployment Guide
+
+<!-- Copyright 2026 Chronos Ledger Contributors — Apache 2.0 -->
+
+## Prerequisites
+
+| Tool | Minimum Version |
+|------|----------------|
+| Docker | 24.x |
+| Docker Compose | 2.20 |
+| Git | 2.x |
+
+For local development additionally:
+- Python 3.11+ with [uv](https://github.com/astral-sh/uv)
+- Node.js 20 LTS
+
+---
+
+## Docker Compose Topology
+
+```mermaid
+graph TB
+    subgraph Host["Campus Server (single VM / bare-metal)"]
+        subgraph DC["Docker Compose — network: chronos_net (bridge)"]
+            NX["chronos-proxy\nnginx:1.27-alpine\nPorts: 80, 443\n\nServes static files\nProxies /api/v1 + /ws"]
+            FE["chronos-frontend\n(one-shot builder)\nNext.js → /app/out\nexit 0 on success"]
+            APP["chronos-app\nFastAPI + uvicorn\nPort 8000 (internal)\n\nHealthcheck: /health"]
+            DB["chronos-db\npostgres:17-alpine\nPort 5432 (internal)"]
+            CACHE["chronos-cache\nredis:7.4-alpine\nPort 6379 (internal)"]
+
+            V1[(frontend_build\nDocker volume)]
+            V2[(chronos_data\nDocker volume)]
+            V3[(chronos_cache_store\nDocker volume)]
+        end
+    end
+
+    FE -->|writes static files| V1
+    NX -->|reads static files| V1
+    APP --> DB & CACHE
+    NX -->|proxy pass| APP
+
+    NX -.->|depends_on: service_completed_successfully| FE
+    NX -.->|depends_on: service_healthy| APP
+    APP -.->|depends_on: service_healthy| DB
+    APP -.->|depends_on: service_started| CACHE
+    DB --> V2
+    CACHE --> V3
+```
+
+**Startup order enforced by `depends_on`:**
+
+1. `chronos-db` starts and passes its healthcheck (`pg_isready`).
+2. `chronos-app` starts only after DB is healthy; passes its own `/health` check.
+3. `chronos-frontend` build runs (exits 0, writes files to shared volume).
+4. `chronos-proxy` (nginx) starts only after both App is healthy **and** the frontend builder has exited successfully. This prevents nginx from serving an empty or partial build.
+
+---
+
+## Production Deployment (Campus Server)
+
+### 1. Prepare the server
+
+```bash
+git clone https://github.com/Life-Experimentalist/chronos-ledger.git
+cd chronos-ledger
+cp .env.example .env
+```
+
+Edit `.env` and set:
+- `JWT_SECRET_SIGNING_KEY` — generate with `openssl rand -hex 32`
+- `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` — generate with `npx web-push generate-vapid-keys`
+- `VAPID_CONTACT_EMAIL` — a reachable admin email
+- `DB_PASSWORD` — change from the default before first launch
+
+### 2. Launch with auto-discovery
+
+```bash
+chmod +x bin/chronos_intranet_autodiscover.sh
+./bin/chronos_intranet_autodiscover.sh
+```
+
+This script:
+1. Detects the server LAN IP via `ip route`
+2. Writes `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` to `.env.production`
+3. Runs `docker compose up --build -d`
+
+### 3. Verify containers
+
+```bash
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+```
+
+Expected output:
+```
+NAMES                          STATUS          PORTS
+chronos_edge_proxy             Up              0.0.0.0:80->80/tcp
+chronos_core_engine            Up (healthy)
+chronos_postgres_persistence   Up (healthy)
+chronos_redis_state            Up
+```
+
+### 4. First login
+
+Navigate to `http://<server-ip>` and log in with the seed credentials:
+
+- Email: `admin@college.internal`
+- Password: `ChronosAdmin2026!`
+
+**Change this password immediately** via Admin Portal → Profile.
+
+---
+
+## Local Development
+
+```bash
+# Backend
+cd backend
+uv sync
+cp .env.example .env          # set DATABASE_URL, REDIS_URL, JWT_SECRET_SIGNING_KEY
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload --port 8000
+
+# Frontend (separate terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend dev server proxies `/api/v1` to `localhost:8000` via `next.config.js`.
+Alembic reads `DATABASE_URL` from the environment — override the `alembic.ini`
+default by exporting `DATABASE_URL` before running migrations.
+
+---
+
+## Academic Cycle Rollover
+
+```mermaid
+flowchart LR
+    A([Active Cycle Running]) --> B[Close current cycle\nAdmin → Schedule → Cycles → Close]
+    B --> C[Create new cycle\nPOST /schedule/cycles]
+    C --> D[Clone master slots\nPOST /cycles/old/clone-to/new]
+    D --> E[Re-import enrollment CSV\nPOST /ingestion/upload-csv?cycle_id=new]
+    E --> F[Generate first ledger\nPOST /ingestion/generate-ledger]
+    F --> G([New Cycle Active])
+```
+
+### Step-by-step
+
+1. **Close the active cycle** — Admin Portal → Schedule → Cycles → `Close Cycle`, or:
+   ```sql
+   UPDATE academic_cycles SET operational_status = false WHERE id = <current_id>;
+   ```
+2. **Create the new cycle** — Admin Portal → New Cycle or `POST /api/v1/schedule/cycles`:
+   ```json
+   { "cycle_label": "2026-Fall-Trimester", "date_bounds_start": "2026-09-01",
+     "date_bounds_end": "2026-12-20", "operational_status": true }
+   ```
+3. **Clone master slots** — copies all `StructuralMasterSlot` rows (not enrollment or attendance):
+   ```
+   POST /api/v1/schedule/cycles/{old_id}/clone-to/{new_id}
+   ```
+4. **Re-import CSV** — upload the new semester's enrollment sheet to assign students and update instructors.
+5. **Generate first ledger** — trigger ledger generation for the first day of the new cycle:
+   ```
+   POST /api/v1/ingestion/generate-ledger   { "target_date": "2026-09-01" }
+   ```
+
+---
+
+## Database Backup
+
+The maintenance script runs automated integrity checks and backups:
+
+```bash
+chmod +x bin/chronos_maintenance_vault.sh
+./bin/chronos_maintenance_vault.sh
+```
+
+Schedule via cron for nightly runs:
+
+```cron
+0 2 * * * /path/to/chronos-ledger/bin/chronos_maintenance_vault.sh >> /var/log/chronos_maintenance.log 2>&1
+```
+
+---
+
+## TLS / HTTPS
+
+For production with HTTPS, place certificates in `certs/`:
+
+```
+certs/
+  fullchain.pem
+  privkey.pem
+```
+
+Then add a TLS server block to `nginx/nginx.conf` and redirect HTTP → HTTPS:
+
+```nginx
+server {
+    listen 443 ssl;
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+    # ... rest of existing config
+}
+server {
+    listen 80;
+    return 301 https://$host$request_uri;
+}
+```
+
+Also update your `.env` `APP_CORS_ORIGINS` to the HTTPS URL and rebuild the frontend
+(`NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` must use `https://` / `wss://`).
+
+---
+
+## Scaling
+
+The FastAPI layer is stateless beyond DB/Redis. To scale horizontally:
+
+1. Add Redis Pub/Sub broadcasting to `CampusConnectionManager` so WebSocket events fanout across multiple app instances.
+2. Place a load balancer in front of the app containers (sticky sessions not required once Pub/Sub is implemented — WS connections land on any instance and receive events via Redis).
+3. The PostgreSQL connection pool (`pool_size=10`, `max_overflow=20` in `core/database.py`) handles typical single-campus loads without change.

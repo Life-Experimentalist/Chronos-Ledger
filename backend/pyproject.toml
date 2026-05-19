@@ -1,0 +1,91 @@
+# Copyright 2026 Chronos Ledger Contributors
+# Licensed under the Apache License, Version 2.0
+
+[project]
+name = "chronos-ledger-backend"
+version = "1.0.0"
+description = "Chronos Ledger — Campus Schedule & Attendance Management Backend"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+authors = [
+    { name = "Chronos Ledger Contributors" }
+]
+dependencies = [
+    "fastapi>=0.115.6",
+    "uvicorn[standard]>=0.34.0",
+    "sqlalchemy>=2.0.36",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.0",
+    "psycopg2-binary>=2.9.10",
+    "redis>=5.2.1",
+    "pydantic>=2.10.5",
+    "pydantic-settings>=2.7.0",
+    # PyJWT replaces python-jose (CVE-2022-29217 in jose; jose also unmaintained)
+    "PyJWT[crypto]>=2.10.1",
+    # bcrypt directly replaces passlib (passlib unmaintained since 2023)
+    "bcrypt>=4.2.1",
+    "python-multipart>=0.0.20",
+    "pandas>=2.2.3",
+    "openpyxl>=3.1.5",
+    "apscheduler>=3.10.4",
+    "httpx>=0.28.1",
+    "websockets>=14.1",
+    "pywebpush>=2.0.3",
+    "aiofiles>=24.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.4",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.28.1",
+    "ruff>=0.9.0",
+    "mypy>=1.14.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.3.4",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.9.0",
+    "mypy>=1.14.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long — handled by formatter
+    "B008",   # do not perform function calls in default arguments (FastAPI Depends pattern)
+    "SIM108", # ternary operator — sometimes less readable
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true

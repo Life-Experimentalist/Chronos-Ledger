@@ -1,0 +1,75 @@
+# Python / uv
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+.uv/
+uv.lock
+
+# Env files
+.env
+.env.local
+.env.production
+.env.*.local
+!.env.example
+
+# Next.js / Node
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.pnpm-debug.log*
+
+# PWA generated files
+frontend/public/sw.js
+frontend/public/workbox-*.js
+frontend/public/worker-*.js
+frontend/public/fallback-*.js
+
+# Build artifacts
+frontend/public/icons/*.png
+
+# Docker
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Logs
+logs/
+*.log
+
+# Internal planning / scratch docs (not for public repo)
+LLD.md
+"ui prommpts.md"
+assets/prompts.md
+
+# Backups
+/var/chronos/backups/
+
+# Uploads
+backend/uploads/
+
+# Certificates
+certs/*.pem
+certs/*.key
+certs/*.crt

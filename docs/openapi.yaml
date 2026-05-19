@@ -1,0 +1,1436 @@
+openapi: "3.1.0"
+
+# Copyright 2026 Chronos Ledger Contributors
+# Licensed under the Apache License, Version 2.0
+#
+# This is the authoritative static OpenAPI contract for Chronos Ledger.
+# FastAPI also generates a live version at runtime: GET /openapi.json
+# The two should remain in sync. Update this file when adding or changing endpoints.
+
+info:
+  title: Chronos Ledger API
+  version: "1.0.0"
+  description: |
+    Campus Schedule & Attendance Management REST API.
+
+    **Authentication**: All endpoints except `/auth/login`, `/guest/register-checkin`,
+    and `/guest/directory` require a Bearer JWT in the `Authorization` header.
+
+    **Roles**: `SUPER_ADMIN` > `DEPT_ADMIN` > `FACULTY` > `STUDENT`.
+    Role requirements are noted on each endpoint.
+  contact:
+    name: Chronos Ledger Contributors
+    email: admin@college.internal
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: http://localhost/api/v1
+    description: Local development (Docker Compose)
+  - url: http://{server_ip}/api/v1
+    description: Campus intranet
+    variables:
+      server_ip:
+        default: "192.168.1.100"
+
+# ─────────────────────────────────────────────
+# Reusable components
+# ─────────────────────────────────────────────
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # ── Enumerations ──────────────────────────
+    InstitutionalRole:
+      type: string
+      enum: [SUPER_ADMIN, DEPT_ADMIN, FACULTY, STUDENT]
+      description: Role assigned to a system user.
+
+    AccessReadiness:
+      type: string
+      enum: [OPEN_AD_HOC, BUSY, CRITICAL_DO_NOT_DISTURB, VERY_FREE]
+      description: Faculty availability / occupancy index visible to students.
+
+    DynamicState:
+      type: string
+      enum: [SCHEDULED, ON_LEAVE, PROXY_SUBSTITUTE, LUNCH, INTERNAL_MEETING, ADHOC_EVENT]
+      description: Operational state of a daily ledger entry.
+
+    ExecutionMode:
+      type: string
+      enum: [PHYSICAL, ONLINE_STREAM]
+      description: Class delivery format.
+
+    VerificationMetric:
+      type: string
+      enum: [PRESENT, ABSENT, LATE]
+      description: Attendance marking status for a student.
+
+    LogVerificationState:
+      type: string
+      enum: [PENDING_VERIFICATION, VERIFIED_APPROVED, VERIFIED_DENIED]
+      description: Approval workflow state for absence requests and guest handshakes.
+
+    # ── Auth ──────────────────────────────────
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: faculty@college.internal
+        password:
+          type: string
+          format: password
+          example: "••••••••"
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: Signed JWT. Include as `Authorization: Bearer <token>`.
+        token_type:
+          type: string
+          example: bearer
+        user_id:
+          type: string
+          example: FAC001
+        role:
+          $ref: "#/components/schemas/InstitutionalRole"
+        full_name:
+          type: string
+          example: Dr. Priya Sharma
+        initial_login_state:
+          type: boolean
+          description: True on first login — client should prompt password change.
+
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+          format: password
+        new_password:
+          type: string
+          format: password
+          minLength: 8
+
+    # ── Users ─────────────────────────────────
+    UserCreate:
+      type: object
+      required: [id, full_name, email_address, password, role_type]
+      properties:
+        id:
+          type: string
+          example: FAC042
+        full_name:
+          type: string
+          example: Dr. Rajan Mehta
+        email_address:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+        role_type:
+          $ref: "#/components/schemas/InstitutionalRole"
+        department_code:
+          type: string
+          nullable: true
+          example: CSE
+        assigned_base_station:
+          type: string
+          nullable: true
+          example: Staff Room Block A
+        reporting_line_manager:
+          type: string
+          nullable: true
+          example: HOD001
+
+    UserUpdate:
+      type: object
+      properties:
+        full_name:
+          type: string
+          nullable: true
+        email_address:
+          type: string
+          format: email
+          nullable: true
+        department_code:
+          type: string
+          nullable: true
+        assigned_base_station:
+          type: string
+          nullable: true
+        reporting_line_manager:
+          type: string
+          nullable: true
+
+    UserStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/AccessReadiness"
+
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        full_name:
+          type: string
+        email_address:
+          type: string
+        role_type:
+          $ref: "#/components/schemas/InstitutionalRole"
+        department_code:
+          type: string
+          nullable: true
+        assigned_base_station:
+          type: string
+          nullable: true
+        current_occupancy_index:
+          $ref: "#/components/schemas/AccessReadiness"
+        reporting_line_manager:
+          type: string
+          nullable: true
+
+    # ── Schedule ──────────────────────────────
+    AcademicCycleCreate:
+      type: object
+      required: [cycle_label, date_bounds_start, date_bounds_end]
+      properties:
+        cycle_label:
+          type: string
+          example: 2026-Fall-Trimester
+        date_bounds_start:
+          type: string
+          format: date
+          example: "2026-09-01"
+        date_bounds_end:
+          type: string
+          format: date
+          example: "2026-12-20"
+        operational_status:
+          type: boolean
+          default: false
+
+    AcademicCycleResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        cycle_label:
+          type: string
+        date_bounds_start:
+          type: string
+          format: date
+        date_bounds_end:
+          type: string
+          format: date
+        operational_status:
+          type: boolean
+
+    DailyLedgerUpdate:
+      type: object
+      properties:
+        operational_state:
+          $ref: "#/components/schemas/DynamicState"
+          nullable: true
+        substitute_instructor_id:
+          type: string
+          nullable: true
+        delivery_format:
+          $ref: "#/components/schemas/ExecutionMode"
+          nullable: true
+        virtual_connection_string:
+          type: string
+          nullable: true
+          example: https://meet.google.com/xyz-abc
+        latitude_target:
+          type: number
+          format: double
+          nullable: true
+        longitude_target:
+          type: number
+          format: double
+          nullable: true
+        altitude_target:
+          type: number
+          format: double
+          nullable: true
+        precision_radius_meters:
+          type: integer
+          nullable: true
+          description: Geofence radius override for this specific session.
+
+    DailyLedgerResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        target_date:
+          type: string
+          format: date
+        course_offering_id:
+          type: integer
+        active_instructor_id:
+          type: string
+          nullable: true
+        substitute_instructor_id:
+          type: string
+          nullable: true
+        target_room_identifier:
+          type: string
+        delivery_format:
+          $ref: "#/components/schemas/ExecutionMode"
+        virtual_connection_string:
+          type: string
+          nullable: true
+        operational_state:
+          $ref: "#/components/schemas/DynamicState"
+        course_code:
+          type: string
+          nullable: true
+        course_title:
+          type: string
+          nullable: true
+        time_window_start:
+          type: string
+          format: time
+          nullable: true
+        time_window_end:
+          type: string
+          format: time
+          nullable: true
+
+    FacultyLocationResponse:
+      type: object
+      properties:
+        resolved_location:
+          type: string
+          description: Human-readable location label derived from 4-tier resolver.
+          example: Room 204 (Active Class)
+        status:
+          type: string
+          description: Redis override value if set, otherwise derived state.
+        faculty_id:
+          type: string
+        full_name:
+          type: string
+        occupancy_index:
+          $ref: "#/components/schemas/AccessReadiness"
+
+    # ── Attendance ────────────────────────────
+    AttendanceMarkRequest:
+      type: object
+      required: [ledger_instance_id, student_id, marking_status]
+      properties:
+        ledger_instance_id:
+          type: integer
+          example: 1042
+        student_id:
+          type: string
+          example: STU20210001
+        marking_status:
+          $ref: "#/components/schemas/VerificationMetric"
+        user_lat:
+          type: number
+          format: double
+          nullable: true
+          example: 12.971598
+        user_lon:
+          type: number
+          format: double
+          nullable: true
+          example: 77.594562
+        user_alt:
+          type: number
+          format: double
+          nullable: true
+          example: 920.5
+          description: Altitude in metres. Used with lat/lon for 3D geofence check.
+
+    AttendanceBatchRequest:
+      type: object
+      required: [ledger_instance_id, records]
+      properties:
+        ledger_instance_id:
+          type: integer
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceMarkRequest"
+
+    AttendanceResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        ledger_instance_id:
+          type: integer
+        student_id:
+          type: string
+        marking_status:
+          $ref: "#/components/schemas/VerificationMetric"
+        authorizing_agent_id:
+          type: string
+          nullable: true
+          description: User ID of the person who marked attendance (may be faculty for batch).
+        modification_timestamp:
+          type: string
+          format: date-time
+
+    ReverseRsvpCreate:
+      type: object
+      required: [target_absence_date, context_justification]
+      properties:
+        target_absence_date:
+          type: string
+          format: date
+          example: "2026-06-15"
+        context_justification:
+          type: string
+          minLength: 10
+          example: Attending national faculty development seminar.
+
+    ReverseRsvpResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        submitting_user_id:
+          type: string
+        target_absence_date:
+          type: string
+          format: date
+        context_justification:
+          type: string
+        approval_state:
+          $ref: "#/components/schemas/LogVerificationState"
+        authorized_by_user_id:
+          type: string
+          nullable: true
+
+    RsvpDecision:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          $ref: "#/components/schemas/LogVerificationState"
+
+    AnnotationCreate:
+      type: object
+      required: [ledger_instance_id, classification_tag, annotation_payload]
+      properties:
+        ledger_instance_id:
+          type: integer
+        classification_tag:
+          type: string
+          example: LATE_START
+        annotation_payload:
+          type: string
+          example: Class started 10 minutes late due to lab setup.
+
+    AnnotationResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        ledger_instance_id:
+          type: integer
+        creator_id:
+          type: string
+        classification_tag:
+          type: string
+        annotation_payload:
+          type: string
+        distribution_timestamp:
+          type: string
+          format: date-time
+
+    # ── Guest ─────────────────────────────────
+    GuestCheckInRequest:
+      type: object
+      required: [guest_name, contact_phone, originating_body, target_faculty_id, visitation_intent]
+      properties:
+        guest_name:
+          type: string
+          example: John Smith
+        contact_phone:
+          type: string
+          example: "+91 98765 43210"
+        originating_body:
+          type: string
+          example: TechCorp Ltd
+        target_faculty_id:
+          type: string
+          example: FAC001
+        visitation_intent:
+          type: string
+          example: Research collaboration discussion
+
+    GuestDecisionRequest:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          $ref: "#/components/schemas/LogVerificationState"
+
+    GuestResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        guest_name:
+          type: string
+        contact_phone:
+          type: string
+        originating_body:
+          type: string
+        target_faculty_id:
+          type: string
+        visitation_intent:
+          type: string
+        handshake_status:
+          $ref: "#/components/schemas/LogVerificationState"
+        timestamp_marked:
+          type: string
+          format: date-time
+
+    FacultyAvailabilityResponse:
+      type: object
+      properties:
+        faculty_id:
+          type: string
+        full_name:
+          type: string
+        department_code:
+          type: string
+          nullable: true
+        availability_label:
+          type: string
+          description: Human-readable availability derived from current_occupancy_index.
+
+    # ── Common ────────────────────────────────
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+          example: Not authorized.
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid JWT.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Authenticated but insufficient role.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    UnprocessableEntity:
+      description: Validation error (e.g. malformed request body).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+security:
+  - BearerAuth: []
+
+# ─────────────────────────────────────────────
+# Paths
+# ─────────────────────────────────────────────
+paths:
+
+  # ── Authentication ────────────────────────
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login and receive JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Successful login.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /auth/me:
+    get:
+      tags: [Authentication]
+      summary: Get current authenticated user profile
+      responses:
+        "200":
+          description: User profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/change-password:
+    post:
+      tags: [Authentication]
+      summary: Change own password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: Password changed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Password updated successfully.
+        "400":
+          description: Current password incorrect or new password too short.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ── Users ─────────────────────────────────
+  /users/:
+    get:
+      tags: [Users]
+      summary: List all users
+      description: Requires `SUPER_ADMIN` or `DEPT_ADMIN`.
+      parameters:
+        - name: role
+          in: query
+          schema:
+            $ref: "#/components/schemas/InstitutionalRole"
+          description: Filter by role.
+        - name: department
+          in: query
+          schema:
+            type: string
+          description: Filter by department code.
+      responses:
+        "200":
+          description: User list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+    post:
+      tags: [Users]
+      summary: Create a new user
+      description: Requires `SUPER_ADMIN`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreate"
+      responses:
+        "201":
+          description: User created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          description: Duplicate user ID or email.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /users/faculty/available:
+    get:
+      tags: [Users]
+      summary: List faculty with OPEN_AD_HOC or VERY_FREE status
+      description: >
+        Used by the Guest Kiosk to look up who can receive a visitor right now.
+        This route **must** appear before `GET /users/{user_id}` in the router
+        to prevent "faculty" being matched as a user_id path parameter.
+      security: []
+      responses:
+        "200":
+          description: Available faculty.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FacultyAvailabilityResponse"
+
+  /users/{user_id}:
+    get:
+      tags: [Users]
+      summary: Get a specific user
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User details.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      tags: [Users]
+      summary: Update a user
+      description: Admins can update any user. Users can update only themselves.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: Updated user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags: [Users]
+      summary: Delete a user
+      description: Requires `SUPER_ADMIN`.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted.
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/{user_id}/status:
+    patch:
+      tags: [Users]
+      summary: Update faculty availability status
+      description: Faculty update their own. Admins can update anyone.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserStatusUpdate"
+      responses:
+        "200":
+          description: Status updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Schedule ──────────────────────────────
+  /schedule/ledger/today:
+    get:
+      tags: [Schedule]
+      summary: Today's ledger entries for the authenticated user
+      description: >
+        Faculty receive entries where they are the active or substitute instructor.
+        Students receive entries for their registered courses.
+        Admins receive all entries.
+      responses:
+        "200":
+          description: Today's schedule.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DailyLedgerResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /schedule/ledger/{ledger_id}:
+    get:
+      tags: [Schedule]
+      summary: Get a specific ledger entry
+      parameters:
+        - name: ledger_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Ledger entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyLedgerResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      tags: [Schedule]
+      summary: Update a ledger entry
+      description: Faculty/Admin only. Used to set substitute, delivery format, or override geofence coords.
+      parameters:
+        - name: ledger_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DailyLedgerUpdate"
+      responses:
+        "200":
+          description: Updated ledger entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyLedgerResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /schedule/faculty/{faculty_id}/location:
+    get:
+      tags: [Schedule]
+      summary: Resolve a faculty member's current location via 4-tier resolver
+      parameters:
+        - name: faculty_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Resolved location.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacultyLocationResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /schedule/faculty/all/locations:
+    get:
+      tags: [Schedule]
+      summary: Snapshot of all faculty locations (Student Locator feed)
+      responses:
+        "200":
+          description: All faculty locations.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FacultyLocationResponse"
+
+  /schedule/cycles:
+    get:
+      tags: [Schedule]
+      summary: List academic cycles
+      responses:
+        "200":
+          description: Cycle list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AcademicCycleResponse"
+
+    post:
+      tags: [Schedule]
+      summary: Create a new academic cycle
+      description: Requires `SUPER_ADMIN` or `DEPT_ADMIN`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcademicCycleCreate"
+      responses:
+        "201":
+          description: Cycle created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcademicCycleResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /schedule/cycles/{cycle_id}/close:
+    patch:
+      tags: [Schedule]
+      summary: Close an active academic cycle
+      description: Sets `operational_status = false`. Requires admin.
+      parameters:
+        - name: cycle_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Cycle closed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcademicCycleResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /schedule/cycles/{source_cycle_id}/clone-to/{target_cycle_id}:
+    post:
+      tags: [Schedule]
+      summary: Clone all course offerings from one cycle to another
+      description: >
+        Copies `StructuralMasterSlot` and `CourseOffering` records.
+        Student enrollment and attendance records are **not** cloned.
+        Re-import CSV after cloning to update enrollment.
+      parameters:
+        - name: source_cycle_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: target_cycle_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Clone complete. Returns count of cloned offerings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cloned_offerings:
+                    type: integer
+
+  # ── Attendance ────────────────────────────
+  /attendance/mark:
+    post:
+      tags: [Attendance]
+      summary: Mark single student attendance
+      description: >
+        Students may only mark themselves. Faculty/Admin can mark any student.
+        If `user_lat`/`user_lon`/`user_alt` are provided, the backend runs
+        a 3D Haversine geofence check against the ledger entry's target coordinates.
+        When GPS accuracy > 30m, omit coordinates and rely on backend override.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttendanceMarkRequest"
+      responses:
+        "201":
+          description: Attendance marked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceResponse"
+        "400":
+          description: Geofence violation or duplicate mark.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /attendance/batch:
+    post:
+      tags: [Attendance]
+      summary: Batch mark attendance for multiple students
+      description: Faculty/Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttendanceBatchRequest"
+      responses:
+        "200":
+          description: Batch result summary.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  marked:
+                    type: integer
+                  skipped:
+                    type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /attendance/ledger/{ledger_id}:
+    get:
+      tags: [Attendance]
+      summary: Get all attendance records for a ledger entry
+      parameters:
+        - name: ledger_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Attendance records.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /attendance/absence:
+    post:
+      tags: [Attendance]
+      summary: Submit an absence request (Reverse RSVP)
+      description: >
+        Faculty submit a request for a future absence.
+        The request is routed to `reporting_line_manager` for approval.
+        On approval, the relevant daily ledger entry transitions to `ON_LEAVE`
+        and a WebSocket event is broadcast to the faculty member.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReverseRsvpCreate"
+      responses:
+        "201":
+          description: Absence request created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReverseRsvpResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /attendance/absence/pending:
+    get:
+      tags: [Attendance]
+      summary: List absence requests pending the caller's approval
+      description: Managers/Admins only. Returns requests where caller is the line manager.
+      responses:
+        "200":
+          description: Pending requests.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReverseRsvpResponse"
+
+  /attendance/absence/{request_id}/decide:
+    patch:
+      tags: [Attendance]
+      summary: Approve or deny an absence request
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RsvpDecision"
+      responses:
+        "200":
+          description: Decision recorded. If approved, ledger entry updated and WebSocket event fired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReverseRsvpResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /attendance/annotations:
+    post:
+      tags: [Attendance]
+      summary: Create a ledger annotation
+      description: Faculty/Admin only. Attach freeform notes (e.g. lab issues, late starts).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnotationCreate"
+      responses:
+        "201":
+          description: Annotation created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnnotationResponse"
+
+  /attendance/annotations/{ledger_id}:
+    get:
+      tags: [Attendance]
+      summary: Get all annotations for a ledger entry
+      parameters:
+        - name: ledger_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Annotations.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AnnotationResponse"
+
+  # ── Guest Gate ────────────────────────────
+  /guest/register-checkin:
+    post:
+      tags: [Guest Gate]
+      summary: Register a campus visitor (kiosk)
+      security: []
+      description: >
+        No authentication required — this is the public kiosk endpoint.
+        Fires a `GUEST_HANDSHAKE_REQ` WebSocket event to the target faculty member.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuestCheckInRequest"
+      responses:
+        "201":
+          description: Guest registered. Faculty notified via WebSocket.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuestResponse"
+        "404":
+          description: Target faculty not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /guest/directory:
+    get:
+      tags: [Guest Gate]
+      summary: Public faculty availability directory
+      security: []
+      description: Returns faculty with OPEN_AD_HOC or VERY_FREE status for kiosk display.
+      parameters:
+        - name: name
+          in: query
+          schema:
+            type: string
+          description: Case-insensitive search by faculty name.
+      responses:
+        "200":
+          description: Available faculty.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FacultyAvailabilityResponse"
+
+  /guest/:
+    get:
+      tags: [Guest Gate]
+      summary: List pending guest requests for authenticated faculty
+      description: Returns guests targeting the authenticated faculty member with PENDING_VERIFICATION status.
+      responses:
+        "200":
+          description: Pending guest requests.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GuestResponse"
+
+  /guest/{transaction_id}/decide:
+    patch:
+      tags: [Guest Gate]
+      summary: Accept or decline a guest visit
+      parameters:
+        - name: transaction_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuestDecisionRequest"
+      responses:
+        "200":
+          description: Decision recorded. If approved, guest receives notification.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuestResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Ingestion ─────────────────────────────
+  /ingestion/upload-csv:
+    post:
+      tags: [Ingestion]
+      summary: Bulk import schedule from CSV
+      description: >
+        Requires `SUPER_ADMIN` or `DEPT_ADMIN`.
+        The CSV must contain these columns (case-sensitive):
+        `student_id`, `student_name`, `student_email`, `subject_code`, `subject_title`,
+        `department`, `day_of_week_index` (0=Mon), `time_window_start` (HH:MM),
+        `time_window_end` (HH:MM), `teacher_id`, `room`.
+
+        Creates/updates: Users, CourseOfferings, StructuralMasterSlots, CourseRegistrations.
+        Idempotent — re-uploading the same CSV is safe.
+      parameters:
+        - name: cycle_id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Target academic cycle ID.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Import complete.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rows_processed:
+                    type: integer
+                  users_created:
+                    type: integer
+                  slots_created:
+                    type: integer
+                  registrations_created:
+                    type: integer
+        "400":
+          description: CSV format error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /ingestion/generate-ledger:
+    post:
+      tags: [Ingestion]
+      summary: Trigger daily ledger generation
+      description: >
+        Requires admin. Generates `DailyLedger` rows from `StructuralMasterSlot`
+        for a given date (defaults to tomorrow). Safe to re-run — existing rows are skipped.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                target_date:
+                  type: string
+                  format: date
+                  description: Date to generate. Defaults to tomorrow.
+      responses:
+        "200":
+          description: Generation complete.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated:
+                    type: integer
+                  skipped:
+                    type: integer
+                  target_date:
+                    type: string
+                    format: date
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  # ── Calendar Sync ─────────────────────────
+  /sync/user-feed/{user_id}.ics:
+    get:
+      tags: [Calendar Sync]
+      summary: iCalendar feed for a user (rolling 37-day window)
+      description: >
+        Subscribe this URL directly in Google Calendar, Apple Calendar, or Outlook.
+        Returns standard iCalendar (text/calendar) content.
+        Faculty feed includes all sessions where they are active or substitute instructor.
+        Student feed includes all registered courses.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: iCalendar feed.
+          content:
+            text/calendar:
+              schema:
+                type: string
+                example: "BEGIN:VCALENDAR\nVERSION:2.0\n..."
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Health ────────────────────────────────
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      security: []
+      description: Used by Docker healthcheck. Returns 200 when the app is ready.
+      responses:
+        "200":
+          description: Healthy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+# ─────────────────────────────────────────────
+# WebSocket (informational — not an HTTP path)
+# ─────────────────────────────────────────────
+# WebSocket endpoint: ws://<server>/ws?token=<jwt>
+#
+# Connect with the JWT as a query parameter. After the handshake the server
+# registers the connection and begins routing domain events to this client.
+#
+# Inbound frames (server → client):
+#
+#   { "event": "ABSENCE_APPROVAL_REQUIRED",
+#     "payload": { "log_id": 12, "from": "Prof. A", "date": "2026-06-15" } }
+#
+#   { "event": "ABSENCE_DECISION",
+#     "payload": { "log_id": 12, "decision": "VERIFIED_APPROVED" } }
+#
+#   { "event": "GUEST_HANDSHAKE_REQ",
+#     "payload": { "transaction_reference": 5, "guest_name": "J. Smith",
+#                  "originating_body": "TechCorp", "intent": "..." } }
+#
+#   { "event": "LEDGER_STATE_CHANGE",
+#     "payload": { "ledger_id": 1042, "new_state": "ON_LEAVE" } }
+#
+# The client sends no frames upstream (receive-only subscription model).

@@ -1,0 +1,128 @@
+version: '3.9'
+
+# Copyright 2026 Chronos Ledger Contributors — Apache 2.0
+#
+# Production Docker Compose — pulls pre-built images from GHCR.
+# No local build required; swap in any released version instantly.
+#
+# Usage:
+#   # Latest nightly build from main branch
+#   docker compose -f docker-compose.prod.yml up -d
+#
+#   # Pin to a specific release
+#   VERSION=v1.2.0 docker compose -f docker-compose.prod.yml up -d
+#
+# Required env vars (set in .env or export before running):
+#   JWT_SECRET_SIGNING_KEY  — openssl rand -hex 32
+#   DB_PASSWORD             — strong random password
+#   VAPID_PUBLIC_KEY        — npx web-push generate-vapid-keys
+#   VAPID_PRIVATE_KEY       — (same command)
+#   VAPID_CONTACT_EMAIL     — admin reachable email
+#   GHCR_OWNER              — your GitHub org/username (default: Life-Experimentalist)
+#   VERSION                 — image tag to deploy  (default: latest)
+
+x-restart: &restart
+  restart: unless-stopped
+
+x-chronos-net: &chronos-net
+  networks:
+    - chronos_net
+
+services:
+  # ── Web (nginx + pre-built Next.js static export) ─────────────────────────
+  chronos-proxy:
+    <<: [*restart, *chronos-net]
+    image: ghcr.io/${GHCR_OWNER:-Life-Experimentalist}/chronos-ledger-web:${VERSION:-latest}
+    container_name: chronos_edge_proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      chronos-app:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── FastAPI backend ────────────────────────────────────────────────────────
+  chronos-app:
+    <<: [*restart, *chronos-net]
+    image: ghcr.io/${GHCR_OWNER:-Life-Experimentalist}/chronos-ledger-backend:${VERSION:-latest}
+    container_name: chronos_core_engine
+    environment:
+      DATABASE_URL: postgresql://chronos_admin:${DB_PASSWORD:-SecureCloud2026}@chronos-db:5432/chronos_ledger
+      REDIS_URL: redis://chronos-cache:6379/0
+      JWT_SECRET_SIGNING_KEY: ${JWT_SECRET_SIGNING_KEY:?JWT_SECRET_SIGNING_KEY is required}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-480}
+      APP_ENV: production
+      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-http://localhost}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_CONTACT_EMAIL: ${VAPID_CONTACT_EMAIL:-admin@college.internal}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      chronos-db:
+        condition: service_healthy
+      chronos-cache:
+        condition: service_started
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  chronos-db:
+    <<: [*restart, *chronos-net]
+    image: postgres:17-alpine
+    container_name: chronos_postgres_persistence
+    environment:
+      POSTGRES_USER: chronos_admin
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-SecureCloud2026}
+      POSTGRES_DB: chronos_ledger
+    volumes:
+      - chronos_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chronos_admin -d chronos_ledger"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  chronos-cache:
+    <<: [*restart, *chronos-net]
+    image: redis:7.4-alpine
+    container_name: chronos_redis_state
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - chronos_cache_store:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+volumes:
+  chronos_data:
+    driver: local
+  chronos_cache_store:
+    driver: local
+
+networks:
+  chronos_net:
+    driver: bridge
