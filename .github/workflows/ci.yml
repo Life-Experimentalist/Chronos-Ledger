@@ -34,7 +34,7 @@ jobs:
           cache-dependency-glob: backend/uv.lock
 
       - name: Install dev dependencies
-        run: uv sync --frozen --dev
+        run: uv sync --frozen --dev --no-install-project
 
       - name: Ruff format check
         run: uv run ruff format --check .

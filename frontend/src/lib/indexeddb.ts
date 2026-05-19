@@ -69,7 +69,7 @@ export async function queueAttendanceMark(token: string, payload: object): Promi
   }
 }
 
-export async function getPendingAttendanceQueue(): Promise<Array<{ id: number; payload: object; token: string }>> {
+export async function getPendingAttendanceQueue(): Promise<Array<{ id?: number; payload: object; token: string; queued_at: string }>> {
   const database = await getDb()
   return database.getAll('attendance-queue')
 }
