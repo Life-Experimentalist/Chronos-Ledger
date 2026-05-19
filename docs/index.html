@@ -16,6 +16,8 @@
   <title>Chronos Ledger — Campus Schedule &amp; Attendance</title>
   <meta name="description" content="Production-ready PWA for universities and colleges. Live timetables, geofenced attendance, faculty location resolution, and smart offline notifications — all self-hosted on your intranet." />
   <meta name="theme-color" content="#14b8a6" />
+  <link rel="icon" href="icon.png" />
+  <link rel="apple-touch-icon" href="icon.png" />
   <meta property="og:title" content="Chronos Ledger" />
   <meta property="og:description" content="Campus schedule &amp; attendance that works offline." />
   <meta property="og:type" content="website" />
@@ -193,23 +195,11 @@
       transition: background .25s, border-color .25s;
     }
 
-    .nav-logo {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: 700;
-      font-size: .95rem;
+    .nav-logo-img {
+      height: 38px;
+      width: auto;
+      display: block;
     }
-    .nav-logo-icon {
-      width: 30px; height: 30px;
-      border-radius: 8px;
-      background: linear-gradient(135deg, var(--teal), var(--emerald));
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-    .nav-logo-icon svg { color: var(--bg) !important; }
 
     .nav-links {
       display: flex;
@@ -598,16 +588,11 @@
       gap: 16px;
       flex-wrap: wrap;
     }
-    .footer-logo { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: .88rem; }
-    .footer-logo-icon {
-      width: 26px; height: 26px;
-      border-radius: 7px;
-      background: linear-gradient(135deg, var(--teal), var(--emerald));
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    .footer-logo-img {
+      height: 30px;
+      width: auto;
+      display: block;
     }
-    .footer-logo-icon svg { color: var(--bg) !important; }
     .footer-copy { font-size: .75rem; color: var(--muted); }
     .footer-links { display: flex; align-items: center; gap: 16px; font-size: .8rem; color: var(--muted); }
     .footer-links a:hover { color: var(--text); }
@@ -668,12 +653,7 @@
 
 <!-- ── Navigation ──────────────────────────────────────────────────────────── -->
 <nav>
-  <div class="nav-logo">
-    <div class="nav-logo-icon">
-      <i data-lucide="clock" style="width:15px;height:15px;"></i>
-    </div>
-    Chronos Ledger
-  </div>
+  <img src="logo.svg" alt="Chronos Ledger" class="nav-logo-img" />
 
   <div class="nav-links">
     <a href="#features">Features</a>
@@ -876,12 +856,7 @@
 <!-- ── Footer ────────────────────────────────────────────────────────────────── -->
 <footer>
   <div class="footer-inner">
-    <div class="footer-logo">
-      <div class="footer-logo-icon">
-        <i data-lucide="clock" style="width:13px;height:13px;"></i>
-      </div>
-      Chronos Ledger
-    </div>
+    <img src="logo.svg" alt="Chronos Ledger" class="footer-logo-img" />
     <p class="footer-copy">
       Licensed under the <span class="teal">Apache License 2.0</span>. Built for campus intranet deployments.
     </p>

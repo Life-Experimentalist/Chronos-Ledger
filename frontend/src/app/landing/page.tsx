@@ -6,8 +6,8 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import {
-  Clock, MapPin, Users, Wifi, WifiOff, Bell, Calendar,
-  Shield, Upload, ChevronRight, Check, Zap, Globe,
+  MapPin, Users, WifiOff, Bell, Calendar,
+  Shield, Upload, ChevronRight, Check, Zap,
   BookOpen, UserCheck, Navigation, BarChart3, Star, Github,
 } from 'lucide-react'
 import { recordView } from '@/lib/telemetry'
@@ -27,12 +27,7 @@ export default function LandingPage() {
 
       {/* ── Nav ─────────────────────────────────────────────────────────────── */}
       <nav className="fixed top-0 left-0 right-0 z-50 h-16 flex items-center justify-between px-6 md:px-12 border-b border-chronos-border/30 bg-chronos-dark/80 backdrop-blur-md">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-chronos-teal to-chronos-emerald flex items-center justify-center">
-            <Clock className="w-4 h-4 text-chronos-dark" />
-          </div>
-          <span className="font-bold text-chronos-text tracking-tight">Chronos Ledger</span>
-        </div>
+        <img src="/logo-dark.svg" alt="Chronos Ledger" className="h-9 w-auto" />
         <div className="hidden md:flex items-center gap-8 text-sm text-chronos-muted">
           <a href="#features" className="hover:text-chronos-text transition-colors">Features</a>
           <a href="#roles" className="hover:text-chronos-text transition-colors">Who It&apos;s For</a>
@@ -406,12 +401,7 @@ export default function LandingPage() {
       {/* ── Footer ──────────────────────────────────────────────────────────── */}
       <footer className="border-t border-chronos-border/30 py-12 px-6 md:px-12">
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-chronos-teal to-chronos-emerald flex items-center justify-center">
-              <Clock className="w-3.5 h-3.5 text-chronos-dark" />
-            </div>
-            <span className="font-bold text-sm text-chronos-text">Chronos Ledger</span>
-          </div>
+          <img src="/logo-dark.svg" alt="Chronos Ledger" className="h-7 w-auto" />
           <p className="text-xs text-chronos-muted text-center">
             Licensed under the{' '}
             <span className="text-chronos-teal">Apache License 2.0</span>.

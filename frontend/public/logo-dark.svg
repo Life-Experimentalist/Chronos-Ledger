@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 60" fill="none">
+  <!-- Clock icon box -->
+  <rect x="0" y="0" width="56" height="56" rx="14" fill="url(#grad)"/>
+
+  <!-- Clock face -->
+  <circle cx="28" cy="28" r="18" stroke="#060d1a" stroke-width="2.5" fill="none"/>
+  <line x1="28" y1="28" x2="28" y2="15" stroke="#060d1a" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="28" y1="28" x2="38" y2="34" stroke="#060d1a" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="28" cy="28" r="2" fill="#060d1a"/>
+
+  <!-- Wordmark (dark background) -->
+  <text x="70" y="22" font-family="'Inter', 'Segoe UI', system-ui, sans-serif" font-size="18" font-weight="700" letter-spacing="-0.5" fill="#f0fafa">Chronos</text>
+  <text x="70" y="46" font-family="'Inter', 'Segoe UI', system-ui, sans-serif" font-size="18" font-weight="700" letter-spacing="-0.5" fill="url(#textGrad)">Ledger</text>
+
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#14b8a6"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#14b8a6"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+  </defs>
+</svg>

@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Clock, Search, User, Phone, Building2, MessageSquare, Loader2, CheckCircle2, ArrowLeft } from 'lucide-react'
+import { Search, User, Phone, Building2, MessageSquare, Loader2, CheckCircle2, ArrowLeft } from 'lucide-react'
 import { guestApi } from '@/lib/api'
 import type { FacultyAvailability } from '@/types'
 
@@ -84,9 +84,7 @@ export default function GuestKioskPage() {
 
       {/* Header */}
       <div className="w-full max-w-xl mb-8 text-center relative">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-chronos-teal to-chronos-emerald mb-4 shadow-teal-glow">
-          <Clock className="w-7 h-7 text-chronos-dark" strokeWidth={2.5} />
-        </div>
+        <img src="/icon.png" alt="Chronos Ledger" className="w-14 h-14 rounded-2xl mb-4 shadow-teal-glow" />
         <h1 className="text-2xl font-bold text-chronos-text">Campus Visitor Kiosk</h1>
         <p className="text-chronos-text-dim text-sm mt-1">Search for a faculty member to request a gate-pass</p>
       </div>

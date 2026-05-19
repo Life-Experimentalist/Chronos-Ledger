@@ -8,7 +8,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Clock, Lock, Mail, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react'
+import { Lock, Mail, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
 import { roleRedirectPath, getStoredUser } from '@/lib/auth'
 
@@ -62,9 +62,7 @@ export default function LoginPage() {
       >
         {/* Logo & Brand */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-chronos-teal to-chronos-emerald mb-4 shadow-teal-strong">
-            <Clock className="w-8 h-8 text-chronos-dark" strokeWidth={2.5} />
-          </div>
+          <img src="/icon.png" alt="Chronos Ledger" className="w-16 h-16 rounded-2xl mb-4 shadow-teal-strong" />
           <h1 className="text-3xl font-bold text-chronos-text teal-glow-text">Chronos Ledger</h1>
           <p className="text-chronos-text-dim mt-1 text-sm">Campus Schedule & Attendance Management</p>
         </div>

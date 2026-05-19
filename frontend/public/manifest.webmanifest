@@ -13,50 +13,8 @@
   "categories": ["education", "productivity", "utilities"],
   "icons": [
     {
-      "src": "/icons/icon-72x72.png",
-      "sizes": "72x72",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/icon-96x96.png",
-      "sizes": "96x96",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/icon-128x128.png",
-      "sizes": "128x128",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/icon-144x144.png",
-      "sizes": "144x144",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/icon-152x152.png",
-      "sizes": "152x152",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/icon-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icons/icon-384x384.png",
-      "sizes": "384x384",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/icon-512x512.png",
-      "sizes": "512x512",
+      "src": "/icon.png",
+      "sizes": "any",
       "type": "image/png",
       "purpose": "any maskable"
     }
@@ -67,33 +25,33 @@
       "short_name": "Schedule",
       "description": "View today's class schedule",
       "url": "/student/dashboard/",
-      "icons": [{ "src": "/icons/icon-96x96.png", "sizes": "96x96" }]
+      "icons": [{ "src": "/icon.png", "sizes": "any" }]
     },
     {
       "name": "Mark Attendance",
       "short_name": "Attendance",
       "description": "Mark class attendance",
       "url": "/student/dashboard/?action=mark",
-      "icons": [{ "src": "/icons/icon-96x96.png", "sizes": "96x96" }]
+      "icons": [{ "src": "/icon.png", "sizes": "any" }]
     },
     {
       "name": "Guest Check-In",
       "short_name": "Check-In",
       "description": "Campus visitor check-in kiosk",
       "url": "/guest/kiosk/",
-      "icons": [{ "src": "/icons/icon-96x96.png", "sizes": "96x96" }]
+      "icons": [{ "src": "/icon.png", "sizes": "any" }]
     }
   ],
   "screenshots": [
     {
-      "src": "/icons/screenshot-desktop.png",
+      "src": "/logo.png",
       "sizes": "1280x800",
       "type": "image/png",
       "form_factor": "wide",
       "label": "Admin dashboard showing today's schedule and attendance matrix"
     },
     {
-      "src": "/icons/screenshot-mobile.png",
+      "src": "/icon.png",
       "sizes": "390x844",
       "type": "image/png",
       "form_factor": "narrow",

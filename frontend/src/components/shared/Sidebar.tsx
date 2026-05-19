@@ -8,7 +8,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { clsx } from 'clsx'
 import {
-  Clock, LayoutDashboard, Users, Calendar, CheckSquare,
+  LayoutDashboard, Users, Calendar, CheckSquare,
   LogOut, Bell, ChevronLeft, ChevronRight, Settings,
   FileSpreadsheet, MapPin, UserCheck,
 } from 'lucide-react'
@@ -60,20 +60,19 @@ export function Sidebar({ role }: SidebarProps) {
       className="flex flex-col h-screen bg-chronos-surface border-r border-chronos-border/40 shrink-0 overflow-hidden"
     >
       {/* Brand */}
-      <div className={clsx('flex items-center h-16 px-4 border-b border-chronos-border/40', collapsed ? 'justify-center' : 'gap-3')}>
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-chronos-teal to-chronos-emerald flex items-center justify-center shrink-0">
-          <Clock className="w-4 h-4 text-chronos-dark" strokeWidth={2.5} />
-        </div>
+      <div className={clsx('flex items-center h-16 px-4 border-b border-chronos-border/40 overflow-hidden', collapsed ? 'justify-center' : 'gap-3')}>
+        <img src="/icon.png" alt="Chronos Ledger" className="w-8 h-8 rounded-lg shrink-0" />
         <AnimatePresence>
           {!collapsed && (
-            <motion.span
+            <motion.img
+              src="/logo-dark.svg"
+              alt="Chronos Ledger"
               initial={{ opacity: 0, x: -8 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -8 }}
-              className="font-bold text-chronos-text text-sm tracking-wide whitespace-nowrap"
-            >
-              Chronos Ledger
-            </motion.span>
+              className="h-8 w-auto object-contain"
+              style={{ maxWidth: 140 }}
+            />
           )}
         </AnimatePresence>
       </div>
