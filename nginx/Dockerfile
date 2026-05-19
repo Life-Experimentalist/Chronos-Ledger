@@ -16,8 +16,8 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Dependency layer — cached unless package files change
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm install --legacy-peer-deps --ignore-scripts
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --legacy-peer-deps --ignore-scripts
 
 COPY frontend/ ./
 
