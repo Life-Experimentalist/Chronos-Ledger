@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<!--
+  Copyright 2026 Chronos Ledger Contributors
+  Licensed under the Apache License, Version 2.0
+
+  Standalone landing page for GitHub Pages.
+  Self-contained: no build step, no framework.
+  Dark Reader aware: all colours via CSS variables + color-scheme meta.
+-->
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Dark Reader reads this and won't over-invert when theme=dark -->
+  <meta name="color-scheme" content="dark light" />
+  <title>Chronos Ledger — Campus Schedule &amp; Attendance</title>
+  <meta name="description" content="Production-ready PWA for universities and colleges. Live timetables, geofenced attendance, faculty location resolution, and smart offline notifications — all self-hosted on your intranet." />
+  <meta name="theme-color" content="#14b8a6" />
+  <meta property="og:title" content="Chronos Ledger" />
+  <meta property="og:description" content="Campus schedule &amp; attendance that works offline." />
+  <meta property="og:type" content="website" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+
+  <style>
+    /* ── Theme variables ─────────────────────────────────────────────────────
+       All colour tokens live here.  Dark Reader overrides these variables
+       directly instead of inverting bitmaps, so the page stays readable in
+       every mode.                                                            */
+    :root {
+      color-scheme: dark;
+      --bg:         #060d1a;
+      --surface:    #0a1628;
+      --card:       #0f1f38;
+      --border:     #1a2f50;
+      --teal:       #14b8a6;
+      --teal-dim:   #0d9488;
+      --teal-glow:  #5eead4;
+      --emerald:    #10b981;
+      --accent:     #818cf8;
+      --warning:    #f59e0b;
+      --danger:     #f43f5e;
+      --success:    #22c55e;
+      --text:       #e2e8f0;
+      --text-dim:   #94a3b8;
+      --muted:      #64748b;
+      --overlay:    rgba(6, 13, 26, 0.85);
+      --shadow:     0 4px 24px rgba(0,0,0,.5);
+      --glow-teal:  0 0 24px rgba(20,184,166,.18);
+      --glow-strong:0 0 48px rgba(20,184,166,.32);
+    }
+
+    [data-theme="light"] {
+      color-scheme: light;
+      --bg:         #f0f4f8;
+      --surface:    #ffffff;
+      --card:       #f8fafc;
+      --border:     #cbd5e1;
+      --teal:       #0f766e;
+      --teal-dim:   #0e6b63;
+      --teal-glow:  #14b8a6;
+      --emerald:    #059669;
+      --accent:     #4f46e5;
+      --warning:    #d97706;
+      --danger:     #dc2626;
+      --success:    #16a34a;
+      --text:       #0f172a;
+      --text-dim:   #334155;
+      --muted:      #64748b;
+      --overlay:    rgba(240,244,248,.9);
+      --shadow:     0 4px 24px rgba(0,0,0,.12);
+      --glow-teal:  0 0 24px rgba(15,118,110,.12);
+      --glow-strong:0 0 48px rgba(15,118,110,.22);
+    }
+
+    /* ── Reset & base ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+      transition: background .25s, color .25s;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    code, pre, .mono {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    /* ── Utility ──────────────────────────────────────────────────────────── */
+    .teal   { color: var(--teal); }
+    .muted  { color: var(--muted); }
+    .dim    { color: var(--text-dim); }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .card:hover { border-color: rgba(20,184,166,.3); }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: .72rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 99px;
+    }
+    .badge-teal {
+      background: rgba(20,184,166,.1);
+      color: var(--teal);
+      border: 1px solid rgba(20,184,166,.22);
+    }
+    .badge-warning {
+      background: rgba(245,158,11,.1);
+      color: var(--warning);
+      border: 1px solid rgba(245,158,11,.22);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 22px;
+      border-radius: 10px;
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .18s, border-color .18s, background .18s, color .18s;
+      border: none;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--teal), var(--emerald));
+      color: var(--bg);
+    }
+    .btn-primary:hover { opacity: .88; }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+    }
+    .btn-outline:hover { border-color: rgba(20,184,166,.4); color: var(--text); }
+    .btn-ghost {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      padding: 7px 13px;
+      font-size: .82rem;
+    }
+    .btn-ghost:hover { color: var(--text); }
+
+    /* ── Scroll reveal ────────────────────────────────────────────────────── */
+    .reveal {
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity .45s ease, transform .45s ease;
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: none;
+    }
+    .reveal-delay-1 { transition-delay: .07s; }
+    .reveal-delay-2 { transition-delay: .14s; }
+    .reveal-delay-3 { transition-delay: .21s; }
+    .reveal-delay-4 { transition-delay: .28s; }
+
+    /* ── Navigation ───────────────────────────────────────────────────────── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 48px;
+      border-bottom: 1px solid rgba(26,47,80,.4);
+      background: var(--overlay);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      z-index: 100;
+      transition: background .25s, border-color .25s;
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: .95rem;
+    }
+    .nav-logo-icon {
+      width: 30px; height: 30px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--teal), var(--emerald));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .nav-logo-icon svg { color: var(--bg) !important; }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      font-size: .875rem;
+      color: var(--muted);
+    }
+    .nav-links a:hover { color: var(--text); }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #theme-toggle {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      font-size: .8rem;
+      gap: 5px;
+      transition: border-color .18s, color .18s;
+    }
+    #theme-toggle:hover { border-color: var(--teal); color: var(--teal); }
+
+    /* ── Hero ─────────────────────────────────────────────────────────────── */
+    .hero {
+      padding: 140px 48px 96px;
+      max-width: 1200px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.2rem, 5vw, 3.8rem);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -.02em;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 .gradient {
+      background: linear-gradient(135deg, var(--teal), var(--emerald));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-sub {
+      font-size: 1.08rem;
+      color: var(--text-dim);
+      max-width: 580px;
+      margin: 0 auto 36px;
+      line-height: 1.7;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 64px;
+    }
+
+    /* Terminal mockup */
+    .terminal {
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      overflow: hidden;
+      text-align: left;
+      box-shadow: var(--shadow);
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--card);
+    }
+    .terminal-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+    }
+    .terminal-title {
+      margin-left: 10px;
+      font-size: .75rem;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .terminal-body {
+      padding: 20px 24px;
+      font-size: .82rem;
+      line-height: 1.9;
+    }
+    .terminal-body p { white-space: pre; }
+    .t-normal { color: var(--text); }
+    .t-green  { color: var(--teal); }
+    .t-dim    { color: var(--muted); }
+    .t-warn   { color: var(--warning); }
+
+    /* ── Stats bar ────────────────────────────────────────────────────────── */
+    .stats-bar {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      background: rgba(10,22,40,.4);
+      padding: 28px 48px;
+      transition: background .25s;
+    }
+    [data-theme="light"] .stats-bar {
+      background: rgba(248,250,252,.6);
+    }
+    .stats-grid {
+      max-width: 860px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      text-align: center;
+    }
+    .stat-value { font-size: 1.6rem; font-weight: 700; color: var(--teal); }
+    .stat-label { font-size: .73rem; color: var(--muted); margin-top: 2px; }
+
+    /* ── Section headings ─────────────────────────────────────────────────── */
+    .section { padding: 88px 48px; }
+    .section-inner { max-width: 1160px; margin: 0 auto; }
+    .section-alt {
+      background: rgba(10,22,40,.35);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    [data-theme="light"] .section-alt {
+      background: rgba(248,250,252,.6);
+    }
+
+    .section-header { text-align: center; margin-bottom: 56px; }
+    .section-header h2 {
+      font-size: clamp(1.7rem, 3vw, 2.4rem);
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    .section-header p { color: var(--text-dim); max-width: 480px; margin: 0 auto; }
+
+    /* ── Features grid ────────────────────────────────────────────────────── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    .feature-card {
+      padding: 22px;
+      cursor: default;
+    }
+    .feature-icon {
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+    .feature-card h3 { font-size: .92rem; font-weight: 600; margin-bottom: 6px; }
+    .feature-card p { font-size: .82rem; color: var(--text-dim); line-height: 1.65; }
+
+    /* ── Roles grid ───────────────────────────────────────────────────────── */
+    .roles-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+    }
+    .role-card { padding: 22px; }
+    .role-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .role-icon {
+      width: 38px; height: 38px;
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .role-name { font-size: .93rem; font-weight: 600; }
+    .role-path { font-size: .72rem; color: var(--muted); font-family: monospace; }
+    .role-caps { list-style: none; }
+    .role-caps li {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: .82rem;
+      color: var(--text-dim);
+      padding: 4px 0;
+    }
+    .role-caps li svg { color: var(--emerald) !important; flex-shrink: 0; margin-top: 2px; }
+
+    /* ── Offline two-col ──────────────────────────────────────────────────── */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 56px;
+      align-items: center;
+    }
+    .two-col h2 {
+      font-size: clamp(1.5rem, 2.5vw, 2rem);
+      font-weight: 700;
+      margin: 12px 0;
+    }
+    .two-col p { color: var(--text-dim); line-height: 1.75; margin-bottom: 20px; }
+    .checklist { list-style: none; }
+    .checklist li {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      font-size: .85rem;
+      color: var(--text-dim);
+      padding: 5px 0;
+    }
+    .checklist li svg { color: var(--teal) !important; flex-shrink: 0; margin-top: 2px; }
+
+    .offline-widget { padding: 20px; }
+    .offline-widget-label {
+      font-size: .68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+    .offline-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 0;
+      border-bottom: 1px solid rgba(26,47,80,.3);
+      font-size: .83rem;
+    }
+    .offline-row:last-child { border-bottom: none; }
+    .offline-row-left { display: flex; align-items: center; gap: 9px; color: var(--text-dim); }
+    .pulse-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      animation: pulse-dot 1.8s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%,100% { opacity: 1; }
+      50% { opacity: .3; }
+    }
+
+    /* ── Install steps ────────────────────────────────────────────────────── */
+    .install-steps { max-width: 740px; margin: 0 auto; }
+    .install-step { padding: 18px 20px; margin-bottom: 14px; }
+    .install-step-inner { display: flex; align-items: flex-start; gap: 16px; }
+    .step-num {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: rgba(20,184,166,.1);
+      color: var(--teal);
+      font-size: .75rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .step-title { font-size: .9rem; font-weight: 600; margin-bottom: 10px; }
+    .step-code {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: .78rem;
+      color: var(--teal);
+      overflow-x: auto;
+      line-height: 1.8;
+      white-space: pre;
+    }
+    .step-note { font-size: .75rem; color: var(--muted); margin-top: 7px; }
+
+    .warning-card {
+      margin-top: 24px;
+      padding: 18px 20px;
+      border: 1px solid rgba(245,158,11,.22);
+      background: rgba(245,158,11,.06);
+      border-radius: 12px;
+    }
+    .warning-card-title { font-size: .85rem; font-weight: 600; color: var(--warning); margin-bottom: 10px; }
+    .warning-list { list-style: none; }
+    .warning-list li {
+      font-size: .78rem;
+      color: var(--text-dim);
+      padding: 3px 0;
+      display: flex;
+      gap: 8px;
+    }
+    .warning-list li::before { content: "→"; color: var(--warning); flex-shrink: 0; }
+
+    /* ── API groups ───────────────────────────────────────────────────────── */
+    .api-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .api-group { padding: 16px 18px; }
+    .api-group-title {
+      font-size: .68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--teal);
+      margin-bottom: 12px;
+    }
+    .api-endpoint {
+      font-size: .73rem;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+      padding: 3px 0;
+    }
+    .api-note {
+      text-align: center;
+      font-size: .82rem;
+      color: var(--muted);
+    }
+    .api-note code {
+      font-size: .75rem;
+      color: var(--teal);
+      background: var(--surface);
+      padding: 2px 8px;
+      border-radius: 5px;
+    }
+
+    /* ── CTA ──────────────────────────────────────────────────────────────── */
+    .cta-section { padding: 80px 48px; text-align: center; }
+    .cta-icon {
+      width: 58px; height: 58px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, var(--teal), var(--emerald));
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      box-shadow: var(--glow-strong);
+    }
+    .cta-icon svg { color: var(--bg) !important; }
+    .cta-section h2 { font-size: 1.9rem; font-weight: 700; margin-bottom: 12px; }
+    .cta-section p { color: var(--text-dim); max-width: 500px; margin: 0 auto 32px; line-height: 1.7; }
+    .cta-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 36px; }
+    .cta-mini-stats {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .cta-mini-stat {
+      padding: 10px 18px;
+      text-align: center;
+    }
+    .cta-mini-stat-val { font-size: .88rem; font-weight: 600; color: var(--teal); }
+    .cta-mini-stat-label { font-size: .72rem; color: var(--muted); }
+
+    /* ── Footer ───────────────────────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 40px 48px;
+    }
+    .footer-inner {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .footer-logo { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: .88rem; }
+    .footer-logo-icon {
+      width: 26px; height: 26px;
+      border-radius: 7px;
+      background: linear-gradient(135deg, var(--teal), var(--emerald));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .footer-logo-icon svg { color: var(--bg) !important; }
+    .footer-copy { font-size: .75rem; color: var(--muted); }
+    .footer-links { display: flex; align-items: center; gap: 16px; font-size: .8rem; color: var(--muted); }
+    .footer-links a:hover { color: var(--text); }
+    .footer-links a { display: flex; align-items: center; gap: 5px; }
+
+    /* ── Responsive ───────────────────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      nav { padding: 0 24px; }
+      .nav-links { display: none; }
+      .hero { padding: 110px 24px 72px; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .section { padding: 64px 24px; }
+      .features-grid { grid-template-columns: 1fr 1fr; }
+      .roles-grid { grid-template-columns: 1fr; }
+      .two-col { grid-template-columns: 1fr; gap: 32px; }
+      .api-grid { grid-template-columns: repeat(2, 1fr); }
+      .stats-bar { padding: 24px; }
+      .cta-section { padding: 56px 24px; }
+      footer { padding: 32px 24px; }
+    }
+
+    @media (max-width: 600px) {
+      .features-grid { grid-template-columns: 1fr; }
+      .api-grid { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 2rem; }
+      .hero-actions { flex-direction: column; align-items: center; }
+    }
+
+    /* ── Animated gradient border on hero terminal ────────────────────────── */
+    @keyframes border-spin {
+      to { --angle: 360deg; }
+    }
+
+    /* ── Active nav underline ─────────────────────────────────────────────── */
+    .nav-links a {
+      position: relative;
+      padding-bottom: 2px;
+    }
+    .nav-links a::after {
+      content: '';
+      position: absolute;
+      bottom: -2px; left: 0;
+      width: 0; height: 1.5px;
+      background: var(--teal);
+      transition: width .2s;
+    }
+    .nav-links a:hover::after { width: 100%; }
+
+    /* ── Feature card active state ────────────────────────────────────────── */
+    .feature-card.active {
+      border-color: rgba(20,184,166,.4);
+      box-shadow: var(--glow-teal);
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- ── Navigation ──────────────────────────────────────────────────────────── -->
+<nav>
+  <div class="nav-logo">
+    <div class="nav-logo-icon">
+      <i data-lucide="clock" style="width:15px;height:15px;"></i>
+    </div>
+    Chronos Ledger
+  </div>
+
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#roles">Who It's For</a>
+    <a href="#install">Install</a>
+    <a href="#api">API</a>
+  </div>
+
+  <div class="nav-actions">
+    <button id="theme-toggle" aria-label="Toggle colour theme">
+      <i data-lucide="sun" id="icon-light" style="width:14px;height:14px;display:none;"></i>
+      <i data-lucide="moon" id="icon-dark" style="width:14px;height:14px;"></i>
+      <span id="theme-label">Light</span>
+    </button>
+    <a href="https://github.com/Life-Experimentalist/Chronos-Ledger" target="_blank" rel="noopener"
+       class="btn btn-ghost" style="display:none;" id="star-btn">
+      <i data-lucide="star" style="width:13px;height:13px;"></i> Star
+    </a>
+  </div>
+</nav>
+
+<!-- ── Hero ────────────────────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="reveal" style="margin-bottom:20px;">
+    <span class="badge badge-teal">
+      <i data-lucide="zap" style="width:10px;height:10px;"></i>
+      Open Source · Apache 2.0 · Intranet-Ready
+    </span>
+  </div>
+
+  <h1 class="reveal reveal-delay-1">
+    Campus schedule &amp;<br>
+    <span class="gradient">attendance</span><br>
+    that works offline
+  </h1>
+
+  <p class="hero-sub reveal reveal-delay-2">
+    Chronos Ledger is a production-ready PWA for universities and colleges. Live timetables,
+    geofenced attendance, faculty location resolution, and smart offline notifications —
+    all self-hosted on your campus intranet.
+  </p>
+
+  <div class="hero-actions reveal reveal-delay-3">
+    <a href="https://github.com/Life-Experimentalist/Chronos-Ledger" target="_blank" rel="noopener"
+       class="btn btn-outline">
+      <i data-lucide="github" style="width:15px;height:15px;"></i> View on GitHub
+    </a>
+    <a href="#install" class="btn btn-primary">
+      Self-Host in 5 min <i data-lucide="chevron-right" style="width:15px;height:15px;"></i>
+    </a>
+  </div>
+
+  <div class="reveal reveal-delay-4">
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="terminal-dot" style="background:#ef4444;opacity:.7;"></span>
+        <span class="terminal-dot" style="background:#f59e0b;opacity:.7;"></span>
+        <span class="terminal-dot" style="background:#22c55e;opacity:.7;"></span>
+        <span class="terminal-title">chronos-ledger — docker compose up -d</span>
+      </div>
+      <div class="terminal-body mono" id="terminal-output"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Stats bar ────────────────────────────────────────────────────────────── -->
+<div class="stats-bar">
+  <div class="stats-grid">
+    <div class="reveal"><div class="stat-value" data-count="30">0</div><div class="stat-label">API Endpoints</div></div>
+    <div class="reveal reveal-delay-1"><div class="stat-value" data-count="4">0</div><div class="stat-label">User Roles</div></div>
+    <div class="reveal reveal-delay-2"><div class="stat-value">100%</div><div class="stat-label">Offline-First</div></div>
+    <div class="reveal reveal-delay-3"><div class="stat-value" style="font-size:1.1rem;">Apache 2.0</div><div class="stat-label">License</div></div>
+  </div>
+</div>
+
+<!-- ── Features ─────────────────────────────────────────────────────────────── -->
+<section class="section" id="features">
+  <div class="section-inner">
+    <div class="section-header">
+      <h2>Everything a campus needs</h2>
+      <p>Designed for educational institutions with unreliable Wi-Fi, shared devices, and complex scheduling requirements.</p>
+    </div>
+    <div class="features-grid" id="features-grid"></div>
+  </div>
+</section>
+
+<!-- ── Roles ─────────────────────────────────────────────────────────────────── -->
+<section class="section section-alt" id="roles">
+  <div class="section-inner">
+    <div class="section-header">
+      <h2>Four role-specific interfaces</h2>
+      <p>Each role sees exactly what they need — nothing more, nothing less.</p>
+    </div>
+    <div class="roles-grid" id="roles-grid"></div>
+  </div>
+</section>
+
+<!-- ── Offline ───────────────────────────────────────────────────────────────── -->
+<section class="section">
+  <div class="section-inner">
+    <div class="two-col">
+      <div class="reveal">
+        <span class="badge badge-warning" style="margin-bottom:14px;">
+          <i data-lucide="wifi-off" style="width:10px;height:10px;"></i> Offline-First
+        </span>
+        <h2>Campus Wi-Fi drops.<br>Your data doesn't.</h2>
+        <p>Chronos Ledger uses Service Workers, IndexedDB, and Background Sync so students can
+        mark attendance and faculty can view their schedule even without connectivity.
+        Everything syncs automatically when the network returns.</p>
+        <ul class="checklist">
+          <li><i data-lucide="check" style="width:14px;height:14px;"></i>Attendance marks queue in IndexedDB and flush on reconnect</li>
+          <li><i data-lucide="check" style="width:14px;height:14px;"></i>Today's schedule cached for 12 hours — works fully offline</li>
+          <li><i data-lucide="check" style="width:14px;height:14px;"></i>Class start notifications fire even when the app is closed</li>
+          <li><i data-lucide="check" style="width:14px;height:14px;"></i>Workbox NetworkFirst for APIs · CacheFirst for static assets</li>
+        </ul>
+      </div>
+      <div class="reveal reveal-delay-2">
+        <div class="card offline-widget">
+          <div class="offline-widget-label">Offline queue status</div>
+          <div class="offline-row">
+            <div class="offline-row-left">
+              <div class="pulse-dot" style="background:var(--warning);"></div>
+              <span>Attendance marks pending sync</span>
+            </div>
+            <span style="font-weight:700;color:var(--warning);">3</span>
+          </div>
+          <div class="offline-row">
+            <div class="offline-row-left">
+              <div class="pulse-dot" style="background:var(--emerald);"></div>
+              <span>Schedule cached (expires in 8h)</span>
+            </div>
+            <span class="badge badge-teal" style="font-size:.68rem;">FRESH</span>
+          </div>
+          <div class="offline-row">
+            <div class="offline-row-left">
+              <div class="pulse-dot" style="background:var(--teal);"></div>
+              <span>Service worker active</span>
+            </div>
+            <span class="badge badge-teal" style="font-size:.68rem;">v2.1</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Install ───────────────────────────────────────────────────────────────── -->
+<section class="section section-alt" id="install">
+  <div class="section-inner">
+    <div class="section-header">
+      <h2>Up and running in minutes</h2>
+      <p>Docker Compose is all you need.</p>
+    </div>
+    <div class="install-steps" id="install-steps"></div>
+  </div>
+</section>
+
+<!-- ── API ───────────────────────────────────────────────────────────────────── -->
+<section class="section" id="api">
+  <div class="section-inner">
+    <div class="section-header">
+      <h2>First-class REST API</h2>
+      <p>Full OpenAPI 3.0 spec. Every endpoint documented and testable via Swagger UI at <code class="teal">/docs</code>.</p>
+    </div>
+    <div class="api-grid" id="api-grid"></div>
+    <p class="api-note">
+      Subscribe to your personal iCal feed:
+      <code>GET /api/v1/sync/user-feed/{user_id}.ics</code>
+    </p>
+  </div>
+</section>
+
+<!-- ── CTA ───────────────────────────────────────────────────────────────────── -->
+<section class="cta-section">
+  <div class="reveal">
+    <div class="cta-icon">
+      <i data-lucide="github" style="width:26px;height:26px;"></i>
+    </div>
+    <h2>Open Source · Apache 2.0</h2>
+    <p>Chronos Ledger is freely available. Fork it, self-host it, extend it.
+    Contributions, bug reports, and feature requests are welcome.</p>
+    <div class="cta-actions">
+      <a href="https://github.com/Life-Experimentalist/Chronos-Ledger" target="_blank" rel="noopener"
+         class="btn btn-outline">
+        <i data-lucide="github" style="width:15px;height:15px;"></i> View on GitHub
+      </a>
+      <a href="https://github.com/Life-Experimentalist/Chronos-Ledger" target="_blank" rel="noopener"
+         class="btn btn-primary">
+        <i data-lucide="star" style="width:15px;height:15px;"></i> Star the repo
+      </a>
+    </div>
+    <div class="cta-mini-stats">
+      <div class="card cta-mini-stat"><div class="cta-mini-stat-val">v1.0.0</div><div class="cta-mini-stat-label">Version</div></div>
+      <div class="card cta-mini-stat"><div class="cta-mini-stat-val">Apache 2.0</div><div class="cta-mini-stat-label">License</div></div>
+      <div class="card cta-mini-stat"><div class="cta-mini-stat-val">Python · TS</div><div class="cta-mini-stat-label">Language</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ────────────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo">
+      <div class="footer-logo-icon">
+        <i data-lucide="clock" style="width:13px;height:13px;"></i>
+      </div>
+      Chronos Ledger
+    </div>
+    <p class="footer-copy">
+      Licensed under the <span class="teal">Apache License 2.0</span>. Built for campus intranet deployments.
+    </p>
+    <div class="footer-links">
+      <a href="https://github.com/Life-Experimentalist/Chronos-Ledger" target="_blank" rel="noopener">
+        <i data-lucide="github" style="width:13px;height:13px;"></i> GitHub
+      </a>
+      <a href="https://github.com/Life-Experimentalist/Chronos-Ledger/blob/main/docs/faq.md" target="_blank" rel="noopener">
+        FAQ
+      </a>
+      <a href="https://github.com/Life-Experimentalist/Chronos-Ledger/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">
+        Contribute
+      </a>
+    </div>
+  </div>
+</footer>
+
+<!-- ── Data ──────────────────────────────────────────────────────────────────── -->
+<script>
+const FEATURES = [
+  { icon:'navigation', title:'Live Faculty Locator', desc:'4-tier resolution: Redis override → daily exception → master timetable → base station fallback. Always know where faculty are.', bg:'rgba(20,184,166,.1)', color:'var(--teal)' },
+  { icon:'map-pin', title:'3D Geofenced Attendance', desc:'Haversine distance + 4 m altitude check prevents cross-floor spoofing. Falls back to Wi-Fi BSSID when GPS accuracy exceeds 30 m.', bg:'rgba(16,185,129,.1)', color:'var(--emerald)' },
+  { icon:'user-check', title:'Reverse RSVP Absences', desc:'Presence is the default. Faculty file absence requests; their manager approves. Approved absences auto-cascade ON_LEAVE to the daily ledger.', bg:'rgba(129,140,248,.1)', color:'var(--accent)' },
+  { icon:'zap', title:'Real-Time WebSocket', desc:'JWT-authenticated persistent connections. Instant guest handshake requests, absence approvals, and campus broadcasts — no polling.', bg:'rgba(245,158,11,.1)', color:'var(--warning)' },
+  { icon:'upload', title:'CSV Schedule Import', desc:'Bulk-import the semester timetable from a single student-centric CSV. Upserts students, course offerings, registrations, and master slots atomically.', bg:'rgba(168,85,247,.1)', color:'#a855f7' },
+  { icon:'calendar', title:'iCalendar Sync', desc:'Live 37-day .ics feed per user. Subscribe directly in Google Calendar, Apple Calendar, or Outlook. Updates reflect approved leaves and proxy swaps.', bg:'rgba(56,189,248,.1)', color:'#38bdf8' },
+  { icon:'users', title:'Guest Kiosk', desc:'No login required. Visitors fill a check-in form; the target faculty receives an instant WebSocket notification with Approve/Decline actions.', bg:'rgba(244,63,94,.1)', color:'#fb7185' },
+  { icon:'bell', title:'Offline Notifications', desc:'Class reminders fire 15 minutes before start — even offline. Scheduled via JS timers while active and Periodic Background Sync when the app is closed.', bg:'rgba(20,184,166,.1)', color:'var(--teal)' },
+  { icon:'shield', title:'Role-Based Access', desc:'SUPER_ADMIN, DEPT_ADMIN, FACULTY, STUDENT. JWT RBAC enforced at every endpoint. Each role sees only their own data.', bg:'rgba(244,63,94,.1)', color:'var(--danger)' },
+];
+
+const ROLES = [
+  { icon:'bar-chart-3', name:'Admin / Dept Admin', path:'/admin/dashboard', bg:'rgba(20,184,166,.1)', color:'var(--teal)',
+    caps:['CSV timetable import and cycle management','Proxy assignment and absence approval','Master ledger view with operational state overrides','User provisioning and department management'] },
+  { icon:'book-open', name:'Faculty', path:'/faculty/dashboard', bg:'rgba(16,185,129,.1)', color:'var(--emerald)',
+    caps:['Availability status switcher (4 states)','Attendance matrix: mark whole class in one tap','Submit and track absence requests','Guest interaction desk with real-time notifications'] },
+  { icon:'user-check', name:'Student', path:'/student/dashboard', bg:'rgba(129,140,248,.1)', color:'var(--accent)',
+    caps:["Live timeline of today's classes with status indicators",'3D geofenced attendance marking with GPS/BSSID','Faculty locator with real-time availability','Offline attendance queue with background sync'] },
+  { icon:'users', name:'Guest (no login)', path:'/guest/kiosk', bg:'rgba(245,158,11,.1)', color:'var(--warning)',
+    caps:['Search faculty directory by name','Submit check-in request with purpose','Real-time notification to target faculty','Public availability status display'] },
+];
+
+const INSTALL_STEPS = [
+  { title:'Clone and run the setup script',
+    code:'git clone https://github.com/Life-Experimentalist/Chronos-Ledger.git\ncd Chronos-Ledger\nchmod +x setup.sh && ./setup.sh',
+    note:'Auto-detects your LAN IP, generates JWT & DB secrets, and starts all services.' },
+  { title:'Or pull pre-built images from GHCR (fastest)',
+    code:'export JWT_SECRET_SIGNING_KEY=$(openssl rand -hex 32)\nexport DB_PASSWORD=$(openssl rand -base64 24 | tr -d \'/+=\' | head -c 32)\nexport GHCR_OWNER=Life-Experimentalist\ncurl -fsSL https://github.com/Life-Experimentalist/Chronos-Ledger/releases/latest/download/docker-compose.prod.yml \\\n  | docker compose -f - up -d',
+    note:'No build required. Pin a version: VERSION=v1.2.0 docker compose -f docker-compose.prod.yml up -d' },
+  { title:'Generate push notification keys (optional)',
+    code:'npx web-push generate-vapid-keys\n# Add output to .env: VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY',
+    note:'Skip this step if you do not need browser push notifications.' },
+  { title:'Open the app and change the default password',
+    code:'# App:      http://<your-server-ip>\n# API docs:  http://<your-server-ip>/docs\n# Login:     admin@college.internal',
+    note:'The setup script prints the exact URL when it finishes.' },
+];
+
+const API_GROUPS = [
+  { group:'Auth', eps:['POST /auth/login','GET  /auth/me','POST /auth/change-password'] },
+  { group:'Schedule', eps:['GET  /schedule/ledger/today','GET  /schedule/faculty/{id}/location','POST /schedule/cycles'] },
+  { group:'Attendance', eps:['POST /attendance/mark','POST /attendance/batch','POST /attendance/absence'] },
+  { group:'Guest', eps:['POST /guest/register-checkin','GET  /guest/directory','PATCH /guest/{id}/decide'] },
+  { group:'Ingestion', eps:['POST /ingestion/upload-csv','POST /ingestion/generate-ledger'] },
+  { group:'Sync', eps:['GET  /sync/user-feed/{id}.ics','WS   /ws?token={jwt}','GET  /ws/stats'] },
+];
+
+const TERMINAL_LINES = [
+  { text:'$ docker compose up -d', cls:'t-normal' },
+  { text:'[+] Running 5/5', cls:'t-green' },
+  { text:' ✔ chronos-db         Started', cls:'t-green' },
+  { text:' ✔ chronos-cache      Started', cls:'t-green' },
+  { text:' ✔ chronos-app        Healthy (migrations applied)', cls:'t-green' },
+  { text:' ✔ chronos-frontend   Built → static files ready', cls:'t-green' },
+  { text:' ✔ chronos-proxy      Listening on :80', cls:'t-green' },
+  { text:' ', cls:'' },
+  { text:'  Login:      admin@college.internal', cls:'t-warn' },
+  { text:'  Swagger UI: http://localhost/docs', cls:'t-dim' },
+];
+
+// ── Render functions ──────────────────────────────────────────────────────────
+
+function renderFeatures() {
+  const grid = document.getElementById('features-grid');
+  FEATURES.forEach((f, i) => {
+    const delay = ['','reveal-delay-1','reveal-delay-2'][i % 3];
+    grid.innerHTML += `
+      <div class="card feature-card reveal ${delay}" data-idx="${i}">
+        <div class="feature-icon" style="background:${f.bg};">
+          <i data-lucide="${f.icon}" style="width:18px;height:18px;color:${f.color};"></i>
+        </div>
+        <h3>${f.title}</h3>
+        <p>${f.desc}</p>
+      </div>`;
+  });
+  // click-to-highlight
+  document.querySelectorAll('.feature-card').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.feature-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+    });
+  });
+}
+
+function renderRoles() {
+  const grid = document.getElementById('roles-grid');
+  ROLES.forEach((r, i) => {
+    const caps = r.caps.map(c =>
+      `<li><i data-lucide="check" style="width:13px;height:13px;"></i>${c}</li>`
+    ).join('');
+    grid.innerHTML += `
+      <div class="card role-card reveal ${i%2===1?'reveal-delay-2':''}">
+        <div class="role-header">
+          <div class="role-icon" style="background:${r.bg};">
+            <i data-lucide="${r.icon}" style="width:17px;height:17px;color:${r.color};"></i>
+          </div>
+          <div>
+            <div class="role-name">${r.name}</div>
+            <div class="role-path">${r.path}</div>
+          </div>
+        </div>
+        <ul class="role-caps">${caps}</ul>
+      </div>`;
+  });
+}
+
+function renderInstall() {
+  const steps = document.getElementById('install-steps');
+  INSTALL_STEPS.forEach((s, i) => {
+    steps.innerHTML += `
+      <div class="card install-step reveal" style="transition-delay:${i*0.08}s;">
+        <div class="install-step-inner">
+          <div class="step-num">${i+1}</div>
+          <div style="flex:1;min-width:0;">
+            <div class="step-title">${s.title}</div>
+            <pre class="step-code">${s.code}</pre>
+            ${s.note ? `<p class="step-note">${s.note}</p>` : ''}
+          </div>
+        </div>
+      </div>`;
+  });
+  steps.innerHTML += `
+    <div class="warning-card reveal">
+      <div class="warning-card-title">Before you deploy</div>
+      <ul class="warning-list">
+        <li>Change JWT_SECRET_SIGNING_KEY to a random 64-char string</li>
+        <li>Change the seed admin password immediately after first login</li>
+        <li>Generate VAPID keys: <code class="mono" style="font-size:.75rem;color:var(--teal);">npx web-push generate-vapid-keys</code></li>
+        <li>Restrict /docs and /redoc to internal IPs in nginx.conf for production</li>
+      </ul>
+    </div>`;
+}
+
+function renderApi() {
+  const grid = document.getElementById('api-grid');
+  API_GROUPS.forEach((g, i) => {
+    const delay = ['','reveal-delay-1','reveal-delay-2'][i % 3];
+    const eps = g.eps.map(e => `<div class="api-endpoint">${e}</div>`).join('');
+    grid.innerHTML += `
+      <div class="card api-group reveal ${delay}">
+        <div class="api-group-title">${g.group}</div>
+        ${eps}
+      </div>`;
+  });
+}
+
+// ── Typewriter terminal ───────────────────────────────────────────────────────
+
+function runTerminal() {
+  const out = document.getElementById('terminal-output');
+  let lineIdx = 0;
+
+  function printLine() {
+    if (lineIdx >= TERMINAL_LINES.length) return;
+    const { text, cls } = TERMINAL_LINES[lineIdx++];
+    const p = document.createElement('p');
+    p.className = cls;
+    p.textContent = text || ' ';
+    out.appendChild(p);
+    const delay = lineIdx === 1 ? 400 : lineIdx <= 3 ? 320 : 120;
+    setTimeout(printLine, delay);
+  }
+
+  // Start once the terminal scrolls into view
+  const obs = new IntersectionObserver(entries => {
+    if (entries[0].isIntersecting) { obs.disconnect(); printLine(); }
+  }, { threshold: 0.3 });
+  obs.observe(out.closest('.terminal'));
+}
+
+// ── Scroll reveal ─────────────────────────────────────────────────────────────
+
+function initReveal() {
+  const els = document.querySelectorAll('.reveal');
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); } });
+  }, { threshold: 0.12 });
+  els.forEach(el => obs.observe(el));
+}
+
+// ── Count-up animation ────────────────────────────────────────────────────────
+
+function initCounters() {
+  document.querySelectorAll('[data-count]').forEach(el => {
+    const target = +el.dataset.count;
+    const obs = new IntersectionObserver(entries => {
+      if (!entries[0].isIntersecting) return;
+      obs.disconnect();
+      let start = 0;
+      const step = () => {
+        start++;
+        el.textContent = start + (target >= 30 ? '+' : '');
+        if (start < target) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }, { threshold: 0.5 });
+    obs.observe(el);
+  });
+}
+
+// ── Dark / Light toggle ───────────────────────────────────────────────────────
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  document.getElementById('icon-light').style.display = theme === 'dark' ? 'inline-block' : 'none';
+  document.getElementById('icon-dark').style.display  = theme === 'light' ? 'inline-block' : 'none';
+  document.getElementById('theme-label').textContent  = theme === 'dark' ? 'Light' : 'Dark';
+  // Update color-scheme meta so browser chrome adapts (scrollbars, inputs, etc.)
+  document.querySelector('meta[name="color-scheme"]').content = theme;
+  localStorage.setItem('cl-theme', theme);
+}
+
+function initTheme() {
+  const saved = localStorage.getItem('cl-theme');
+  const preferred = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  applyTheme(saved || preferred);
+
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+  });
+
+  // Follow OS changes when no manual preference saved
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', e => {
+    if (!localStorage.getItem('cl-theme')) applyTheme(e.matches ? 'light' : 'dark');
+  });
+}
+
+// ── Nav star button (show on md+) ─────────────────────────────────────────────
+
+function initNav() {
+  if (window.innerWidth >= 640) document.getElementById('star-btn').style.display = 'inline-flex';
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+
+renderFeatures();
+renderRoles();
+renderInstall();
+renderApi();
+lucide.createIcons();     // render all data-lucide attributes
+initTheme();
+initNav();
+initReveal();
+initCounters();
+runTerminal();
+</script>
+
+</body>
+</html>
