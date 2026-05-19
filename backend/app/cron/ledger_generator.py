@@ -2,15 +2,17 @@
 # Licensed under the Apache License, Version 2.0
 
 import datetime
+
 from sqlalchemy.orm import Session
+
 from app.models.db import (
-    StructuralMasterSlot,
-    CourseOffering,
     AcademicCycle,
+    CourseOffering,
     DailyLedger,
-    ReverseRsvpLog,
-    LogVerificationState,
     DynamicState,
+    LogVerificationState,
+    ReverseRsvpLog,
+    StructuralMasterSlot,
 )
 
 
@@ -23,7 +25,7 @@ def generate_daily_ledger_entries(target_date: datetime.date, db: Session) -> in
         .join(AcademicCycle, CourseOffering.cycle_id == AcademicCycle.id)
         .filter(
             StructuralMasterSlot.day_of_week_index == day_index,
-            AcademicCycle.operational_status == True,
+            AcademicCycle.operational_status,
         )
         .all()
     )

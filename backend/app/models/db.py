@@ -2,11 +2,11 @@
 # Licensed under the Apache License, Version 2.0
 
 import enum
-from datetime import date, time, datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
-    Boolean,
     BigInteger,
+    Boolean,
     CheckConstraint,
     Column,
     Date,
@@ -21,17 +21,18 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
+
 from app.core.database import Base
 
 
-class InstitutionalRole(str, enum.Enum):
+class InstitutionalRole(enum.StrEnum):
     SUPER_ADMIN = "SUPER_ADMIN"
     DEPT_ADMIN = "DEPT_ADMIN"
     FACULTY = "FACULTY"
     STUDENT = "STUDENT"
 
 
-class DynamicState(str, enum.Enum):
+class DynamicState(enum.StrEnum):
     SCHEDULED = "SCHEDULED"
     ON_LEAVE = "ON_LEAVE"
     PROXY_SUBSTITUTE = "PROXY_SUBSTITUTE"
@@ -40,25 +41,25 @@ class DynamicState(str, enum.Enum):
     ADHOC_EVENT = "ADHOC_EVENT"
 
 
-class VerificationMetric(str, enum.Enum):
+class VerificationMetric(enum.StrEnum):
     PRESENT = "PRESENT"
     ABSENT = "ABSENT"
     LATE = "LATE"
 
 
-class ExecutionMode(str, enum.Enum):
+class ExecutionMode(enum.StrEnum):
     PHYSICAL = "PHYSICAL"
     ONLINE_STREAM = "ONLINE_STREAM"
 
 
-class AccessReadiness(str, enum.Enum):
+class AccessReadiness(enum.StrEnum):
     OPEN_AD_HOC = "OPEN_AD_HOC"
     BUSY = "BUSY"
     CRITICAL_DO_NOT_DISTURB = "CRITICAL_DO_NOT_DISTURB"
     VERY_FREE = "VERY_FREE"
 
 
-class LogVerificationState(str, enum.Enum):
+class LogVerificationState(enum.StrEnum):
     PENDING_VERIFICATION = "PENDING_VERIFICATION"
     VERIFIED_APPROVED = "VERIFIED_APPROVED"
     VERIFIED_DENIED = "VERIFIED_DENIED"
@@ -228,7 +229,7 @@ class VerificationLedger(Base):
     marking_status = Column(Enum(VerificationMetric), nullable=False)
     authorizing_agent_id = Column(String(50), ForeignKey("users.id"), nullable=True)
     modification_timestamp = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     ledger_instance = relationship("DailyLedger", back_populates="verification_records")
@@ -247,7 +248,7 @@ class LedgerAnnotation(Base):
     classification_tag = Column(String(30), nullable=False)
     annotation_payload = Column(Text, nullable=False)
     distribution_timestamp = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     ledger_instance = relationship("DailyLedger", back_populates="annotations")
@@ -268,6 +269,6 @@ class GuestGateRegistry(Base):
     handshake_status = Column(
         Enum(LogVerificationState), default=LogVerificationState.PENDING_VERIFICATION
     )
-    timestamp_marked = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    timestamp_marked = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     target_faculty = relationship("User", foreign_keys=[target_faculty_id])

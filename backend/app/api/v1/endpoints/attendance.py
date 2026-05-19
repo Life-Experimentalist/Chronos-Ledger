@@ -1,35 +1,34 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
 
 from app.core.database import get_db
-from app.core.security import get_current_user, require_roles
+from app.core.security import get_current_user
+from app.core.websocket_manager import socket_broker
 from app.models.db import (
-    User,
     DailyLedger,
-    VerificationLedger,
-    ReverseRsvpLog,
     LedgerAnnotation,
-    VerificationMetric,
     LogVerificationState,
+    ReverseRsvpLog,
+    User,
+    VerificationLedger,
 )
 from app.schemas.attendance import (
-    AttendanceMarkRequest,
+    AnnotationCreate,
+    AnnotationResponse,
     AttendanceBatchRequest,
+    AttendanceMarkRequest,
     AttendanceResponse,
     ReverseRsvpCreate,
     ReverseRsvpResponse,
     RsvpDecision,
-    AnnotationCreate,
-    AnnotationResponse,
 )
 from app.services.geo_fence import validate_3d_presence
-from app.services.reverse_rsvp import route_absence_declaration, commit_absence_override
-from app.core.websocket_manager import socket_broker
+from app.services.reverse_rsvp import commit_absence_override, route_absence_declaration
 
 router = APIRouter()
 
@@ -54,8 +53,9 @@ async def mark_attendance(
                 status_code=403, detail="Cannot mark attendance for another student"
             )
 
-        if all(v is not None for v in [payload.user_lat, payload.user_lon, payload.user_alt]):
-            if ledger.latitude_target and ledger.longitude_target and ledger.altitude_target:
+        if all(v is not None for v in [payload.user_lat, payload.user_lon, payload.user_alt]) and (
+            ledger.latitude_target and ledger.longitude_target and ledger.altitude_target
+        ):
                 valid = validate_3d_presence(
                     payload.user_lat,
                     payload.user_lon,
@@ -89,9 +89,11 @@ def batch_mark_attendance(
         raise HTTPException(status_code=404, detail="Ledger instance not found")
 
     # Only assigned/substitute instructor can batch mark
-    if current_user.id not in (ledger.active_instructor_id, ledger.substitute_instructor_id):
-        if current_user.role_type.value not in ("SUPER_ADMIN", "DEPT_ADMIN"):
-            raise HTTPException(status_code=403, detail="Not authorized to mark this ledger")
+    if current_user.id not in (
+        ledger.active_instructor_id,
+        ledger.substitute_instructor_id,
+    ) and current_user.role_type.value not in ("SUPER_ADMIN", "DEPT_ADMIN"):
+        raise HTTPException(status_code=403, detail="Not authorized to mark this ledger")
 
     for record in payload.records:
         _upsert_attendance(db, record, current_user.id)
@@ -113,7 +115,7 @@ def _upsert_attendance(db: Session, payload: AttendanceMarkRequest, agent_id: st
         if existing.marking_status != payload.marking_status:
             existing.marking_status = payload.marking_status
             existing.authorizing_agent_id = agent_id
-            existing.modification_timestamp = datetime.now(timezone.utc)
+            existing.modification_timestamp = datetime.now(UTC)
     else:
         record = VerificationLedger(
             ledger_instance_id=payload.ledger_instance_id,
@@ -125,7 +127,7 @@ def _upsert_attendance(db: Session, payload: AttendanceMarkRequest, agent_id: st
     db.commit()
 
 
-@router.get("/ledger/{ledger_id}", response_model=List[AttendanceResponse])
+@router.get("/ledger/{ledger_id}", response_model=list[AttendanceResponse])
 def get_attendance_for_ledger(
     ledger_id: int,
     db: Session = Depends(get_db),
@@ -166,7 +168,7 @@ async def submit_absence(
     return log
 
 
-@router.get("/absence/pending", response_model=List[ReverseRsvpResponse])
+@router.get("/absence/pending", response_model=list[ReverseRsvpResponse])
 def get_pending_absences(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -229,7 +231,7 @@ def create_annotation(
     return annotation
 
 
-@router.get("/annotations/{ledger_id}", response_model=List[AnnotationResponse])
+@router.get("/annotations/{ledger_id}", response_model=list[AnnotationResponse])
 def get_annotations(
     ledger_id: int,
     db: Session = Depends(get_db),
