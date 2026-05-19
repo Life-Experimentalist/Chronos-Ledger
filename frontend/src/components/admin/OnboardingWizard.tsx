@@ -358,7 +358,7 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
           {step.id === 'ledger' && (
             <div className="glass-card p-8 space-y-6">
               <div>
-                <h2 className="text-xl font-bold text-chronos-text">Generate today's ledger</h2>
+                <h2 className="text-xl font-bold text-chronos-text">Generate today&apos;s ledger</h2>
                 <p className="text-sm text-chronos-muted mt-1">
                   The daily ledger materialises your timetable into session records that attendance, proxies, and notifications are built on.
                   The nightly cron job does this automatically — this button generates it for today immediately.

@@ -351,7 +351,7 @@ export default function LandingPage() {
           <p className="text-sm text-chronos-muted">
             Subscribe to your personal iCal feed:{' '}
             <code className="text-chronos-teal text-xs bg-chronos-surface px-2 py-0.5 rounded">
-              GET /api/v1/sync/user-feed/{'{'`}user_id{'}'}.ics
+              GET /api/v1/sync/user-feed/{'{'}user_id{'}'}.ics
             </code>
           </p>
         </div>
