@@ -1,0 +1,22 @@
+{
+  "$schema": "https://devprune.vkrishna04.me/schemas/v1/devprune.schema.json",
+  "prunable": {
+    "directories": [
+      {
+        "path": "frontend/.next",
+        "rebuild": "npm --prefix frontend run build",
+        "why": "Next.js build cache and server output, regenerated in full by frontend/package.json's `build` script (`next build`). Gitignored; holds nothing a rebuild does not produce."
+      },
+      {
+        "path": "frontend/out",
+        "rebuild": "npm --prefix frontend run build",
+        "why": "Static export emitted by the same `build` script (next.config.js sets output: 'export'). This is what nginx serves; it is a build product, never edited by hand."
+      },
+      {
+        "path": "backend/.ruff_cache",
+        "rebuild": "uv run --directory backend ruff check .",
+        "why": "Ruff's incremental lint cache. Pure cache — deleting it only makes the next lint run slower, and any ruff invocation rebuilds it."
+      }
+    ]
+  }
+}
