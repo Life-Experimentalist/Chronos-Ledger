@@ -49,6 +49,7 @@ backend/.venv
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 *.swp
 *.swo
 
@@ -77,3 +78,6 @@ certs/*.pem
 certs/*.key
 certs/*.crt
 ui prommpts.md
+.devprune.json
+.devprune-ignore
+ignore.devprune.json
