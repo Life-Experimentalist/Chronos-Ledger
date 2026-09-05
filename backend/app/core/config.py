@@ -32,9 +32,9 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_contact_email: str = "admin@college.internal"
 
-    # Telemetry — pings CFlair-Counter (Life-Experimentalist/CFlair-Counter).
-    # Set to false to disable all server-side telemetry pings.
-    telemetry_enabled: bool = True
+    # Telemetry — opt-in. Off by default so a self-hosted instance never
+    # reaches a service the operator does not run. Set both to enable.
+    telemetry_enabled: bool = False
     telemetry_endpoint: str = ""
 
     @property

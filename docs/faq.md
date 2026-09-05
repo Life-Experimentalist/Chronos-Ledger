@@ -511,24 +511,26 @@ No. The system maintains one active cycle at a time. Switching cycles makes the 
 
 ### What data does Chronos Ledger store?
 
-All data stays on your campus server. Nothing is sent to external services by default except:
+All data stays on your campus server. A default install sends nothing to any external service:
 
-- **Telemetry (opt-in by default):** Anonymous view counts sent to [CFlair-Counter](https://github.com/Life-Experimentalist/CFlair-Counter). No PII. Disable in Admin Dashboard → Overview → Privacy & Telemetry, or set `NEXT_PUBLIC_TELEMETRY_ENABLED=false` at build time.
+- **Telemetry (opt-in, off by default):** Anonymous view counts sent to a [CFlair-Counter](https://github.com/Life-Experimentalist/CFlair-Counter) instance you point it at. No PII. Requires both `NEXT_PUBLIC_TELEMETRY_ENABLED=true` and a non-empty `NEXT_PUBLIC_TELEMETRY_ENDPOINT` at build time.
 - **Web Push:** Push payloads are routed through the browser vendor's push service (Google FCM for Chrome, Mozilla for Firefox). Payload content is a short status string — no student names or sensitive data.
 
 ---
 
 ### How do I fully disable telemetry?
 
-Two options:
+It is already off unless you turned it on: the shipped defaults are `NEXT_PUBLIC_TELEMETRY_ENABLED=false` with an empty `NEXT_PUBLIC_TELEMETRY_ENDPOINT`, and either of those alone is enough to suppress every ping.
 
-**Runtime (per-instance):** Admin Dashboard → Overview → Privacy & Telemetry → toggle off. Stored in `localStorage`, persists across sessions for that browser.
+If you enabled it and want it back off:
 
-**Build-time (permanent, applies to all users):** Add to your `.env` before building:
+**Build-time (permanent, applies to all users):** set in your `.env` before building:
 ```
 NEXT_PUBLIC_TELEMETRY_ENABLED=false
 ```
 Then rebuild the frontend image. This removes all telemetry code paths at compile time.
+
+**Runtime (per-browser):** Admin Dashboard → Overview → Privacy & Telemetry → toggle off. Stored in `localStorage`, persists across sessions for that browser.
 
 ---
 

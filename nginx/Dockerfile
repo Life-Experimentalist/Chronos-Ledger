@@ -26,8 +26,10 @@ COPY frontend/ ./
 ARG NEXT_PUBLIC_API_URL=/api/v1
 ARG NEXT_PUBLIC_WS_URL=/ws
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY=
-ARG NEXT_PUBLIC_TELEMETRY_ENABLED=true
-ARG NEXT_PUBLIC_TELEMETRY_ENDPOINT=https://counter.vkrishna04.me
+# Telemetry is opt-in: the published image must not reach a service the
+# operator does not run. Pass both build args to turn it on.
+ARG NEXT_PUBLIC_TELEMETRY_ENABLED=false
+ARG NEXT_PUBLIC_TELEMETRY_ENDPOINT=
 
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL \

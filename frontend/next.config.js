@@ -11,14 +11,6 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   workboxOptions: {
     runtimeCaching: [
       {
-        urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\/.*/,
-        handler: 'CacheFirst',
-        options: {
-          cacheName: 'google-fonts',
-          expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
-        },
-      },
-      {
         // Cache API responses (exclude auth endpoints — never cache credentials)
         urlPattern: /\/api\/v1\/(?!auth).*/,
         handler: 'NetworkFirst',

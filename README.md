@@ -311,22 +311,29 @@ The Alembic seed migration creates one super-admin:
 
 ## Telemetry
 
-Chronos Ledger collects **anonymous, aggregate view counts** via [CFlair-Counter](https://github.com/Life-Experimentalist/CFlair-Counter) — a privacy-first, self-hostable analytics service. No IP addresses, usernames, or session data are ever collected or transmitted.
+Telemetry is **off by default** — a stock build and the published `ghcr.io` image send nothing anywhere. Nothing in a default install reaches a host you do not run.
 
-### What is tracked
+If you turn it on, Chronos Ledger reports **anonymous, aggregate view counts** to a [CFlair-Counter](https://github.com/Life-Experimentalist/CFlair-Counter) instance — a privacy-first, self-hostable counter. No IP addresses, usernames, or session data are collected or transmitted.
+
+### What is tracked, if you opt in
 
 | Event                  | Project key              |
 | ---------------------- | ------------------------ |
 | Landing page visits    | `chronos-ledger-landing` |
 | Admin dashboard logins | `chronos-ledger-app`     |
 
-### Opt out
+### Opt in
 
-**Admin-level (runtime):** Go to Admin Dashboard → Overview → Privacy & Telemetry and toggle off "Anonymous usage analytics". The preference is stored locally and persists across sessions.
+Set both at build time — either is enough to keep it off:
 
-**Build-time (permanent):** Set `NEXT_PUBLIC_TELEMETRY_ENABLED=false` in your environment before building. This removes all telemetry code paths at compile time.
+```bash
+NEXT_PUBLIC_TELEMETRY_ENABLED=true
+NEXT_PUBLIC_TELEMETRY_ENDPOINT=https://counter.example.internal   # a CFlair-Counter you run
+```
 
-**Self-host CFlair-Counter:** Deploy your own instance and point `NEXT_PUBLIC_TELEMETRY_ENDPOINT` at it.
+An empty endpoint disables the pings regardless of the enabled flag.
+
+**Per-browser opt out:** once enabled, Admin Dashboard → Overview → Privacy & Telemetry toggles it off for that browser. The preference is stored locally and persists across sessions.
 
 ---
 
