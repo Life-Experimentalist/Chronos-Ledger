@@ -311,7 +311,7 @@ The Alembic seed migration creates one super-admin:
 
 ## Telemetry
 
-Telemetry is **off by default** — a stock build and the published `ghcr.io` image send nothing anywhere. Nothing in a default install reaches a host you do not run.
+Telemetry is **off by default** — a stock build sends nothing anywhere, and the `ghcr.io` image is built from `nginx/Dockerfile` with those same defaults. Nothing in a default install reaches a host you do not run.
 
 If you turn it on, Chronos Ledger reports **anonymous, aggregate view counts** to a [CFlair-Counter](https://github.com/Life-Experimentalist/CFlair-Counter) instance — a privacy-first, self-hostable counter. No IP addresses, usernames, or session data are collected or transmitted.
 
