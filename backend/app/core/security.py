@@ -6,7 +6,7 @@ from typing import Any
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import InvalidTokenError
 from sqlalchemy.orm import Session
@@ -58,7 +58,12 @@ def get_current_user_id(
     return payload["sub"]
 
 
+# While an admin still holds the seeded initial password, only these paths work.
+_FIRST_LOGIN_EXEMPT_SUFFIXES = ("/auth/me", "/auth/change-password")
+
+
 def get_current_user(
+    request: Request,
     user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
@@ -67,6 +72,15 @@ def get_current_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    if (
+        user.initial_login_state
+        and user.role_type.value in ("SUPER_ADMIN", "DEPT_ADMIN")
+        and not request.url.path.endswith(_FIRST_LOGIN_EXEMPT_SUFFIXES)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Change the initial password before using other endpoints",
+        )
     return user
 
 

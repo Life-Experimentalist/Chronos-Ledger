@@ -1,7 +1,7 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
-from tests.conftest import ADMIN_PASSWORD, FACULTY_PASSWORD, login
+from tests.conftest import ADMIN_PASSWORD, FACULTY_PASSWORD, STUDENT_PASSWORD, login
 
 
 def test_login_returns_token_and_profile(client, seed_users):
@@ -14,7 +14,7 @@ def test_login_returns_token_and_profile(client, seed_users):
     assert body["access_token"]
     assert body["user_id"] == "ADM001"
     assert body["role"] == "SUPER_ADMIN"
-    assert body["initial_login_state"] is True
+    assert body["initial_login_state"] is False
 
 
 def test_login_wrong_password_is_401(client, seed_users):
@@ -81,3 +81,29 @@ def test_change_password_rotates_and_clears_first_login_flag(client, seed_users)
     )
     assert fresh.status_code == 200
     assert fresh.json()["initial_login_state"] is False
+
+
+def test_first_login_admin_is_gated_until_password_change(client, db, seed_users):
+    seed_users["admin"].initial_login_state = True
+    db.commit()
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+
+    gated = client.get("/api/v1/users/", headers=headers)
+    assert gated.status_code == 403
+    assert "initial password" in gated.json()["detail"].lower()
+    assert client.get("/api/v1/auth/me", headers=headers).status_code == 200
+
+    res = client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": ADMIN_PASSWORD, "new_password": "RotatedPass456!"},
+        headers=headers,
+    )
+    assert res.status_code == 200
+    assert client.get("/api/v1/users/", headers=headers).status_code == 200
+
+
+def test_first_login_gate_skips_non_admin_roles(client, seed_users):
+    # Faculty and students are provisioned by an admin, not by a published
+    # default credential, so their first login is not gated.
+    headers = login(client, "student@test.internal", STUDENT_PASSWORD)
+    assert client.get("/api/v1/users/faculty/available", headers=headers).status_code == 200
