@@ -20,9 +20,11 @@ def _token(client):
 
 
 def test_ws_rejects_invalid_token(client):
-    with pytest.raises(WebSocketDisconnect):
-        with client.websocket_connect("/api/v1/ws?token=not-a-token"):
-            pass
+    with (
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect("/api/v1/ws?token=not-a-token"),
+    ):
+        pass
 
 
 def test_ws_accepts_valid_token(client, seed_users):
