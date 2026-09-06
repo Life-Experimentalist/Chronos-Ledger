@@ -31,7 +31,7 @@ def test_ws_accepts_valid_token(client, seed_users):
     token = _token(client)
     with client.websocket_connect(f"/api/v1/ws?token={token}"):
         assert socket_broker.is_online("STU001")
-    assert socket_broker.online_count() >= 0
+    assert not socket_broker.is_online("STU001")
 
 
 def test_stale_close_does_not_evict_reconnected_socket():

@@ -9,6 +9,15 @@ import type { WSEvent } from '@/types'
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost/ws'
 const RECONNECT_DELAY_MS = 3000
 
+// Published images bake a relative path ('/ws') so one build works on any
+// origin, but new WebSocket() only accepts relative URLs in browsers from
+// 2024 onward. Resolve against the page origin ourselves; https gets wss.
+function resolveWsUrl(): string {
+  if (/^wss?:/i.test(WS_URL)) return WS_URL
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${proto}//${window.location.host}${WS_URL}`
+}
+
 type EventHandler = (payload: unknown) => void
 
 export function useWebSocket() {
@@ -22,7 +31,7 @@ export function useWebSocket() {
     const token = getToken()
     if (!token || !mountedRef.current) return
 
-    const ws = new WebSocket(`${WS_URL}?token=${token}`)
+    const ws = new WebSocket(`${resolveWsUrl()}?token=${token}`)
     wsRef.current = ws
 
     ws.onopen = () => {
