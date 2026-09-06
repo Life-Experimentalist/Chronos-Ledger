@@ -1,0 +1,10 @@
+# Host-side artifacts must never reach the image: the Dockerfile installs
+# its own Linux node_modules, and a Windows host's copy (node.exe shims)
+# would overwrite it via COPY . . and break npm run build.
+node_modules
+.next
+out
+tsconfig.tsbuildinfo
+npm-debug.log*
+Dockerfile
+.dockerignore

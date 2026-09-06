@@ -32,10 +32,20 @@ def upgrade() -> None:
     )
 
     institutional_role = postgresql.ENUM(
-        "SUPER_ADMIN", "DEPT_ADMIN", "FACULTY", "STUDENT", name="institutional_role"
+        "SUPER_ADMIN",
+        "DEPT_ADMIN",
+        "FACULTY",
+        "STUDENT",
+        name="institutional_role",
+        create_type=False,
     )
     access_readiness = postgresql.ENUM(
-        "OPEN_AD_HOC", "BUSY", "CRITICAL_DO_NOT_DISTURB", "VERY_FREE", name="access_readiness"
+        "OPEN_AD_HOC",
+        "BUSY",
+        "CRITICAL_DO_NOT_DISTURB",
+        "VERY_FREE",
+        name="access_readiness",
+        create_type=False,
     )
     institutional_role.create(op.get_bind())
     access_readiness.create(op.get_bind())
@@ -48,20 +58,14 @@ def upgrade() -> None:
         sa.Column("credential_secure_hash", sa.String(255), nullable=False),
         sa.Column(
             "role_type",
-            sa.Enum("SUPER_ADMIN", "DEPT_ADMIN", "FACULTY", "STUDENT", name="institutional_role"),
+            institutional_role,
             nullable=False,
         ),
         sa.Column("department_code", sa.String(50), nullable=True),
         sa.Column("assigned_base_station", sa.String(100), server_default="Staff Room Main"),
         sa.Column(
             "current_occupancy_index",
-            sa.Enum(
-                "OPEN_AD_HOC",
-                "BUSY",
-                "CRITICAL_DO_NOT_DISTURB",
-                "VERY_FREE",
-                name="access_readiness",
-            ),
+            access_readiness,
             server_default="OPEN_AD_HOC",
         ),
         sa.Column(
@@ -140,8 +144,11 @@ def upgrade() -> None:
         "INTERNAL_MEETING",
         "ADHOC_EVENT",
         name="dynamic_state",
+        create_type=False,
     )
-    execution_mode = postgresql.ENUM("PHYSICAL", "ONLINE_STREAM", name="execution_mode")
+    execution_mode = postgresql.ENUM(
+        "PHYSICAL", "ONLINE_STREAM", name="execution_mode", create_type=False
+    )
     dynamic_state.create(op.get_bind())
     execution_mode.create(op.get_bind())
 
@@ -168,7 +175,7 @@ def upgrade() -> None:
         sa.Column("target_room_identifier", sa.String(30), nullable=False),
         sa.Column(
             "delivery_format",
-            sa.Enum("PHYSICAL", "ONLINE_STREAM", name="execution_mode"),
+            execution_mode,
             server_default="PHYSICAL",
         ),
         sa.Column("virtual_connection_string", sa.Text(), nullable=True),
@@ -178,15 +185,7 @@ def upgrade() -> None:
         sa.Column("precision_radius_meters", sa.Integer(), server_default="15"),
         sa.Column(
             "operational_state",
-            sa.Enum(
-                "SCHEDULED",
-                "ON_LEAVE",
-                "PROXY_SUBSTITUTE",
-                "LUNCH",
-                "INTERNAL_MEETING",
-                "ADHOC_EVENT",
-                name="dynamic_state",
-            ),
+            dynamic_state,
             server_default="SCHEDULED",
         ),
         sa.PrimaryKeyConstraint("id"),
@@ -198,6 +197,7 @@ def upgrade() -> None:
         "VERIFIED_APPROVED",
         "VERIFIED_DENIED",
         name="log_verification_state",
+        create_type=False,
     )
     log_verification_state.create(op.get_bind())
 
@@ -214,12 +214,7 @@ def upgrade() -> None:
         sa.Column("context_justification", sa.Text(), nullable=False),
         sa.Column(
             "approval_state",
-            sa.Enum(
-                "PENDING_VERIFICATION",
-                "VERIFIED_APPROVED",
-                "VERIFIED_DENIED",
-                name="log_verification_state",
-            ),
+            log_verification_state,
             server_default="PENDING_VERIFICATION",
         ),
         sa.Column(
@@ -231,7 +226,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
-    verification_metric = postgresql.ENUM("PRESENT", "ABSENT", "LATE", name="verification_metric")
+    verification_metric = postgresql.ENUM(
+        "PRESENT", "ABSENT", "LATE", name="verification_metric", create_type=False
+    )
     verification_metric.create(op.get_bind())
 
     op.create_table(
@@ -251,7 +248,7 @@ def upgrade() -> None:
         ),
         sa.Column(
             "marking_status",
-            sa.Enum("PRESENT", "ABSENT", "LATE", name="verification_metric"),
+            verification_metric,
             nullable=False,
         ),
         sa.Column("authorizing_agent_id", sa.String(50), sa.ForeignKey("users.id"), nullable=True),
@@ -302,12 +299,7 @@ def upgrade() -> None:
         sa.Column("visitation_intent", sa.Text(), nullable=False),
         sa.Column(
             "handshake_status",
-            sa.Enum(
-                "PENDING_VERIFICATION",
-                "VERIFIED_APPROVED",
-                "VERIFIED_DENIED",
-                name="log_verification_state",
-            ),
+            log_verification_state,
             server_default="PENDING_VERIFICATION",
         ),
         sa.Column("timestamp_marked", sa.DateTime(timezone=True), server_default=sa.func.now()),
@@ -321,13 +313,12 @@ def upgrade() -> None:
             "INSERT INTO users (id, full_name, email_address, credential_secure_hash, role_type, initial_login_state) "
             "VALUES (:uid, :name, :email, :hash, 'SUPER_ADMIN', true) "
             "ON CONFLICT DO NOTHING"
-        ),
-        {
-            "uid": "ADMIN001",
-            "name": "Campus Administrator",
-            "email": "admin@college.internal",
-            "hash": hashed,
-        },
+        ).bindparams(
+            uid="ADMIN001",
+            name="Campus Administrator",
+            email="admin@college.internal",
+            hash=hashed,
+        )
     )
 
 

@@ -43,8 +43,6 @@ frontend/public/icons/*.png
 backend/.ruff_cache
 backend/.venv
 
-# Docker
-.dockerignore
 
 # OS
 .DS_Store

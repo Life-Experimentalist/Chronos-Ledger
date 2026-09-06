@@ -1,0 +1,11 @@
+# Host-side artifacts must never reach the image: uv sync creates the
+# image's own /app/.venv, and a host venv (Windows Scripts/, host paths)
+# would overwrite it via COPY . .
+.venv
+__pycache__
+**/__pycache__
+.pytest_cache
+.ruff_cache
+*.pyc
+Dockerfile
+.dockerignore
