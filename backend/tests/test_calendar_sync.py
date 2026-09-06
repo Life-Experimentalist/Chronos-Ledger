@@ -83,7 +83,7 @@ def test_student_feed_requires_registration(client, db, seed_users):
     registered = client.get("/api/v1/sync/user-feed/STU001.ics").text
     assert "[CS500] Distributed Systems" in registered
 
-    # Another seeded user with no registration sees an empty calendar.
+    # Drop the registration: the same student now sees an empty calendar.
     db.query(CourseRegistration).delete()
     db.commit()
     unregistered = client.get("/api/v1/sync/user-feed/STU001.ics").text
@@ -107,8 +107,10 @@ def test_substitute_sees_proxy_assignment(client, db, seed_users):
 def test_adhoc_entry_without_slot_is_all_day(client, db, seed_users):
     _seed_schedule(db, with_slot=False)
     body = client.get("/api/v1/sync/user-feed/FAC001.ics").text
-    # No master slot: date-only DTSTART instead of a timed one.
-    assert f"DTSTART:{TODAY.strftime('%Y%m%d')}\r\n" in body
+    # No master slot: an RFC 5545 all-day event (VALUE=DATE, non-inclusive DTEND).
+    tomorrow = TODAY + datetime.timedelta(days=1)
+    assert f"DTSTART;VALUE=DATE:{TODAY.strftime('%Y%m%d')}\r\n" in body
+    assert f"DTEND;VALUE=DATE:{tomorrow.strftime('%Y%m%d')}\r\n" in body
 
 
 def test_unknown_user_is_404(client, db, seed_users):

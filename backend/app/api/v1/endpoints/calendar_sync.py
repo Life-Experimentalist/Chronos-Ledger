@@ -78,15 +78,16 @@ def stream_icalendar_feed(user_token_id: str, db: Session = Depends(get_db)):
             continue
 
         if slot:
-            dtstart = f"{entry.target_date.strftime('%Y%m%d')}T{slot.time_window_start.strftime('%H%M%S')}"
-            dtend = (
-                f"{entry.target_date.strftime('%Y%m%d')}T{slot.time_window_end.strftime('%H%M%S')}"
-            )
+            dtstart_line = f"DTSTART:{entry.target_date.strftime('%Y%m%d')}T{slot.time_window_start.strftime('%H%M%S')}"
+            dtend_line = f"DTEND:{entry.target_date.strftime('%Y%m%d')}T{slot.time_window_end.strftime('%H%M%S')}"
             uid_time = slot.time_window_start.strftime("%H%M%S")
         else:
-            # Ad-hoc entry without a master slot — use all-day event
-            dtstart = entry.target_date.strftime("%Y%m%d")
-            dtend = entry.target_date.strftime("%Y%m%d")
+            # Ad-hoc entry without a master slot: an all-day event. RFC 5545 makes
+            # DTSTART default to DATE-TIME, so a date-only value must declare
+            # VALUE=DATE, and the all-day DTEND is non-inclusive (the next day).
+            next_day = entry.target_date + datetime.timedelta(days=1)
+            dtstart_line = f"DTSTART;VALUE=DATE:{entry.target_date.strftime('%Y%m%d')}"
+            dtend_line = f"DTEND;VALUE=DATE:{next_day.strftime('%Y%m%d')}"
             uid_time = "000000"
 
         summary = f"[{offering.course_code}] {offering.course_title}"
@@ -99,8 +100,8 @@ def stream_icalendar_feed(user_token_id: str, db: Session = Depends(get_db)):
             [
                 "BEGIN:VEVENT",
                 f"UID:slot_{entry.target_date.strftime('%Y%m%d')}_{offering.course_code}_{uid_time}@chronos.internal",
-                f"DTSTART:{dtstart}",
-                f"DTEND:{dtend}",
+                dtstart_line,
+                dtend_line,
                 f"SUMMARY:{summary}",
                 f"LOCATION:Room {entry.target_room_identifier}",
                 f"DESCRIPTION:Status: {entry.operational_state.value} | Synchronized via Chronos Ledger.",
