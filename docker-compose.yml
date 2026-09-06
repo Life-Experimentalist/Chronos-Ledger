@@ -1,5 +1,3 @@
-version: '3.9'
-
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
@@ -18,7 +16,6 @@ services:
       chronos-app:
         condition: service_healthy
       # Wait for build to COMPLETE (not just start) before nginx serves files.
-      # Requires Compose file version 3.9.
       chronos-frontend:
         condition: service_completed_successfully
     restart: always
@@ -50,7 +47,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://chronos_admin:${DB_PASSWORD:-SecureCloud2026}@chronos-db:5432/chronos_ledger
       - REDIS_URL=${REDIS_URL:-redis://chronos-cache:6379/0}
-      - JWT_SECRET_SIGNING_KEY=${JWT_SECRET_SIGNING_KEY}
+      - JWT_SECRET_SIGNING_KEY=${JWT_SECRET_SIGNING_KEY:?set JWT_SECRET_SIGNING_KEY before compose up}
       - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
       - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-480}
       - APP_ENV=${APP_ENV:-production}
