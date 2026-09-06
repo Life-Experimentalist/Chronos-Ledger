@@ -32,8 +32,11 @@ def list_users(
 def create_user(
     payload: UserCreate,
     db: Session = Depends(get_db),
-    _=Depends(require_roles("SUPER_ADMIN", "DEPT_ADMIN")),
+    current_user: User = Depends(require_roles("SUPER_ADMIN", "DEPT_ADMIN")),
 ):
+    admin_roles = (InstitutionalRole.SUPER_ADMIN, InstitutionalRole.DEPT_ADMIN)
+    if payload.role_type in admin_roles and current_user.role_type != InstitutionalRole.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="Only a super-admin can create admin accounts")
     if db.query(User).filter(User.id == payload.id).first():
         raise HTTPException(status_code=409, detail="User ID already exists")
     if db.query(User).filter(User.email_address == payload.email_address).first():

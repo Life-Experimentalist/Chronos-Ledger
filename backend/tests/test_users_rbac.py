@@ -59,3 +59,39 @@ def test_available_faculty_visible_to_any_authenticated_user(client, seed_users)
     listed = res.json()
     assert [f["id"] for f in listed] == ["FAC001"]
     assert listed[0]["current_occupancy_index"] == "OPEN_AD_HOC"
+
+
+def test_dept_admin_cannot_create_admin_accounts(client, seed_users):
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    dept_admin = {
+        "id": "DAD001",
+        "full_name": "Dept Admin",
+        "email_address": "deptadmin@test.internal",
+        "password": "DeptAdmin456!",
+        "role_type": "DEPT_ADMIN",
+        "department_code": "CSE",
+    }
+    assert client.post("/api/v1/users/", headers=headers, json=dept_admin).status_code == 201
+
+    da_headers = login(client, "deptadmin@test.internal", "DeptAdmin456!")
+    # Clear the first-login gate so the dept-admin can reach /users/.
+    res = client.post(
+        "/api/v1/auth/change-password",
+        headers=da_headers,
+        json={"current_password": "DeptAdmin456!", "new_password": "DeptAdmin789!"},
+    )
+    assert res.status_code == 200
+    da_headers = login(client, "deptadmin@test.internal", "DeptAdmin789!")
+
+    for role in ("SUPER_ADMIN", "DEPT_ADMIN"):
+        payload = dict(
+            NEW_USER,
+            id=f"ESC_{role}",
+            email_address=f"esc.{role.lower()}@test.internal",
+            role_type=role,
+        )
+        res = client.post("/api/v1/users/", headers=da_headers, json=payload)
+        assert res.status_code == 403
+
+    # Ordinary members are still theirs to create.
+    assert client.post("/api/v1/users/", headers=da_headers, json=NEW_USER).status_code == 201
