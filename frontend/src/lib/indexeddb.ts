@@ -84,6 +84,36 @@ export async function getPendingCount(): Promise<number> {
   return database.count('attendance-queue')
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api/v1'
+
+// Drains the offline queue from the page itself. Safari and Firefox have no
+// Background Sync, so without this the queue would sit in IndexedDB forever
+// on those browsers. The mark endpoint upserts, so a double flush alongside
+// the service worker's own sync handler is harmless.
+export async function flushAttendanceQueue(): Promise<number> {
+  const pending = await getPendingAttendanceQueue()
+  let flushed = 0
+  for (const record of pending) {
+    try {
+      const res = await fetch(`${API_BASE}/attendance/mark`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${record.token}` },
+        body: JSON.stringify(record.payload),
+      })
+      // A 4xx is a final verdict (expired token, deleted ledger): retrying
+      // will never succeed, so the record is dropped either way. Only a
+      // network failure or a 5xx keeps it for the next attempt.
+      if (res.status < 500) {
+        if (record.id !== undefined) await clearQueueItem(record.id)
+        if (res.ok) flushed += 1
+      }
+    } catch {
+      // Still offline or the server is unreachable: keep the record.
+    }
+  }
+  return flushed
+}
+
 // ── Schedule cache ───────────────────────────────────────────────────────────
 
 export async function cacheSchedule(userId: string, entries: LedgerEntry[]): Promise<void> {

@@ -87,7 +87,10 @@ async function syncOfflineAttendance() {
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${record.token}` },
           body: JSON.stringify(record.payload),
         });
-        if (response.ok) await store.delete(record.id);
+        // 2xx means marked; a 4xx is a final verdict (expired token,
+        // deleted ledger) that a retry can never fix. Only network errors
+        // and 5xx keep the record for the next sync.
+        if (response.status < 500) await store.delete(record.id);
       } catch {
         // Keep the record — will retry on next sync
       }

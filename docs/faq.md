@@ -284,11 +284,15 @@ ALT_DELTA_THRESHOLD_M = 4.0   # change to 10.0 for looser enforcement
 
 ### Attendance marks are queuing offline but never syncing
 
-The service worker's Background Sync fires when the browser decides to — usually within a few seconds of going online. If it is not firing:
+The app drains the queue itself whenever it is open with the network up: reopening or reloading the dashboard while online flushes every pending mark. That path works in every browser, including Safari and Firefox, which have no Background Sync.
+
+If the app is closed, Chromium browsers also flush via the service worker's Background Sync, which fires when the browser decides to, usually within a few seconds of going online. If that is not firing:
 
 1. Make sure the PWA is installed (added to home screen), not just open in a tab.
 2. Check `chrome://serviceworker-internals` to confirm the SW is registered and active.
 3. Force a sync in DevTools: Application → Service Workers → Sync → push the `attendance-sync` tag.
+
+A mark the server rejects outright (for example an expired login token) is dropped from the queue rather than retried forever; mark it again after signing back in.
 
 ---
 

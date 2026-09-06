@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { MapPin, Wifi, CheckCircle2, AlertCircle, Loader2, Navigation } from 'lucide-react'
 import { useGeolocation } from '@/hooks/useGeolocation'
 import { attendanceApi } from '@/lib/api'
-import { queueAttendanceMark, getPendingCount } from '@/lib/indexeddb'
+import { queueAttendanceMark, getPendingCount, flushAttendanceQueue } from '@/lib/indexeddb'
 import { getToken } from '@/lib/auth'
 import type { LedgerEntry } from '@/types'
 
@@ -34,6 +34,13 @@ export function ProximityCard({ currentEntry, userId }: ProximityCardProps) {
   useEffect(() => {
     getPendingCount().then(setPendingCount)
   }, [marking])
+
+  // Page-side drain of the offline queue, on load and whenever the network
+  // comes back. Covers browsers without Background Sync (Safari, Firefox).
+  useEffect(() => {
+    if (!online) return
+    flushAttendanceQueue().then(() => getPendingCount().then(setPendingCount))
+  }, [online])
 
   const markPresence = async () => {
     if (!currentEntry) return

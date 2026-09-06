@@ -32,7 +32,7 @@ Universities and colleges track attendance on paper, manage timetables in Excel,
 | REST API endpoints       | 30+                          |
 | Role-specific dashboards | 4                            |
 | Database tables          | 10                          |
-| Offline capability       | 100% (read + queue writes)   |
+| Offline capability       | Reads cached; attendance marks queue and auto-sync |
 | Setup time               | < 5 minutes                  |
 | Runtime dependencies     | Docker + Docker Compose only |
 | License                  | Apache 2.0                   |
@@ -109,9 +109,9 @@ Presence is the default state. Faculty *file* absences rather than *confirming* 
 
 ### Offline-First PWA
 Campus Wi-Fi drops. Chronos Ledger keeps working:
-- Attendance marks queue to IndexedDB → Background Sync flushes on reconnect
+- Attendance marks queue to IndexedDB and flush on reconnect (Background Sync where available, the app itself otherwise)
 - Today's schedule cached locally for 12 hours
-- Class reminders fire 15 minutes before start — even with the app closed — via `periodicsync` in the service worker
+- Class reminders fire up to 20 minutes before start, even with the app closed, via `periodicsync` in the service worker
 
 ### Real-Time WebSocket Hub
 JWT-authenticated persistent connections. Guest handshake requests, absence approvals, and ledger state changes arrive in milliseconds — no polling.
