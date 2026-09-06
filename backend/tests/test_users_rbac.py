@@ -95,3 +95,57 @@ def test_dept_admin_cannot_create_admin_accounts(client, seed_users):
 
     # Ordinary members are still theirs to create.
     assert client.post("/api/v1/users/", headers=da_headers, json=NEW_USER).status_code == 201
+
+
+def test_dept_admin_cannot_modify_admin_accounts(client, seed_users):
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    dept_admin = {
+        "id": "DAD002",
+        "full_name": "Dept Admin Two",
+        "email_address": "deptadmin2@test.internal",
+        "password": "DeptAdmin456!",
+        "role_type": "DEPT_ADMIN",
+        "department_code": "CSE",
+    }
+    assert client.post("/api/v1/users/", headers=headers, json=dept_admin).status_code == 201
+
+    da_headers = login(client, "deptadmin2@test.internal", "DeptAdmin456!")
+    res = client.post(
+        "/api/v1/auth/change-password",
+        headers=da_headers,
+        json={"current_password": "DeptAdmin456!", "new_password": "DeptAdmin789!"},
+    )
+    assert res.status_code == 200
+    da_headers = login(client, "deptadmin2@test.internal", "DeptAdmin789!")
+
+    # Login is by email, so patching the super-admin's email would lock
+    # them out. Any admin account is off-limits to a dept-admin.
+    res = client.patch(
+        "/api/v1/users/ADM001",
+        headers=da_headers,
+        json={"email_address": "stolen@test.internal"},
+    )
+    assert res.status_code == 403
+
+    res = client.patch(
+        "/api/v1/users/DAD002",
+        headers=da_headers,
+        json={"full_name": "Renamed Self"},
+    )
+    assert res.status_code == 403
+
+    # Ordinary members are still theirs to manage.
+    res = client.patch(
+        "/api/v1/users/STU001",
+        headers=da_headers,
+        json={"full_name": "Renamed Student"},
+    )
+    assert res.status_code == 200
+
+    # The super-admin can still rename a dept-admin.
+    res = client.patch(
+        "/api/v1/users/DAD002",
+        headers=headers,
+        json={"full_name": "Renamed By Super"},
+    )
+    assert res.status_code == 200

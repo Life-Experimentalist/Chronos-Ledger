@@ -103,11 +103,14 @@ def update_user(
     user_id: str,
     payload: UserUpdate,
     db: Session = Depends(get_db),
-    _=Depends(require_roles("SUPER_ADMIN", "DEPT_ADMIN")),
+    current_user: User = Depends(require_roles("SUPER_ADMIN", "DEPT_ADMIN")),
 ):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    admin_roles = (InstitutionalRole.SUPER_ADMIN, InstitutionalRole.DEPT_ADMIN)
+    if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="Only a super-admin can modify admin accounts")
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(user, field, value)
     db.commit()
