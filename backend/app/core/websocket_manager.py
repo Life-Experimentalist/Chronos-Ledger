@@ -14,7 +14,11 @@ class CampusConnectionManager:
         await websocket.accept()
         self.active_sockets[user_id] = websocket
 
-    def terminate_session(self, user_id: str):
+    def terminate_session(self, user_id: str, websocket: WebSocket | None = None):
+        # A reconnect replaces the stored socket; when the stale connection
+        # then closes, it must not evict the replacement.
+        if websocket is not None and self.active_sockets.get(user_id) is not websocket:
+            return
         self.active_sockets.pop(user_id, None)
 
     async def forward_direct_message(self, recipient_id: str, event_type: str, data_payload: dict):

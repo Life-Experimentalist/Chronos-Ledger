@@ -23,7 +23,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
-        socket_broker.terminate_session(user_id)
+        socket_broker.terminate_session(user_id, websocket)
 
 
 @router.get("/ws/stats")
