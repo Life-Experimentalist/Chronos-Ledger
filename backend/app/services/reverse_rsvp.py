@@ -1,6 +1,8 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
+import datetime
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -19,7 +21,8 @@ def route_absence_declaration(
 
     log = ReverseRsvpLog(
         submitting_user_id=submitting_user,
-        target_absence_date=absence_date,
+        # The column is a Date; SQLite's dialect rejects a bare ISO string.
+        target_absence_date=datetime.date.fromisoformat(absence_date),
         context_justification=reasoning,
         approval_state=LogVerificationState.PENDING_VERIFICATION,
         authorized_by_user_id=user.reporting_line_manager,
