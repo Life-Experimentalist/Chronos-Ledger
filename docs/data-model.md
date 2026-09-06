@@ -2,7 +2,7 @@
 
 <!-- Copyright 2026 Chronos Ledger Contributors — Apache 2.0 -->
 
-All nine production tables live in the default PostgreSQL `public` schema.
+All ten production tables live in the default PostgreSQL `public` schema.
 Migrations are managed by Alembic (`backend/alembic/versions/`).
 
 ---
@@ -42,7 +42,7 @@ erDiagram
 
     StructuralMasterSlot {
         int id PK
-        int day_of_week_index "0 = Monday … 6 = Sunday"
+        int day_of_week_index "1 = Monday … 7 = Sunday"
         time time_window_start
         time time_window_end
         int course_offering_id FK "→ CourseOffering.id"
@@ -73,7 +73,7 @@ erDiagram
         int precision_radius_meters
     }
 
-    AttendanceLog {
+    VerificationLedger {
         int id PK
         int ledger_instance_id FK "→ DailyLedger.id"
         string student_id FK "→ User.id"
@@ -82,7 +82,7 @@ erDiagram
         datetime modification_timestamp
     }
 
-    ReverseAbsenceLog {
+    ReverseRsvpLog {
         int id PK
         string submitting_user_id FK "→ User.id"
         date target_absence_date
@@ -91,7 +91,7 @@ erDiagram
         string authorized_by_user_id FK "→ User.id (nullable)"
     }
 
-    GuestTransactionLog {
+    GuestGateRegistry {
         int id PK
         string guest_name
         string contact_phone
@@ -119,11 +119,11 @@ erDiagram
     User ||--o{ CourseRegistration : "student enrols"
     User ||--o{ DailyLedger : "teaches (active)"
     User ||--o{ DailyLedger : "substitutes"
-    DailyLedger ||--o{ AttendanceLog : "records attendance"
+    DailyLedger ||--o{ VerificationLedger : "records attendance"
     DailyLedger ||--o{ LedgerAnnotation : "annotated by"
-    User ||--o{ AttendanceLog : "student marked"
-    User ||--o{ ReverseAbsenceLog : "submits absence"
-    User ||--o{ GuestTransactionLog : "receives guest"
+    User ||--o{ VerificationLedger : "student marked"
+    User ||--o{ ReverseRsvpLog : "submits absence"
+    User ||--o{ GuestGateRegistry : "receives guest"
 ```
 
 ---
@@ -140,7 +140,7 @@ The scheduling container. Only one cycle should have `operational_status = true`
 A course within a cycle. A single course can appear in multiple cycles as independent `CourseOffering` rows — enabling year-over-year history without aliasing.
 
 ### `StructuralMasterSlot`
-The repeating weekly timetable entry. `day_of_week_index` follows Python's `date.weekday()` convention (0 = Monday). These are the *template* rows that `ledger_generator` reads each night.
+The repeating weekly timetable entry. `day_of_week_index` follows Python's `date.isoweekday()` convention (1 = Monday, 7 = Sunday), enforced by a CHECK constraint. These are the *template* rows that `ledger_generator` reads each night.
 
 ### `CourseRegistration`
 Student-to-course enrolment. Created in bulk by `ingestion_engine` during CSV import. No per-semester attendance target is stored here — percentage calculations are done at query time.
@@ -148,13 +148,13 @@ Student-to-course enrolment. Created in bulk by `ingestion_engine` during CSV im
 ### `DailyLedger`
 The materialised daily schedule. Generated nightly from `StructuralMasterSlot` by `cron/ledger_generator.py`. Contains mutable state: `operational_state` (can be flipped to `ON_LEAVE` by an approved absence), substitute instructor, and geofence coordinates (overridable per-session for ad-hoc room changes).
 
-### `AttendanceLog`
+### `VerificationLedger`
 One row per student per ledger entry. `authorizing_agent_id` is `null` for self-marks and set to the faculty/admin user_id for batch marks. The same row is overwritten on re-mark (upsert logic in `attendance.py`).
 
-### `ReverseAbsenceLog`
+### `ReverseRsvpLog`
 The Reverse RSVP state machine. Starts at `PENDING_VERIFICATION`. Transition to `VERIFIED_APPROVED` triggers `services/reverse_rsvp.py` which updates the corresponding `DailyLedger.operational_state` to `ON_LEAVE` and broadcasts a WebSocket event to the faculty member.
 
-### `GuestTransactionLog`
+### `GuestGateRegistry`
 Records each campus visitor interaction. `handshake_status` transitions from `PENDING_VERIFICATION` → `VERIFIED_APPROVED | VERIFIED_DENIED` when the target faculty member acts via the Interaction Desk. The decision is broadcast back to the kiosk via WebSocket.
 
 ### `LedgerAnnotation`

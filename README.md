@@ -31,7 +31,7 @@ Universities and colleges track attendance on paper, manage timetables in Excel,
 | ------------------------ | ---------------------------- |
 | REST API endpoints       | 30+                          |
 | Role-specific dashboards | 4                            |
-| Database tables          | 9                            |
+| Database tables          | 10                          |
 | Offline capability       | 100% (read + queue writes)   |
 | Setup time               | < 5 minutes                  |
 | Runtime dependencies     | Docker + Docker Compose only |
@@ -297,7 +297,7 @@ The Alembic seed migration creates one super-admin:
 | ---------------------------------------------- | ---------------------------------------------------------------------- |
 | [`docs/openapi.yaml`](docs/openapi.yaml)       | OpenAPI 3.1 contract — all endpoints, schemas, enums                   |
 | [`docs/architecture.md`](docs/architecture.md) | System topology, module deps, location resolution, WebSocket lifecycle |
-| [`docs/data-model.md`](docs/data-model.md)     | ERD for all 9 database tables                                          |
+| [`docs/data-model.md`](docs/data-model.md)     | ERD for all 10 database tables                                         |
 | [`docs/flows.md`](docs/flows.md)               | Sequence diagrams: attendance, RSVP, guest handshake, ledger cron      |
 | [`docs/api.md`](docs/api.md)                   | Human-readable API reference with examples                             |
 | [`docs/deployment.md`](docs/deployment.md)     | Deployment guide, cycle rollover, TLS, scaling                         |

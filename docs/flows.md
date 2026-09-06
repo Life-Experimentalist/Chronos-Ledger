@@ -27,7 +27,7 @@ sequenceDiagram
         API->>GF: check_geofence(user_coords, target_coords, radius)
         GF-->>API: inside=true / false
         alt Inside geofence
-            API->>DB: UPSERT AttendanceLog (PRESENT)
+            API->>DB: UPSERT VerificationLedger (PRESENT)
             API-->>Stu: 201 {marking_status: PRESENT}
         else Outside geofence
             API-->>Stu: 400 {detail: "Geofence violation"}
@@ -37,7 +37,7 @@ sequenceDiagram
         SW->>SW: Register background-sync tag<br/>"sync-attendance"
         Note over SW: Fires when connectivity restored
         SW->>API: POST /attendance/mark (replayed)
-        API->>DB: UPSERT AttendanceLog
+        API->>DB: UPSERT VerificationLedger
         API-->>SW: 201
     end
 ```
@@ -46,7 +46,7 @@ sequenceDiagram
 
 1. The student opens the **ProximityCard** component which starts a GPS watch via `useGeolocation.ts`. The hook calls `navigator.geolocation.watchPosition` (stable `useRef` for the watch ID — fixes a prior bug where a plain object was used).
 2. **Online path**: Coordinates + ledger ID are posted to `/attendance/mark`. The backend queries the `DailyLedger` row for the geofence target coordinates and calls `geo_fence.check_geofence()`. The function runs a Haversine 2D distance check then validates `|user_alt - target_alt| < 4m` to prevent students on adjacent floors from registering.
-3. If the check passes, an `AttendanceLog` row is upserted (idempotent — re-marking is allowed, last write wins).
+3. If the check passes, a `VerificationLedger` row is upserted (idempotent — re-marking is allowed, last write wins).
 4. **Offline path**: The mark is written to the `attendance-queue` IndexedDB store. The service worker's `background-sync` tag `sync-attendance` is registered. On reconnect, the SW replays the queue to `/attendance/mark` and clears the store entry on 2xx response.
 
 ---
@@ -63,7 +63,7 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     Fac->>API: POST /attendance/absence<br/>{target_absence_date, context_justification}
-    API->>DB: INSERT ReverseAbsenceLog<br/>approval_state = PENDING_VERIFICATION
+    API->>DB: INSERT ReverseRsvpLog<br/>approval_state = PENDING_VERIFICATION
     API->>DB: SELECT User WHERE id = fac.reporting_line_manager
     API->>WS: broadcast(manager_id, ABSENCE_APPROVAL_REQUIRED)
     WS-->>Mgr: {event: ABSENCE_APPROVAL_REQUIRED,<br/>payload: {log_id, from, date}}
@@ -73,12 +73,12 @@ sequenceDiagram
     API->>RSVP: process_decision(log_id, decision)
 
     alt VERIFIED_APPROVED
-        RSVP->>DB: UPDATE ReverseAbsenceLog<br/>approval_state = VERIFIED_APPROVED
+        RSVP->>DB: UPDATE ReverseRsvpLog<br/>approval_state = VERIFIED_APPROVED
         RSVP->>DB: UPDATE DailyLedger<br/>operational_state = ON_LEAVE<br/>(for target_absence_date slots)
         RSVP->>WS: broadcast(faculty_id, ABSENCE_DECISION)
         WS-->>Fac: {event: ABSENCE_DECISION,<br/>payload: {log_id, decision: VERIFIED_APPROVED}}
     else VERIFIED_DENIED
-        RSVP->>DB: UPDATE ReverseAbsenceLog<br/>approval_state = VERIFIED_DENIED
+        RSVP->>DB: UPDATE ReverseRsvpLog<br/>approval_state = VERIFIED_DENIED
         RSVP->>WS: broadcast(faculty_id, ABSENCE_DECISION)
         WS-->>Fac: {event: ABSENCE_DECISION,<br/>payload: {log_id, decision: VERIFIED_DENIED}}
     end
@@ -88,7 +88,7 @@ sequenceDiagram
 
 **Step-by-step:**
 
-1. Faculty submits an absence request via the **Absence Requests** tab. The `ReverseAbsenceLog` row is created with `approval_state = PENDING_VERIFICATION`.
+1. Faculty submits an absence request via the **Absence Requests** tab. The `ReverseRsvpLog` row is created with `approval_state = PENDING_VERIFICATION`.
 2. The API immediately resolves the faculty's `reporting_line_manager` user ID and broadcasts a `ABSENCE_APPROVAL_REQUIRED` WebSocket event. If the manager is connected, they see a notification badge in real time.
 3. The manager opens **Pending Approvals** and approves or denies.
 4. On approval, `services/reverse_rsvp.py` updates every `DailyLedger` entry on the target date where the faculty is `active_instructor_id` to `operational_state = ON_LEAVE`. This cascades the absence into the live schedule.
@@ -109,7 +109,7 @@ sequenceDiagram
 
     G->>KI: Fills check-in form<br/>(name, phone, org, faculty, intent)
     KI->>API: POST /guest/register-checkin<br/>(no auth required)
-    API->>DB: INSERT GuestTransactionLog<br/>handshake_status = PENDING_VERIFICATION
+    API->>DB: INSERT GuestGateRegistry<br/>handshake_status = PENDING_VERIFICATION
     API->>DB: SELECT User WHERE id = target_faculty_id
     API->>WS: broadcast(faculty_id, GUEST_HANDSHAKE_REQ)
     API-->>KI: 201 GuestResponse
@@ -119,7 +119,7 @@ sequenceDiagram
     Note over Fac: NotificationPanel shows badge
 
     Fac->>API: PATCH /guest/{id}/decide<br/>{decision: VERIFIED_APPROVED}
-    API->>DB: UPDATE GuestTransactionLog<br/>handshake_status = VERIFIED_APPROVED
+    API->>DB: UPDATE GuestGateRegistry<br/>handshake_status = VERIFIED_APPROVED
     API-->>Fac: 200 GuestResponse
 
     Note over KI,G: Kiosk polls /guest/{id} or receives<br/>push notification on approval
@@ -128,9 +128,9 @@ sequenceDiagram
 **Step-by-step:**
 
 1. The **Guest Kiosk** (`/guest/kiosk`) is a public, unauthenticated page accessible from any campus terminal. It searches the faculty directory (`GET /guest/directory?name=…`) to let the guest pick the right person.
-2. The check-in POST requires no bearer token. The server creates a `GuestTransactionLog` row and immediately pushes a `GUEST_HANDSHAKE_REQ` frame to the target faculty's WebSocket connection.
+2. The check-in POST requires no bearer token. The server creates a `GuestGateRegistry` row and immediately pushes a `GUEST_HANDSHAKE_REQ` frame to the target faculty's WebSocket connection.
 3. If the faculty is connected, their **NotificationPanel** badge increments and the **Interaction Desk** tab shows the incoming request within milliseconds.
-4. Faculty approves or declines. The `GuestTransactionLog` row is updated and the decision is broadcast back. The kiosk can display the outcome to the guest.
+4. Faculty approves or declines. The `GuestGateRegistry` row is updated and the decision is broadcast back. The kiosk can display the outcome to the guest.
 
 ---
 
