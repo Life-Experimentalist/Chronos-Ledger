@@ -162,7 +162,7 @@ class StructuralMasterSlot(Base):
 class DailyLedger(Base):
     __tablename__ = "daily_ledger"
 
-    id = Column(BigInteger, primary_key=True, index=True)
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, index=True)
     target_date = Column(Date, nullable=False, index=True)
     master_slot_id = Column(
         Integer, ForeignKey("structural_master_slots.id", ondelete="CASCADE"), nullable=True
@@ -221,7 +221,7 @@ class VerificationLedger(Base):
         ),
     )
 
-    id = Column(BigInteger, primary_key=True, index=True)
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, index=True)
     ledger_instance_id = Column(
         BigInteger, ForeignKey("daily_ledger.id", ondelete="CASCADE"), nullable=False
     )
