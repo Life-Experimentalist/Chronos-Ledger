@@ -271,7 +271,7 @@ Upload a `multipart/form-data` CSV file. Required columns:
 | `subject_code` | CS301 |
 | `subject_title` | Operating Systems |
 | `department` | CSE |
-| `day_of_week_index` | 0 (Monday) … 6 (Sunday) |
+| `day_of_week_index` | 1 (Monday) … 7 (Sunday) |
 | `time_window_start` | 09:00 |
 | `time_window_end` | 10:00 |
 | `teacher_id` | FAC001 |

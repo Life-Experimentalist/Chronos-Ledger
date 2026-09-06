@@ -207,25 +207,23 @@ The new cycle becomes active immediately for ledger generation.
 
 ### What columns does the CSV need?
 
-The ingestion engine expects a student-centric format. Required columns:
+The ingestion engine expects a student-centric format with these exact column names:
 
 | Column | Example |
 |---|---|
-| `student_roll` | `22CS001` |
+| `student_id` | `STU20210001` |
 | `student_name` | `Alice Sharma` |
-| `student_email` | `22cs001@college.internal` |
-| `faculty_email` | `prof.kumar@college.internal` |
-| `faculty_name` | `Dr. Kumar` |
-| `course_code` | `CS301` |
-| `course_title` | `Operating Systems` |
-| `section` | `A` |
-| `day_of_week` | `Monday` |
-| `time_start` | `09:00` |
-| `time_end` | `10:00` |
+| `student_email` | `alice@college.internal` |
+| `subject_code` | `CS301` |
+| `subject_title` | `Operating Systems` |
+| `department` | `CSE` |
+| `day_of_week_index` | `1` (1 = Monday ... 7 = Sunday) |
+| `time_window_start` | `09:00` |
+| `time_window_end` | `10:00` |
+| `teacher_id` | `FAC001` |
 | `room` | `LH-3` |
-| `dept_code` | `CS` |
 
-Column names are case-insensitive. Extra columns are ignored.
+Column names are case-sensitive. Extra columns are ignored. Times accept `HH:MM` or `HH:MM:SS` (24-hour).
 
 ---
 
@@ -235,13 +233,15 @@ The import is idempotent — re-running it with the same data is safe. "Duplicat
 
 ---
 
-### Import completed but some rows were skipped
+### Import failed with a 422 error
 
-The API response includes a `skipped` count with reasons. Download the response JSON from the browser developer tools (Network tab → the POST `/api/v1/ingestion/upload` request → Response). Common skip reasons:
+The import is all-or-nothing: any bad row rolls back the whole upload, and the response `detail` field (POST `/api/v1/ingestion/upload-csv`) explains the failure. Common causes:
 
-- `invalid_email` — faculty or student email does not match expected format
-- `unknown_day` — `day_of_week` is not a full English day name
-- `time_parse_error` — time is not `HH:MM` 24-hour format
+- `Missing columns: {...}`: the CSV header lacks one of the required columns listed above
+- `Cannot parse time value ...`: a time is not `HH:MM` or `HH:MM:SS` 24-hour format
+- a database constraint error: usually `day_of_week_index` outside 1 to 7, or the same student+course+slot appearing twice
+
+Fix the offending rows and re-upload; re-running a corrected file is safe.
 
 ---
 

@@ -105,5 +105,6 @@ def test_first_login_admin_is_gated_until_password_change(client, db, seed_users
 def test_first_login_gate_skips_non_admin_roles(client, seed_users):
     # Faculty and students are provisioned by an admin, not by a published
     # default credential, so their first login is not gated.
+    assert seed_users["student"].initial_login_state is True
     headers = login(client, "student@test.internal", STUDENT_PASSWORD)
     assert client.get("/api/v1/users/faculty/available", headers=headers).status_code == 200
