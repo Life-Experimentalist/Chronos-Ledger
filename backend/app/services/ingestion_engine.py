@@ -136,6 +136,11 @@ class ChronosIngestionEngine:
                     )
 
                 records_processed += 1
+                # The session runs with autoflush=False, so without this flush
+                # the dedup queries above cannot see rows added for earlier CSV
+                # lines: every student sharing a class would add a duplicate
+                # registration and master slot.
+                self.db.flush()
 
             self.db.commit()
             return {"status": "SUCCESS", "rows_ingested": records_processed}

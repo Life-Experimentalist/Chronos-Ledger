@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 
 import os
-import uuid
+import tempfile
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -24,10 +24,11 @@ async def upload_csv(
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are accepted")
 
-    tmp_path = f"/tmp/chronos_upload_{uuid.uuid4().hex}.csv"
+    # tempfile honours the platform temp dir; a hardcoded /tmp only exists on Linux.
+    fd, tmp_path = tempfile.mkstemp(prefix="chronos_upload_", suffix=".csv")
     try:
         content = await file.read()
-        with open(tmp_path, "wb") as f:
+        with os.fdopen(fd, "wb") as f:
             f.write(content)
 
         engine = ChronosIngestionEngine(db)
