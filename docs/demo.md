@@ -46,7 +46,8 @@ automatically. Sign out between steps to switch roles.
    sessions this person leads today, and lets them report a planned
    absence.
 3. **Member**: sign in as `member@demo.internal`. Today's sessions are
-   listed, and attendance can be marked. The marking card lights up
+   listed, and attendance is marked on the Mark Attendance tab. The
+   marking card there lights up
    during a session's time window (the demo day has sessions at 09:00,
    11:00, and 15:00). Demo sessions carry no location pin, so marking
    works from any laptop with no GPS needed; in a real deployment each
