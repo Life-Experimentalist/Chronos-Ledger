@@ -18,6 +18,13 @@ class UserCreate(BaseModel):
     reporting_line_manager: str | None = None
 
 
+class PasswordResetResponse(BaseModel):
+    """Returned once, at reset. The raw password is never stored anywhere."""
+
+    user_id: str
+    initial_password: str
+
+
 class UserUpdate(BaseModel):
     full_name: str | None = None
     email_address: EmailStr | None = None

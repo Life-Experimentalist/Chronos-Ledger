@@ -187,6 +187,17 @@ components:
           type: string
           nullable: true
 
+    PasswordResetResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+        initial_password:
+          type: string
+          description: >
+            Plain text, returned only here. Never stored and never logged.
+      required: [user_id, initial_password]
+
     UserStatusUpdate:
       type: object
       required: [status]
@@ -825,6 +836,35 @@ paths:
       responses:
         "204":
           description: Deleted.
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users/{user_id}/reset-password:
+    post:
+      tags: [Users]
+      summary: Issue a new password for a user who cannot sign in
+      description: >
+        The only route back into a locked-out account: change-password needs
+        the password the user has lost, and no mail sender is configured.
+        The new password is returned once and is never stored. The reset also
+        drops every refresh token the user holds and rotates their calendar
+        feed URL. A UNIT_ADMIN is limited to their own unit and may not reset
+        an admin account.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A new password, shown this one time.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasswordResetResponse"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":

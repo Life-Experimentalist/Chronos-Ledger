@@ -91,9 +91,29 @@ Create users individually. For bulk creation, use CSV import (`POST /ingestion/u
 Returns staff with `OPEN_AD_HOC` or `VERY_FREE` status. Used by the Guest Kiosk.
 
 ### GET /users/{user_id}
-### PUT /users/{user_id}
-### DELETE /users/{user_id} `[SUPER_ADMIN]`
-### PATCH /users/{user_id}/status
+### PATCH /users/{user_id} `[ADMIN]`
+
+### POST /users/{user_id}/reset-password `[ADMIN]`
+
+Issues a new random password for someone who cannot sign in, and returns it
+once:
+
+```json
+{ "user_id": "STU042", "initial_password": "kQ7mZ2pV1xNc" }
+```
+
+This is the only way back into a locked-out account: `POST
+/auth/change-password` needs the password the user has lost, and there is no
+mail sender configured to put a reset link through. Copy the value before
+closing the response. It is not stored, and calling the endpoint again issues
+a different one.
+
+A reset drops every refresh token the user holds and rotates their calendar
+feed URL, so it doubles as the response to a compromised account. A
+`UNIT_ADMIN` may only reset users inside their own unit, and may not reset an
+admin account.
+
+### PUT /users/{user_id}/status
 
 Update staff occupancy. Enum values: `OPEN_AD_HOC`, `BUSY`, `CRITICAL_DO_NOT_DISTURB`, `VERY_FREE`.
 

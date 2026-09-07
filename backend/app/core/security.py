@@ -28,6 +28,20 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
+# Long enough that a generated password is not worth guessing, short enough
+# that an admin can read one off a screen and hand it to somebody.
+GENERATED_PASSWORD_BYTES = 12
+
+
+def generate_password() -> str:
+    """A random password for an account nobody has chosen one for yet.
+
+    The raw value is handed to the caller exactly once and never stored:
+    the database keeps only the bcrypt hash, as it does for every account.
+    """
+    return secrets.token_urlsafe(GENERATED_PASSWORD_BYTES)
+
+
 def create_access_token(subject: str, extra: dict[str, Any] | None = None) -> str:
     expire = datetime.now(UTC) + timedelta(minutes=settings.jwt_access_token_expire_minutes)
     payload = {"sub": subject, "exp": expire, **(extra or {})}
