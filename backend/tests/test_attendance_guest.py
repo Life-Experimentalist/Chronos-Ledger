@@ -418,3 +418,55 @@ def test_all_staff_locations(client, seed_users, monkeypatch):
     res = client.get("/api/v1/schedule/staff/all/locations", headers=headers)
     assert res.status_code == 200
     assert [f["staff_id"] for f in res.json()] == ["FAC001"]
+
+
+def test_staff_cannot_single_mark_a_ledger_they_do_not_lead(client, db, seed_users):
+    """Every check on /mark sat inside `if role == MEMBER`.
+
+    The else branch was empty, so any authenticated non-member could mark any
+    member on any ledger. /batch has always required lead or in-scope admin.
+    """
+    ledger = _make_ledger(db, lead_id="FAC999")
+    headers = login(client, "staff@test.internal", STAFF_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={"ledger_instance_id": ledger.id, "member_id": "STU001", "marking_status": "PRESENT"},
+        headers=headers,
+    )
+    assert res.status_code == 403
+    assert db.query(VerificationLedger).filter_by(ledger_instance_id=ledger.id).count() == 0
+
+
+def test_staff_lead_can_single_mark_their_own_ledger(client, db, seed_users):
+    ledger = _make_ledger(db, lead_id="FAC001")
+    headers = login(client, "staff@test.internal", STAFF_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={"ledger_instance_id": ledger.id, "member_id": "STU001", "marking_status": "PRESENT"},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_substitute_lead_can_single_mark(client, db, seed_users):
+    ledger = _make_ledger(db, lead_id="FAC999")
+    ledger.substitute_lead_id = "FAC001"
+    db.commit()
+    headers = login(client, "staff@test.internal", STAFF_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={"ledger_instance_id": ledger.id, "member_id": "STU001", "marking_status": "PRESENT"},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_super_admin_can_single_mark_any_ledger(client, db, seed_users):
+    ledger = _make_ledger(db, lead_id="FAC999")
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={"ledger_instance_id": ledger.id, "member_id": "STU001", "marking_status": "PRESENT"},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text

@@ -1030,10 +1030,16 @@ paths:
       tags: [Attendance]
       summary: Mark single member attendance
       description: >
-        Members may only mark themselves. Staff/Admin can mark any member.
-        If `user_lat`/`user_lon`/`user_alt` are provided, the backend runs
-        a 3D Haversine geofence check against the ledger entry's target coordinates.
-        When GPS accuracy > 30m, omit coordinates and rely on backend override.
+        Members may only mark themselves. Anyone else must be the ledger's
+        assigned or substitute lead, or an admin, and a UNIT_ADMIN only within
+        their own unit. Same rule as `/attendance/batch`.
+        A ledger that carries `latitude_target` and `longitude_target` is
+        geo-fenced: a member must send `user_lat` and `user_lon`, and the
+        backend checks Haversine surface distance against
+        `precision_radius_meters`. `user_alt` is optional and only adds a
+        floor check when the ledger also carries an `altitude_target`.
+        Omitting the coordinates on a fenced session returns 400; there is no
+        client-side way to skip the fence.
       requestBody:
         required: true
         content:

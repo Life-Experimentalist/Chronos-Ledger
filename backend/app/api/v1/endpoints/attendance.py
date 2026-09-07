@@ -37,6 +37,19 @@ router = APIRouter()
 # ── Attendance Marking ────────────────────────────────────────────────────────
 
 
+def _ensure_can_mark_ledger(current_user: User, ledger: DailyLedger) -> None:
+    """Who may mark someone else's attendance on this ledger.
+
+    The assigned or substitute lead always may. Anyone else must be an admin,
+    and a unit admin only within their own unit.
+    """
+    if current_user.id in (ledger.active_lead_id, ledger.substitute_lead_id):
+        return
+    if current_user.role_type.value not in ("SUPER_ADMIN", "UNIT_ADMIN"):
+        raise HTTPException(status_code=403, detail="Not authorized to mark this ledger")
+    ensure_unit_scope(current_user, ledger.activity.unit_code)
+
+
 @router.post("/mark")
 async def mark_attendance(
     payload: AttendanceMarkRequest,
@@ -76,6 +89,8 @@ async def mark_attendance(
             )
             if not valid:
                 raise HTTPException(status_code=400, detail="Location outside geofence boundary")
+    else:
+        _ensure_can_mark_ledger(current_user, ledger)
 
     _upsert_attendance(db, payload, current_user.id)
     return {
@@ -95,14 +110,7 @@ def batch_mark_attendance(
     if not ledger:
         raise HTTPException(status_code=404, detail="Ledger instance not found")
 
-    # Only assigned/substitute lead can batch mark
-    if current_user.id not in (
-        ledger.active_lead_id,
-        ledger.substitute_lead_id,
-    ) and current_user.role_type.value not in ("SUPER_ADMIN", "UNIT_ADMIN"):
-        raise HTTPException(status_code=403, detail="Not authorized to mark this ledger")
-    if current_user.id not in (ledger.active_lead_id, ledger.substitute_lead_id):
-        ensure_unit_scope(current_user, ledger.activity.unit_code)
+    _ensure_can_mark_ledger(current_user, ledger)
 
     for record in payload.records:
         _upsert_attendance(db, record, current_user.id)

@@ -189,3 +189,22 @@ def test_super_admin_still_reaches_every_unit(client, db, seed_users):
     assert res.status_code == 200
     assert {"CSE", "ECE"} <= {u["unit_code"] for u in res.json()}
     assert client.get("/api/v1/users/STU900", headers=headers).status_code == 200
+
+
+def test_cannot_single_mark_another_units_attendance(client, db, seed_users):
+    """The mirror of the batch test above.
+
+    /attendance/batch was scoped when this file was written; /attendance/mark
+    was not, so the same unit admin could reach any unit one record at a time.
+    """
+    _, ledgers = _seed_unit_world(db)
+    headers = _unit_admin(client)
+    body = {
+        "ledger_instance_id": ledgers["ECE"].id,
+        "member_id": "STU900",
+        "marking_status": "PRESENT",
+    }
+    assert client.post("/api/v1/attendance/mark", headers=headers, json=body).status_code == 403
+    body["ledger_instance_id"] = ledgers["CSE"].id
+    body["member_id"] = "STU001"
+    assert client.post("/api/v1/attendance/mark", headers=headers, json=body).status_code == 200
