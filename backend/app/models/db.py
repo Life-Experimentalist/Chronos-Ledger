@@ -288,3 +288,21 @@ class RefreshToken(Base):
     )
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class ApiKey(Base):
+    """A long-lived machine credential for external integrations, bound to a
+    normal user row (a service account). Only the SHA-256 hash is stored; the
+    raw key is shown once at creation. Every request made with the key acts
+    as the bound user, so role checks and unit scoping apply unchanged."""
+
+    __tablename__ = "api_keys"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    key_hash = Column(String(64), unique=True, index=True, nullable=False)
+    key_prefix = Column(String(12), nullable=False)
+    label = Column(String(100), nullable=False)
+    user_id = Column(
+        String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))

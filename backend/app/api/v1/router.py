@@ -4,6 +4,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
+    api_keys,
     attendance,
     auth,
     calendar_sync,
@@ -19,6 +20,7 @@ api_router = APIRouter()
 
 api_router.include_router(org_config.router, prefix="/config", tags=["Configuration"])
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
+api_router.include_router(api_keys.router, prefix="/api-keys", tags=["API Keys"])
 api_router.include_router(users.router, prefix="/users", tags=["Users"])
 api_router.include_router(schedule.router, prefix="/schedule", tags=["Schedule"])
 api_router.include_router(attendance.router, prefix="/attendance", tags=["Attendance"])

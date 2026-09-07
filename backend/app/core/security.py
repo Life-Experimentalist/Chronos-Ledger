@@ -8,7 +8,7 @@ from typing import Any
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import InvalidTokenError
 from sqlalchemy.orm import Session
@@ -17,7 +17,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 
 settings = get_settings()
-bearer_scheme = HTTPBearer()
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def hash_password(plain: str) -> str:
@@ -43,6 +43,15 @@ def hash_refresh_token(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def generate_api_key() -> str:
+    return "ck_" + secrets.token_urlsafe(36)
+
+
+def hash_api_key(raw: str) -> str:
+    """API keys are stored hashed, so a database leak leaks no credentials."""
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def decode_token(token: str) -> dict[str, Any] | None:
     try:
         return jwt.decode(
@@ -57,16 +66,36 @@ def verify_jwt_token_string(token: str) -> dict[str, Any] | None:
 
 
 def get_current_user_id(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    api_key: str | None = Header(default=None, alias="X-API-Key"),
+    db: Session = Depends(get_db),
 ) -> str:
-    payload = decode_token(credentials.credentials)
-    if not payload or "sub" not in payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return payload["sub"]
+    if credentials is not None:
+        payload = decode_token(credentials.credentials)
+        if not payload or "sub" not in payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        return payload["sub"]
+
+    if api_key:
+        from app.models.db import ApiKey
+
+        row = db.query(ApiKey).filter(ApiKey.key_hash == hash_api_key(api_key)).first()
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid API key",
+            )
+        return row.user_id
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 # While an admin still holds the seeded initial password, only these paths work.
