@@ -3,7 +3,7 @@
 
 from datetime import date, time
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.db import DynamicState, ExecutionMode
 
@@ -26,12 +26,24 @@ class PlanningCycleResponse(BaseModel):
 
 
 class MasterSlotCreate(BaseModel):
-    day_of_week_index: int
+    day_of_week_index: int = Field(ge=1, le=7)
     time_window_start: time
     time_window_end: time
     activity_id: int
     primary_lead_id: str | None = None
     target_room_identifier: str
+
+    @model_validator(mode="after")
+    def _window_runs_forward(self):
+        # Windows that cross midnight are not supported yet: the ledger,
+        # attendance resolver and calendar feed all assume start < end
+        # within one day. Reject at the edge instead of breaking there.
+        if self.time_window_end <= self.time_window_start:
+            raise ValueError(
+                "time_window_end must be after time_window_start "
+                "(windows crossing midnight are not supported yet)"
+            )
+        return self
 
 
 class DailyLedgerUpdate(BaseModel):
