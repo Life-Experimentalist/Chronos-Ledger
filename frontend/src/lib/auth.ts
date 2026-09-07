@@ -5,6 +5,7 @@ import type { AuthUser, TokenResponse } from '@/types'
 
 export function saveSession(data: TokenResponse): void {
   localStorage.setItem('chronos_token', data.access_token)
+  localStorage.setItem('chronos_refresh', data.refresh_token)
   const user: AuthUser = {
     user_id: data.user_id,
     full_name: data.full_name,
@@ -16,6 +17,7 @@ export function saveSession(data: TokenResponse): void {
 
 export function clearSession(): void {
   localStorage.removeItem('chronos_token')
+  localStorage.removeItem('chronos_refresh')
   localStorage.removeItem('chronos_user')
 }
 
@@ -28,6 +30,11 @@ export function getStoredUser(): AuthUser | null {
   } catch {
     return null
   }
+}
+
+export function getRefreshToken(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem('chronos_refresh')
 }
 
 export function getToken(): string | null {

@@ -3,7 +3,7 @@
 
 import { create } from 'zustand'
 import type { AuthUser } from '@/types'
-import { saveSession, clearSession, getStoredUser } from '@/lib/auth'
+import { saveSession, clearSession, getStoredUser, getRefreshToken } from '@/lib/auth'
 import { authApi } from '@/lib/api'
 
 interface AuthState {
@@ -48,6 +48,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: () => {
+    const refresh = getRefreshToken()
+    if (refresh) authApi.logout(refresh).catch(() => {})
     clearSession()
     set({ user: null })
   },

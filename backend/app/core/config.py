@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     # JWT
     jwt_secret_signing_key: str = "insecure_dev_key_change_in_production"
     jwt_algorithm: str = "HS256"
-    jwt_access_token_expire_minutes: int = 480
+    jwt_access_token_expire_minutes: int = 15
+    jwt_refresh_token_expire_days: int = 30
 
     # Campus
     campus_domain_mask: str = "college.internal"

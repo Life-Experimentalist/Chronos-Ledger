@@ -1,9 +1,25 @@
 // Copyright 2026 Chronos Ledger Contributors
 // Licensed under the Apache License, Version 2.0
 
-import axios, { AxiosInstance } from 'axios'
+import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api/v1'
+
+let refreshInFlight: Promise<string | null> | null = null
+
+async function tryRefresh(): Promise<string | null> {
+  const stored = localStorage.getItem('chronos_refresh')
+  if (!stored) return null
+  try {
+    // Plain axios on purpose: the client's own interceptor must not see this 401.
+    const res = await axios.post(`${BASE_URL}/auth/refresh`, { refresh_token: stored })
+    localStorage.setItem('chronos_token', res.data.access_token)
+    localStorage.setItem('chronos_refresh', res.data.refresh_token)
+    return res.data.access_token as string
+  } catch {
+    return null
+  }
+}
 
 function createApiClient(): AxiosInstance {
   const client = axios.create({ baseURL: BASE_URL, timeout: 10000 })
@@ -16,9 +32,23 @@ function createApiClient(): AxiosInstance {
 
   client.interceptors.response.use(
     (r) => r,
-    (err) => {
-      if (err.response?.status === 401 && typeof window !== 'undefined') {
+    async (err) => {
+      const original = err.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined
+      if (err.response?.status === 401 && typeof window !== 'undefined' && original && !original._retried) {
+        // One silent refresh, shared across concurrent 401s, then retry once.
+        if (!refreshInFlight) {
+          refreshInFlight = tryRefresh().finally(() => {
+            refreshInFlight = null
+          })
+        }
+        const token = await refreshInFlight
+        if (token) {
+          original._retried = true
+          original.headers.Authorization = `Bearer ${token}`
+          return client(original)
+        }
         localStorage.removeItem('chronos_token')
+        localStorage.removeItem('chronos_refresh')
         localStorage.removeItem('chronos_user')
         window.location.href = '/'
       }
@@ -38,6 +68,7 @@ export const authApi = {
   me: () => api.get('/auth/me'),
   changePassword: (current_password: string, new_password: string) =>
     api.post('/auth/change-password', { current_password, new_password }),
+  logout: (refresh_token: string) => api.post('/auth/logout', { refresh_token }),
 }
 
 // ── Schedule ──────────────────────────────────────────────────────────────────

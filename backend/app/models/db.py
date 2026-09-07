@@ -277,3 +277,18 @@ class GuestGateRegistry(Base):
     timestamp_marked = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     target_faculty = relationship("User", foreign_keys=[target_faculty_id])
+
+
+class RefreshToken(Base):
+    """One row per live session. The raw token never touches the database:
+    only its SHA-256 hash is stored, and a row is deleted the moment it is used."""
+
+    __tablename__ = "refresh_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    token_hash = Column(String(64), unique=True, index=True, nullable=False)
+    user_id = Column(
+        String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))

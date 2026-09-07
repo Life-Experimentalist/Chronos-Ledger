@@ -1,6 +1,8 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
+import hashlib
+import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -30,6 +32,15 @@ def create_access_token(subject: str, extra: dict[str, Any] | None = None) -> st
     expire = datetime.now(UTC) + timedelta(minutes=settings.jwt_access_token_expire_minutes)
     payload = {"sub": subject, "exp": expire, **(extra or {})}
     return jwt.encode(payload, settings.jwt_secret_signing_key, algorithm=settings.jwt_algorithm)
+
+
+def generate_refresh_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def hash_refresh_token(raw: str) -> str:
+    """Refresh tokens are stored hashed, so a database leak leaks no sessions."""
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def decode_token(token: str) -> dict[str, Any] | None:
