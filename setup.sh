@@ -53,6 +53,12 @@ elif command -v ipconfig >/dev/null 2>&1; then
   LAN_IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo "")
 fi
 
+# Windows ipconfig has no getifaddr and prints its usage text to stdout;
+# keep only a real IPv4 address, otherwise fall back below.
+if [[ ! "${LAN_IP:-}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+  LAN_IP=""
+fi
+
 if [[ -z "${LAN_IP:-}" ]]; then
   warn "Could not auto-detect LAN IP. Falling back to localhost."
   LAN_IP="localhost"

@@ -54,8 +54,10 @@ DEMO_ACTIVITIES = [
 def seed() -> None:
     db = SessionLocal()
     try:
+        today = datetime.date.today()
         if db.query(User).filter(User.id == "DEMO-STF01").first():
-            print("Demo data already present; nothing to do.")
+            created = generate_daily_ledger_entries(today, db)
+            print(f"Demo data already present; topped up {created} ledger rows for {today}.")
             return
 
         for uid, name, email, password, role in DEMO_USERS:
@@ -71,7 +73,6 @@ def seed() -> None:
                 )
             )
 
-        today = datetime.date.today()
         cycle = PlanningCycle(
             cycle_label="Demo Cycle",
             date_bounds_start=today - datetime.timedelta(days=30),
