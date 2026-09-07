@@ -13,7 +13,8 @@ import {
   Info, ExternalLink, SkipForward,
 } from 'lucide-react'
 import { authApi, scheduleApi, ingestionApi } from '@/lib/api'
-import type { PlanningCycle } from '@/types'
+import { ProvisionedCredentials } from './ProvisionedCredentials'
+import type { CsvImportResult, PlanningCycle, ProvisionedCredential } from '@/types'
 
 // ─── Step configs ────────────────────────────────────────────────────────────
 const STEPS = [
@@ -57,6 +58,7 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
   const [currentStep, setCurrentStep] = useState(initialStep)
   const [createdCycle, setCreatedCycle] = useState<PlanningCycle | null>(null)
   const [csvFile, setCsvFile] = useState<File | null>(null)
+  const [provisioned, setProvisioned] = useState<ProvisionedCredential[]>([])
   const [dragOver, setDragOver] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -136,9 +138,16 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
     setError(null)
     try {
       const res = await ingestionApi.uploadCsv(createdCycle.id, csvFile)
-      const d = res.data as { rows_processed: number; users_created: number }
-      setSuccess(`Imported ${d.rows_processed} rows, created ${d.users_created} users.`)
-      setTimeout(next, 1000)
+      const d = res.data as CsvImportResult
+      const credentials = d.provisioned_credentials ?? []
+      setProvisioned(credentials)
+      const created =
+        credentials.length === 1 ? '1 new member' : `${credentials.length} new members`
+      setSuccess(`Imported ${d.rows_ingested} rows, created ${created}.`)
+      // Only move on by itself when there is nothing to write down. The
+      // passwords below exist in this response and nowhere else, so the
+      // admin decides when to leave them behind.
+      if (credentials.length === 0) setTimeout(next, 1000)
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       setError(msg ?? 'CSV import failed. Check the file format.')
@@ -339,6 +348,7 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
                 </label>
               </div>
               <FeedbackBanner error={error} success={success} />
+              <ProvisionedCredentials credentials={provisioned} />
               <div className="flex gap-3">
                 <button
                   onClick={submitCsv}
@@ -348,7 +358,8 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
                   {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Importing…</> : 'Import Schedule'}
                 </button>
                 <button onClick={next} className="btn-secondary flex items-center gap-1.5">
-                  <SkipForward className="w-4 h-4" /> Skip
+                  <SkipForward className="w-4 h-4" />
+                  {provisioned.length > 0 ? 'Continue' : 'Skip'}
                 </button>
               </div>
             </div>

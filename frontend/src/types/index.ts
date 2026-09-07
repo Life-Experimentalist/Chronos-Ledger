@@ -117,6 +117,20 @@ export interface PlanningCycle {
   operational_status: boolean
 }
 
+/** A password the CSV import generated. Returned once, never stored. */
+export interface ProvisionedCredential {
+  member_id: string
+  email_address: string
+  initial_password: string
+}
+
+export interface CsvImportResult {
+  status: 'SUCCESS' | 'FAILED'
+  rows_ingested?: number
+  provisioned_credentials?: ProvisionedCredential[]
+  error_log?: string
+}
+
 export interface WSEvent<T = unknown> {
   event: string
   payload: T

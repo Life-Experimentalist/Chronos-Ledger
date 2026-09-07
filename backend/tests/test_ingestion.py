@@ -51,7 +51,9 @@ def test_upload_happy_path_creates_everything(client, db, seed_users):
     )
     r = _upload(client, headers, cycle.id, csv_text)
     assert r.status_code == 200, r.text
-    assert r.json() == {"status": "SUCCESS", "rows_ingested": 2}
+    body = r.json()
+    assert body["status"] == "SUCCESS"
+    assert body["rows_ingested"] == 2
 
     db.expire_all()
     ada = db.query(User).filter(User.id == "STU900").first()
@@ -135,3 +137,71 @@ def test_member_cannot_upload(client, db, seed_users):
     headers = login(client, "member@test.internal", MEMBER_PASSWORD)
     r = _upload(client, headers, cycle.id, HEADER + "\n")
     assert r.status_code == 403
+
+
+# -- Provisioned credentials --------------------------------------------------
+
+
+def _two_member_csv():
+    return (
+        HEADER + "\n"
+        "STU900,Ada Newling,ada@test.internal,MA201,Linear Algebra,CSE,2,09:00,10:00,FAC001,LH-201\n"
+        "STU901,Grace Hoppen,grace@test.internal,MA201,Linear Algebra,CSE,2,09:00,10:00,FAC001,LH-201\n"
+    )
+
+
+def test_each_imported_member_gets_a_distinct_password(client, db, seed_users):
+    """A shared constant meant one leaked credential opened every account."""
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+
+    creds = _upload(client, headers, cycle.id, _two_member_csv()).json()["provisioned_credentials"]
+    assert {c["member_id"] for c in creds} == {"STU900", "STU901"}
+    assert len({c["initial_password"] for c in creds}) == 2
+
+
+def test_a_provisioned_password_actually_logs_the_member_in(client, db, seed_users):
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+
+    creds = _upload(client, headers, cycle.id, _two_member_csv()).json()["provisioned_credentials"]
+    for cred in creds:
+        res = client.post(
+            "/api/v1/auth/login",
+            json={"email": cred["email_address"], "password": cred["initial_password"]},
+        )
+        assert res.status_code == 200, res.text
+
+
+def test_the_plaintext_password_is_never_stored(client, db, seed_users):
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+
+    creds = _upload(client, headers, cycle.id, _two_member_csv()).json()["provisioned_credentials"]
+    db.expire_all()
+    for cred in creds:
+        member = db.query(User).filter(User.id == cred["member_id"]).first()
+        assert cred["initial_password"] not in member.credential_secure_hash
+
+
+def test_a_reimport_does_not_reset_an_existing_password(client, db, seed_users):
+    """Rotating every member's password on every re-upload would be worse."""
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+
+    first = _upload(client, headers, cycle.id, _two_member_csv()).json()
+    db.expire_all()
+    hash_before = db.query(User).filter(User.id == "STU900").first().credential_secure_hash
+
+    second = _upload(client, headers, cycle.id, _two_member_csv()).json()
+    assert second["provisioned_credentials"] == []
+
+    db.expire_all()
+    assert db.query(User).filter(User.id == "STU900").first().credential_secure_hash == hash_before
+    # The password handed out by the first import still works.
+    original = first["provisioned_credentials"][0]
+    res = client.post(
+        "/api/v1/auth/login",
+        json={"email": original["email_address"], "password": original["initial_password"]},
+    )
+    assert res.status_code == 200, res.text

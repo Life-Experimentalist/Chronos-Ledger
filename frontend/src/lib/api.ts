@@ -154,6 +154,10 @@ export const ingestionApi = {
     form.append('file', file)
     return api.post(`/ingestion/upload-csv?cycle_id=${cycleId}`, form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      // Every new member costs a bcrypt hash on the request thread, so
+      // this call is measured in seconds, not the 10s the shared client
+      // assumes. Matches nginx proxy_read_timeout, which caps it anyway.
+      timeout: 60000,
     })
   },
   generateLedger: (targetDate?: string) =>

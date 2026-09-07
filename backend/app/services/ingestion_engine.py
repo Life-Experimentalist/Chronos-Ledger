@@ -7,7 +7,7 @@ from typing import Any
 import pandas as pd
 from sqlalchemy.orm import Session
 
-from app.core.security import hash_password
+from app.core.security import generate_password, hash_password
 from app.models.db import (
     Activity,
     ActivityEnrollment,
@@ -57,21 +57,37 @@ class ChronosIngestionEngine:
             return {"status": "FAILED", "error_log": f"Missing columns: {missing}"}
 
         records_processed = 0
+        # Raw passwords for the members this import creates. Handed back once,
+        # in the upload response, for the admin to distribute. Never stored and
+        # never logged: the database keeps only the bcrypt hash, as it does for
+        # every other account.
+        provisioned: list[dict[str, str]] = []
 
         try:
             for _, row in df.iterrows():
                 # 1. Upsert member user
                 member = self.db.query(User).filter(User.id == str(row["member_id"])).first()
                 if not member:
+                    # One password per member. The shared constant this replaces
+                    # meant a single leaked credential opened every account the
+                    # import had ever created, across every unit.
+                    raw_password = generate_password()
                     member = User(
                         id=str(row["member_id"]),
                         full_name=str(row["member_name"]),
                         email_address=str(row["member_email"]),
-                        credential_secure_hash=hash_password("ChangeMe2026!"),
+                        credential_secure_hash=hash_password(raw_password),
                         role_type=InstitutionalRole.MEMBER,
                         unit_code=str(row["unit"]),
                     )
                     self.db.add(member)
+                    provisioned.append(
+                        {
+                            "member_id": str(row["member_id"]),
+                            "email_address": str(row["member_email"]),
+                            "initial_password": raw_password,
+                        }
+                    )
                 else:
                     member.full_name = str(row["member_name"])
 
@@ -147,7 +163,11 @@ class ChronosIngestionEngine:
                 self.db.flush()
 
             self.db.commit()
-            return {"status": "SUCCESS", "rows_ingested": records_processed}
+            return {
+                "status": "SUCCESS",
+                "rows_ingested": records_processed,
+                "provisioned_credentials": provisioned,
+            }
 
         except Exception as e:
             self.db.rollback()

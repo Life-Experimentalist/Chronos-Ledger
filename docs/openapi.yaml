@@ -187,6 +187,42 @@ components:
           type: string
           nullable: true
 
+    ProvisionedCredential:
+      type: object
+      description: >
+        A password generated for a member the import created. Returned
+        only in the upload response and never stored.
+      properties:
+        member_id:
+          type: string
+        email_address:
+          type: string
+        initial_password:
+          type: string
+      required: [member_id, email_address, initial_password]
+
+    CsvImportResult:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [SUCCESS, FAILED]
+        rows_ingested:
+          type: integer
+          description: Present when status is SUCCESS.
+        provisioned_credentials:
+          type: array
+          description: >
+            One entry per member this import created, empty when the file
+            only touched members who already existed. The single copy of
+            these passwords: save them or reset the members individually.
+          items:
+            $ref: "#/components/schemas/ProvisionedCredential"
+        error_log:
+          type: string
+          description: Present when status is FAILED.
+      required: [status]
+
     PasswordResetResponse:
       type: object
       properties:
@@ -1386,14 +1422,21 @@ paths:
       tags: [Ingestion]
       summary: Bulk import schedule from CSV
       description: >
-        Requires `SUPER_ADMIN` or `UNIT_ADMIN`.
+        Requires `SUPER_ADMIN`. The matrix rewrites activities and
+        registrations across every unit, so a unit-scoped admin cannot
+        upload it.
         The CSV must contain these columns (case-sensitive):
         `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`,
         `unit`, `day_of_week_index` (0=Mon), `time_window_start` (HH:MM),
         `time_window_end` (HH:MM), `lead_id`, `room`.
 
         Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations.
-        Idempotent, re-uploading the same CSV is safe.
+        Idempotent, re-uploading the same CSV is safe: an existing member
+        keeps their password.
+
+        Each new member costs a bcrypt hash on the request thread, about
+        half a second, so a file creating more than roughly 100 new
+        members will exceed the 60s client and proxy timeouts. Split it.
       parameters:
         - name: cycle_id
           in: query
@@ -1417,16 +1460,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  rows_processed:
-                    type: integer
-                  users_created:
-                    type: integer
-                  slots_created:
-                    type: integer
-                  registrations_created:
-                    type: integer
+                $ref: "#/components/schemas/CsvImportResult"
         "400":
           description: CSV format error.
           content:

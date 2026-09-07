@@ -7,7 +7,8 @@ import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react'
 import { ingestionApi, scheduleApi } from '@/lib/api'
-import type { PlanningCycle } from '@/types'
+import { ProvisionedCredentials } from './ProvisionedCredentials'
+import type { CsvImportResult, PlanningCycle } from '@/types'
 import { useEffect } from 'react'
 
 export function CsvImportZone() {
@@ -15,7 +16,7 @@ export function CsvImportZone() {
   const [selectedCycle, setSelectedCycle] = useState<number | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [status, setStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
-  const [result, setResult] = useState<{ rows_ingested?: number; error_log?: string } | null>(null)
+  const [result, setResult] = useState<CsvImportResult | null>(null)
 
   useEffect(() => {
     scheduleApi.listCycles().then((r) => {
@@ -44,7 +45,7 @@ export function CsvImportZone() {
       setStatus(res.data.status === 'SUCCESS' ? 'success' : 'error')
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } }
-      setResult({ error_log: e.response?.data?.detail || 'Upload failed' })
+      setResult({ status: 'FAILED', error_log: e.response?.data?.detail || 'Upload failed' })
       setStatus('error')
     }
   }
@@ -150,6 +151,10 @@ export function CsvImportZone() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {status === 'success' && (
+        <ProvisionedCredentials credentials={result?.provisioned_credentials ?? []} />
+      )}
     </div>
   )
 }

@@ -284,7 +284,7 @@ Pending guest requests targeting the authenticated staff member.
 
 ## Ingestion
 
-### POST /ingestion/upload-csv?cycle_id={id} `[ADMIN]`
+### POST /ingestion/upload-csv?cycle_id={id} `[SUPER_ADMIN]`
 
 Upload a `multipart/form-data` CSV file. Required columns:
 
@@ -302,7 +302,38 @@ Upload a `multipart/form-data` CSV file. Required columns:
 | `lead_id` | FAC001 |
 | `room` | Room 204 |
 
-Import is idempotent, re-uploading the same file is safe.
+Import is idempotent, re-uploading the same file is safe. A member who
+already exists is left alone, password included.
+
+Every member the file creates gets an individual random password, returned
+once in the response and never stored:
+
+```json
+{
+  "status": "SUCCESS",
+  "rows_ingested": 412,
+  "provisioned_credentials": [
+    { "member_id": "STU20210001", "email_address": "alice@org.internal", "initial_password": "kQ7mZ2pV1xNc" }
+  ]
+}
+```
+
+Save that list. The server keeps only the bcrypt hash, so a lost password
+has to be reissued one member at a time through
+`POST /users/{user_id}/reset-password`.
+
+**Practical size limit.** Each new member costs one bcrypt hash on the
+request thread, roughly half a second, and the work happens before the
+response is sent. The browser client waits 60 seconds and nginx
+(`proxy_read_timeout` in `nginx/chronos-common.conf`) also waits 60, which
+puts the ceiling near 100 *new* members per file. Rows for members who
+already exist are cheap and do not count against it. Split a larger roll
+into several files.
+
+A timed-out upload is the awkward case: the server finishes and commits
+regardless, so the accounts exist but nobody ever saw their passwords.
+Reset those members individually, or re-upload after raising both
+timeouts.
 
 ### POST /ingestion/generate-ledger `[ADMIN]`
 
