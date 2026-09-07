@@ -11,6 +11,7 @@ from app.core.security import get_current_user
 from app.core.websocket_manager import socket_broker
 from app.models.db import (
     DailyLedger,
+    ExecutionMode,
     LedgerAnnotation,
     LogVerificationState,
     ReverseRsvpLog,
@@ -53,9 +54,17 @@ async def mark_attendance(
                 status_code=403, detail="Cannot mark attendance for another student"
             )
 
-        if all(v is not None for v in [payload.user_lat, payload.user_lon, payload.user_alt]) and (
-            ledger.latitude_target and ledger.longitude_target and ledger.altitude_target
+        geo_targets = [ledger.latitude_target, ledger.longitude_target, ledger.altitude_target]
+        if (
+            all(v is not None for v in geo_targets)
+            and ledger.delivery_format == ExecutionMode.PHYSICAL
         ):
+            coords = [payload.user_lat, payload.user_lon, payload.user_alt]
+            if any(v is None for v in coords):
+                raise HTTPException(
+                    status_code=400,
+                    detail="This session is geo-fenced; location coordinates are required",
+                )
             valid = validate_3d_presence(
                 payload.user_lat,
                 payload.user_lon,

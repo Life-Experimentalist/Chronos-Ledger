@@ -124,9 +124,7 @@ def test_geofence_accepts_student_at_target(client, db, seed_users):
     assert res.status_code == 200
 
 
-def test_omitting_coordinates_bypasses_geofence(client, db, seed_users):
-    # Documents current behavior: a geo-fenced ledger still accepts a mark with
-    # no coordinates at all. Whether that should hard-fail is intake question Q9.
+def test_omitting_coordinates_is_rejected_on_geofenced_session(client, db, seed_users):
     ledger = _make_ledger(db, with_geo=True)
     headers = login(client, "student@test.internal", STUDENT_PASSWORD)
     res = client.post(
@@ -134,7 +132,8 @@ def test_omitting_coordinates_bypasses_geofence(client, db, seed_users):
         json={"ledger_instance_id": ledger.id, "student_id": "STU001", "marking_status": "PRESENT"},
         headers=headers,
     )
-    assert res.status_code == 200
+    assert res.status_code == 400
+    assert "geo-fenced" in res.json()["detail"]
 
 
 def test_batch_mark_requires_assigned_instructor(client, db, seed_users):
