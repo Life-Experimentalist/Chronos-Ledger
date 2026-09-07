@@ -91,3 +91,23 @@ def test_revoked_key_stops_working(client, seed_users):
     assert (
         client.get("/api/v1/auth/me", headers={"X-API-Key": created["api_key"]}).status_code == 401
     )
+
+
+def test_key_bound_to_gated_admin_hits_first_login_gate(client, db, seed_users):
+    # Pins current behavior: the first-login gate applies to API-key requests
+    # too, because a key acts as its bound user. A key bound to an admin who
+    # still holds the seeded password is therefore useless outside the exempt
+    # paths, and a machine cannot change a password. Bind service accounts to
+    # STAFF or MEMBER rows, or complete the password change before issuing
+    # the key. Whether key auth should bypass the gate is an open design call.
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    created = _create_key(client, headers, user_id="ADM001").json()
+
+    seed_users["admin"].initial_login_state = True
+    db.commit()
+
+    key_headers = {"X-API-Key": created["api_key"]}
+    assert client.get("/api/v1/auth/me", headers=key_headers).status_code == 200
+    gated = client.get("/api/v1/api-keys/", headers=key_headers)
+    assert gated.status_code == 403
+    assert "initial password" in gated.json()["detail"].lower()
