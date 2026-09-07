@@ -476,7 +476,7 @@ const FEATURES = [
   },
   {
     title: 'Guest Kiosk',
-    desc: 'No login required. Visitors fill a check-in form; the target staff receives an instant WebSocket notification with Approve/Decline actions.',
+    desc: 'No visitor login: the device holds an admin-issued kiosk key. Visitors fill a check-in form; the target staff receives an instant WebSocket notification with Approve/Decline actions.',
     icon: Users,
     iconBg: 'bg-pink-500/10',
     iconColor: 'text-pink-400',
@@ -538,7 +538,7 @@ const ROLES = [
     ],
   },
   {
-    name: 'Guest (no login)',
+    name: 'Guest (kiosk key)',
     path: '/guest/kiosk',
     icon: Users,
     iconBg: 'bg-chronos-warning/10',

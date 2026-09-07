@@ -227,9 +227,12 @@ Attach freeform notes to a session (lab issues, late starts, etc.).
 
 ## Guest Gate
 
-### POST /guest/register-checkin `[no auth]`
+### POST /guest/register-checkin `[KIOSK KEY]`
 
-Public kiosk endpoint. Fires a real-time WebSocket notification to the target staff.
+The kiosk endpoint. The visitor does not log in; the kiosk device sends an
+admin-issued API key in `X-API-Key`. Fires a real-time WebSocket notification
+to the target staff. Every field is length-bounded, and `contact_phone` accepts
+only digits, spaces and `+ ( ) -`.
 
 ```json
 {
@@ -241,9 +244,11 @@ Public kiosk endpoint. Fires a real-time WebSocket notification to the target st
 }
 ```
 
-### GET /guest/directory `[no auth]`
+### GET /guest/directory `[KIOSK KEY]`
 
-`?name=<string>`, case-insensitive name search. Returns staff with `OPEN_AD_HOC` or `VERY_FREE` status.
+`?name=<string>`, case-insensitive name search, minimum two characters so the
+roster cannot be walked one letter at a time. Returns staff with `OPEN_AD_HOC`
+or `VERY_FREE` status.
 
 ### GET /guest/ `[STAFF]`
 

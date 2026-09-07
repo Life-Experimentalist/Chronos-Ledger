@@ -10,7 +10,7 @@ graph TB
         S[Member Mobile]
         F[Staff Desktop]
         A[Admin Dashboard]
-        G[Guest Kiosk<br/>no auth]
+        G[Guest Kiosk<br/>device key]
     end
 
     subgraph Edge["Edge: Nginx 1.27"]
@@ -180,7 +180,7 @@ graph TD
         Admin["/admin/dashboard"]
         Staff["/staff/dashboard"]
         Member["/member/dashboard"]
-        Kiosk["/guest/kiosk  (no auth)"]
+        Kiosk["/guest/kiosk  (device key)"]
     end
 
     subgraph Shared["components/shared/"]

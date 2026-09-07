@@ -883,7 +883,7 @@ const FEATURES = [
   { icon:'zap', title:'Real-Time WebSocket', desc:'JWT-authenticated persistent connections. Instant guest handshake requests, absence approvals, and organization-wide broadcasts, no polling.', bg:'rgba(245,158,11,.1)', color:'var(--warning)' },
   { icon:'upload', title:'CSV Schedule Import', desc:'Bulk-import the term timetable from a single member-centric CSV. Upserts members, activities, registrations, and master slots atomically.', bg:'rgba(168,85,247,.1)', color:'#a855f7' },
   { icon:'calendar', title:'iCalendar Sync', desc:'Live 37-day .ics feed per user. Subscribe directly in Google Calendar, Apple Calendar, or Outlook. Updates reflect approved leaves and proxy swaps.', bg:'rgba(56,189,248,.1)', color:'#38bdf8' },
-  { icon:'users', title:'Guest Kiosk', desc:'No login required. Visitors fill a check-in form; the target staff receives an instant WebSocket notification with Approve/Decline actions.', bg:'rgba(244,63,94,.1)', color:'#fb7185' },
+  { icon:'users', title:'Guest Kiosk', desc:'No visitor login: the device holds an admin-issued kiosk key. Visitors fill a check-in form; the target staff receives an instant WebSocket notification with Approve/Decline actions.', bg:'rgba(244,63,94,.1)', color:'#fb7185' },
   { icon:'bell', title:'Offline Notifications', desc:'Class reminders fire 15 minutes before start, even offline. Scheduled via JS timers while active and Periodic Background Sync when the app is closed.', bg:'rgba(20,184,166,.1)', color:'var(--teal)' },
   { icon:'shield', title:'Role-Based Access', desc:'SUPER_ADMIN, UNIT_ADMIN, STAFF, MEMBER. JWT RBAC enforced at every endpoint. Each role sees only their own data.', bg:'rgba(244,63,94,.1)', color:'var(--danger)' },
 ];
@@ -895,7 +895,7 @@ const ROLES = [
     caps:['Availability status switcher (4 states)','Attendance matrix: mark whole class in one tap','Submit and track absence requests','Guest interaction desk with real-time notifications'] },
   { icon:'user-check', name:'Member', path:'/member/dashboard', bg:'rgba(129,140,248,.1)', color:'var(--accent)',
     caps:["Live timeline of today's classes with status indicators",'3D geofenced attendance marking with GPS/BSSID','Staff locator with real-time availability','Offline attendance queue with background sync'] },
-  { icon:'users', name:'Guest (no login)', path:'/guest/kiosk', bg:'rgba(245,158,11,.1)', color:'var(--warning)',
+  { icon:'users', name:'Guest (kiosk key)', path:'/guest/kiosk', bg:'rgba(245,158,11,.1)', color:'var(--warning)',
     caps:['Search staff directory by name','Submit check-in request with purpose','Real-time notification to target staff','Public availability status display'] },
 ];
 

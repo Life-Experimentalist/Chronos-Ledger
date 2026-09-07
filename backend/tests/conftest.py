@@ -8,9 +8,9 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
-from app.core.security import hash_password
+from app.core.security import hash_api_key, hash_password
 from app.main import app
-from app.models.db import InstitutionalRole, User
+from app.models.db import ApiKey, InstitutionalRole, User
 
 # One shared in-memory database for the whole process; each test gets a
 # freshly rebuilt schema via the `db` fixture below.
@@ -24,6 +24,8 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 ADMIN_PASSWORD = "AdminPass123!"
 STAFF_PASSWORD = "StaffPass123!"
 MEMBER_PASSWORD = "MemberPass123!"
+# A device credential, not a password: never hashed with bcrypt.
+KIOSK_KEY = "ck_test_kiosk_credential_not_a_real_secret"
 
 # bcrypt is deliberately slow; hash each seed password once per run.
 _HASHES = {
@@ -77,6 +79,35 @@ def seed_users(db):
     db.add_all(users.values())
     db.commit()
     return users
+
+
+@pytest.fixture()
+def kiosk_key(db, seed_users):
+    """X-API-Key headers for a lobby kiosk device.
+
+    The kiosk is an unattended public terminal, so its service account is
+    a MEMBER: it can read the directory and file a check-in, and nothing
+    a member could not already do.
+    """
+    db.add(
+        User(
+            id="KIOSK01",
+            full_name="Lobby Kiosk",
+            email_address="kiosk@test.internal",
+            credential_secure_hash=_HASHES["member"],
+            role_type=InstitutionalRole.MEMBER,
+        )
+    )
+    db.add(
+        ApiKey(
+            key_hash=hash_api_key(KIOSK_KEY),
+            key_prefix=KIOSK_KEY[:12],
+            label="Lobby kiosk",
+            user_id="KIOSK01",
+        )
+    )
+    db.commit()
+    return {"X-API-Key": KIOSK_KEY}
 
 
 @pytest.fixture()

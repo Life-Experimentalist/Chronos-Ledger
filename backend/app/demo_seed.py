@@ -6,22 +6,24 @@ Run inside the app container after the stack is up:
 
     docker compose run --rm chronos-app uv run --no-sync python -m app.demo_seed
 
-Creates two staff, one member, one active planning cycle, three activities
-with slots on every day of the week, and today's ledger rows, so every
-portal has something to show on a fresh install. Idempotent: a second run
-is a no-op. The seeded admin account and its first-login password gate are
-left untouched. Ledger rows carry no geo targets, so a member can mark
-attendance from any machine during a demo.
+Creates two staff, one member, a kiosk service account, one active planning
+cycle, three activities with slots on every day of the week, and today's
+ledger rows, so every portal has something to show on a fresh install.
+Idempotent apart from the kiosk key, which is reissued and printed on every
+run because its raw value cannot be read back. The seeded admin account and
+its first-login password gate are left untouched. Ledger rows carry no geo
+targets, so a member can mark attendance from any machine during a demo.
 """
 
 import datetime
 
 from app.core.database import SessionLocal
-from app.core.security import hash_password
+from app.core.security import generate_api_key, hash_api_key, hash_password
 from app.cron.ledger_generator import generate_daily_ledger_entries
 from app.models.db import (
     Activity,
     ActivityEnrollment,
+    ApiKey,
     InstitutionalRole,
     PlanningCycle,
     StructuralMasterSlot,
@@ -29,6 +31,7 @@ from app.models.db import (
 )
 
 DEMO_UNIT = "CORE"
+DEMO_KIOSK_ID = "DEMO-KIOSK01"
 
 DEMO_USERS = [
     ("DEMO-STF01", "Alex Rivera", "staff@demo.internal", "StaffDemo2026!", InstitutionalRole.STAFF),
@@ -51,6 +54,45 @@ DEMO_ACTIVITIES = [
 ]
 
 
+def provision_demo_kiosk(db) -> str:
+    """Mint a device key for the demo lobby kiosk and return the raw value.
+
+    Generated rather than hardcoded: a fixed key in a public repository is a
+    working credential for every demo deployment that ever runs. The raw value
+    is unrecoverable once printed, so a re-run replaces the key, which is what
+    makes `--demo` reliably produce a kiosk someone can actually set up.
+
+    The account is a MEMBER, not a new role: an unattended terminal in a lobby
+    should be able to do nothing that the least-privileged user cannot.
+    """
+    if not db.query(User).filter(User.id == DEMO_KIOSK_ID).first():
+        db.add(
+            User(
+                id=DEMO_KIOSK_ID,
+                full_name="Demo Lobby Kiosk",
+                email_address="kiosk@demo.internal",
+                credential_secure_hash=hash_password(generate_api_key()),
+                role_type=InstitutionalRole.MEMBER,
+                unit_code=DEMO_UNIT,
+                initial_login_state=False,
+            )
+        )
+        db.flush()
+
+    db.query(ApiKey).filter(ApiKey.user_id == DEMO_KIOSK_ID).delete()
+    raw = generate_api_key()
+    db.add(
+        ApiKey(
+            key_hash=hash_api_key(raw),
+            key_prefix=raw[:12],
+            label="Demo lobby kiosk",
+            user_id=DEMO_KIOSK_ID,
+        )
+    )
+    db.commit()
+    return raw
+
+
 def seed() -> None:
     db = SessionLocal()
     try:
@@ -58,6 +100,10 @@ def seed() -> None:
         if db.query(User).filter(User.id == "DEMO-STF01").first():
             created = generate_daily_ledger_entries(today, db)
             print(f"Demo data already present; topped up {created} ledger rows for {today}.")
+            print(
+                f"Kiosk key for /guest/kiosk (new, replaces any earlier one): "
+                f"{provision_demo_kiosk(db)}"
+            )
             return
 
         for uid, name, email, password, role in DEMO_USERS:
@@ -109,6 +155,7 @@ def seed() -> None:
         created = generate_daily_ledger_entries(today, db)
         print(f"Seeded {len(DEMO_USERS)} demo users, {len(DEMO_ACTIVITIES)} activities,")
         print(f"and {created} ledger rows for {today}.")
+        print(f"Kiosk key for /guest/kiosk: {provision_demo_kiosk(db)}")
     finally:
         db.close()
 

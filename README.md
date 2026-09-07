@@ -131,7 +131,7 @@ Drop a member-centric CSV on the Admin dashboard. One upload creates/updates use
 | **Unit Admin**  | `/admin/dashboard`   | Absence approvals, ledger overrides for own unit                 |
 | **Staff**     | `/staff/dashboard` | Availability switcher, attendance matrix, absence requests, guest desk |
 | **Member**     | `/member/dashboard` | Live timeline, geofenced self-mark, staff locator, offline queue     |
-| **Guest**       | `/guest/kiosk`       | No login, check-in form, real-time staff notification               |
+| **Guest**       | `/guest/kiosk`       | No visitor login, check-in form, real-time staff notification  |
 
 ---
 

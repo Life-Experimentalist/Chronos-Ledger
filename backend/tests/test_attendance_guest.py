@@ -4,6 +4,8 @@
 
 import datetime
 
+import pytest
+
 from app.models.db import (
     Activity,
     DailyLedger,
@@ -340,10 +342,9 @@ _GUEST = {
 }
 
 
-def test_guest_checkin_needs_no_auth(client, db, seed_users):
-    # The kiosk endpoint is deliberately unauthenticated.
-    res = client.post("/api/v1/guest/register-checkin", json=_GUEST)
-    assert res.status_code == 200
+def test_guest_checkin_works_with_a_kiosk_credential(client, db, seed_users, kiosk_key):
+    res = client.post("/api/v1/guest/register-checkin", json=_GUEST, headers=kiosk_key)
+    assert res.status_code == 200, res.text
     assert res.json()["registration_state"] == "PENDING_STAFF_AUTH"
 
     fac = login(client, "staff@test.internal", STAFF_PASSWORD)
@@ -351,15 +352,61 @@ def test_guest_checkin_needs_no_auth(client, db, seed_users):
     assert [p["guest_name"] for p in pending] == ["Ravi Verma"]
 
 
-def test_guest_checkin_rejects_non_staff_target(client, seed_users):
+def test_guest_checkin_refuses_an_anonymous_caller(client, seed_users):
+    """Without this, anyone on the internet can fill the visitor log."""
+    res = client.post("/api/v1/guest/register-checkin", json=_GUEST)
+    assert res.status_code == 401
+
+
+def test_guest_directory_refuses_an_anonymous_caller(client, seed_users):
+    """The roster and every staff member's live presence used to be public."""
+    res = client.get("/api/v1/guest/directory")
+    assert res.status_code == 401
+
+
+def test_guest_directory_works_with_a_kiosk_credential(client, seed_users, kiosk_key):
+    res = client.get("/api/v1/guest/directory", headers=kiosk_key)
+    assert res.status_code == 200, res.text
+    names = [f["full_name"] for f in res.json()]
+    assert seed_users["staff"].full_name in names
+
+
+def test_guest_directory_refuses_a_one_character_search(client, seed_users, kiosk_key):
+    """A single letter walks the whole roster alphabetically."""
+    res = client.get("/api/v1/guest/directory", params={"name": "a"}, headers=kiosk_key)
+    assert res.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("guest_name", "R" * 101),
+        ("originating_body", "A" * 101),
+        ("visitation_intent", "P" * 501),
+        ("contact_phone", "9" * 21),
+        ("contact_phone", "not-a-phone-number"),
+    ],
+)
+def test_guest_checkin_bounds_every_field(client, seed_users, kiosk_key, field, value):
     res = client.post(
-        "/api/v1/guest/register-checkin", json={**_GUEST, "target_staff_id": "STU001"}
+        "/api/v1/guest/register-checkin", json={**_GUEST, field: value}, headers=kiosk_key
+    )
+    assert res.status_code == 422
+
+
+def test_guest_checkin_rejects_non_staff_target(client, seed_users, kiosk_key):
+    res = client.post(
+        "/api/v1/guest/register-checkin",
+        json={**_GUEST, "target_staff_id": "STU001"},
+        headers=kiosk_key,
     )
     assert res.status_code == 404
 
 
-def test_guest_decide_only_by_target_staff(client, db, seed_users):
-    entry_id = client.post("/api/v1/guest/register-checkin", json=_GUEST).json()["reference_token"]
+def test_guest_decide_only_by_target_staff(client, db, seed_users, kiosk_key):
+    entry_id = client.post("/api/v1/guest/register-checkin", json=_GUEST, headers=kiosk_key).json()[
+        "reference_token"
+    ]
 
     stu = login(client, "member@test.internal", MEMBER_PASSWORD)
     res = client.patch(
@@ -373,13 +420,6 @@ def test_guest_decide_only_by_target_staff(client, db, seed_users):
     )
     assert res.status_code == 200
     assert client.get("/api/v1/guest/pending", headers=fac).json() == []
-
-
-def test_guest_directory_is_public(client, seed_users):
-    res = client.get("/api/v1/guest/directory")
-    assert res.status_code == 200
-    names = [f["full_name"] for f in res.json()]
-    assert seed_users["staff"].full_name in names
 
 
 # -- Staff location (Redis-backed) -----------------------------------------

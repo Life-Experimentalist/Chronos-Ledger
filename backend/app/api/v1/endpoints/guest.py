@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -33,7 +33,14 @@ _AVAILABILITY_LABELS = {
 
 
 @router.post("/register-checkin")
-async def process_guest_entry(payload: GuestCheckInRequest, db: Session = Depends(get_db)):
+async def process_guest_entry(
+    payload: GuestCheckInRequest,
+    db: Session = Depends(get_db),
+    # The visitor does not sign in; the kiosk device does, with an API key an
+    # admin issues it once. Unused in the body on purpose: it is here to turn
+    # anonymous callers away before they reach the visitor log.
+    _caller: User = Depends(get_current_user),
+):
     staff = db.query(User).filter(User.id == payload.target_staff_id).first()
     if not staff or staff.role_type not in (
         InstitutionalRole.STAFF,
@@ -105,7 +112,13 @@ def get_pending_guests(
 
 
 @router.get("/directory", response_model=list[StaffAvailabilityResponse])
-def get_staff_directory(name: str | None = None, db: Session = Depends(get_db)):
+def get_staff_directory(
+    name: str | None = Query(default=None, min_length=2, max_length=100),
+    db: Session = Depends(get_db),
+    # Same kiosk credential. This response is the staff roster plus each
+    # person's live presence, so it is not something to hand out anonymously.
+    _caller: User = Depends(get_current_user),
+):
     q = db.query(User).filter(User.role_type == InstitutionalRole.STAFF)
     if name:
         q = q.filter(User.full_name.ilike(f"%{name}%"))

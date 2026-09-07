@@ -189,7 +189,11 @@ echo ""
 # Optional demo data (see docs/demo.md)
 if [[ "${SEED_DEMO}" == "1" ]]; then
   log "Loading demo data..."
-  $DOCKER_COMPOSE_CMD -f "${COMPOSE_FILE}" run --rm chronos-app uv run --no-sync python -m app.demo_seed
+  DEMO_OUTPUT="$($DOCKER_COMPOSE_CMD -f "${COMPOSE_FILE}" run --rm chronos-app uv run --no-sync python -m app.demo_seed)"
+  echo "${DEMO_OUTPUT}"
+  # Held back for the summary too: it scrolls past during the compose run, and
+  # the visitor kiosk cannot be set up without it.
+  DEMO_KIOSK_KEY="$(echo "${DEMO_OUTPUT}" | sed -n 's/^Kiosk key[^:]*: //p')"
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
@@ -200,6 +204,11 @@ ok "API docs:  http://${LAN_IP}/docs"
 ok "Login:     admin@org.internal"
 echo -e "${YELLOW}  IMPORTANT: You will be prompted to set a new password on first login.${NC}"
 echo ""
+if [[ -n "${DEMO_KIOSK_KEY:-}" ]]; then
+  ok "Kiosk key: ${DEMO_KIOSK_KEY}"
+  echo -e "${YELLOW}  Paste this once at http://${LAN_IP}/guest/kiosk/ to activate the visitor kiosk.${NC}"
+  echo ""
+fi
 echo "  Useful commands:"
 echo "    docker compose logs -f                  # Stream all logs"
 echo "    docker compose logs -f chronos-app      # FastAPI logs only"

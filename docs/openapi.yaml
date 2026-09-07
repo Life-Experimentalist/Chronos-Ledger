@@ -13,9 +13,11 @@ info:
   description: |
     Organization Schedule & Attendance Management REST API.
 
-    **Authentication**: All endpoints except `/config`, `/auth/login`,
-    `/guest/register-checkin`, and `/guest/directory` require a Bearer JWT
-    in the `Authorization` header.
+    **Authentication**: All endpoints except `/config` and `/auth/login`
+    require a Bearer JWT in the `Authorization` header. The two kiosk
+    endpoints, `/guest/register-checkin` and `/guest/directory`, accept an
+    API key in `X-API-Key` instead, since a lobby terminal has no one to
+    sign in.
 
     **Roles**: `SUPER_ADMIN` > `UNIT_ADMIN` > `STAFF` > `MEMBER`.
     Role requirements are noted on each endpoint.
@@ -44,6 +46,14 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: >
+        A machine credential bound to a service-account user. Accepted anywhere
+        a Bearer token is, and acts as the bound user, so roles and unit scoping
+        apply unchanged. This is how a lobby kiosk authenticates.
 
   schemas:
     # ── Enumerations ──────────────────────────
@@ -468,18 +478,29 @@ components:
       properties:
         guest_name:
           type: string
+          minLength: 2
+          maxLength: 100
           example: John Smith
         contact_phone:
           type: string
+          minLength: 8
+          maxLength: 20
+          pattern: "^[-0-9+() ]+$"
           example: "+91 98765 43210"
         originating_body:
           type: string
+          minLength: 2
+          maxLength: 100
           example: TechCorp Ltd
         target_staff_id:
           type: string
+          minLength: 1
+          maxLength: 50
           example: FAC001
         visitation_intent:
           type: string
+          minLength: 10
+          maxLength: 500
           example: Research collaboration discussion
 
     GuestDecisionRequest:
@@ -558,8 +579,10 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
 
+# Either credential is accepted on every endpoint below.
 security:
   - BearerAuth: []
+  - ApiKeyAuth: []
 
 # ─────────────────────────────────────────────
 # Paths
@@ -1222,9 +1245,9 @@ paths:
     post:
       tags: [Guest Gate]
       summary: Register an organization visitor (kiosk)
-      security: []
       description: >
-        No authentication required, this is the public kiosk endpoint.
+        The visitor does not authenticate; the kiosk device does, with an
+        admin-issued API key in `X-API-Key`.
         Fires a `GUEST_HANDSHAKE_REQ` WebSocket event to the target staff member.
       requestBody:
         required: true
@@ -1249,15 +1272,21 @@ paths:
   /guest/directory:
     get:
       tags: [Guest Gate]
-      summary: Public staff availability directory
-      security: []
-      description: Returns staff with OPEN_AD_HOC or VERY_FREE status for kiosk display.
+      summary: Staff availability directory (kiosk)
+      description: >
+        Returns staff with OPEN_AD_HOC or VERY_FREE status for kiosk display.
+        Requires a credential: this response carries the staff roster and each
+        person's live presence.
       parameters:
         - name: name
           in: query
           schema:
             type: string
-          description: Case-insensitive search by staff name.
+            minLength: 2
+            maxLength: 100
+          description: >
+            Case-insensitive search by staff name. Two characters minimum, so
+            the roster cannot be walked one letter at a time.
       responses:
         "200":
           description: Available staff.

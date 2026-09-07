@@ -52,9 +52,12 @@ automatically. Sign out between steps to switch roles.
    11:00, and 15:00). Demo sessions carry no location pin, so marking
    works from any laptop with no GPS needed; in a real deployment each
    session is geo-fenced to its room's coordinates.
-4. **Guest kiosk** (`/guest/kiosk/` on the same address): no login needed. A
-   visitor registers a check-in here and the responsible staff member gets
-   a live notification to approve or decline.
+4. **Guest kiosk** (`/guest/kiosk/` on the same address): the first visit asks
+   for a kiosk key, which `--demo` printed at the end of setup. Paste it once
+   and the device remembers it. A visitor then registers a check-in with no
+   login of their own, and the responsible staff member gets a live
+   notification to approve or decline. To retire a lost or stolen kiosk,
+   revoke its key under Settings, API Keys.
 5. **API** (`/docs` on the same address): the whole API, interactive, if your
    audience is technical.
 
