@@ -1,7 +1,7 @@
 // Copyright 2026 Chronos Ledger Contributors
 // Licensed under the Apache License, Version 2.0
 
-export type InstitutionalRole = 'SUPER_ADMIN' | 'DEPT_ADMIN' | 'FACULTY' | 'STUDENT'
+export type InstitutionalRole = 'SUPER_ADMIN' | 'UNIT_ADMIN' | 'STAFF' | 'MEMBER'
 export type DynamicState = 'SCHEDULED' | 'ON_LEAVE' | 'PROXY_SUBSTITUTE' | 'LUNCH' | 'INTERNAL_MEETING' | 'ADHOC_EVENT'
 export type VerificationMetric = 'PRESENT' | 'ABSENT' | 'LATE'
 export type ExecutionMode = 'PHYSICAL' | 'ONLINE_STREAM'
@@ -30,7 +30,7 @@ export interface UserProfile {
   full_name: string
   email_address: string
   role_type: InstitutionalRole
-  department_code: string | null
+  unit_code: string | null
   assigned_base_station: string | null
   current_occupancy_index: AccessReadiness
   reporting_line_manager: string | null
@@ -39,16 +39,16 @@ export interface UserProfile {
 export interface LedgerEntry {
   id: number
   target_date: string
-  course_code: string | null
-  course_title: string | null
+  activity_code: string | null
+  activity_title: string | null
   target_room_identifier: string
   time_window_start: string | null
   time_window_end: string | null
   delivery_format: ExecutionMode
   virtual_connection_string: string | null
   operational_state: DynamicState
-  active_instructor_id: string | null
-  substitute_instructor_id: string | null
+  active_lead_id: string | null
+  substitute_lead_id: string | null
   latitude_target: number | null
   longitude_target: number | null
   altitude_target: number | null
@@ -58,7 +58,7 @@ export interface LedgerEntry {
 export interface AttendanceRecord {
   id: number
   ledger_instance_id: number
-  student_id: string
+  member_id: string
   marking_status: VerificationMetric
   authorizing_agent_id: string | null
   modification_timestamp: string
@@ -78,25 +78,25 @@ export interface GuestEntry {
   guest_name: string
   contact_phone: string
   originating_body: string
-  target_faculty_id: string
+  target_staff_id: string
   visitation_intent: string
   handshake_status: LogVerificationState
   timestamp_marked: string
 }
 
-export interface FacultyLocation {
-  faculty_id: string
+export interface StaffLocation {
+  staff_id: string
   full_name: string
-  department_code: string | null
+  unit_code: string | null
   occupancy_index: AccessReadiness
   resolved_location: string
   status: string
 }
 
-export interface FacultyAvailability {
-  faculty_id: string
+export interface StaffAvailability {
+  staff_id: string
   full_name: string
-  department_code: string | null
+  unit_code: string | null
   availability_label: string
 }
 
@@ -109,7 +109,7 @@ export interface Annotation {
   distribution_timestamp: string
 }
 
-export interface AcademicCycle {
+export interface PlanningCycle {
   id: number
   cycle_label: string
   date_bounds_start: string

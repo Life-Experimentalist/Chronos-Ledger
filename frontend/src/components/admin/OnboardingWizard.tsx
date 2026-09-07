@@ -13,12 +13,12 @@ import {
   Info, ExternalLink, SkipForward,
 } from 'lucide-react'
 import { authApi, scheduleApi, ingestionApi } from '@/lib/api'
-import type { AcademicCycle } from '@/types'
+import type { PlanningCycle } from '@/types'
 
 // ─── Step configs ────────────────────────────────────────────────────────────
 const STEPS = [
   { id: 'password',  label: 'Secure Account',    icon: Lock,         required: true  },
-  { id: 'cycle',     label: 'Academic Cycle',     icon: CalendarPlus, required: false },
+  { id: 'cycle',     label: 'Planning Cycle',     icon: CalendarPlus, required: false },
   { id: 'import',    label: 'Import Schedule',    icon: Upload,       required: false },
   { id: 'ledger',    label: 'Generate Ledger',    icon: Zap,          required: false },
   { id: 'done',      label: 'Ready',              icon: CheckCircle2, required: false },
@@ -55,7 +55,7 @@ type CycleForm = z.infer<typeof cycleSchema>
 export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Props) {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState(initialStep)
-  const [createdCycle, setCreatedCycle] = useState<AcademicCycle | null>(null)
+  const [createdCycle, setCreatedCycle] = useState<PlanningCycle | null>(null)
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -110,7 +110,7 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
     setError(null)
     try {
       const res = await scheduleApi.createCycle({ ...data, operational_status: true })
-      setCreatedCycle(res.data as AcademicCycle)
+      setCreatedCycle(res.data as PlanningCycle)
       setSuccess(`Cycle "${data.cycle_label}" created.`)
       setTimeout(next, 800)
     } catch (e: unknown) {
@@ -244,19 +244,19 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
             </div>
           )}
 
-          {/* ── Step: Academic Cycle ──────────────────────────────────────── */}
+          {/* ── Step: Planning Cycle ──────────────────────────────────────── */}
           {step.id === 'cycle' && (
             <div className="glass-card p-8 space-y-6">
               <div>
-                <h2 className="text-xl font-bold text-chronos-text">Create an academic cycle</h2>
+                <h2 className="text-xl font-bold text-chronos-text">Create an planning cycle</h2>
                 <p className="text-sm text-chronos-muted mt-1">
-                  An academic cycle defines the semester/trimester boundaries. Schedules and attendance records are scoped to it.
+                  An planning cycle defines the term/trimester boundaries. Schedules and attendance records are scoped to it.
                 </p>
               </div>
               <form onSubmit={submitCycle} className="space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-chronos-text-dim mb-1.5 uppercase tracking-wider">Cycle Name</label>
-                  <input {...cycleForm.register('cycle_label')} className="input-field" placeholder="e.g. 2026-Fall-Semester" />
+                  <input {...cycleForm.register('cycle_label')} className="input-field" placeholder="e.g. 2026-Fall-Term" />
                   {cycleForm.formState.errors.cycle_label && (
                     <p className="text-chronos-danger text-xs mt-1">{cycleForm.formState.errors.cycle_label.message}</p>
                   )}
@@ -290,7 +290,7 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
               <div>
                 <h2 className="text-xl font-bold text-chronos-text">Import your schedule</h2>
                 <p className="text-sm text-chronos-muted mt-1">
-                  Upload a student-centric CSV to create courses, faculty, students, and timetable slots in one go.
+                  Upload a member-centric CSV to create activities, staff, members, and timetable slots in one go.
                 </p>
               </div>
               {!createdCycle && (
@@ -302,9 +302,9 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
               <div>
                 <p className="text-xs font-medium text-chronos-text-dim mb-2 uppercase tracking-wider">Required CSV columns</p>
                 <div className="font-mono text-xs text-chronos-muted bg-chronos-dark rounded-lg p-3 border border-chronos-border/40 leading-relaxed">
-                  student_id, student_name, student_email, subject_code, subject_title,<br/>
-                  department, day_of_week_index, time_window_start, time_window_end,<br/>
-                  teacher_id, room
+                  member_id, member_name, member_email, activity_code, activity_title,<br/>
+                  unit, day_of_week_index, time_window_start, time_window_end,<br/>
+                  lead_id, room
                 </div>
               </div>
               {/* Drop zone */}
@@ -401,8 +401,8 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
                 {[
-                  { title: 'Invite faculty & students', desc: 'Create accounts via Admin → Users or import via CSV.', href: '/admin/dashboard?tab=import' },
-                  { title: 'Configure timetable', desc: 'Upload or manually adjust master slots for each course.', href: '/admin/dashboard?tab=import' },
+                  { title: 'Invite staff & members', desc: 'Create accounts via Admin → Users or import via CSV.', href: '/admin/dashboard?tab=import' },
+                  { title: 'Configure timetable', desc: 'Upload or manually adjust master slots for each activity.', href: '/admin/dashboard?tab=import' },
                   { title: 'Read the API docs', desc: 'OpenAPI spec and guides in /docs on your server.', href: '/docs', external: true },
                   { title: 'Set up push notifications', desc: 'Add VAPID keys to .env and rebuild the frontend container.', href: 'https://github.com/Life-Experimentalist/chronos-ledger/blob/main/docs/deployment.md', external: true },
                 ].map((item) => (

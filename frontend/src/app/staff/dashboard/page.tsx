@@ -8,9 +8,9 @@ import { motion } from 'framer-motion'
 import { Wifi } from 'lucide-react'
 import { Sidebar } from '@/components/shared/Sidebar'
 import { NotificationPanel } from '@/components/shared/NotificationPanel'
-import { StatusSwitcher } from '@/components/faculty/StatusSwitcher'
-import { AttendanceMatrix } from '@/components/faculty/AttendanceMatrix'
-import { InteractionDesk } from '@/components/faculty/InteractionDesk'
+import { StatusSwitcher } from '@/components/staff/StatusSwitcher'
+import { AttendanceMatrix } from '@/components/staff/AttendanceMatrix'
+import { InteractionDesk } from '@/components/staff/InteractionDesk'
 import { useAuth } from '@/hooks/useAuth'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { useScheduleNotifications } from '@/hooks/useScheduleNotifications'
@@ -20,16 +20,16 @@ import type { LedgerEntry } from '@/types'
 const TABS = ['overview', 'attendance', 'absences', 'guests'] as const
 type Tab = (typeof TABS)[number]
 
-export default function FacultyDashboard() {
+export default function StaffDashboard() {
   return (
     <Suspense>
-      <FacultyDashboardContent />
+      <StaffDashboardContent />
     </Suspense>
   )
 }
 
-function FacultyDashboardContent() {
-  const { user } = useAuth('FACULTY')
+function StaffDashboardContent() {
+  const { user } = useAuth('STAFF')
   const { isConnected } = useWebSocket()
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<Tab>('overview')
@@ -60,7 +60,7 @@ function FacultyDashboardContent() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="h-16 flex items-center justify-between px-6 border-b border-chronos-border/40 bg-chronos-surface/50 backdrop-blur-sm shrink-0">
           <div>
-            <h1 className="text-base font-semibold text-chronos-text">Faculty Command Station</h1>
+            <h1 className="text-base font-semibold text-chronos-text">Staff Command Station</h1>
             <p className="text-xs text-chronos-muted">{user.full_name}</p>
           </div>
           <div className="flex items-center gap-3">
@@ -115,7 +115,7 @@ function FacultyDashboardContent() {
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="font-semibold text-chronos-text">{entry.course_code} — {entry.course_title}</p>
+                          <p className="font-semibold text-chronos-text">{entry.activity_code} — {entry.activity_title}</p>
                           <p className="text-sm text-chronos-text-dim mt-0.5">Room {entry.target_room_identifier} · {entry.time_window_start} – {entry.time_window_end}</p>
                         </div>
                         <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${

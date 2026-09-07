@@ -28,15 +28,15 @@ export function AttendanceMatrix({ classes, selectedEntry, onSelectEntry }: Atte
       .then((r) => {
         const map: Record<string, VerificationMetric> = {}
         r.data.forEach((rec: AttendanceRecord) => {
-          map[rec.student_id] = rec.marking_status
+          map[rec.member_id] = rec.marking_status
         })
         setRecords(map)
       })
       .finally(() => setLoading(false))
   }, [selectedEntry])
 
-  const setStatus = (studentId: string, status: VerificationMetric) => {
-    setRecords((prev) => ({ ...prev, [studentId]: status }))
+  const setStatus = (memberId: string, status: VerificationMetric) => {
+    setRecords((prev) => ({ ...prev, [memberId]: status }))
     setSaved(false)
   }
 
@@ -44,9 +44,9 @@ export function AttendanceMatrix({ classes, selectedEntry, onSelectEntry }: Atte
     if (!selectedEntry) return
     setSaving(true)
     try {
-      const batch = Object.entries(records).map(([student_id, marking_status]) => ({
+      const batch = Object.entries(records).map(([member_id, marking_status]) => ({
         ledger_instance_id: selectedEntry.id,
-        student_id,
+        member_id,
         marking_status,
       }))
       await attendanceApi.batchMark({ ledger_instance_id: selectedEntry.id, records: batch })
@@ -56,8 +56,8 @@ export function AttendanceMatrix({ classes, selectedEntry, onSelectEntry }: Atte
     }
   }
 
-  // Generate dummy student IDs from records keys or show empty state
-  const studentIds = Object.keys(records)
+  // Generate dummy member IDs from records keys or show empty state
+  const memberIds = Object.keys(records)
 
   return (
     <div className="space-y-4">
@@ -75,7 +75,7 @@ export function AttendanceMatrix({ classes, selectedEntry, onSelectEntry }: Atte
                   : 'border-chronos-border/40 text-chronos-text-dim hover:border-chronos-border'
               }`}
             >
-              {entry.course_code} · {entry.time_window_start}
+              {entry.activity_code} · {entry.time_window_start}
             </button>
           ))}
         </div>
@@ -85,7 +85,7 @@ export function AttendanceMatrix({ classes, selectedEntry, onSelectEntry }: Atte
         <div className="glass-card p-5">
           <div className="flex items-center justify-between mb-5">
             <div>
-              <p className="font-semibold text-chronos-text">{selectedEntry.course_code} — {selectedEntry.course_title}</p>
+              <p className="font-semibold text-chronos-text">{selectedEntry.activity_code} — {selectedEntry.activity_title}</p>
               <p className="text-sm text-chronos-text-dim mt-0.5">Room {selectedEntry.target_room_identifier} · {selectedEntry.time_window_start} – {selectedEntry.time_window_end}</p>
             </div>
             <div className="flex items-center gap-2">
@@ -101,26 +101,26 @@ export function AttendanceMatrix({ classes, selectedEntry, onSelectEntry }: Atte
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-chronos-teal" />
             </div>
-          ) : studentIds.length === 0 ? (
+          ) : memberIds.length === 0 ? (
             <div className="text-center py-10">
               <Users className="w-10 h-10 text-chronos-muted/40 mx-auto mb-2" />
-              <p className="text-sm text-chronos-muted">No attendance records yet. Students will appear as they self-mark or via import.</p>
+              <p className="text-sm text-chronos-muted">No attendance records yet. Members will appear as they self-mark or via import.</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {studentIds.map((studentId) => {
-                const status = records[studentId]
+              {memberIds.map((memberId) => {
+                const status = records[memberId]
                 return (
                   <motion.div
-                    key={studentId}
+                    key={memberId}
                     layout
                     className="flex items-center justify-between py-2.5 px-3 bg-chronos-surface rounded-lg"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-chronos-teal/10 flex items-center justify-center text-chronos-teal text-xs font-bold">
-                        {studentId.slice(-2)}
+                        {memberId.slice(-2)}
                       </div>
-                      <span className="text-sm text-chronos-text font-mono">{studentId}</span>
+                      <span className="text-sm text-chronos-text font-mono">{memberId}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <AttendanceBadge status={status} />
@@ -128,7 +128,7 @@ export function AttendanceMatrix({ classes, selectedEntry, onSelectEntry }: Atte
                         {(['PRESENT', 'ABSENT', 'LATE'] as VerificationMetric[]).map((s) => (
                           <button
                             key={s}
-                            onClick={() => setStatus(studentId, s)}
+                            onClick={() => setStatus(memberId, s)}
                             title={s}
                             className={`p-1.5 rounded-lg transition-colors ${status === s ? 'bg-chronos-teal/20 text-chronos-teal' : 'text-chronos-muted hover:text-chronos-text'}`}
                           >

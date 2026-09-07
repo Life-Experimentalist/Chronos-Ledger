@@ -54,15 +54,15 @@ export function useWebSocket() {
             type: 'warning',
             title: 'Absence Approval Required',
             message: `${p.from} requested absence on ${p.date}`,
-            actionUrl: '/faculty/dashboard?tab=absences',
+            actionUrl: '/staff/dashboard?tab=absences',
           })
         } else if (frame.event === 'GUEST_HANDSHAKE_REQ') {
           const p = frame.payload as { guest_name: string; organization: string }
           pushNotification({
             type: 'info',
-            title: 'Guest at Campus Gate',
+            title: 'Guest at Organization Gate',
             message: `${p.guest_name} from ${p.organization} is waiting`,
-            actionUrl: '/faculty/dashboard?tab=guests',
+            actionUrl: '/staff/dashboard?tab=guests',
           })
         } else if (frame.event === 'ABSENCE_DECISION') {
           const p = frame.payload as { decision: string }

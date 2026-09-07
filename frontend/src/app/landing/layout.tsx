@@ -9,20 +9,20 @@ const SITE_URL = 'https://chronos.vkrishna04.me'
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
 
-  title: 'Chronos Ledger — Campus Schedule & Attendance Management',
+  title: 'Chronos Ledger — Organization Schedule & Attendance Management',
   description:
-    'Self-hosted PWA for universities and colleges. Geofenced attendance, real-time faculty locator, offline-first architecture, and smart absence management. Deploy on your campus intranet in under 5 minutes with Docker.',
+    'Self-hosted PWA for universities and organizations. Geofenced attendance, real-time staff locator, offline-first architecture, and smart absence management. Deploy on your organization intranet in under 5 minutes with Docker.',
 
   keywords: [
-    'campus management system',
+    'organization management system',
     'attendance tracking software',
     'university schedule management',
-    'college timetable system',
+    'organization timetable system',
     'geofenced attendance',
-    'faculty locator',
+    'staff locator',
     'offline PWA education',
-    'self-hosted campus software',
-    'academic management system',
+    'self-hosted organization software',
+    'planning management system',
     'chronos ledger',
   ],
 
@@ -38,15 +38,15 @@ export const metadata: Metadata = {
     type: 'website',
     url: SITE_URL,
     siteName: 'Chronos Ledger',
-    title: 'Chronos Ledger — Campus Schedule & Attendance Management',
+    title: 'Chronos Ledger — Organization Schedule & Attendance Management',
     description:
-      'Self-hosted PWA for universities. Geofenced attendance, faculty tracking, offline-first. Deploy in 5 minutes with Docker.',
+      'Self-hosted PWA for universities. Geofenced attendance, staff tracking, offline-first. Deploy in 5 minutes with Docker.',
     images: [
       {
         url: `${SITE_URL}/icons/og-image.png`,
         width: 1200,
         height: 630,
-        alt: 'Chronos Ledger — Campus Management PWA',
+        alt: 'Chronos Ledger — Organization Management PWA',
       },
     ],
     locale: 'en_US',
@@ -54,9 +54,9 @@ export const metadata: Metadata = {
 
   twitter: {
     card: 'summary_large_image',
-    title: 'Chronos Ledger — Campus Schedule & Attendance Management',
+    title: 'Chronos Ledger — Organization Schedule & Attendance Management',
     description:
-      'Self-hosted PWA for universities. Geofenced attendance, faculty tracking, offline-first.',
+      'Self-hosted PWA for universities. Geofenced attendance, staff tracking, offline-first.',
     images: [`${SITE_URL}/icons/og-image.png`],
     creator: '@Life-Experimentalist',
   },
@@ -92,7 +92,7 @@ export default function LandingLayout({ children }: { children: React.ReactNode 
             name: 'Chronos Ledger',
             url: SITE_URL,
             description:
-              'Self-hosted campus schedule and attendance management PWA for universities and colleges.',
+              'Self-hosted organization schedule and attendance management PWA for universities and organizations.',
             applicationCategory: 'EducationApplication',
             operatingSystem: 'Any (PWA)',
             offers: {
@@ -108,17 +108,17 @@ export default function LandingLayout({ children }: { children: React.ReactNode 
             license: 'https://www.apache.org/licenses/LICENSE-2.0',
             codeRepository: 'https://github.com/Life-Experimentalist/chronos-ledger',
             keywords:
-              'campus management, attendance tracking, university software, self-hosted, PWA, geofence',
+              'organization management, attendance tracking, university software, self-hosted, PWA, geofence',
             featureList: [
               'Geofenced attendance marking with 3D validation',
-              '4-tier real-time faculty location resolver',
+              '4-tier real-time staff location resolver',
               'Reverse RSVP absence management',
               'Offline-first with service worker sync',
               'CSV bulk schedule import',
               'iCalendar feed per user',
               'WebSocket real-time notifications',
               'Guest visitor kiosk (no login required)',
-              'Role-based access: Admin, Faculty, Student, Guest',
+              'Role-based access: Admin, Staff, Member, Guest',
             ],
           }),
         }}

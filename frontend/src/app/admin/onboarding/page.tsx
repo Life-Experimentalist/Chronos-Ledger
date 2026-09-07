@@ -16,7 +16,7 @@ export default function OnboardingPage() {
 }
 
 function OnboardingContent() {
-  const { user } = useAuth(['SUPER_ADMIN', 'DEPT_ADMIN'])
+  const { user } = useAuth(['SUPER_ADMIN', 'UNIT_ADMIN'])
   const searchParams = useSearchParams()
 
   if (!user) return null

@@ -74,8 +74,8 @@ export const authApi = {
 // ── Schedule ──────────────────────────────────────────────────────────────────
 export const scheduleApi = {
   getTodayLedger: () => api.get('/schedule/ledger/today'),
-  getFacultyLocation: (facultyId: string) => api.get(`/schedule/faculty/${facultyId}/location`),
-  getAllFacultyLocations: () => api.get('/schedule/faculty/all/locations'),
+  getStaffLocation: (staffId: string) => api.get(`/schedule/staff/${staffId}/location`),
+  getAllStaffLocations: () => api.get('/schedule/staff/all/locations'),
   listCycles: () => api.get('/schedule/cycles'),
   createCycle: (data: object) => api.post('/schedule/cycles', data),
   closeCycle: (id: number) => api.patch(`/schedule/cycles/${id}/close`),
@@ -108,7 +108,7 @@ export const guestApi = {
   decidePending: (id: number, decision: string) =>
     api.patch(`/guest/${id}/decide`, { decision }),
   getPendingGuests: () => api.get('/guest/pending'),
-  searchFaculty: (name?: string) => api.get('/guest/directory', { params: name ? { name } : {} }),
+  searchStaff: (name?: string) => api.get('/guest/directory', { params: name ? { name } : {} }),
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────
@@ -118,8 +118,8 @@ export const usersApi = {
   getById: (id: string) => api.get(`/users/${id}`),
   update: (id: string, data: object) => api.patch(`/users/${id}`, data),
   updateStatus: (id: string, status: string) => api.put(`/users/${id}/status`, { status }),
-  listAvailableFaculty: (department?: string) =>
-    api.get('/users/faculty/available', { params: department ? { department } : {} }),
+  listAvailableStaff: (unit?: string) =>
+    api.get('/users/staff/available', { params: unit ? { unit } : {} }),
 }
 
 // ── Ingestion ─────────────────────────────────────────────────────────────────

@@ -9,7 +9,8 @@ import { z } from 'zod'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, User, Phone, Building2, MessageSquare, Loader2, CheckCircle2, ArrowLeft } from 'lucide-react'
 import { guestApi } from '@/lib/api'
-import type { FacultyAvailability } from '@/types'
+import { useVocabulary } from '@/hooks/useVocabulary'
+import type { StaffAvailability } from '@/types'
 
 type KioskStep = 'search' | 'form' | 'pending' | 'done'
 
@@ -22,11 +23,12 @@ const checkInSchema = z.object({
 type CheckInForm = z.infer<typeof checkInSchema>
 
 export default function GuestKioskPage() {
+  const vocab = useVocabulary()
   const [step, setStep] = useState<KioskStep>('search')
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<FacultyAvailability[]>([])
+  const [searchResults, setSearchResults] = useState<StaffAvailability[]>([])
   const [searching, setSearching] = useState(false)
-  const [selectedFaculty, setSelectedFaculty] = useState<FacultyAvailability | null>(null)
+  const [selectedStaff, setSelectedStaff] = useState<StaffAvailability | null>(null)
   const [referenceToken, setReferenceToken] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -38,25 +40,25 @@ export default function GuestKioskPage() {
     if (!searchQuery.trim()) return
     setSearching(true)
     try {
-      const res = await guestApi.searchFaculty(searchQuery)
+      const res = await guestApi.searchStaff(searchQuery)
       setSearchResults(res.data)
     } finally {
       setSearching(false)
     }
   }
 
-  const selectFaculty = (faculty: FacultyAvailability) => {
-    setSelectedFaculty(faculty)
+  const selectStaff = (staff: StaffAvailability) => {
+    setSelectedStaff(staff)
     setStep('form')
   }
 
   const onSubmit = async (data: CheckInForm) => {
-    if (!selectedFaculty) return
+    if (!selectedStaff) return
     setSubmitting(true)
     try {
       const res = await guestApi.checkIn({
         ...data,
-        target_faculty_id: selectedFaculty.faculty_id,
+        target_staff_id: selectedStaff.staff_id,
       })
       setReferenceToken(res.data.reference_token)
       setStep('pending')
@@ -69,7 +71,7 @@ export default function GuestKioskPage() {
     setStep('search')
     setSearchQuery('')
     setSearchResults([])
-    setSelectedFaculty(null)
+    setSelectedStaff(null)
     setReferenceToken(null)
     reset()
   }
@@ -85,8 +87,8 @@ export default function GuestKioskPage() {
       {/* Header */}
       <div className="w-full max-w-xl mb-8 text-center relative">
         <img src="/icon.png" alt="Chronos Ledger" className="w-14 h-14 rounded-2xl mb-4 shadow-teal-glow" />
-        <h1 className="text-2xl font-bold text-chronos-text">Campus Visitor Kiosk</h1>
-        <p className="text-chronos-text-dim text-sm mt-1">Search for a faculty member to request a gate-pass</p>
+        <h1 className="text-2xl font-bold text-chronos-text">Organization Visitor Kiosk</h1>
+        <p className="text-chronos-text-dim text-sm mt-1">{`Search for a ${vocab.staff.toLowerCase()} member to request a gate-pass`}</p>
       </div>
 
       <div className="w-full max-w-xl relative">
@@ -96,7 +98,7 @@ export default function GuestKioskPage() {
           {step === 'search' && (
             <motion.div key="search" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} className="space-y-4">
               <div className="glass-card p-6">
-                <p className="text-sm font-medium text-chronos-text-dim mb-3 uppercase tracking-wider text-xs">Search Faculty Member</p>
+                <p className="text-sm font-medium text-chronos-text-dim mb-3 uppercase tracking-wider text-xs">{`Search ${vocab.staff} Member`}</p>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-chronos-muted" />
@@ -104,7 +106,7 @@ export default function GuestKioskPage() {
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                      placeholder="Enter faculty name or department..."
+                      placeholder="Enter staff name or unit..."
                       className="input-field pl-10 text-lg py-3"
                       autoComplete="off"
                       autoFocus
@@ -126,28 +128,28 @@ export default function GuestKioskPage() {
                     <p className="text-xs text-chronos-muted">{searchResults.length} result(s) — select to proceed</p>
                   </div>
                   <div className="divide-y divide-chronos-border/20">
-                    {searchResults.map((faculty) => (
+                    {searchResults.map((staff) => (
                       <motion.button
-                        key={faculty.faculty_id}
-                        onClick={() => selectFaculty(faculty)}
+                        key={staff.staff_id}
+                        onClick={() => selectStaff(staff)}
                         whileTap={{ scale: 0.99 }}
                         className="w-full flex items-center gap-4 p-4 hover:bg-chronos-surface/60 transition-colors text-left"
                       >
                         <div className="w-12 h-12 rounded-full bg-chronos-teal/10 flex items-center justify-center text-chronos-teal text-lg font-bold shrink-0">
-                          {faculty.full_name.charAt(0)}
+                          {staff.full_name.charAt(0)}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-chronos-text">{faculty.full_name}</p>
-                          <p className="text-sm text-chronos-text-dim">{faculty.department_code || 'Faculty'}</p>
+                          <p className="font-semibold text-chronos-text">{staff.full_name}</p>
+                          <p className="text-sm text-chronos-text-dim">{staff.unit_code || vocab.staff}</p>
                         </div>
                         <span className={`text-xs font-medium px-3 py-1.5 rounded-full border ${
-                          faculty.availability_label === 'Available' || faculty.availability_label === 'Very Available'
+                          staff.availability_label === 'Available' || staff.availability_label === 'Very Available'
                             ? 'text-chronos-teal bg-chronos-teal/10 border-chronos-teal/20'
-                            : faculty.availability_label === 'Do Not Disturb'
+                            : staff.availability_label === 'Do Not Disturb'
                             ? 'text-chronos-danger bg-chronos-danger/10 border-chronos-danger/20'
                             : 'text-chronos-warning bg-chronos-warning/10 border-chronos-warning/20'
                         }`}>
-                          {faculty.availability_label}
+                          {staff.availability_label}
                         </span>
                       </motion.button>
                     ))}
@@ -158,7 +160,7 @@ export default function GuestKioskPage() {
           )}
 
           {/* Step 2: Check-In Form */}
-          {step === 'form' && selectedFaculty && (
+          {step === 'form' && selectedStaff && (
             <motion.div key="form" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} className="space-y-4">
               <button onClick={() => setStep('search')} className="flex items-center gap-1.5 text-sm text-chronos-text-dim hover:text-chronos-text transition-colors">
                 <ArrowLeft className="w-4 h-4" /> Back to Search
@@ -166,8 +168,8 @@ export default function GuestKioskPage() {
 
               <div className="glass-card p-5 border-l-4 border-l-chronos-teal">
                 <p className="text-xs text-chronos-muted mb-1">Visiting</p>
-                <p className="font-bold text-chronos-text text-lg">{selectedFaculty.full_name}</p>
-                <p className="text-sm text-chronos-text-dim">{selectedFaculty.department_code}</p>
+                <p className="font-bold text-chronos-text text-lg">{selectedStaff.full_name}</p>
+                <p className="text-sm text-chronos-text-dim">{selectedStaff.unit_code}</p>
               </div>
 
               <form onSubmit={handleSubmit(onSubmit)} className="glass-card p-6 space-y-4">
@@ -216,13 +218,13 @@ export default function GuestKioskPage() {
             </motion.div>
           )}
 
-          {/* Step 3: Waiting for faculty response */}
+          {/* Step 3: Waiting for staff response */}
           {step === 'pending' && (
             <motion.div key="pending" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="glass-card p-10 text-center">
               <div className="w-16 h-16 rounded-full border-4 border-chronos-teal border-t-transparent animate-spin mx-auto mb-6" />
-              <h2 className="text-xl font-bold text-chronos-text mb-2">Awaiting Faculty Response</h2>
+              <h2 className="text-xl font-bold text-chronos-text mb-2">{`Awaiting ${vocab.staff} Response`}</h2>
               <p className="text-chronos-text-dim text-sm mb-4">
-                Your request has been sent to <strong className="text-chronos-teal">{selectedFaculty?.full_name}</strong>.
+                Your request has been sent to <strong className="text-chronos-teal">{selectedStaff?.full_name}</strong>.
                 Please wait while they review your request.
               </p>
               {referenceToken && (
@@ -239,9 +241,9 @@ export default function GuestKioskPage() {
 
       {step !== 'pending' && (
         <p className="mt-8 text-xs text-chronos-muted text-center relative">
-          <a href="/" className="hover:text-chronos-text transition-colors">Staff Sign In</a>
+          <a href="/" className="hover:text-chronos-text transition-colors">{`${vocab.staff} Sign In`}</a>
           {' · '}
-          Campus Visitor Kiosk
+          Organization Visitor Kiosk
         </p>
       )}
     </div>

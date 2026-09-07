@@ -24,15 +24,15 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/admin/dashboard', roles: ['SUPER_ADMIN', 'DEPT_ADMIN'] },
-  { icon: FileSpreadsheet, label: 'Import Data', href: '/admin/dashboard?tab=import', roles: ['SUPER_ADMIN', 'DEPT_ADMIN'] },
-  { icon: Users, label: 'Proxy Management', href: '/admin/dashboard?tab=proxy', roles: ['SUPER_ADMIN', 'DEPT_ADMIN'] },
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/faculty/dashboard', roles: ['FACULTY'] },
-  { icon: CheckSquare, label: 'Attendance', href: '/faculty/dashboard?tab=attendance', roles: ['FACULTY'] },
-  { icon: UserCheck, label: 'Guests & Requests', href: '/faculty/dashboard?tab=guests', roles: ['FACULTY'] },
-  { icon: LayoutDashboard, label: 'My Schedule', href: '/student/dashboard', roles: ['STUDENT'] },
-  { icon: MapPin, label: 'Mark Presence', href: '/student/dashboard?tab=attendance', roles: ['STUDENT'] },
-  { icon: Calendar, label: 'Calendar Sync', href: '/student/dashboard?tab=calendar', roles: ['STUDENT'] },
+  { icon: LayoutDashboard, label: 'Dashboard', href: '/admin/dashboard', roles: ['SUPER_ADMIN', 'UNIT_ADMIN'] },
+  { icon: FileSpreadsheet, label: 'Import Data', href: '/admin/dashboard?tab=import', roles: ['SUPER_ADMIN', 'UNIT_ADMIN'] },
+  { icon: Users, label: 'Proxy Management', href: '/admin/dashboard?tab=proxy', roles: ['SUPER_ADMIN', 'UNIT_ADMIN'] },
+  { icon: LayoutDashboard, label: 'Dashboard', href: '/staff/dashboard', roles: ['STAFF'] },
+  { icon: CheckSquare, label: 'Attendance', href: '/staff/dashboard?tab=attendance', roles: ['STAFF'] },
+  { icon: UserCheck, label: 'Guests & Requests', href: '/staff/dashboard?tab=guests', roles: ['STAFF'] },
+  { icon: LayoutDashboard, label: 'My Schedule', href: '/member/dashboard', roles: ['MEMBER'] },
+  { icon: MapPin, label: 'Mark Presence', href: '/member/dashboard?tab=attendance', roles: ['MEMBER'] },
+  { icon: Calendar, label: 'Calendar Sync', href: '/member/dashboard?tab=calendar', roles: ['MEMBER'] },
 ]
 
 interface SidebarProps {

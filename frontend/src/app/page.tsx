@@ -38,7 +38,7 @@ export default function LoginPage() {
     clearError()
     const user = await login(data.email, data.password).catch(() => null)
     if (!user) return
-    if (user.initial_login_state && (user.role === 'SUPER_ADMIN' || user.role === 'DEPT_ADMIN')) {
+    if (user.initial_login_state && (user.role === 'SUPER_ADMIN' || user.role === 'UNIT_ADMIN')) {
       router.push('/admin/onboarding')
     } else {
       router.push(roleRedirectPath(user.role))
@@ -64,7 +64,7 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <img src="/icon.png" alt="Chronos Ledger" className="w-16 h-16 rounded-2xl mb-4 shadow-teal-strong" />
           <h1 className="text-3xl font-bold text-chronos-text teal-glow-text">Chronos Ledger</h1>
-          <p className="text-chronos-text-dim mt-1 text-sm">Campus Schedule & Attendance Management</p>
+          <p className="text-chronos-text-dim mt-1 text-sm">Organization Schedule & Attendance Management</p>
         </div>
 
         {/* Login Card */}
@@ -81,7 +81,7 @@ export default function LoginPage() {
                 <input
                   {...register('email')}
                   type="email"
-                  placeholder="you@college.internal"
+                  placeholder="you@org.internal"
                   className="input-field pl-10"
                   autoComplete="email"
                 />
@@ -153,7 +153,7 @@ export default function LoginPage() {
 
           <div className="mt-6 pt-5 border-t border-chronos-border/40 space-y-2">
             <p className="text-xs text-chronos-muted text-center">
-              Guest campus visit?{' '}
+              Guest organization visit?{' '}
               <a href="/guest/kiosk" className="text-chronos-teal hover:underline">
                 Use the kiosk
               </a>

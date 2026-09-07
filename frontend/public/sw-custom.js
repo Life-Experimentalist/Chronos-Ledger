@@ -20,7 +20,7 @@ self.addEventListener('push', function (event) {
   }
 
   const options = {
-    body: payload.body || 'New campus notification',
+    body: payload.body || 'New organization notification',
     icon: '/icons/icon-192x192.png',
     badge: '/icons/icon-72x72.png',
     vibrate: [200, 100, 200],
@@ -144,7 +144,7 @@ async function checkUpcomingClasses() {
             icon: '/icons/icon-192x192.png',
             badge: '/icons/icon-72x72.png',
             tag: `class-remind-${entry.id}`,
-            data: { url: '/student/dashboard?tab=attendance' },
+            data: { url: '/member/dashboard?tab=attendance' },
           });
           await notifStore.put({ key: notifKey, notified_at: new Date().toISOString() });
         }

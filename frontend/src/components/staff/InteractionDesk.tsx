@@ -38,7 +38,7 @@ export function InteractionDesk() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-chronos-text">Interaction Desk</h2>
-          <p className="text-sm text-chronos-muted mt-0.5">Manage campus visitor requests and student interactions</p>
+          <p className="text-sm text-chronos-muted mt-0.5">Manage organization visitor requests and member interactions</p>
         </div>
         <button onClick={load} className="btn-secondary text-xs">
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />

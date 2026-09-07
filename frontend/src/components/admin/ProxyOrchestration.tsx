@@ -11,7 +11,7 @@ import type { AbsenceRequest, UserProfile } from '@/types'
 
 export function ProxyOrchestration() {
   const [absences, setAbsences] = useState<AbsenceRequest[]>([])
-  const [availableFaculty, setAvailableFaculty] = useState<UserProfile[]>([])
+  const [availableStaff, setAvailableStaff] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState<number | null>(null)
 
@@ -19,10 +19,10 @@ export function ProxyOrchestration() {
     setLoading(true)
     Promise.all([
       attendanceApi.getPendingAbsences(),
-      usersApi.listAvailableFaculty(),
+      usersApi.listAvailableStaff(),
     ]).then(([absRes, facRes]) => {
       setAbsences(absRes.data)
-      setAvailableFaculty(facRes.data)
+      setAvailableStaff(facRes.data)
     }).finally(() => setLoading(false))
   }
 
@@ -43,7 +43,7 @@ export function ProxyOrchestration() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-chronos-text">Proxy & Absence Management</h2>
-          <p className="text-sm text-chronos-muted mt-0.5">Review pending absence requests and assign substitute faculty</p>
+          <p className="text-sm text-chronos-muted mt-0.5">Review pending absence requests and assign substitute staff</p>
         </div>
         <button onClick={load} className="btn-secondary text-xs">
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -115,23 +115,23 @@ export function ProxyOrchestration() {
           )}
         </div>
 
-        {/* Available Faculty */}
+        {/* Available Staff */}
         <div className="glass-card p-5">
-          <p className="section-title mb-4">Available Faculty</p>
+          <p className="section-title mb-4">Available Staff</p>
           <div className="space-y-2">
-            {availableFaculty.slice(0, 10).map((f) => (
+            {availableStaff.slice(0, 10).map((f) => (
               <div key={f.id} className="flex items-center gap-3 py-2 border-b border-chronos-border/20 last:border-0">
                 <div className="w-8 h-8 rounded-full bg-chronos-teal/10 flex items-center justify-center text-chronos-teal text-xs font-bold">
                   {f.full_name.charAt(0)}
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-chronos-text truncate">{f.full_name}</p>
-                  <p className="text-[10px] text-chronos-muted">{f.department_code || 'No dept'}</p>
+                  <p className="text-[10px] text-chronos-muted">{f.unit_code || 'No unit'}</p>
                 </div>
               </div>
             ))}
-            {availableFaculty.length === 0 && (
-              <p className="text-xs text-chronos-muted text-center py-4">No faculty data available</p>
+            {availableStaff.length === 0 && (
+              <p className="text-xs text-chronos-muted text-center py-4">No staff data available</p>
             )}
           </div>
         </div>

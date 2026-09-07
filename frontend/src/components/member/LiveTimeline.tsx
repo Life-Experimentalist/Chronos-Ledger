@@ -86,7 +86,7 @@ export function LiveTimeline({ entries }: LiveTimelineProps) {
                     <BookOpen className="w-4 h-4 text-chronos-teal shrink-0" />
                   )}
                   <span className="font-semibold text-chronos-text text-sm">
-                    {entry.course_code} — {entry.course_title}
+                    {entry.activity_code} — {entry.activity_title}
                   </span>
                 </div>
 

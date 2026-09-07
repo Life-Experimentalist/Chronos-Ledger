@@ -32,7 +32,7 @@ export default function AdminDashboard() {
 }
 
 function AdminDashboardContent() {
-  const { user } = useAuth(['SUPER_ADMIN', 'DEPT_ADMIN'])
+  const { user } = useAuth(['SUPER_ADMIN', 'UNIT_ADMIN'])
   const { isConnected } = useWebSocket()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -127,7 +127,7 @@ function AdminDashboardContent() {
               <div className="space-y-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                   <StatCard icon={CalendarCheck} label="Active Classes" value={stats.activeClasses} color="teal" />
-                  <StatCard icon={UserX} label="Faculty on Leave" value={stats.onLeave} color="danger" />
+                  <StatCard icon={UserX} label="Staff on Leave" value={stats.onLeave} color="danger" />
                   <StatCard icon={Users} label="Proxy Assignments" value={stats.proxied} color="warning" />
                   <StatCard icon={AlertTriangle} label="Pending Guests" value={stats.guests} color="accent" />
                 </div>
@@ -165,7 +165,7 @@ function AdminDashboardContent() {
                       {todayLedger.slice(0, 8).map((entry) => (
                         <div key={entry.id} className="flex items-center justify-between py-2 border-b border-chronos-border/20 last:border-0">
                           <div>
-                            <span className="text-sm font-medium text-chronos-text">{entry.course_code} — {entry.course_title}</span>
+                            <span className="text-sm font-medium text-chronos-text">{entry.activity_code} — {entry.activity_title}</span>
                             <span className="text-xs text-chronos-muted ml-3">Room {entry.target_room_identifier} · {entry.time_window_start} – {entry.time_window_end}</span>
                           </div>
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${

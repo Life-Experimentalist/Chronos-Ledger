@@ -7,11 +7,11 @@ import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react'
 import { ingestionApi, scheduleApi } from '@/lib/api'
-import type { AcademicCycle } from '@/types'
+import type { PlanningCycle } from '@/types'
 import { useEffect } from 'react'
 
 export function CsvImportZone() {
-  const [cycles, setCycles] = useState<AcademicCycle[]>([])
+  const [cycles, setCycles] = useState<PlanningCycle[]>([])
   const [selectedCycle, setSelectedCycle] = useState<number | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [status, setStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
@@ -19,7 +19,7 @@ export function CsvImportZone() {
 
   useEffect(() => {
     scheduleApi.listCycles().then((r) => {
-      const active = r.data.filter((c: AcademicCycle) => c.operational_status)
+      const active = r.data.filter((c: PlanningCycle) => c.operational_status)
       setCycles(active)
       if (active.length > 0) setSelectedCycle(active[0].id)
     }).catch(() => {})
@@ -56,13 +56,13 @@ export function CsvImportZone() {
       <div>
         <h2 className="text-lg font-semibold text-chronos-text">CSV Data Import</h2>
         <p className="text-sm text-chronos-muted mt-1">
-          Upload a student-centric schedule matrix CSV to populate courses, enrollments, and timetable slots.
+          Upload a member-centric schedule matrix CSV to populate activities, enrollments, and timetable slots.
         </p>
       </div>
 
       {/* Cycle selector */}
       <div className="glass-card p-5 space-y-3">
-        <p className="section-title">Target Academic Cycle</p>
+        <p className="section-title">Target Planning Cycle</p>
         {cycles.length === 0 ? (
           <p className="text-sm text-chronos-muted">No active cycles found. Create one first.</p>
         ) : (
@@ -104,7 +104,7 @@ export function CsvImportZone() {
           ) : (
             <div>
               <p className="text-sm text-chronos-text">Drop CSV file here or click to browse</p>
-              <p className="text-xs text-chronos-muted mt-1">Required columns: student_id, student_name, student_email, subject_code, subject_title, department, day_of_week_index, time_window_start, time_window_end, teacher_id, room</p>
+              <p className="text-xs text-chronos-muted mt-1">Required columns: member_id, member_name, member_email, activity_code, activity_title, unit, day_of_week_index, time_window_start, time_window_end, lead_id, room</p>
             </div>
           )}
         </div>

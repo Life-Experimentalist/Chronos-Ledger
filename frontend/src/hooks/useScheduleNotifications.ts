@@ -52,8 +52,8 @@ export function useScheduleNotifications(entries: LedgerEntry[]) {
         userId: user.user_id,
         entries: entries.map((e) => ({
           id: e.id,
-          course_code: e.course_code,
-          course_title: e.course_title,
+          activity_code: e.activity_code,
+          activity_title: e.activity_title,
           target_room_identifier: e.target_room_identifier,
           time_window_start: e.time_window_start,
           operational_state: e.operational_state,
@@ -88,11 +88,11 @@ export function useScheduleNotifications(entries: LedgerEntry[]) {
         if (alreadyNotified) return
 
         const title = entry.operational_state === 'PROXY_SUBSTITUTE'
-          ? `Proxy Alert: ${entry.course_code}`
-          : `Class starting soon: ${entry.course_code}`
+          ? `Proxy Alert: ${entry.activity_code}`
+          : `Class starting soon: ${entry.activity_code}`
 
         const body = [
-          entry.course_title,
+          entry.activity_title,
           `Room ${entry.target_room_identifier}`,
           `Starts at ${entry.time_window_start}`,
           entry.delivery_format === 'ONLINE_STREAM' ? '(Online)' : '',

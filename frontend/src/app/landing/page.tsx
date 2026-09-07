@@ -64,7 +64,7 @@ export default function LandingPage() {
           variants={fadeUp} initial="hidden" animate="show" custom={1}
           className="text-4xl md:text-6xl font-extrabold leading-tight tracking-tight mb-6"
         >
-          Campus schedule &amp;{' '}
+          Organization schedule &amp;{' '}
           <span className="bg-gradient-to-r from-chronos-teal to-chronos-emerald bg-clip-text text-transparent">
             attendance
           </span>
@@ -75,9 +75,9 @@ export default function LandingPage() {
           variants={fadeUp} initial="hidden" animate="show" custom={2}
           className="text-lg text-chronos-muted max-w-2xl mx-auto mb-10"
         >
-          Chronos Ledger is a production-ready PWA for universities and colleges. Live timetables,
-          geofenced attendance, faculty location resolution, and smart offline notifications — all
-          self-hosted on your campus intranet.
+          Chronos Ledger is a production-ready PWA for universities and organizations. Live timetables,
+          geofenced attendance, staff location resolution, and smart offline notifications — all
+          self-hosted on your organization intranet.
         </motion.p>
 
         <motion.div
@@ -116,7 +116,7 @@ export default function LandingPage() {
               { text: ' ✔ chronos-frontend   Built → static files ready', color: 'text-chronos-teal' },
               { text: ' ✔ chronos-proxy      Listening on :80', color: 'text-chronos-teal' },
               { text: '', color: '' },
-              { text: '  Admin login: admin@college.internal / ChronosAdmin2026!', color: 'text-chronos-warning' },
+              { text: '  Admin login: admin@org.internal / ChronosAdmin2026!', color: 'text-chronos-warning' },
               { text: '  Swagger UI:  http://localhost/docs', color: 'text-chronos-muted' },
             ].map((line, i) => (
               <p key={i} className={`${line.color} leading-relaxed`}>{line.text || ' '}</p>
@@ -145,7 +145,7 @@ export default function LandingPage() {
       {/* ── Features ────────────────────────────────────────────────────────── */}
       <section id="features" className="py-24 px-6 md:px-12 max-w-6xl mx-auto">
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">Everything a campus needs</h2>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">Everything your organization needs</h2>
           <p className="text-chronos-muted max-w-xl mx-auto">
             Designed for educational institutions with unreliable Wi-Fi, shared devices, and complex
             scheduling requirements.
@@ -219,10 +219,10 @@ export default function LandingPage() {
             <span className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full bg-chronos-warning/10 text-chronos-warning border border-chronos-warning/20 mb-4">
               <WifiOff className="w-3 h-3" /> Offline-First
             </span>
-            <h2 className="text-3xl font-bold mb-4">Campus Wi-Fi drops. Your data doesn&apos;t.</h2>
+            <h2 className="text-3xl font-bold mb-4">Organization Wi-Fi drops. Your data doesn&apos;t.</h2>
             <p className="text-chronos-muted mb-6 leading-relaxed">
-              Chronos Ledger uses Service Workers, IndexedDB, and Background Sync so students can
-              mark attendance and faculty can view their schedule even without connectivity. Everything
+              Chronos Ledger uses Service Workers, IndexedDB, and Background Sync so members can
+              mark attendance and staff can view their schedule even without connectivity. Everything
               syncs automatically when the network returns.
             </p>
             <ul className="space-y-3">
@@ -405,7 +405,7 @@ export default function LandingPage() {
           <p className="text-xs text-chronos-muted text-center">
             Licensed under the{' '}
             <span className="text-chronos-teal">Apache License 2.0</span>.
-            Built for campus intranet deployments.
+            Built for organization intranet deployments.
           </p>
           <div className="flex items-center gap-3">
             <a
@@ -433,8 +433,8 @@ export default function LandingPage() {
 
 const FEATURES = [
   {
-    title: 'Live Faculty Locator',
-    desc: '4-tier resolution: Redis manual override → daily exception → master timetable → base station fallback. Always know where faculty are.',
+    title: 'Live Staff Locator',
+    desc: '4-tier resolution: Redis manual override → daily exception → master timetable → base station fallback. Always know where staff are.',
     icon: Navigation,
     iconBg: 'bg-chronos-teal/10',
     iconColor: 'text-chronos-teal',
@@ -448,21 +448,21 @@ const FEATURES = [
   },
   {
     title: 'Reverse RSVP Absences',
-    desc: 'Presence is the default. Faculty file absence requests; their manager approves. Approved absences auto-cascade ON_LEAVE to the daily ledger.',
+    desc: 'Presence is the default. Staff file absence requests; their manager approves. Approved absences auto-cascade ON_LEAVE to the daily ledger.',
     icon: UserCheck,
     iconBg: 'bg-chronos-accent/10',
     iconColor: 'text-chronos-accent',
   },
   {
     title: 'Real-Time WebSocket',
-    desc: 'JWT-authenticated persistent connections. Instant guest handshake requests, absence approvals, and campus broadcasts — no polling.',
+    desc: 'JWT-authenticated persistent connections. Instant guest handshake requests, absence approvals, and organization broadcasts — no polling.',
     icon: Zap,
     iconBg: 'bg-chronos-warning/10',
     iconColor: 'text-chronos-warning',
   },
   {
     title: 'CSV Schedule Import',
-    desc: 'Bulk-import the semester timetable from a single student-centric CSV. Upserts students, course offerings, registrations, and master slots atomically.',
+    desc: 'Bulk-import the term timetable from a single member-centric CSV. Upserts members, activity offerings, registrations, and master slots atomically.',
     icon: Upload,
     iconBg: 'bg-purple-500/10',
     iconColor: 'text-purple-400',
@@ -476,7 +476,7 @@ const FEATURES = [
   },
   {
     title: 'Guest Kiosk',
-    desc: 'No login required. Visitors fill a check-in form; the target faculty receives an instant WebSocket notification with Approve/Decline actions.',
+    desc: 'No login required. Visitors fill a check-in form; the target staff receives an instant WebSocket notification with Approve/Decline actions.',
     icon: Users,
     iconBg: 'bg-pink-500/10',
     iconColor: 'text-pink-400',
@@ -490,7 +490,7 @@ const FEATURES = [
   },
   {
     title: 'Role-Based Access',
-    desc: 'SUPER_ADMIN, DEPT_ADMIN, FACULTY, STUDENT. JWT RBAC enforced at every endpoint. Each role sees only their own data.',
+    desc: 'SUPER_ADMIN, UNIT_ADMIN, STAFF, MEMBER. JWT RBAC enforced at every endpoint. Each role sees only their own data.',
     icon: Shield,
     iconBg: 'bg-chronos-danger/10',
     iconColor: 'text-chronos-danger',
@@ -499,7 +499,7 @@ const FEATURES = [
 
 const ROLES = [
   {
-    name: 'Admin / Dept Admin',
+    name: 'Admin / Unit Admin',
     path: '/admin/dashboard',
     icon: BarChart3,
     iconBg: 'bg-chronos-teal/10',
@@ -508,12 +508,12 @@ const ROLES = [
       'CSV timetable import and cycle management',
       'Proxy assignment and absence approval',
       'Master ledger view with operational state overrides',
-      'User provisioning and department management',
+      'User provisioning and unit management',
     ],
   },
   {
-    name: 'Faculty',
-    path: '/faculty/dashboard',
+    name: 'Staff',
+    path: '/staff/dashboard',
     icon: BookOpen,
     iconBg: 'bg-chronos-emerald/10',
     iconColor: 'text-chronos-emerald',
@@ -525,15 +525,15 @@ const ROLES = [
     ],
   },
   {
-    name: 'Student',
-    path: '/student/dashboard',
+    name: 'Member',
+    path: '/member/dashboard',
     icon: UserCheck,
     iconBg: 'bg-chronos-accent/10',
     iconColor: 'text-chronos-accent',
     capabilities: [
       'Live timeline of today\'s classes with status indicators',
       '3D geofenced attendance marking with GPS/BSSID',
-      'Faculty locator with real-time availability',
+      'Staff locator with real-time availability',
       'Offline attendance queue with background sync',
     ],
   },
@@ -544,9 +544,9 @@ const ROLES = [
     iconBg: 'bg-chronos-warning/10',
     iconColor: 'text-chronos-warning',
     capabilities: [
-      'Search faculty directory by name',
+      'Search staff directory by name',
       'Submit check-in request with purpose',
-      'Real-time notification to target faculty',
+      'Real-time notification to target staff',
       'Public availability status display',
     ],
   },
@@ -570,7 +570,7 @@ const INSTALL_STEPS = [
   },
   {
     title: 'Open the app and change the default password',
-    code: '# App:     http://<your-server-ip>\n# API docs: http://<your-server-ip>/docs\n# Login:    admin@college.internal / ChronosAdmin2026!',
+    code: '# App:     http://<your-server-ip>\n# API docs: http://<your-server-ip>/docs\n# Login:    admin@org.internal / ChronosAdmin2026!',
     note: 'The setup script prints the exact URL when it finishes.',
   },
 ]
@@ -582,7 +582,7 @@ const API_GROUPS = [
   },
   {
     group: 'Schedule',
-    endpoints: ['GET /schedule/ledger/today', 'GET /schedule/faculty/{id}/location', 'POST /schedule/cycles'],
+    endpoints: ['GET /schedule/ledger/today', 'GET /schedule/staff/{id}/location', 'POST /schedule/cycles'],
   },
   {
     group: 'Attendance',

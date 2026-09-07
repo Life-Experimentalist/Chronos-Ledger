@@ -8,9 +8,9 @@ import { motion } from 'framer-motion'
 import { Wifi, Calendar, Search, MapPin } from 'lucide-react'
 import { Sidebar } from '@/components/shared/Sidebar'
 import { NotificationPanel } from '@/components/shared/NotificationPanel'
-import { LiveTimeline } from '@/components/student/LiveTimeline'
-import { ProximityCard } from '@/components/student/ProximityCard'
-import { FacultyLocator } from '@/components/student/FacultyLocator'
+import { LiveTimeline } from '@/components/member/LiveTimeline'
+import { ProximityCard } from '@/components/member/ProximityCard'
+import { StaffLocator } from '@/components/member/StaffLocator'
 import { useAuth } from '@/hooks/useAuth'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { useScheduleNotifications } from '@/hooks/useScheduleNotifications'
@@ -20,16 +20,16 @@ import type { LedgerEntry } from '@/types'
 const TABS = ['schedule', 'attendance', 'locator'] as const
 type Tab = (typeof TABS)[number]
 
-export default function StudentDashboard() {
+export default function MemberDashboard() {
   return (
     <Suspense>
-      <StudentDashboardContent />
+      <MemberDashboardContent />
     </Suspense>
   )
 }
 
-function StudentDashboardContent() {
-  const { user } = useAuth('STUDENT')
+function MemberDashboardContent() {
+  const { user } = useAuth('MEMBER')
   const { isConnected } = useWebSocket()
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<Tab>('schedule')
@@ -67,7 +67,7 @@ function StudentDashboardContent() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="h-16 flex items-center justify-between px-6 border-b border-chronos-border/40 bg-chronos-surface/50 backdrop-blur-sm shrink-0">
           <div>
-            <h1 className="text-base font-semibold text-chronos-text">Student Portal</h1>
+            <h1 className="text-base font-semibold text-chronos-text">Member Portal</h1>
             <p className="text-xs text-chronos-muted">{user.full_name}</p>
           </div>
           <div className="flex items-center gap-3">
@@ -84,7 +84,7 @@ function StudentDashboardContent() {
           {[
             { id: 'schedule', label: 'My Schedule', icon: Calendar },
             { id: 'attendance', label: 'Mark Attendance', icon: MapPin },
-            { id: 'locator', label: 'Find Faculty', icon: Search },
+            { id: 'locator', label: 'Find Staff', icon: Search },
           ].map((tab) => {
             const Icon = tab.icon
             return (
@@ -119,7 +119,7 @@ function StudentDashboardContent() {
             )}
             {activeTab === 'locator' && (
               <div className="max-w-2xl">
-                <FacultyLocator />
+                <StaffLocator />
               </div>
             )}
           </motion.div>

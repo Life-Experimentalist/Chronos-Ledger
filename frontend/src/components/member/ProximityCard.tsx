@@ -49,7 +49,7 @@ export function ProximityCard({ currentEntry, userId }: ProximityCardProps) {
 
     const payload = {
       ledger_instance_id: currentEntry.id,
-      student_id: userId,
+      member_id: userId,
       marking_status: 'PRESENT',
       user_lat: position?.lat,
       user_lon: position?.lon,
@@ -97,8 +97,8 @@ export function ProximityCard({ currentEntry, userId }: ProximityCardProps) {
       {/* Active class card */}
       <div className={`glass-card p-6 border-l-4 ${currentEntry.operational_state === 'ON_LEAVE' ? 'border-l-chronos-danger' : 'border-l-chronos-teal'}`}>
         <p className="section-title mb-3">Active Class</p>
-        <h3 className="text-lg font-bold text-chronos-text">{currentEntry.course_code}</h3>
-        <p className="text-sm text-chronos-text-dim">{currentEntry.course_title}</p>
+        <h3 className="text-lg font-bold text-chronos-text">{currentEntry.activity_code}</h3>
+        <p className="text-sm text-chronos-text-dim">{currentEntry.activity_title}</p>
         <p className="text-xs text-chronos-muted mt-1">
           Room {currentEntry.target_room_identifier} · {currentEntry.time_window_start} – {currentEntry.time_window_end}
         </p>
@@ -193,7 +193,7 @@ export function ProximityCard({ currentEntry, userId }: ProximityCardProps) {
                 <MapPin className="w-6 h-6" />
               )}
               {currentEntry.operational_state === 'ON_LEAVE'
-                ? 'Class Cancelled — Faculty Absent'
+                ? 'Class Cancelled — Staff Absent'
                 : marking
                 ? 'Verifying Location...'
                 : canMark
