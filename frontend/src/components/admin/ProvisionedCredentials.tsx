@@ -15,6 +15,7 @@ import type { ProvisionedCredential } from '@/types'
  */
 export function ProvisionedCredentials({ credentials }: { credentials: ProvisionedCredential[] }) {
   const [copied, setCopied] = useState(false)
+  const [copyFailed, setCopyFailed] = useState(false)
 
   if (credentials.length === 0) return null
 
@@ -37,9 +38,14 @@ export function ProvisionedCredentials({ credentials }: { credentials: Provision
   }
 
   const copy = async () => {
-    await navigator.clipboard.writeText(asCsv())
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      // Absent on a plain-HTTP origin, which a LAN deployment often is.
+      await navigator.clipboard.writeText(asCsv())
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setCopyFailed(true)
+    }
   }
 
   return (
@@ -65,6 +71,11 @@ export function ProvisionedCredentials({ credentials }: { credentials: Provision
           {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
           {copied ? 'Copied' : 'Copy all'}
         </button>
+        {copyFailed && (
+          <span className="text-xs text-chronos-text-dim self-center">
+            Clipboard unavailable, use Download.
+          </span>
+        )}
       </div>
 
       <div className="max-h-52 overflow-y-auto rounded-lg border border-chronos-border">
