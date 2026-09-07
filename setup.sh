@@ -8,6 +8,11 @@
 # Usage (from repo root):
 #   chmod +x setup.sh && ./setup.sh
 #
+# Flags (all optional; without them the script asks interactively):
+#   --build   build images from source (skips the mode prompt)
+#   --ghcr    pull pre-built images from GHCR (skips the mode prompt)
+#   --demo    load a small demo data set after boot (see docs/demo.md)
+#
 # Prerequisites: Docker >= 24, Docker Compose >= 2.20, git, openssl
 
 set -euo pipefail
@@ -127,6 +132,17 @@ if grep -q "your_vapid" .env 2>/dev/null; then
 fi
 
 # ── Choose deployment mode ────────────────────────────────────────────────────
+MODE=""
+SEED_DEMO=0
+for arg in "$@"; do
+  case "${arg}" in
+    --build) MODE=1 ;;
+    --ghcr)  MODE=2 ;;
+    --demo)  SEED_DEMO=1 ;;
+  esac
+done
+
+if [[ -z "${MODE}" ]]; then
 header "Deployment mode"
 echo ""
 echo "  [1] Build locally  — builds images from source (slower, always fresh)"
@@ -134,6 +150,7 @@ echo "  [2] Pull from GHCR — pulls pre-built images (faster, requires login fo
 echo ""
 read -rp "  Choose [1]: " MODE
 MODE="${MODE:-1}"
+fi
 
 COMPOSE_FILE="docker-compose.yml"
 if [[ "${MODE}" == "2" ]]; then
@@ -162,6 +179,12 @@ until docker inspect --format='{{.State.Health.Status}}' chronos_core_engine 2>/
   echo -n "."
 done
 echo ""
+
+# Optional demo data (see docs/demo.md)
+if [[ "${SEED_DEMO}" == "1" ]]; then
+  log "Loading demo data..."
+  $DOCKER_COMPOSE_CMD -f "${COMPOSE_FILE}" run --rm chronos-app uv run --no-sync python -m app.demo_seed
+fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 header "All done!"

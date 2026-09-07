@@ -54,6 +54,8 @@ chmod +x setup.sh && ./setup.sh
 - **API docs** → `http://<your-server-ip>/docs`
 - **Default login** → `admin@org.internal` / `ChronosAdmin2026!` *(change immediately)*
 
+Want to demo it to someone? `./setup.sh --build --demo` boots it with sample data; [docs/demo.md](docs/demo.md) has the five-minute walkthrough.
+
 ### Or pull from GHCR (no build required)
 
 ```bash
