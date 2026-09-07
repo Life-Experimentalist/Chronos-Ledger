@@ -39,7 +39,7 @@ In scope:
 - Dependency CVEs with a working exploit against this project's usage
 
 Out of scope:
-- Rate limiting (this is an intranet app; DoS from inside the campus network is a separate concern)
+- Rate limiting (this is an intranet app; DoS from inside the organization network is a separate concern)
 - TLS configuration (responsibility of the deploying institution)
 - Social engineering
 

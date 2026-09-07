@@ -59,7 +59,7 @@ services:
       - APP_CORS_ORIGINS=${APP_CORS_ORIGINS:-http://localhost}
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
-      - VAPID_CONTACT_EMAIL=${VAPID_CONTACT_EMAIL:-admin@college.internal}
+      - VAPID_CONTACT_EMAIL=${VAPID_CONTACT_EMAIL:-admin@org.internal}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s

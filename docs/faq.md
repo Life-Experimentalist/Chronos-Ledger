@@ -17,7 +17,7 @@ Answers to the most common questions and error scenarios for Chronos Ledger.
 - [WebSocket / Live Updates](#websocket--live-updates)
 - [Docker & Deployment](#docker--deployment)
 - [CI/CD & GHCR](#cicd--ghcr)
-- [New Academic Year Rollover](#new-academic-year-rollover)
+- [New Cycle Rollover](#new-cycle-rollover)
 - [Data & Privacy](#data--privacy)
 
 ---
@@ -94,7 +94,7 @@ Or manually generate secrets and copy them into `.env`:
 
 ---
 
-### The app is accessible on localhost but not from other campus devices
+### The app is accessible on localhost but not from other organization devices
 
 The `NEXT_PUBLIC_API_URL` was built with `http://localhost` instead of the server's LAN IP.
 
@@ -116,7 +116,7 @@ Also ensure `APP_CORS_ORIGINS` in `.env` includes `http://192.168.1.10`.
 
 | Field | Value |
 |---|---|
-| Email | `admin@college.internal` |
+| Email | `admin@org.internal` |
 | Password | `ChronosAdmin2026!` |
 
 **Change this immediately** — the admin is prompted to do so on first login via the Onboarding Wizard.
@@ -141,7 +141,7 @@ Super Admins can reset any user's password via the Admin dashboard. If the Super
 
 ```bash
 docker compose exec db psql -U chronos_admin -d chronos_ledger -c \
-  "UPDATE users SET hashed_password = crypt('NewTempPassword!', gen_salt('bf')) WHERE email = 'admin@college.internal';"
+  "UPDATE users SET hashed_password = crypt('NewTempPassword!', gen_salt('bf')) WHERE email = 'admin@org.internal';"
 ```
 
 Requires the `pgcrypto` extension, which is enabled by the seed migration.
@@ -164,7 +164,7 @@ Fix: complete the password step in the Onboarding Wizard (Admin Dashboard → Se
 
 ```bash
 docker compose exec db psql -U chronos_admin -d chronos_ledger -c \
-  "UPDATE users SET initial_login_state = false WHERE email = 'admin@college.internal';"
+  "UPDATE users SET initial_login_state = false WHERE email = 'admin@org.internal';"
 ```
 
 ---
@@ -173,7 +173,7 @@ docker compose exec db psql -U chronos_admin -d chronos_ledger -c \
 
 ### When does the Onboarding Wizard appear?
 
-Automatically on first login when `initial_login_state` is `true` for a `SUPER_ADMIN` or `DEPT_ADMIN` account. It can also be reopened at any time from Admin Dashboard → **Setup Guide** button (top-right of the tab bar).
+Automatically on first login when `initial_login_state` is `true` for a `SUPER_ADMIN` or `UNIT_ADMIN` account. It can also be reopened at any time from Admin Dashboard → **Setup Guide** button (top-right of the tab bar).
 
 ---
 
@@ -182,7 +182,7 @@ Automatically on first login when `initial_login_state` is `true` for a `SUPER_A
 | Step | Required | Can skip? |
 |---|---|---|
 | 1. Change password | Yes | No |
-| 2. Create academic cycle | Yes | No |
+| 2. Create planning cycle | Yes | No |
 | 3. Import CSV | Yes | No |
 | 4. Generate ledger | Recommended | Yes |
 | 5. Done | — | — |
@@ -195,9 +195,9 @@ The ledger is not generated automatically after import. Go to **Step 4 — Gener
 
 ---
 
-### I need to re-run the wizard for a new academic year
+### I need to re-run the wizard for a new planning cycle
 
-Use the **Setup Guide** link from the Admin Dashboard. On Step 2, create a new academic cycle (leave the old one — historical data is preserved under the previous cycle). Then re-upload the new semester's CSV.
+Use the **Setup Guide** link from the Admin Dashboard. On Step 2, create a new planning cycle (leave the old one — historical data is preserved under the previous cycle). Then re-upload the new term's CSV.
 
 The new cycle becomes active immediately for ledger generation.
 
@@ -207,20 +207,20 @@ The new cycle becomes active immediately for ledger generation.
 
 ### What columns does the CSV need?
 
-The ingestion engine expects a student-centric format with these exact column names:
+The ingestion engine expects a member-centric format with these exact column names:
 
 | Column | Example |
 |---|---|
-| `student_id` | `STU20210001` |
-| `student_name` | `Alice Sharma` |
-| `student_email` | `alice@college.internal` |
-| `subject_code` | `CS301` |
-| `subject_title` | `Operating Systems` |
-| `department` | `CSE` |
+| `member_id` | `STU20210001` |
+| `member_name` | `Alice Sharma` |
+| `member_email` | `alice@org.internal` |
+| `activity_code` | `CS301` |
+| `activity_title` | `Operating Systems` |
+| `unit` | `CSE` |
 | `day_of_week_index` | `1` (1 = Monday ... 7 = Sunday) |
 | `time_window_start` | `09:00` |
 | `time_window_end` | `10:00` |
-| `teacher_id` | `FAC001` |
+| `lead_id` | `FAC001` |
 | `room` | `LH-3` |
 
 Column names are case-sensitive. Extra columns are ignored. Times accept `HH:MM` or `HH:MM:SS` (24-hour).
@@ -229,7 +229,7 @@ Column names are case-sensitive. Extra columns are ignored. Times accept `HH:MM`
 
 ### Import returns "duplicate key" errors
 
-The import is idempotent — re-running it with the same data is safe. "Duplicate key" errors suggest the CSV has internal duplicates (the same student+course+slot appears twice). Remove duplicates and re-upload.
+The import is idempotent — re-running it with the same data is safe. "Duplicate key" errors suggest the CSV has internal duplicates (the same member+activity+slot appears twice). Remove duplicates and re-upload.
 
 ---
 
@@ -239,7 +239,7 @@ The import is all-or-nothing: any bad row rolls back the whole upload, and the r
 
 - `Missing columns: {...}`: the CSV header lacks one of the required columns listed above
 - `Cannot parse time value ...`: a time is not `HH:MM` or `HH:MM:SS` 24-hour format
-- a database constraint error: usually `day_of_week_index` outside 1 to 7, or the same student+course+slot appearing twice
+- a database constraint error: usually `day_of_week_index` outside 1 to 7, or the same member+activity+slot appearing twice
 
 Fix the offending rows and re-upload; re-running a corrected file is safe.
 
@@ -247,7 +247,7 @@ Fix the offending rows and re-upload; re-running a corrected file is safe.
 
 ## Attendance & Geofencing
 
-### Students cannot mark attendance — "Location unavailable"
+### Members cannot mark attendance — "Location unavailable"
 
 The browser geolocation API requires HTTPS or localhost. If the app is served over plain HTTP, the location prompt will be blocked by the browser.
 
@@ -270,7 +270,7 @@ docker compose exec db psql -U chronos_admin -d chronos_ledger -c \
 
 ---
 
-### The altitude check is blocking students on the correct floor
+### The altitude check is blocking members on the correct floor
 
 The altitude delta threshold is `|Δalt| < 4 metres`. GPS altitude accuracy is typically ±10–20m on mobile devices, making this check unreliable outdoors. The check only fires when the device reports altitude — if the device does not expose it, the check is skipped.
 
@@ -298,7 +298,7 @@ A mark the server rejects outright (for example an expired login token) is dropp
 
 ## Absences & Proxy
 
-### Faculty submitted an absence but the line manager never got notified
+### Staff submitted an absence but the line manager never got notified
 
 WebSocket notifications are only delivered to connected clients. The line manager must have the app open. If they are offline, the absence request will still appear in their pending queue when they next log in.
 
@@ -306,13 +306,13 @@ For email notifications, the current release does not include an email transport
 
 ---
 
-### Proxy assignment is not reflected on the student timeline
+### Proxy assignment is not reflected on the member timeline
 
-The student timeline reads from the live ledger. After approving a proxy, trigger a ledger refresh: Admin Dashboard → Import → Generate Daily Ledger (or wait for the midnight cron).
+The member timeline reads from the live ledger. After approving a proxy, trigger a ledger refresh: Admin Dashboard → Import → Generate Daily Ledger (or wait for the midnight cron).
 
 ---
 
-### An absence was approved but the faculty member's ledger still shows SCHEDULED
+### An absence was approved but the staff member's ledger still shows SCHEDULED
 
 The ledger is a materialized daily snapshot. Approved absences cascade `ON_LEAVE` only when the ledger is regenerated. Use the manual Generate button in the Admin Dashboard.
 
@@ -320,17 +320,17 @@ The ledger is a materialized daily snapshot. Approved absences cascade `ON_LEAVE
 
 ## Guest Kiosk
 
-### The guest form submits but the faculty member never gets the notification
+### The guest form submits but the staff member never gets the notification
 
-The faculty member must be online with the app open. The notification arrives via WebSocket to `/faculty/dashboard`. If they are offline, the request stays pending in the database and will appear when they next log in.
+The staff member must be online with the app open. The notification arrives via WebSocket to `/staff/dashboard`. If they are offline, the request stays pending in the database and will appear when they next log in.
 
-Check that the faculty member's email in the guest form exactly matches their account email — the lookup is case-insensitive but the email must exist in the system.
+Check that the staff member's email in the guest form exactly matches their account email — the lookup is case-insensitive but the email must exist in the system.
 
 ---
 
 ### Guest check-in kiosk is accessible without a login — is this intentional?
 
-Yes. The guest kiosk (`/guest/kiosk`) is explicitly public. It does not expose any internal data — it only allows submitting a visit request and viewing the faculty notification status. The underlying API endpoints (`/api/v1/guest/*`) are similarly unauthenticated by design.
+Yes. The guest kiosk (`/guest/kiosk`) is explicitly public. It does not expose any internal data — it only allows submitting a visit request and viewing the staff notification status. The underlying API endpoints (`/api/v1/guest/*`) are similarly unauthenticated by design.
 
 ---
 
@@ -483,13 +483,13 @@ Check `release.yml` — it declares `permissions: { contents: write, pull-reques
 
 ---
 
-## New Academic Year Rollover
+## New Cycle Rollover
 
-### How do I start a new academic year / semester?
+### How do I start a new planning cycle or term?
 
 1. Open the Onboarding Wizard: Admin Dashboard → **Setup Guide**
-2. Skip to **Step 2 — Create Cycle**. Fill in the new semester's start and end dates.
-3. Move to **Step 3 — Import CSV**. Upload the new semester's timetable CSV.
+2. Skip to **Step 2 — Create Cycle**. Fill in the new term's start and end dates.
+3. Move to **Step 3 — Import CSV**. Upload the new term's timetable CSV.
 4. Click **Generate Ledger** to populate the first day's entries.
 
 The old cycle is preserved in full — historical attendance records and ledger snapshots remain untouched. The new cycle is set as active.
@@ -502,9 +502,9 @@ No. The system maintains one active cycle at a time. Switching cycles makes the 
 
 ---
 
-### How do I add a new department mid-year?
+### How do I add a new unit mid-year?
 
-1. Prepare a CSV with only the new department's data.
+1. Prepare a CSV with only the new unit's data.
 2. Import it via Admin Dashboard → Import Data → CSV Import Zone.
 3. The import is idempotent — existing records are not duplicated; new ones are created.
 4. Regenerate the ledger to include the new slots in today's schedule.
@@ -515,10 +515,10 @@ No. The system maintains one active cycle at a time. Switching cycles makes the 
 
 ### What data does Chronos Ledger store?
 
-All data stays on your campus server. A default install sends nothing to any external service:
+All data stays on your organization server. A default install sends nothing to any external service:
 
 - **Telemetry (opt-in, off by default):** Anonymous view counts sent to a [CFlair-Counter](https://github.com/Life-Experimentalist/CFlair-Counter) instance you point it at. No PII. Requires both `NEXT_PUBLIC_TELEMETRY_ENABLED=true` and a non-empty `NEXT_PUBLIC_TELEMETRY_ENDPOINT` at build time.
-- **Web Push:** Push payloads are routed through the browser vendor's push service (Google FCM for Chrome, Mozilla for Firefox). Payload content is a short status string — no student names or sensitive data.
+- **Web Push:** Push payloads are routed through the browser vendor's push service (Google FCM for Chrome, Mozilla for Firefox). Payload content is a short status string — no member names or sensitive data.
 
 ---
 

@@ -7,11 +7,11 @@ by a plain-English walk-through of every significant step.
 
 ---
 
-## 1. Student Attendance Marking (Geofenced)
+## 1. Member Attendance Marking (Geofenced)
 
 ```mermaid
 sequenceDiagram
-    actor Stu as Student (PWA)
+    actor Stu as Member (PWA)
     participant SW as Service Worker
     participant IDB as IndexedDB
     participant API as FastAPI /attendance/mark
@@ -21,7 +21,7 @@ sequenceDiagram
     Stu->>Stu: Opens ProximityCard<br/>for today's class
 
     alt Online
-        Stu->>API: POST /attendance/mark<br/>{ledger_id, student_id, lat, lon, alt}
+        Stu->>API: POST /attendance/mark<br/>{ledger_id, member_id, lat, lon, alt}
         API->>DB: SELECT DailyLedger WHERE id = ledger_id
         DB-->>API: lat_target, lon_target, alt_target, radius_m
         API->>GF: check_geofence(user_coords, target_coords, radius)
@@ -44,18 +44,18 @@ sequenceDiagram
 
 **Step-by-step:**
 
-1. The student opens the **ProximityCard** component which starts a GPS watch via `useGeolocation.ts`. The hook calls `navigator.geolocation.watchPosition` (stable `useRef` for the watch ID — fixes a prior bug where a plain object was used).
-2. **Online path**: Coordinates + ledger ID are posted to `/attendance/mark`. The backend queries the `DailyLedger` row for the geofence target coordinates and calls `geo_fence.check_geofence()`. The function runs a Haversine 2D distance check then validates `|user_alt - target_alt| < 4m` to prevent students on adjacent floors from registering.
+1. The member opens the **ProximityCard** component which starts a GPS watch via `useGeolocation.ts`. The hook calls `navigator.geolocation.watchPosition` (stable `useRef` for the watch ID — fixes a prior bug where a plain object was used).
+2. **Online path**: Coordinates + ledger ID are posted to `/attendance/mark`. The backend queries the `DailyLedger` row for the geofence target coordinates and calls `geo_fence.check_geofence()`. The function runs a Haversine 2D distance check then validates `|user_alt - target_alt| < 4m` to prevent members on adjacent floors from registering.
 3. If the check passes, a `VerificationLedger` row is upserted (idempotent — re-marking is allowed, last write wins).
 4. **Offline path**: The mark is written to the `attendance-queue` IndexedDB store. The service worker's `background-sync` tag `sync-attendance` is registered. On reconnect, the SW replays the queue to `/attendance/mark` and clears the store entry on 2xx response.
 
 ---
 
-## 2. Faculty Absence Request (Reverse RSVP)
+## 2. Staff Absence Request (Reverse RSVP)
 
 ```mermaid
 sequenceDiagram
-    actor Fac as Faculty
+    actor Fac as Staff
     actor Mgr as Line Manager
     participant API as FastAPI
     participant RSVP as reverse_rsvp.py
@@ -75,11 +75,11 @@ sequenceDiagram
     alt VERIFIED_APPROVED
         RSVP->>DB: UPDATE ReverseRsvpLog<br/>approval_state = VERIFIED_APPROVED
         RSVP->>DB: UPDATE DailyLedger<br/>operational_state = ON_LEAVE<br/>(for target_absence_date slots)
-        RSVP->>WS: broadcast(faculty_id, ABSENCE_DECISION)
+        RSVP->>WS: broadcast(staff_id, ABSENCE_DECISION)
         WS-->>Fac: {event: ABSENCE_DECISION,<br/>payload: {log_id, decision: VERIFIED_APPROVED}}
     else VERIFIED_DENIED
         RSVP->>DB: UPDATE ReverseRsvpLog<br/>approval_state = VERIFIED_DENIED
-        RSVP->>WS: broadcast(faculty_id, ABSENCE_DECISION)
+        RSVP->>WS: broadcast(staff_id, ABSENCE_DECISION)
         WS-->>Fac: {event: ABSENCE_DECISION,<br/>payload: {log_id, decision: VERIFIED_DENIED}}
     end
 
@@ -88,11 +88,11 @@ sequenceDiagram
 
 **Step-by-step:**
 
-1. Faculty submits an absence request via the **Absence Requests** tab. The `ReverseRsvpLog` row is created with `approval_state = PENDING_VERIFICATION`.
-2. The API immediately resolves the faculty's `reporting_line_manager` user ID and broadcasts a `ABSENCE_APPROVAL_REQUIRED` WebSocket event. If the manager is connected, they see a notification badge in real time.
+1. Staff submits an absence request via the **Absence Requests** tab. The `ReverseRsvpLog` row is created with `approval_state = PENDING_VERIFICATION`.
+2. The API immediately resolves the staff's `reporting_line_manager` user ID and broadcasts a `ABSENCE_APPROVAL_REQUIRED` WebSocket event. If the manager is connected, they see a notification badge in real time.
 3. The manager opens **Pending Approvals** and approves or denies.
-4. On approval, `services/reverse_rsvp.py` updates every `DailyLedger` entry on the target date where the faculty is `active_instructor_id` to `operational_state = ON_LEAVE`. This cascades the absence into the live schedule.
-5. A `ABSENCE_DECISION` WebSocket event is sent to the faculty member so they see the outcome immediately without polling.
+4. On approval, `services/reverse_rsvp.py` updates every `DailyLedger` entry on the target date where the staff is `active_lead_id` to `operational_state = ON_LEAVE`. This cascades the absence into the live schedule.
+5. A `ABSENCE_DECISION` WebSocket event is sent to the staff member so they see the outcome immediately without polling.
 
 ---
 
@@ -104,14 +104,14 @@ sequenceDiagram
     participant KI as /guest/kiosk (PWA)
     participant API as FastAPI /guest/register-checkin
     participant WS as WebSocket Hub
-    actor Fac as Faculty (dashboard)
+    actor Fac as Staff (dashboard)
     participant DB as PostgreSQL
 
-    G->>KI: Fills check-in form<br/>(name, phone, org, faculty, intent)
+    G->>KI: Fills check-in form<br/>(name, phone, org, staff, intent)
     KI->>API: POST /guest/register-checkin<br/>(no auth required)
     API->>DB: INSERT GuestGateRegistry<br/>handshake_status = PENDING_VERIFICATION
-    API->>DB: SELECT User WHERE id = target_faculty_id
-    API->>WS: broadcast(faculty_id, GUEST_HANDSHAKE_REQ)
+    API->>DB: SELECT User WHERE id = target_staff_id
+    API->>WS: broadcast(staff_id, GUEST_HANDSHAKE_REQ)
     API-->>KI: 201 GuestResponse
     KI-->>G: "Your request has been sent.<br/>Please wait."
 
@@ -127,10 +127,10 @@ sequenceDiagram
 
 **Step-by-step:**
 
-1. The **Guest Kiosk** (`/guest/kiosk`) is a public, unauthenticated page accessible from any campus terminal. It searches the faculty directory (`GET /guest/directory?name=…`) to let the guest pick the right person.
-2. The check-in POST requires no bearer token. The server creates a `GuestGateRegistry` row and immediately pushes a `GUEST_HANDSHAKE_REQ` frame to the target faculty's WebSocket connection.
-3. If the faculty is connected, their **NotificationPanel** badge increments and the **Interaction Desk** tab shows the incoming request within milliseconds.
-4. Faculty approves or declines. The `GuestGateRegistry` row is updated and the decision is broadcast back. The kiosk can display the outcome to the guest.
+1. The **Guest Kiosk** (`/guest/kiosk`) is a public, unauthenticated page accessible from any organization terminal. It searches the staff directory (`GET /guest/directory?name=…`) to let the guest pick the right person.
+2. The check-in POST requires no bearer token. The server creates a `GuestGateRegistry` row and immediately pushes a `GUEST_HANDSHAKE_REQ` frame to the target staff's WebSocket connection.
+3. If the staff is connected, their **NotificationPanel** badge increments and the **Interaction Desk** tab shows the incoming request within milliseconds.
+4. Staff approves or declines. The `GuestGateRegistry` row is updated and the decision is broadcast back. The kiosk can display the outcome to the guest.
 
 ---
 
@@ -140,7 +140,7 @@ sequenceDiagram
 flowchart TD
     T([APScheduler fires at 00:05 UTC]) --> Q1
 
-    Q1[Query active AcademicCycle<br/>WHERE operational_status = true] --> Q2
+    Q1[Query active PlanningCycle<br/>WHERE operational_status = true] --> Q2
     Q2[Query all StructuralMasterSlots<br/>for tomorrows day_of_week_index] --> LOOP
 
     LOOP{For each slot} --> CHK
@@ -152,7 +152,7 @@ flowchart TD
     INS[INSERT DailyLedger
     target_date = tomorrow
     operational_state = SCHEDULED
-    active_instructor_id = slot.primary_instructor_id
+    active_lead_id = slot.primary_lead_id
     delivery_format = PHYSICAL
     lat/lon/alt from slot room registry] --> LOOP
 
@@ -163,7 +163,7 @@ flowchart TD
 **Step-by-step:**
 
 1. APScheduler (configured in `backend/app/main.py`) triggers `cron/ledger_generator.generate_tomorrow_ledger()` at 00:05 UTC daily.
-2. The active `AcademicCycle` is queried. If none is active (e.g., semester break), the job is a no-op.
+2. The active `PlanningCycle` is queried. If none is active (e.g., term break), the job is a no-op.
 3. For tomorrow's `day_of_week_index`, all `StructuralMasterSlot` rows for that day are fetched.
 4. For each slot, an existence check is performed. This makes the job fully **idempotent** — safe to re-run manually via `POST /ingestion/generate-ledger` without creating duplicates.
-5. New rows are inserted with `operational_state = SCHEDULED` and the slot's instructor. Faculty/admins can subsequently mutate the row (substitute instructor, delivery format, geofence coords) via `PATCH /schedule/ledger/{id}`.
+5. New rows are inserted with `operational_state = SCHEDULED` and the slot's lead. Staff/admins can subsequently mutate the row (substitute lead, delivery format, geofence coords) via `PATCH /schedule/ledger/{id}`.

@@ -60,7 +60,7 @@ Chronos Ledger uses [Conventional Commits](https://www.conventionalcommits.org/)
 
 | Prefix | Effect | Example |
 |---|---|---|
-| `feat:` | Bumps MINOR | `feat: add department CSV export` |
+| `feat:` | Bumps MINOR | `feat: add unit CSV export` |
 | `fix:` | Bumps PATCH | `fix: geofence false positive on altitude boundary` |
 | `feat!:` or `BREAKING CHANGE:` | Bumps MAJOR | `feat!: remove v0 API compatibility shim` |
 | `perf:` | Bumps PATCH | `perf: cache location resolver result in Redis` |
@@ -70,11 +70,11 @@ Chronos Ledger uses [Conventional Commits](https://www.conventionalcommits.org/)
 Commit messages should complete the sentence: *"If applied, this commit will…"*
 
 ```
-feat: add student attendance export to CSV
+feat: add member attendance export to CSV
 
 Adds a new GET /schedule/attendance/export endpoint that streams a
 gzip-compressed CSV of all attendance records for the current cycle.
-Only accessible by SUPER_ADMIN and DEPT_ADMIN.
+Only accessible by SUPER_ADMIN and UNIT_ADMIN.
 ```
 
 ---
@@ -115,8 +115,8 @@ backend/app/
   cron/           APScheduler jobs — ledger_generator
 
 frontend/src/
-  app/            Next.js App Router pages (admin, faculty, student, guest, landing)
-  components/     UI split by role (admin/, faculty/, student/, shared/, ui/)
+  app/            Next.js App Router pages (admin, staff, member, guest, landing)
+  components/     UI split by role (admin/, staff/, member/, shared/, ui/)
   hooks/          useAuth, useWebSocket, useGeolocation, useScheduleNotifications
   lib/            API client (axios), IndexedDB helpers, auth utils, telemetry
   store/          Zustand: auth + notifications

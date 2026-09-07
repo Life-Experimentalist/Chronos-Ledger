@@ -20,7 +20,7 @@ For local development additionally:
 
 ```mermaid
 graph TB
-    subgraph Host["Campus Server (single VM / bare-metal)"]
+    subgraph Host["Organization Server (single VM / bare-metal)"]
         subgraph DC["Docker Compose — network: chronos_net (bridge)"]
             NX["chronos-proxy\nnginx:1.27-alpine\nPorts: 80, 443\n\nServes static files\nProxies /api/v1 + /ws"]
             FE["chronos-frontend\n(one-shot builder)\nNext.js → /app/out\nexit 0 on success"]
@@ -56,7 +56,7 @@ graph TB
 
 ---
 
-## Production Deployment (Campus Server)
+## Production Deployment (Organization Server)
 
 ### 1. Prepare the server
 
@@ -103,7 +103,7 @@ chronos_redis_state            Up
 
 Navigate to `http://<server-ip>` and log in with the seed credentials:
 
-- Email: `admin@college.internal`
+- Email: `admin@org.internal`
 - Password: `ChronosAdmin2026!`
 
 **Change this password immediately** via Admin Portal → Profile.
@@ -132,7 +132,7 @@ default by exporting `DATABASE_URL` before running migrations.
 
 ---
 
-## Academic Cycle Rollover
+## Planning Cycle Rollover
 
 ```mermaid
 flowchart LR
@@ -148,7 +148,7 @@ flowchart LR
 
 1. **Close the active cycle** — Admin Portal → Schedule → Cycles → `Close Cycle`, or:
    ```sql
-   UPDATE academic_cycles SET operational_status = false WHERE id = <current_id>;
+   UPDATE planning_cycles SET operational_status = false WHERE id = <current_id>;
    ```
 2. **Create the new cycle** — Admin Portal → New Cycle or `POST /api/v1/schedule/cycles`:
    ```json
@@ -159,7 +159,7 @@ flowchart LR
    ```
    POST /api/v1/schedule/cycles/{old_id}/clone-to/{new_id}
    ```
-4. **Re-import CSV** — upload the new semester's enrollment sheet to assign students and update instructors.
+4. **Re-import CSV** — upload the new term's enrollment sheet to assign members and update leads.
 5. **Generate first ledger** — trigger ledger generation for the first day of the new cycle:
    ```
    POST /api/v1/ingestion/generate-ledger   { "target_date": "2026-09-01" }
@@ -259,6 +259,6 @@ absolute paths (`/usr/bin/docker`, `/usr/bin/certbot`) or set
 
 The FastAPI layer is stateless beyond DB/Redis. To scale horizontally:
 
-1. Add Redis Pub/Sub broadcasting to `CampusConnectionManager` so WebSocket events fanout across multiple app instances.
+1. Add Redis Pub/Sub broadcasting to `OrganizationConnectionManager` so WebSocket events fanout across multiple app instances.
 2. Place a load balancer in front of the app containers (sticky sessions not required once Pub/Sub is implemented — WS connections land on any instance and receive events via Redis).
-3. The PostgreSQL connection pool (`pool_size=10`, `max_overflow=20` in `core/database.py`) handles typical single-campus loads without change.
+3. The PostgreSQL connection pool (`pool_size=10`, `max_overflow=20` in `core/database.py`) handles typical single-organization loads without change.

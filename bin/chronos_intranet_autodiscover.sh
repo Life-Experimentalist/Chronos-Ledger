@@ -47,5 +47,5 @@ docker compose --env-file .env.production up --build -d
 echo "\n========================================================================="
 echo " Container health status:"
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-echo "\n Campus devices should navigate to: http://$DETECTED_IP"
+echo "\n Organization devices should navigate to: http://$DETECTED_IP"
 echo "========================================================================="

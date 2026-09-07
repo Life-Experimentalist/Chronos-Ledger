@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copyright 2026 Chronos Ledger Contributors — Apache 2.0
 #
-# One-command campus deployment script.
+# One-command organization deployment script.
 # Detects the server's LAN IP, configures the environment, and launches
 # all services via Docker Compose.
 #
@@ -168,7 +168,7 @@ header "All done!"
 echo ""
 ok "App:       http://${LAN_IP}"
 ok "API docs:  http://${LAN_IP}/docs"
-ok "Login:     admin@college.internal"
+ok "Login:     admin@org.internal"
 echo -e "${YELLOW}  IMPORTANT: You will be prompted to set a new password on first login.${NC}"
 echo ""
 echo "  Useful commands:"

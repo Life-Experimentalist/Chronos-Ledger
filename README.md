@@ -6,7 +6,7 @@
 
   ----
 
-  **Campus Schedule & Attendance Management — self-hosted, offline-first, production-ready.**
+  **Organization Schedule & Attendance Management — self-hosted, offline-first, production-ready.**
 
 
   [![CI](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml)  [![Release](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/release.yml/badge.svg)](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/release.yml)  [![License](https://img.shields.io/badge/License-Apache_2.0-14b8a6.svg)](LICENSE)
@@ -19,9 +19,9 @@
 
 ## The Problem
 
-Universities and colleges track attendance on paper, manage timetables in Excel, and learn of faculty absences only when students complain. Campus networks are unreliable. Faculty don't know where their colleagues are. Visitors have no formal check-in system.
+Universities and organizations track attendance on paper, manage timetables in Excel, and learn of staff absences only when members complain. Organization networks are unreliable. Staff don't know where their colleagues are. Visitors have no formal check-in system.
 
-**Chronos Ledger** solves all of this in a single, self-hosted, Docker-deployable stack that runs entirely on your campus intranet — no cloud subscription, no data leaving your network.
+**Chronos Ledger** solves all of this in a single, self-hosted, Docker-deployable stack that runs entirely on your organization intranet — no cloud subscription, no data leaving your network.
 
 ---
 
@@ -52,7 +52,7 @@ chmod +x setup.sh && ./setup.sh
 
 - **App** → `http://<your-server-ip>`
 - **API docs** → `http://<your-server-ip>/docs`
-- **Default login** → `admin@college.internal` / `ChronosAdmin2026!` *(change immediately)*
+- **Default login** → `admin@org.internal` / `ChronosAdmin2026!` *(change immediately)*
 
 ### Or pull from GHCR (no build required)
 
@@ -74,10 +74,10 @@ Pin any release: `VERSION=v1.2.0 docker compose -f docker-compose.prod.yml up -d
 ## Architecture
 
 ```
-  Clients (PWA)                 Campus Server
+  Clients (PWA)                 Organization Server
   ┌─────────────┐              ┌────────────────────────────────────────┐
-  │ Student     │              │  Docker network: chronos_net           │
-  │ Faculty     │──HTTPS/WSS──▶│  ┌──────────┐     ┌────────────────┐  │
+  │ Member     │              │  Docker network: chronos_net           │
+  │ Staff     │──HTTPS/WSS──▶│  ┌──────────┐     ┌────────────────┐  │
   │ Admin       │              │  │  Nginx   │────▶│  FastAPI       │  │
   │ Guest Kiosk │              │  │  :80/443 │     │  :8000         │  │
   └─────────────┘              │  └──────────┘     └───────┬────────┘  │
@@ -95,20 +95,20 @@ Full diagrams with Mermaid charts: [`docs/architecture.md`](docs/architecture.md
 ## Feature Highlights
 
 ### 3D Geofenced Attendance
-Students mark attendance via GPS. The server runs a Haversine distance check **plus** an altitude delta (`|Δalt| < 4m`) to prevent students on floors above or below from registering. When GPS accuracy exceeds 30m, the client flags a BSSID Wi-Fi fallback.
+Members mark attendance via GPS. The server runs a Haversine distance check **plus** an altitude delta (`|Δalt| < 4m`) to prevent members on floors above or below from registering. When GPS accuracy exceeds 30m, the client flags a BSSID Wi-Fi fallback.
 
-### 4-Tier Faculty Location Resolution
-Always know where faculty are — in priority order:
+### 4-Tier Staff Location Resolution
+Always know where staff are — in priority order:
 1. **Redis manual override** (e.g., "In meeting — back at 15:00")
 2. **Approved absence** from the daily exception log
 3. **Active master slot** room from the live timetable
 4. **Base station fallback** (their configured office/staffroom)
 
 ### Reverse RSVP Absence System
-Presence is the default state. Faculty *file* absences rather than *confirming* presence. Requests route to the line manager for approval. Approved absences cascade `ON_LEAVE` to every affected ledger entry and fire a WebSocket notification to the faculty member.
+Presence is the default state. Staff *file* absences rather than *confirming* presence. Requests route to the line manager for approval. Approved absences cascade `ON_LEAVE` to every affected ledger entry and fire a WebSocket notification to the staff member.
 
 ### Offline-First PWA
-Campus Wi-Fi drops. Chronos Ledger keeps working:
+Organization Wi-Fi drops. Chronos Ledger keeps working:
 - Attendance marks queue to IndexedDB and flush on reconnect (Background Sync where available, the app itself otherwise)
 - Today's schedule cached locally for 12 hours
 - Class reminders fire up to 20 minutes before start, even with the app closed, via `periodicsync` in the service worker
@@ -117,7 +117,7 @@ Campus Wi-Fi drops. Chronos Ledger keeps working:
 JWT-authenticated persistent connections. Guest handshake requests, absence approvals, and ledger state changes arrive in milliseconds — no polling.
 
 ### CSV Bulk Import
-Drop a student-centric CSV on the Admin dashboard. One upload creates/updates users, course offerings, master timetable slots, and student registrations atomically and idempotently.
+Drop a member-centric CSV on the Admin dashboard. One upload creates/updates users, activity offerings, master timetable slots, and member registrations atomically and idempotently.
 
 ---
 
@@ -126,10 +126,10 @@ Drop a student-centric CSV on the Admin dashboard. One upload creates/updates us
 | Role            | Path                 | Core capabilities                                                      |
 | --------------- | -------------------- | ---------------------------------------------------------------------- |
 | **Super Admin** | `/admin/dashboard`   | CSV import, cycle management, proxy assignment, user provisioning      |
-| **Dept Admin**  | `/admin/dashboard`   | Absence approvals, ledger overrides for own department                 |
-| **Faculty**     | `/faculty/dashboard` | Availability switcher, attendance matrix, absence requests, guest desk |
-| **Student**     | `/student/dashboard` | Live timeline, geofenced self-mark, faculty locator, offline queue     |
-| **Guest**       | `/guest/kiosk`       | No login — check-in form, real-time faculty notification               |
+| **Unit Admin**  | `/admin/dashboard`   | Absence approvals, ledger overrides for own unit                 |
+| **Staff**     | `/staff/dashboard` | Availability switcher, attendance matrix, absence requests, guest desk |
+| **Member**     | `/member/dashboard` | Live timeline, geofenced self-mark, staff locator, offline queue     |
+| **Guest**       | `/guest/kiosk`       | No login — check-in form, real-time staff notification               |
 
 ---
 
@@ -284,7 +284,7 @@ The Alembic seed migration creates one super-admin:
 
 | Field    | Value                    |
 | -------- | ------------------------ |
-| Email    | `admin@college.internal` |
+| Email    | `admin@org.internal` |
 | Password | `ChronosAdmin2026!`      |
 
 **Change this password immediately** via Admin Portal → Profile → Change Password.
@@ -348,9 +348,9 @@ Contributions are welcome. Please:
 
 Commit examples:
 ```
-feat: add department-level attendance export to CSV
+feat: add unit-level attendance export to CSV
 fix: resolve geofence false positive on altitude boundary
-perf: cache faculty location resolver result in Redis
+perf: cache staff location resolver result in Redis
 security: upgrade cryptography to 44.0.1
 ```
 

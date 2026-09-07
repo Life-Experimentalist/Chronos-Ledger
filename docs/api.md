@@ -25,9 +25,9 @@ Tokens expire after `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` (default: 480 min / 8 hour
 
 ```mermaid
 graph TD
-    SA[SUPER_ADMIN] --> DA[DEPT_ADMIN]
-    DA --> FAC[FACULTY]
-    FAC --> STU[STUDENT]
+    SA[SUPER_ADMIN] --> DA[UNIT_ADMIN]
+    DA --> FAC[STAFF]
+    FAC --> STU[MEMBER]
 ```
 
 Higher roles inherit the permissions of all roles below them. Role is embedded in the JWT payload and validated server-side on every request.
@@ -38,14 +38,14 @@ Higher roles inherit the permissions of all roles below them. Role is embedded i
 
 ```json
 // Request
-{ "email": "user@college.internal", "password": "…" }
+{ "email": "user@org.internal", "password": "…" }
 
 // Response 200
 {
   "access_token": "<jwt>",
   "token_type": "bearer",
   "user_id": "FAC001",
-  "role": "FACULTY",
+  "role": "STAFF",
   "full_name": "Dr. Priya Sharma",
   "initial_login_state": false
 }
@@ -77,25 +77,25 @@ Create users individually. For bulk creation, use CSV import (`POST /ingestion/u
 {
   "id": "FAC042",
   "full_name": "Dr. Rajan Mehta",
-  "email_address": "rajan@college.internal",
+  "email_address": "rajan@org.internal",
   "password": "InitialPass1!",
-  "role_type": "FACULTY",
-  "department_code": "CSE",
+  "role_type": "STAFF",
+  "unit_code": "CSE",
   "assigned_base_station": "Staff Room Block A",
   "reporting_line_manager": "HOD001"
 }
 ```
 
-### GET /users/faculty/available `[public]`
+### GET /users/staff/available `[public]`
 
-Returns faculty with `OPEN_AD_HOC` or `VERY_FREE` status. Used by the Guest Kiosk.
+Returns staff with `OPEN_AD_HOC` or `VERY_FREE` status. Used by the Guest Kiosk.
 
 ### GET /users/{user_id}
 ### PUT /users/{user_id}
 ### DELETE /users/{user_id} `[SUPER_ADMIN]`
 ### PATCH /users/{user_id}/status
 
-Update faculty occupancy. Enum values: `OPEN_AD_HOC`, `BUSY`, `CRITICAL_DO_NOT_DISTURB`, `VERY_FREE`.
+Update staff occupancy. Enum values: `OPEN_AD_HOC`, `BUSY`, `CRITICAL_DO_NOT_DISTURB`, `VERY_FREE`.
 
 ```json
 { "status": "BUSY" }
@@ -108,12 +108,12 @@ Update faculty occupancy. Enum values: `OPEN_AD_HOC`, `BUSY`, `CRITICAL_DO_NOT_D
 ### GET /schedule/ledger/today
 
 Returns today's `DailyLedger` entries scoped to the caller's role:
-- **Faculty** → sessions where they are active or substitute instructor
-- **Student** → sessions for their registered courses
+- **Staff** → sessions where they are active or substitute lead
+- **Member** → sessions for their registered activities
 - **Admin** → all sessions
 
 ### GET /schedule/ledger/{ledger_id}
-### PATCH /schedule/ledger/{ledger_id} `[FACULTY, ADMIN]`
+### PATCH /schedule/ledger/{ledger_id} `[STAFF, ADMIN]`
 
 ```json
 // Patch to switch to online delivery
@@ -133,7 +133,7 @@ Returns today's `DailyLedger` entries scoped to the caller's role:
 }
 ```
 
-### GET /schedule/faculty/{faculty_id}/location
+### GET /schedule/staff/{staff_id}/location
 
 4-tier location resolver result. See [`docs/flows.md`](flows.md) for resolution order.
 
@@ -141,15 +141,15 @@ Returns today's `DailyLedger` entries scoped to the caller's role:
 {
   "resolved_location": "Room 204 — Active Class",
   "status": "SCHEDULED",
-  "faculty_id": "FAC001",
+  "staff_id": "FAC001",
   "full_name": "Dr. Priya Sharma",
   "occupancy_index": "BUSY"
 }
 ```
 
-### GET /schedule/faculty/all/locations
+### GET /schedule/staff/all/locations
 
-Snapshot of all faculty locations. Polled by the Student Locator panel.
+Snapshot of all staff locations. Polled by the Member Locator panel.
 
 ### GET /schedule/cycles
 ### POST /schedule/cycles `[ADMIN]`
@@ -165,7 +165,7 @@ Snapshot of all faculty locations. Polled by the Student Locator panel.
 ```json
 {
   "ledger_instance_id": 1042,
-  "student_id": "STU20210001",
+  "member_id": "STU20210001",
   "marking_status": "PRESENT",
   "user_lat": 12.971598,
   "user_lon": 77.594562,
@@ -174,16 +174,16 @@ Snapshot of all faculty locations. Polled by the Student Locator panel.
 ```
 
 Omit `user_lat`/`user_lon`/`user_alt` to skip geofence validation (e.g., GPS unavailable).
-Students may only mark themselves; faculty/admins can mark any student.
+Members may only mark themselves; staff/admins can mark any member.
 
-### POST /attendance/batch `[FACULTY, ADMIN]`
+### POST /attendance/batch `[STAFF, ADMIN]`
 
 ```json
 {
   "ledger_instance_id": 1042,
   "records": [
-    { "ledger_instance_id": 1042, "student_id": "STU001", "marking_status": "PRESENT" },
-    { "ledger_instance_id": 1042, "student_id": "STU002", "marking_status": "LATE" }
+    { "ledger_instance_id": 1042, "member_id": "STU001", "marking_status": "PRESENT" },
+    { "ledger_instance_id": 1042, "member_id": "STU002", "marking_status": "LATE" }
   ]
 }
 ```
@@ -192,7 +192,7 @@ Students may only mark themselves; faculty/admins can mark any student.
 
 All attendance records for a session.
 
-### POST /attendance/absence `[FACULTY]`
+### POST /attendance/absence `[STAFF]`
 
 Submit a Reverse RSVP (absence request):
 
@@ -214,7 +214,7 @@ Returns absence requests pending your approval.
 { "decision": "VERIFIED_DENIED" }
 ```
 
-### POST /attendance/annotations `[FACULTY, ADMIN]`
+### POST /attendance/annotations `[STAFF, ADMIN]`
 ### GET /attendance/annotations/{ledger_id}
 
 Attach freeform notes to a session (lab issues, late starts, etc.).
@@ -229,27 +229,27 @@ Attach freeform notes to a session (lab issues, late starts, etc.).
 
 ### POST /guest/register-checkin `[no auth]`
 
-Public kiosk endpoint. Fires a real-time WebSocket notification to the target faculty.
+Public kiosk endpoint. Fires a real-time WebSocket notification to the target staff.
 
 ```json
 {
   "guest_name": "John Smith",
   "contact_phone": "+91 98765 43210",
   "originating_body": "TechCorp Ltd",
-  "target_faculty_id": "FAC001",
+  "target_staff_id": "FAC001",
   "visitation_intent": "Research collaboration discussion"
 }
 ```
 
 ### GET /guest/directory `[no auth]`
 
-`?name=<string>` — case-insensitive name search. Returns faculty with `OPEN_AD_HOC` or `VERY_FREE` status.
+`?name=<string>` — case-insensitive name search. Returns staff with `OPEN_AD_HOC` or `VERY_FREE` status.
 
-### GET /guest/ `[FACULTY]`
+### GET /guest/ `[STAFF]`
 
-Pending guest requests targeting the authenticated faculty member.
+Pending guest requests targeting the authenticated staff member.
 
-### PATCH /guest/{id}/decide `[FACULTY]`
+### PATCH /guest/{id}/decide `[STAFF]`
 
 ```json
 { "decision": "VERIFIED_APPROVED" }
@@ -265,16 +265,16 @@ Upload a `multipart/form-data` CSV file. Required columns:
 
 | Column | Example |
 |---|---|
-| `student_id` | STU20210001 |
-| `student_name` | Alice Kumar |
-| `student_email` | alice@college.internal |
-| `subject_code` | CS301 |
-| `subject_title` | Operating Systems |
-| `department` | CSE |
+| `member_id` | STU20210001 |
+| `member_name` | Alice Kumar |
+| `member_email` | alice@org.internal |
+| `activity_code` | CS301 |
+| `activity_title` | Operating Systems |
+| `unit` | CSE |
 | `day_of_week_index` | 1 (Monday) … 7 (Sunday) |
 | `time_window_start` | 09:00 |
 | `time_window_end` | 10:00 |
-| `teacher_id` | FAC001 |
+| `lead_id` | FAC001 |
 | `room` | Room 204 |
 
 Import is idempotent — re-uploading the same file is safe.
@@ -297,8 +297,8 @@ Live iCalendar feed (rolling 37-day window). Subscribe directly in any calendar 
 webcal://<server>/api/v1/sync/user-feed/FAC001.ics
 ```
 
-Faculty feed includes sessions where they are active or substitute instructor.
-Student feed includes all registered courses.
+Staff feed includes sessions where they are active or substitute lead.
+Member feed includes all registered activities.
 
 ---
 
@@ -313,8 +313,8 @@ Persistent receive-only connection. Events delivered as JSON frames:
 | Event | Who receives | Payload |
 |---|---|---|
 | `ABSENCE_APPROVAL_REQUIRED` | Line manager | `{log_id, from, date}` |
-| `ABSENCE_DECISION` | Faculty who submitted | `{log_id, decision}` |
-| `GUEST_HANDSHAKE_REQ` | Target faculty | `{transaction_id, guest_name, originating_body, intent}` |
+| `ABSENCE_DECISION` | Staff who submitted | `{log_id, decision}` |
+| `GUEST_HANDSHAKE_REQ` | Target staff | `{transaction_id, guest_name, originating_body, intent}` |
 | `LEDGER_STATE_CHANGE` | All connected users | `{ledger_id, new_state}` |
 
 The client sends no upstream frames — the connection is subscribe-only.

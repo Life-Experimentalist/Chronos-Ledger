@@ -28,8 +28,8 @@ BEGIN
     JOIN daily_ledger dl2
         ON dl1.target_date = dl2.target_date
         AND dl1.id < dl2.id
-        AND dl1.active_instructor_id = dl2.active_instructor_id
-        AND dl1.active_instructor_id IS NOT NULL
+        AND dl1.active_lead_id = dl2.active_lead_id
+        AND dl1.active_lead_id IS NOT NULL
     JOIN structural_master_slots sms1 ON dl1.master_slot_id = sms1.id
     JOIN structural_master_slots sms2 ON dl2.master_slot_id = sms2.id
     WHERE dl1.operational_state != 'ON_LEAVE'

@@ -7,8 +7,8 @@
 ```mermaid
 graph TB
     subgraph Clients["Client Layer (PWA — installed or browser)"]
-        S[Student Mobile]
-        F[Faculty Desktop]
+        S[Member Mobile]
+        F[Staff Desktop]
         A[Admin Dashboard]
         G[Guest Kiosk<br/>no auth]
     end
@@ -45,7 +45,7 @@ graph TB
 | **FastAPI app** | All REST endpoints + WebSocket hub. Single process (uvicorn), stateless beyond DB/Redis. |
 | **APScheduler** | Runs `ledger_generator` at midnight UTC to materialise `DailyLedger` rows from `StructuralMasterSlot` for the next day. |
 | **PostgreSQL** | Source of truth for all persistent data: users, schedule, attendance, absence logs, guest transactions. |
-| **Redis** | Short-lived state: faculty status overrides (TTL), in-memory WebSocket connection registry serialised for pub/sub. |
+| **Redis** | Short-lived state: staff status overrides (TTL), in-memory WebSocket connection registry serialised for pub/sub. |
 
 ---
 
@@ -111,11 +111,11 @@ graph LR
 
 ---
 
-## 4-Tier Faculty Location Resolution
+## 4-Tier Staff Location Resolution
 
 ```mermaid
 flowchart TD
-    Start([Resolve location for faculty_id]) --> R1
+    Start([Resolve location for staff_id]) --> R1
 
     R1{Redis override<br/>exists?}
     R1 -->|Yes| RET1[Return override value<br/>e.g. 'In Meeting — Back at 15:00']
@@ -134,9 +134,9 @@ flowchart TD
 
 **Each tier explained:**
 
-1. **Redis override** — A faculty member or admin has pushed a manual status via `PATCH /users/{id}/status`. Stored in Redis with an optional TTL. Cleared automatically when TTL expires or manually via the same endpoint.
+1. **Redis override** — A staff member or admin has pushed a manual status via `PATCH /users/{id}/status`. Stored in Redis with an optional TTL. Cleared automatically when TTL expires or manually via the same endpoint.
 2. **Daily exception log** — The `ReverseRsvpLog` table is checked for an approved absence on today's date. If found, the ledger entry for that slot is in `ON_LEAVE`.
-3. **Master timetable** — The current wall-clock time is compared against `StructuralMasterSlot` time windows. If the faculty is in a scheduled session right now, the room from the `DailyLedger` entry is returned.
+3. **Master timetable** — The current wall-clock time is compared against `StructuralMasterSlot` time windows. If the staff is in a scheduled session right now, the room from the `DailyLedger` entry is returned.
 4. **Base station fallback** — The `assigned_base_station` field on the `User` record (e.g., "Staff Room Block A") is the last-resort answer.
 
 ---
@@ -148,7 +148,7 @@ sequenceDiagram
     participant C as Client (browser/PWA)
     participant N as Nginx
     participant WS as FastAPI WebSocket
-    participant Reg as CampusConnectionManager<br/>(in-memory + Redis)
+    participant Reg as OrganizationConnectionManager<br/>(in-memory + Redis)
 
     C->>N: GET /ws?token=<jwt> (Upgrade)
     N->>WS: Proxy WebSocket handshake
@@ -166,7 +166,7 @@ sequenceDiagram
     Reg-->>Redis: Delete user_id key
 ```
 
-**Why WebSockets instead of polling:** Absence approvals and guest handshakes need sub-second delivery to the faculty dashboard. Polling at any sane interval (≥5s) introduces noticeable lag in the two-party guest interaction flow. The connection registry is kept in process memory (fast path) with Redis as the index; this enables adding multi-process fanout later without changing client code.
+**Why WebSockets instead of polling:** Absence approvals and guest handshakes need sub-second delivery to the staff dashboard. Polling at any sane interval (≥5s) introduces noticeable lag in the two-party guest interaction flow. The connection registry is kept in process memory (fast path) with Redis as the index; this enables adding multi-process fanout later without changing client code.
 
 ---
 
@@ -178,8 +178,8 @@ graph TD
         Login["/  Login"]
         Landing["/landing  Marketing"]
         Admin["/admin/dashboard"]
-        Faculty["/faculty/dashboard"]
-        Student["/student/dashboard"]
+        Staff["/staff/dashboard"]
+        Member["/member/dashboard"]
         Kiosk["/guest/kiosk  (no auth)"]
     end
 
@@ -188,16 +188,16 @@ graph TD
         NotificationPanel
     end
 
-    subgraph FComp["components/faculty/"]
+    subgraph FComp["components/staff/"]
         StatusSwitcher
         AttendanceMatrix
         InteractionDesk
     end
 
-    subgraph SComp["components/student/"]
+    subgraph SComp["components/member/"]
         LiveTimeline
         ProximityCard
-        FacultyLocator
+        StaffLocator
     end
 
     subgraph AComp["components/admin/"]
@@ -230,9 +230,9 @@ graph TD
         Push[push<br/>server notifications]
     end
 
-    Admin & Faculty & Student --> Shared
-    Faculty --> FComp
-    Student --> SComp
+    Admin & Staff & Member --> Shared
+    Staff --> FComp
+    Member --> SComp
     Admin --> AComp
     Pages --> Hooks
     Hooks --> Lib & Store
