@@ -228,11 +228,19 @@ docker logs chronos_edge_proxy | grep 40-tls
 ### Renewal
 
 Let's Encrypt certificates last 90 days. Add a monthly cron entry that
-renews, refreshes the copies, and restarts the proxy so nginx re-reads them:
+renews, refreshes the copies, and restarts the proxy so nginx re-reads them.
+Use certbot's own hooks rather than a shell `&&` chain: `--post-hook` runs
+after every renewal attempt (success or failure), so the proxy always comes
+back up even when certbot errors, and `--deploy-hook` runs only when a new
+certificate was actually issued.
 
 ```cron
-0 3 1 * * certbot renew --pre-hook "docker compose -f /path/to/chronos-ledger/docker-compose.prod.yml stop chronos-proxy" && cp /etc/letsencrypt/live/chronos.example.edu/{fullchain,privkey}.pem /path/to/chronos-ledger/certs/ && docker compose -f /path/to/chronos-ledger/docker-compose.prod.yml start chronos-proxy
+0 3 1 * * certbot renew --pre-hook "docker compose -f /path/to/chronos-ledger/docker-compose.prod.yml stop chronos-proxy" --deploy-hook "cp /etc/letsencrypt/live/chronos.example.edu/fullchain.pem /path/to/chronos-ledger/certs/ && cp /etc/letsencrypt/live/chronos.example.edu/privkey.pem /path/to/chronos-ledger/certs/" --post-hook "docker compose -f /path/to/chronos-ledger/docker-compose.prod.yml start chronos-proxy"
 ```
+
+Cron runs with a minimal `PATH`; if `docker` or `certbot` is not found, use
+absolute paths (`/usr/bin/docker`, `/usr/bin/certbot`) or set
+`PATH=/usr/local/bin:/usr/bin:/bin` at the top of the crontab.
 
 ### After enabling HTTPS
 
