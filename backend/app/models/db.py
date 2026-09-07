@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 
 import enum
+import secrets
 from datetime import UTC, datetime
 
 from sqlalchemy import (
@@ -23,6 +24,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
+
+
+def generate_feed_token() -> str:
+    """Unguessable key for a user's public iCalendar feed URL."""
+    return secrets.token_urlsafe(32)
 
 
 class InstitutionalRole(enum.StrEnum):
@@ -94,6 +100,9 @@ class User(Base):
         String(50), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     initial_login_state = Column(Boolean, default=True)
+    calendar_feed_token = Column(
+        String(64), unique=True, index=True, nullable=True, default=generate_feed_token
+    )
 
     manager = relationship("User", remote_side="User.id", foreign_keys=[reporting_line_manager])
     course_registrations = relationship(

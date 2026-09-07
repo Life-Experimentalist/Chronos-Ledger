@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import create_access_token, get_current_user, hash_password, verify_password
-from app.models.db import User
+from app.models.db import User, generate_feed_token
 from app.schemas.auth import ChangePasswordRequest, LoginRequest, TokenResponse
 
 router = APIRouter()
@@ -41,6 +41,8 @@ def change_password(
 
     current_user.credential_secure_hash = hash_password(payload.new_password)
     current_user.initial_login_state = False
+    # A password change also invalidates the shareable calendar feed URL.
+    current_user.calendar_feed_token = generate_feed_token()
     db.commit()
     return {"message": "Password updated successfully"}
 

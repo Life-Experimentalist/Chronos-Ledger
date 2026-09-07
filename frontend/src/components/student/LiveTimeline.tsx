@@ -2,18 +2,33 @@
 // Copyright 2026 Chronos Ledger Contributors
 // Licensed under the Apache License, Version 2.0
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { BookOpen, Video, Clock, MapPin, ExternalLink } from 'lucide-react'
+import { BookOpen, Video, Clock, MapPin, ExternalLink, RefreshCw } from 'lucide-react'
 import { DynamicStateBadge } from '@/components/ui/Badge'
+import { calendarApi } from '@/lib/api'
 import type { LedgerEntry } from '@/types'
 
 interface LiveTimelineProps {
   entries: LedgerEntry[]
-  userId: string
 }
 
-export function LiveTimeline({ entries, userId }: LiveTimelineProps) {
+export function LiveTimeline({ entries }: LiveTimelineProps) {
+  const [feedPath, setFeedPath] = useState<string | null>(null)
+
+  useEffect(() => {
+    calendarApi
+      .getFeedToken()
+      .then((res) => setFeedPath(res.data.feed_path))
+      .catch(() => setFeedPath(null))
+  }, [])
+
+  const rotateFeed = () => {
+    calendarApi
+      .rotateFeedToken()
+      .then((res) => setFeedPath(res.data.feed_path))
+      .catch(() => undefined)
+  }
   const now = new Date()
   const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
 
@@ -105,17 +120,27 @@ export function LiveTimeline({ entries, userId }: LiveTimelineProps) {
         )
       })}
 
-      <div className="text-center py-3">
-        <a
-          href={`/api/v1/sync/user-feed/${userId}.ics`}
-          className="text-xs text-chronos-teal hover:underline flex items-center gap-1.5 justify-center"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <ExternalLink className="w-3.5 h-3.5" />
-          Subscribe to Calendar (iCal)
-        </a>
-      </div>
+      {feedPath && (
+        <div className="flex items-center gap-3 justify-center py-3">
+          <a
+            href={feedPath}
+            className="text-xs text-chronos-teal hover:underline flex items-center gap-1.5"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Subscribe to Calendar (iCal)
+          </a>
+          <button
+            onClick={rotateFeed}
+            title="Reset the calendar link (the old URL stops working)"
+            className="text-xs text-chronos-muted hover:text-chronos-teal flex items-center gap-1"
+          >
+            <RefreshCw className="w-3 h-3" />
+            Reset link
+          </button>
+        </div>
+      )}
     </div>
   )
 }

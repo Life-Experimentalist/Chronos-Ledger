@@ -3,8 +3,7 @@
 """iCalendar feed: faculty and student views, state annotations, ad-hoc entries.
 
 The feed is deliberately unauthenticated so calendar apps can subscribe to it,
-but it is keyed by the plain user id rather than a secret token. Whether that
-should become an unguessable per-user token is an open intake question.
+but it is keyed by an unguessable per-user token, never the plain user id.
 """
 
 import datetime
@@ -16,7 +15,9 @@ from app.models.db import (
     DailyLedger,
     DynamicState,
     StructuralMasterSlot,
+    User,
 )
+from tests.conftest import FACULTY_PASSWORD, login
 
 TODAY = datetime.date.today()
 
@@ -66,9 +67,14 @@ def _seed_schedule(db, state=DynamicState.SCHEDULED, with_slot=True, substitute=
     return offering
 
 
+def _feed_url(db, user_id):
+    token = db.query(User).filter(User.id == user_id).first().calendar_feed_token
+    return f"/api/v1/sync/user-feed/{token}.ics"
+
+
 def test_faculty_feed_lists_their_class(client, db, seed_users):
     _seed_schedule(db)
-    r = client.get("/api/v1/sync/user-feed/FAC001.ics")
+    r = client.get(_feed_url(db, "FAC001"))
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/calendar")
     body = r.text
@@ -80,19 +86,19 @@ def test_faculty_feed_lists_their_class(client, db, seed_users):
 
 def test_student_feed_requires_registration(client, db, seed_users):
     _seed_schedule(db)
-    registered = client.get("/api/v1/sync/user-feed/STU001.ics").text
+    registered = client.get(_feed_url(db, "STU001")).text
     assert "[CS500] Distributed Systems" in registered
 
     # Drop the registration: the same student now sees an empty calendar.
     db.query(CourseRegistration).delete()
     db.commit()
-    unregistered = client.get("/api/v1/sync/user-feed/STU001.ics").text
+    unregistered = client.get(_feed_url(db, "STU001")).text
     assert "BEGIN:VEVENT" not in unregistered
 
 
 def test_on_leave_class_is_marked_cancelled(client, db, seed_users):
     _seed_schedule(db, state=DynamicState.ON_LEAVE)
-    body = client.get("/api/v1/sync/user-feed/FAC001.ics").text
+    body = client.get(_feed_url(db, "FAC001")).text
     assert "CANCELLED" in body
 
 
@@ -100,19 +106,47 @@ def test_substitute_sees_proxy_assignment(client, db, seed_users):
     # FAC001 is on leave; the admin user substitutes and gets the entry
     # in their own feed, marked as a proxy assignment.
     _seed_schedule(db, state=DynamicState.PROXY_SUBSTITUTE, substitute="ADM001")
-    body = client.get("/api/v1/sync/user-feed/ADM001.ics").text
+    body = client.get(_feed_url(db, "ADM001")).text
     assert "(Proxy Assignment)" in body
 
 
 def test_adhoc_entry_without_slot_is_all_day(client, db, seed_users):
     _seed_schedule(db, with_slot=False)
-    body = client.get("/api/v1/sync/user-feed/FAC001.ics").text
+    body = client.get(_feed_url(db, "FAC001")).text
     # No master slot: an RFC 5545 all-day event (VALUE=DATE, non-inclusive DTEND).
     tomorrow = TODAY + datetime.timedelta(days=1)
     assert f"DTSTART;VALUE=DATE:{TODAY.strftime('%Y%m%d')}\r\n" in body
     assert f"DTEND;VALUE=DATE:{tomorrow.strftime('%Y%m%d')}\r\n" in body
 
 
-def test_unknown_user_is_404(client, db, seed_users):
+def test_unknown_token_is_404(client, db, seed_users):
     r = client.get("/api/v1/sync/user-feed/NOBODY.ics")
     assert r.status_code == 404
+
+
+def test_plain_user_id_no_longer_serves_a_feed(client, db, seed_users):
+    _seed_schedule(db)
+    r = client.get("/api/v1/sync/user-feed/FAC001.ics")
+    assert r.status_code == 404
+
+
+def test_rotate_invalidates_the_old_feed_url(client, db, seed_users):
+    _seed_schedule(db)
+    old_url = _feed_url(db, "FAC001")
+    assert client.get(old_url).status_code == 200
+
+    headers = login(client, "faculty@test.internal", FACULTY_PASSWORD)
+    rotated = client.post("/api/v1/sync/feed-token/rotate", headers=headers)
+    assert rotated.status_code == 200
+    new_path = rotated.json()["feed_path"]
+
+    assert client.get(old_url).status_code == 404
+    assert client.get(new_path).status_code == 200
+
+
+def test_feed_token_endpoint_returns_the_current_url(client, db, seed_users):
+    headers = login(client, "faculty@test.internal", FACULTY_PASSWORD)
+    r = client.get("/api/v1/sync/feed-token", headers=headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["feed_path"] == f"/api/v1/sync/user-feed/{body['feed_token']}.ics"

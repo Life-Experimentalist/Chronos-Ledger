@@ -346,7 +346,7 @@ export default function LandingPage() {
           <p className="text-sm text-chronos-muted">
             Subscribe to your personal iCal feed:{' '}
             <code className="text-chronos-teal text-xs bg-chronos-surface px-2 py-0.5 rounded">
-              GET /api/v1/sync/user-feed/{'{'}user_id{'}'}.ics
+              GET /api/v1/sync/user-feed/{'{'}feed_token{'}'}.ics
             </code>
           </p>
         </div>
@@ -598,6 +598,6 @@ const API_GROUPS = [
   },
   {
     group: 'Sync',
-    endpoints: ['GET /sync/user-feed/{id}.ics', 'WS /ws?token={jwt}', 'GET /ws/stats'],
+    endpoints: ['GET /sync/user-feed/{feed_token}.ics', 'WS /ws?token={jwt}', 'GET /ws/stats'],
   },
 ]

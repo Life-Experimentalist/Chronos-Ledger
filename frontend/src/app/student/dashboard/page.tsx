@@ -109,7 +109,7 @@ function StudentDashboardContent() {
             {activeTab === 'schedule' && (
               <div className="max-w-2xl space-y-4">
                 <p className="section-title">Today&apos;s Timeline</p>
-                <LiveTimeline entries={todayEntries} userId={user.user_id} />
+                <LiveTimeline entries={todayEntries} />
               </div>
             )}
             {activeTab === 'attendance' && (

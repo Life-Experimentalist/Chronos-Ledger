@@ -52,6 +52,12 @@ export const scheduleApi = {
   updateLedger: (id: number, data: object) => api.patch(`/schedule/ledger/${id}`, data),
 }
 
+// ── Calendar sync ──────────────────────────────────────────────────────────────
+export const calendarApi = {
+  getFeedToken: () => api.get('/sync/feed-token'),
+  rotateFeedToken: () => api.post('/sync/feed-token/rotate'),
+}
+
 // ── Attendance ────────────────────────────────────────────────────────────────
 export const attendanceApi = {
   markAttendance: (data: object) => api.post('/attendance/mark', data),

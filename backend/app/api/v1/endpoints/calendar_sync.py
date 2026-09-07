@@ -8,6 +8,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.security import get_current_user
 from app.models.db import (
     CourseOffering,
     CourseRegistration,
@@ -15,16 +16,43 @@ from app.models.db import (
     InstitutionalRole,
     StructuralMasterSlot,
     User,
+    generate_feed_token,
 )
 
 router = APIRouter()
 
 
-@router.get("/user-feed/{user_token_id}.ics")
-def stream_icalendar_feed(user_token_id: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_token_id).first()
+def _feed_payload(user: User) -> dict:
+    return {
+        "feed_token": user.calendar_feed_token,
+        "feed_path": f"/api/v1/sync/user-feed/{user.calendar_feed_token}.ics",
+    }
+
+
+@router.get("/feed-token")
+def get_feed_token(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user.calendar_feed_token:
+        current_user.calendar_feed_token = generate_feed_token()
+        db.commit()
+    return _feed_payload(current_user)
+
+
+@router.post("/feed-token/rotate")
+def rotate_feed_token(
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    current_user.calendar_feed_token = generate_feed_token()
+    db.commit()
+    return _feed_payload(current_user)
+
+
+@router.get("/user-feed/{feed_token}.ics")
+def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
+    # The feed stays unauthenticated so calendar apps can subscribe, but the key
+    # is an unguessable per-user token, never the user id.
+    user = db.query(User).filter(User.calendar_feed_token == feed_token).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Feed not found")
 
     start_range = datetime.date.today() - datetime.timedelta(days=7)
     end_range = datetime.date.today() + datetime.timedelta(days=30)
@@ -42,8 +70,8 @@ def stream_icalendar_feed(user_token_id: str, db: Session = Depends(get_db)):
             .join(CourseOffering, DailyLedger.course_offering_id == CourseOffering.id)
             .outerjoin(StructuralMasterSlot, DailyLedger.master_slot_id == StructuralMasterSlot.id)
             .filter(
-                (DailyLedger.active_instructor_id == user_token_id)
-                | (DailyLedger.substitute_instructor_id == user_token_id),
+                (DailyLedger.active_instructor_id == user.id)
+                | (DailyLedger.substitute_instructor_id == user.id),
                 DailyLedger.target_date.between(start_range, end_range),
             )
             .all()
@@ -56,7 +84,7 @@ def stream_icalendar_feed(user_token_id: str, db: Session = Depends(get_db)):
             .join(StructuralMasterSlot, DailyLedger.master_slot_id == StructuralMasterSlot.id)
             .join(CourseRegistration, CourseRegistration.course_offering_id == CourseOffering.id)
             .filter(
-                CourseRegistration.student_id == user_token_id,
+                CourseRegistration.student_id == user.id,
                 DailyLedger.target_date.between(start_range, end_range),
             )
             .all()
