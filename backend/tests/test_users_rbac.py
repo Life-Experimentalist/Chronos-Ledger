@@ -93,8 +93,11 @@ def test_dept_admin_cannot_create_admin_accounts(client, seed_users):
         res = client.post("/api/v1/users/", headers=da_headers, json=payload)
         assert res.status_code == 403
 
-    # Ordinary members are still theirs to create.
-    assert client.post("/api/v1/users/", headers=da_headers, json=NEW_USER).status_code == 201
+    # Ordinary members of their own department are still theirs to create;
+    # NEW_USER belongs to ECE, outside this CSE admin"s reach.
+    assert client.post("/api/v1/users/", headers=da_headers, json=NEW_USER).status_code == 403
+    own_dept = dict(NEW_USER, department_code="CSE")
+    assert client.post("/api/v1/users/", headers=da_headers, json=own_dept).status_code == 201
 
 
 def test_dept_admin_cannot_modify_admin_accounts(client, seed_users):

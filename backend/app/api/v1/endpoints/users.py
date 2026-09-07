@@ -6,7 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user, hash_password, require_roles
+from app.core.security import (
+    ensure_department_scope,
+    get_current_user,
+    hash_password,
+    require_roles,
+)
 from app.models.db import InstitutionalRole, User
 from app.schemas.users import UserCreate, UserResponse, UserStatusUpdate, UserUpdate
 
@@ -18,13 +23,16 @@ def list_users(
     role: str | None = None,
     department: str | None = None,
     db: Session = Depends(get_db),
-    _=Depends(require_roles("SUPER_ADMIN", "DEPT_ADMIN")),
+    current_user: User = Depends(require_roles("SUPER_ADMIN", "DEPT_ADMIN")),
 ):
     q = db.query(User)
     if role:
         q = q.filter(User.role_type == role)
     if department:
         q = q.filter(User.department_code == department)
+    # A department admin only ever sees their own department, whatever they ask for.
+    if current_user.role_type == InstitutionalRole.DEPT_ADMIN:
+        q = q.filter(User.department_code == current_user.department_code)
     return q.all()
 
 
@@ -37,6 +45,7 @@ def create_user(
     admin_roles = (InstitutionalRole.SUPER_ADMIN, InstitutionalRole.DEPT_ADMIN)
     if payload.role_type in admin_roles and current_user.role_type != InstitutionalRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Only a super-admin can create admin accounts")
+    ensure_department_scope(current_user, payload.department_code)
     if db.query(User).filter(User.id == payload.id).first():
         raise HTTPException(status_code=409, detail="User ID already exists")
     if db.query(User).filter(User.email_address == payload.email_address).first():
@@ -95,6 +104,8 @@ def get_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if current_user.id != user_id:
+        ensure_department_scope(current_user, user.department_code)
     return user
 
 
@@ -111,6 +122,10 @@ def update_user(
     admin_roles = (InstitutionalRole.SUPER_ADMIN, InstitutionalRole.DEPT_ADMIN)
     if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Only a super-admin can modify admin accounts")
+    ensure_department_scope(current_user, user.department_code)
+    if payload.department_code is not None:
+        # A department admin cannot move a user into or out of another department.
+        ensure_department_scope(current_user, payload.department_code)
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(user, field, value)
     db.commit()

@@ -19,7 +19,9 @@ async def upload_csv(
     cycle_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _=Depends(require_roles("SUPER_ADMIN", "DEPT_ADMIN")),
+    # The matrix rewrites offerings and registrations across every department,
+    # so no department-scoped admin can upload it.
+    _=Depends(require_roles("SUPER_ADMIN")),
 ):
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are accepted")

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import ensure_department_scope, get_current_user
 from app.core.websocket_manager import socket_broker
 from app.models.db import (
     DailyLedger,
@@ -101,6 +101,8 @@ def batch_mark_attendance(
         ledger.substitute_instructor_id,
     ) and current_user.role_type.value not in ("SUPER_ADMIN", "DEPT_ADMIN"):
         raise HTTPException(status_code=403, detail="Not authorized to mark this ledger")
+    if current_user.id not in (ledger.active_instructor_id, ledger.substitute_instructor_id):
+        ensure_department_scope(current_user, ledger.course_offering.department_code)
 
     for record in payload.records:
         _upsert_attendance(db, record, current_user.id)

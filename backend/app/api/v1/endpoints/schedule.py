@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.redis_client import get_redis
-from app.core.security import get_current_user, require_roles
+from app.core.security import ensure_department_scope, get_current_user, require_roles
 from app.models.db import AcademicCycle, CourseOffering, DailyLedger, StructuralMasterSlot, User
 from app.schemas.schedule import (
     AcademicCycleCreate,
@@ -105,8 +105,14 @@ def list_master_slots(
 def create_master_slot(
     payload: MasterSlotCreate,
     db: Session = Depends(get_db),
-    _=Depends(require_roles("SUPER_ADMIN", "DEPT_ADMIN")),
+    current_user: User = Depends(require_roles("SUPER_ADMIN", "DEPT_ADMIN")),
 ):
+    offering = (
+        db.query(CourseOffering).filter(CourseOffering.id == payload.course_offering_id).first()
+    )
+    if not offering:
+        raise HTTPException(status_code=404, detail="Course offering not found")
+    ensure_department_scope(current_user, offering.department_code)
     slot = StructuralMasterSlot(**payload.model_dump())
     db.add(slot)
     db.commit()
@@ -174,11 +180,12 @@ def update_ledger_entry(
     ledger_id: int,
     payload: DailyLedgerUpdate,
     db: Session = Depends(get_db),
-    _=Depends(require_roles("SUPER_ADMIN", "DEPT_ADMIN")),
+    current_user: User = Depends(require_roles("SUPER_ADMIN", "DEPT_ADMIN")),
 ):
     entry = db.query(DailyLedger).filter(DailyLedger.id == ledger_id).first()
     if not entry:
         raise HTTPException(status_code=404, detail="Ledger entry not found")
+    ensure_department_scope(current_user, entry.course_offering.department_code)
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(entry, field, value)
     db.commit()

@@ -84,6 +84,18 @@ def get_current_user(
     return user
 
 
+def ensure_department_scope(current_user, department_code) -> None:
+    """A DEPT_ADMIN may only act inside their own department; other roles pass."""
+    if (
+        current_user.role_type.value == "DEPT_ADMIN"
+        and department_code != current_user.department_code
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Outside your department",
+        )
+
+
 def require_roles(*roles: str):
     def checker(current_user=Depends(get_current_user)):
         if current_user.role_type.value not in roles:
