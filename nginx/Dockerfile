@@ -46,10 +46,17 @@ FROM nginx:1.27-alpine AS server
 # Copy pre-built static export
 COPY --from=builder /app/out /usr/share/nginx/html
 
-# Copy nginx reverse-proxy config
+# Copy nginx reverse-proxy config. tls-server.conf stays inactive until
+# 40-tls.sh finds a certificate pair at /etc/nginx/certs/ and copies it
+# into /etc/nginx/tls/ (which nginx.conf globs), so the same image serves
+# plain HTTP or HTTP+HTTPS depending on what is mounted.
 COPY nginx/nginx.conf /etc/nginx/nginx.conf
+COPY nginx/chronos-common.conf /etc/nginx/chronos-common.conf
+COPY nginx/tls-server.conf /etc/nginx/tls-server.conf
+COPY nginx/40-tls.sh /docker-entrypoint.d/40-tls.sh
+RUN chmod +x /docker-entrypoint.d/40-tls.sh && mkdir -p /etc/nginx/tls
 
-EXPOSE 80
+EXPOSE 80 443
 
 # Lightweight healthcheck — nginx must respond to /health which it proxies
 # to the backend. Use a simple port check here so the container reports

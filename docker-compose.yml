@@ -10,6 +10,11 @@ services:
       - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/chronos-common.conf:/etc/nginx/chronos-common.conf:ro
+      - ./nginx/tls-server.conf:/etc/nginx/tls-server.conf:ro
+      # The stock nginx image runs /docker-entrypoint.d/ scripts at start;
+      # 40-tls.sh enables :443 only when certs/ holds a certificate pair.
+      - ./nginx/40-tls.sh:/docker-entrypoint.d/40-tls.sh:ro
       - ./certs:/etc/nginx/certs:ro
       - frontend_build:/usr/share/nginx/html:ro
     depends_on:

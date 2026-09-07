@@ -186,7 +186,10 @@ Schedule via cron for nightly runs:
 
 ## TLS / HTTPS
 
-For production with HTTPS, place certificates in `certs/`:
+TLS is switched on by mounting certificates, not by editing configuration.
+At container start, `40-tls.sh` (in `/docker-entrypoint.d/`) checks for a
+certificate pair and enables the HTTPS listener on `:443` only when both
+files exist:
 
 ```
 certs/
@@ -194,23 +197,53 @@ certs/
   privkey.pem
 ```
 
-Then add a TLS server block to `nginx/nginx.conf` and redirect HTTP → HTTPS:
+With no certificates the same image serves plain HTTP on `:80` and logs
+`serving HTTP only`. With them it serves both, logs `HTTPS enabled on :443`,
+and sends `Strict-Transport-Security` on HTTPS responses only (HSTS is never
+emitted over plain HTTP). Both listeners share one config body
+(`nginx/chronos-common.conf`), so they cannot drift apart.
 
-```nginx
-server {
-    listen 443 ssl;
-    ssl_certificate     /etc/nginx/certs/fullchain.pem;
-    ssl_certificate_key /etc/nginx/certs/privkey.pem;
-    # ... rest of existing config
-}
-server {
-    listen 80;
-    return 301 https://$host$request_uri;
-}
+### Getting certificates with certbot (Let's Encrypt)
+
+On the host, with DNS for your domain pointing at the server:
+
+```bash
+# Stop the proxy briefly so certbot can bind :80
+docker compose stop chronos-proxy
+sudo certbot certonly --standalone -d chronos.example.edu
+
+# Copy into the mounted certs/ directory (paths per certbot output)
+sudo cp /etc/letsencrypt/live/chronos.example.edu/fullchain.pem certs/
+sudo cp /etc/letsencrypt/live/chronos.example.edu/privkey.pem certs/
+
+docker compose start chronos-proxy
 ```
 
-Also update your `.env` `APP_CORS_ORIGINS` to the HTTPS URL and rebuild the frontend
-(`NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` must use `https://` / `wss://`).
+The proxy logs confirm which mode it started in:
+
+```bash
+docker logs chronos_edge_proxy | grep 40-tls
+```
+
+### Renewal
+
+Let's Encrypt certificates last 90 days. Add a monthly cron entry that
+renews, refreshes the copies, and restarts the proxy so nginx re-reads them:
+
+```cron
+0 3 1 * * certbot renew --pre-hook "docker compose -f /path/to/chronos-ledger/docker-compose.prod.yml stop chronos-proxy" && cp /etc/letsencrypt/live/chronos.example.edu/{fullchain,privkey}.pem /path/to/chronos-ledger/certs/ && docker compose -f /path/to/chronos-ledger/docker-compose.prod.yml start chronos-proxy
+```
+
+### After enabling HTTPS
+
+- Update `.env` `APP_CORS_ORIGINS` to the `https://` URL.
+- Rebuild the frontend image if you override `NEXT_PUBLIC_API_URL` or
+  `NEXT_PUBLIC_WS_URL` with absolute URLs (the defaults are relative paths,
+  which follow the page origin and need no rebuild).
+- Optional: to force all traffic onto HTTPS, replace the body of the `:80`
+  server in `nginx/nginx.conf` with `return 301 https://$host$request_uri;`.
+  This is not the default because the container healthcheck and internal
+  probes use plain HTTP on localhost.
 
 ---
 
