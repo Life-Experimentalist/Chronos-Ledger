@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import ensure_department_scope, get_current_user
+from app.core.security import ensure_unit_scope, get_current_user
 from app.core.websocket_manager import socket_broker
 from app.models.db import (
     DailyLedger,
@@ -47,12 +47,10 @@ async def mark_attendance(
     if not ledger:
         raise HTTPException(status_code=404, detail="Ledger instance not found")
 
-    # Students can only mark their own attendance; must pass geo validation
-    if current_user.role_type.value == "STUDENT":
-        if payload.student_id != current_user.id:
-            raise HTTPException(
-                status_code=403, detail="Cannot mark attendance for another student"
-            )
+    # Members can only mark their own attendance; must pass geo validation
+    if current_user.role_type.value == "MEMBER":
+        if payload.member_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Cannot mark attendance for another member")
 
         geo_targets = [ledger.latitude_target, ledger.longitude_target, ledger.altitude_target]
         if (
@@ -80,7 +78,7 @@ async def mark_attendance(
     _upsert_attendance(db, payload, current_user.id)
     return {
         "status": "marked",
-        "student_id": payload.student_id,
+        "member_id": payload.member_id,
         "marking_status": payload.marking_status.value,
     }
 
@@ -95,14 +93,14 @@ def batch_mark_attendance(
     if not ledger:
         raise HTTPException(status_code=404, detail="Ledger instance not found")
 
-    # Only assigned/substitute instructor can batch mark
+    # Only assigned/substitute lead can batch mark
     if current_user.id not in (
-        ledger.active_instructor_id,
-        ledger.substitute_instructor_id,
-    ) and current_user.role_type.value not in ("SUPER_ADMIN", "DEPT_ADMIN"):
+        ledger.active_lead_id,
+        ledger.substitute_lead_id,
+    ) and current_user.role_type.value not in ("SUPER_ADMIN", "UNIT_ADMIN"):
         raise HTTPException(status_code=403, detail="Not authorized to mark this ledger")
-    if current_user.id not in (ledger.active_instructor_id, ledger.substitute_instructor_id):
-        ensure_department_scope(current_user, ledger.course_offering.department_code)
+    if current_user.id not in (ledger.active_lead_id, ledger.substitute_lead_id):
+        ensure_unit_scope(current_user, ledger.activity.unit_code)
 
     for record in payload.records:
         _upsert_attendance(db, record, current_user.id)
@@ -115,7 +113,7 @@ def _upsert_attendance(db: Session, payload: AttendanceMarkRequest, agent_id: st
         db.query(VerificationLedger)
         .filter(
             VerificationLedger.ledger_instance_id == payload.ledger_instance_id,
-            VerificationLedger.student_id == payload.student_id,
+            VerificationLedger.member_id == payload.member_id,
         )
         .first()
     )
@@ -128,7 +126,7 @@ def _upsert_attendance(db: Session, payload: AttendanceMarkRequest, agent_id: st
     else:
         record = VerificationLedger(
             ledger_instance_id=payload.ledger_instance_id,
-            student_id=payload.student_id,
+            member_id=payload.member_id,
             marking_status=payload.marking_status,
             authorizing_agent_id=agent_id,
         )

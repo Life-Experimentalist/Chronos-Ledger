@@ -6,7 +6,7 @@ import json
 from fastapi import WebSocket
 
 
-class CampusConnectionManager:
+class OrganizationConnectionManager:
     def __init__(self):
         self.active_sockets: dict[str, WebSocket] = {}
 
@@ -46,4 +46,4 @@ class CampusConnectionManager:
         return user_id in self.active_sockets
 
 
-socket_broker = CampusConnectionManager()
+socket_broker = OrganizationConnectionManager()

@@ -85,7 +85,7 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     if (
         user.initial_login_state
-        and user.role_type.value in ("SUPER_ADMIN", "DEPT_ADMIN")
+        and user.role_type.value in ("SUPER_ADMIN", "UNIT_ADMIN")
         and not request.url.path.endswith(_FIRST_LOGIN_EXEMPT_SUFFIXES)
     ):
         raise HTTPException(
@@ -95,15 +95,12 @@ def get_current_user(
     return user
 
 
-def ensure_department_scope(current_user, department_code) -> None:
-    """A DEPT_ADMIN may only act inside their own department; other roles pass."""
-    if (
-        current_user.role_type.value == "DEPT_ADMIN"
-        and department_code != current_user.department_code
-    ):
+def ensure_unit_scope(current_user, unit_code) -> None:
+    """A UNIT_ADMIN may only act inside their own unit; other roles pass."""
+    if current_user.role_type.value == "UNIT_ADMIN" and unit_code != current_user.unit_code:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Outside your department",
+            detail="Outside your unit",
         )
 
 

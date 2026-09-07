@@ -8,10 +8,10 @@ from datetime import UTC, datetime, timedelta
 
 from app.core.security import hash_refresh_token
 from app.models.db import RefreshToken
-from tests.conftest import STUDENT_PASSWORD
+from tests.conftest import MEMBER_PASSWORD
 
 
-def _login(client, email="student@test.internal", password=STUDENT_PASSWORD):
+def _login(client, email="member@test.internal", password=MEMBER_PASSWORD):
     res = client.post("/api/v1/auth/login", json={"email": email, "password": password})
     assert res.status_code == 200
     return res.json()
@@ -85,7 +85,7 @@ def test_password_change_revokes_all_sessions(client, db, seed_users):
 
     res = client.post(
         "/api/v1/auth/change-password",
-        json={"current_password": STUDENT_PASSWORD, "new_password": "BrandNewPass456!"},
+        json={"current_password": MEMBER_PASSWORD, "new_password": "BrandNewPass456!"},
         headers={"Authorization": f"Bearer {laptop['access_token']}"},
     )
     assert res.status_code == 200

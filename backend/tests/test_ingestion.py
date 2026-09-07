@@ -6,23 +6,23 @@ import datetime
 import io
 
 from app.models.db import (
-    AcademicCycle,
-    CourseOffering,
-    CourseRegistration,
+    Activity,
+    ActivityEnrollment,
+    PlanningCycle,
     StructuralMasterSlot,
     User,
 )
-from tests.conftest import ADMIN_PASSWORD, STUDENT_PASSWORD, login
+from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, login
 
 HEADER = (
-    "student_id,student_name,student_email,subject_code,subject_title,"
-    "department,day_of_week_index,time_window_start,time_window_end,teacher_id,room"
+    "member_id,member_name,member_email,activity_code,activity_title,"
+    "unit,day_of_week_index,time_window_start,time_window_end,lead_id,room"
 )
 
 
 def _make_cycle(db):
     today = datetime.date.today()
-    cycle = AcademicCycle(
+    cycle = PlanningCycle(
         cycle_label="Ingest 2026",
         date_bounds_start=today - datetime.timedelta(days=30),
         date_bounds_end=today + datetime.timedelta(days=90),
@@ -56,25 +56,23 @@ def test_upload_happy_path_creates_everything(client, db, seed_users):
     db.expire_all()
     ada = db.query(User).filter(User.id == "STU900").first()
     assert ada is not None
-    assert ada.role_type.value == "STUDENT"
-    assert ada.department_code == "CSE"
+    assert ada.role_type.value == "MEMBER"
+    assert ada.unit_code == "CSE"
 
-    offerings = db.query(CourseOffering).filter(CourseOffering.course_code == "MA201").all()
+    offerings = db.query(Activity).filter(Activity.activity_code == "MA201").all()
     assert len(offerings) == 1  # both rows share one offering
     regs = (
-        db.query(CourseRegistration)
-        .filter(CourseRegistration.course_offering_id == offerings[0].id)
-        .all()
+        db.query(ActivityEnrollment).filter(ActivityEnrollment.activity_id == offerings[0].id).all()
     )
-    assert {reg.student_id for reg in regs} == {"STU900", "STU901"}
+    assert {reg.member_id for reg in regs} == {"STU900", "STU901"}
 
     slots = (
         db.query(StructuralMasterSlot)
-        .filter(StructuralMasterSlot.course_offering_id == offerings[0].id)
+        .filter(StructuralMasterSlot.activity_id == offerings[0].id)
         .all()
     )
-    assert len(slots) == 1  # deduplicated by course + day + start time
-    assert slots[0].primary_instructor_id == "FAC001"
+    assert len(slots) == 1  # deduplicated by activity + day + start time
+    assert slots[0].primary_lead_id == "FAC001"
     assert slots[0].target_room_identifier == "LH-201"
 
 
@@ -90,7 +88,7 @@ def test_upload_is_idempotent(client, db, seed_users):
 
     db.expire_all()
     assert db.query(User).filter(User.id == "STU902").count() == 1
-    assert db.query(CourseOffering).filter(CourseOffering.course_code == "PH101").count() == 1
+    assert db.query(Activity).filter(Activity.activity_code == "PH101").count() == 1
 
 
 def test_missing_column_is_422(client, db, seed_users):
@@ -122,7 +120,7 @@ def test_bad_time_rolls_back_the_whole_file(client, db, seed_users):
 
     db.expire_all()
     assert db.query(User).filter(User.id == "STU904").first() is None
-    assert db.query(CourseOffering).filter(CourseOffering.course_code == "BI101").first() is None
+    assert db.query(Activity).filter(Activity.activity_code == "BI101").first() is None
 
 
 def test_non_csv_filename_is_400(client, db, seed_users):
@@ -132,8 +130,8 @@ def test_non_csv_filename_is_400(client, db, seed_users):
     assert r.status_code == 400
 
 
-def test_student_cannot_upload(client, db, seed_users):
+def test_member_cannot_upload(client, db, seed_users):
     cycle = _make_cycle(db)
-    headers = login(client, "student@test.internal", STUDENT_PASSWORD)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
     r = _upload(client, headers, cycle.id, HEADER + "\n")
     assert r.status_code == 403

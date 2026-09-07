@@ -1,6 +1,6 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
-"""iCalendar feed: faculty and student views, state annotations, ad-hoc entries.
+"""iCalendar feed: staff and member views, state annotations, ad-hoc entries.
 
 The feed is deliberately unauthenticated so calendar apps can subscribe to it,
 but it is keyed by an unguessable per-user token, never the plain user id.
@@ -9,21 +9,21 @@ but it is keyed by an unguessable per-user token, never the plain user id.
 import datetime
 
 from app.models.db import (
-    AcademicCycle,
-    CourseOffering,
-    CourseRegistration,
+    Activity,
+    ActivityEnrollment,
     DailyLedger,
     DynamicState,
+    PlanningCycle,
     StructuralMasterSlot,
     User,
 )
-from tests.conftest import FACULTY_PASSWORD, login
+from tests.conftest import STAFF_PASSWORD, login
 
 TODAY = datetime.date.today()
 
 
 def _seed_schedule(db, state=DynamicState.SCHEDULED, with_slot=True, substitute=None):
-    cycle = AcademicCycle(
+    cycle = PlanningCycle(
         cycle_label="Cal 2026",
         date_bounds_start=TODAY - datetime.timedelta(days=30),
         date_bounds_end=TODAY + datetime.timedelta(days=90),
@@ -31,10 +31,10 @@ def _seed_schedule(db, state=DynamicState.SCHEDULED, with_slot=True, substitute=
     )
     db.add(cycle)
     db.flush()
-    offering = CourseOffering(
-        course_code="CS500",
-        course_title="Distributed Systems",
-        department_code="CSE",
+    offering = Activity(
+        activity_code="CS500",
+        activity_title="Distributed Systems",
+        unit_code="CSE",
         cycle_id=cycle.id,
     )
     db.add(offering)
@@ -45,8 +45,8 @@ def _seed_schedule(db, state=DynamicState.SCHEDULED, with_slot=True, substitute=
             day_of_week_index=TODAY.isoweekday(),
             time_window_start=datetime.time(10, 0),
             time_window_end=datetime.time(11, 0),
-            course_offering_id=offering.id,
-            primary_instructor_id="FAC001",
+            activity_id=offering.id,
+            primary_lead_id="FAC001",
             target_room_identifier="LH-500",
         )
         db.add(slot)
@@ -55,14 +55,14 @@ def _seed_schedule(db, state=DynamicState.SCHEDULED, with_slot=True, substitute=
     ledger = DailyLedger(
         target_date=TODAY,
         master_slot_id=slot_id,
-        course_offering_id=offering.id,
-        active_instructor_id="FAC001",
-        substitute_instructor_id=substitute,
+        activity_id=offering.id,
+        active_lead_id="FAC001",
+        substitute_lead_id=substitute,
         target_room_identifier="LH-500",
         operational_state=state,
     )
     db.add(ledger)
-    db.add(CourseRegistration(course_offering_id=offering.id, student_id="STU001"))
+    db.add(ActivityEnrollment(activity_id=offering.id, member_id="STU001"))
     db.commit()
     return offering
 
@@ -72,7 +72,7 @@ def _feed_url(db, user_id):
     return f"/api/v1/sync/user-feed/{token}.ics"
 
 
-def test_faculty_feed_lists_their_class(client, db, seed_users):
+def test_staff_feed_lists_their_class(client, db, seed_users):
     _seed_schedule(db)
     r = client.get(_feed_url(db, "FAC001"))
     assert r.status_code == 200
@@ -84,13 +84,13 @@ def test_faculty_feed_lists_their_class(client, db, seed_users):
     assert "LOCATION:Room LH-500" in body
 
 
-def test_student_feed_requires_registration(client, db, seed_users):
+def test_member_feed_requires_registration(client, db, seed_users):
     _seed_schedule(db)
     registered = client.get(_feed_url(db, "STU001")).text
     assert "[CS500] Distributed Systems" in registered
 
-    # Drop the registration: the same student now sees an empty calendar.
-    db.query(CourseRegistration).delete()
+    # Drop the registration: the same member now sees an empty calendar.
+    db.query(ActivityEnrollment).delete()
     db.commit()
     unregistered = client.get(_feed_url(db, "STU001")).text
     assert "BEGIN:VEVENT" not in unregistered
@@ -135,7 +135,7 @@ def test_rotate_invalidates_the_old_feed_url(client, db, seed_users):
     old_url = _feed_url(db, "FAC001")
     assert client.get(old_url).status_code == 200
 
-    headers = login(client, "faculty@test.internal", FACULTY_PASSWORD)
+    headers = login(client, "staff@test.internal", STAFF_PASSWORD)
     rotated = client.post("/api/v1/sync/feed-token/rotate", headers=headers)
     assert rotated.status_code == 200
     new_path = rotated.json()["feed_path"]
@@ -145,7 +145,7 @@ def test_rotate_invalidates_the_old_feed_url(client, db, seed_users):
 
 
 def test_feed_token_endpoint_returns_the_current_url(client, db, seed_users):
-    headers = login(client, "faculty@test.internal", FACULTY_PASSWORD)
+    headers = login(client, "staff@test.internal", STAFF_PASSWORD)
     r = client.get("/api/v1/sync/feed-token", headers=headers)
     assert r.status_code == 200
     body = r.json()

@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -25,13 +26,14 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 30
 
-    # Campus
-    campus_domain_mask: str = "college.internal"
+    # Organization
+    org_domain_mask: str = "org.internal"
+    org_profile: Literal["generic", "campus", "hospital"] = "generic"
 
     # VAPID (Web Push)
     vapid_public_key: str = ""
     vapid_private_key: str = ""
-    vapid_contact_email: str = "admin@college.internal"
+    vapid_contact_email: str = "admin@org.internal"
 
     # Telemetry — opt-in. Off by default so a self-hosted instance never
     # reaches a service the operator does not run. Set both to enable.

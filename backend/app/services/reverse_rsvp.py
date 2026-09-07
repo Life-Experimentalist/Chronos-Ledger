@@ -44,8 +44,8 @@ def commit_absence_override(log_id: int, execution_agent: str, target_state: str
 
     if new_state == LogVerificationState.VERIFIED_APPROVED:
         db.query(DailyLedger).filter(
-            DailyLedger.active_instructor_id == log.submitting_user_id,
+            DailyLedger.active_lead_id == log.submitting_user_id,
             DailyLedger.target_date == log.target_absence_date,
-        ).update({"operational_state": DynamicState.ON_LEAVE, "substitute_instructor_id": None})
+        ).update({"operational_state": DynamicState.ON_LEAVE, "substitute_lead_id": None})
 
     db.commit()

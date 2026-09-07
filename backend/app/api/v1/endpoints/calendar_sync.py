@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.db import (
-    CourseOffering,
-    CourseRegistration,
+    Activity,
+    ActivityEnrollment,
     DailyLedger,
     InstitutionalRole,
     StructuralMasterSlot,
@@ -57,34 +57,34 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
     start_range = datetime.date.today() - datetime.timedelta(days=7)
     end_range = datetime.date.today() + datetime.timedelta(days=30)
 
-    is_faculty = user.role_type in (
-        InstitutionalRole.FACULTY,
+    is_staff = user.role_type in (
+        InstitutionalRole.STAFF,
         InstitutionalRole.SUPER_ADMIN,
-        InstitutionalRole.DEPT_ADMIN,
+        InstitutionalRole.UNIT_ADMIN,
     )
 
-    if is_faculty:
-        # Faculty feed: ledger entries where they are instructor or substitute
+    if is_staff:
+        # Staff feed: ledger entries where they are lead or substitute
         ledger_entries = (
             db.query(DailyLedger)
-            .join(CourseOffering, DailyLedger.course_offering_id == CourseOffering.id)
+            .join(Activity, DailyLedger.activity_id == Activity.id)
             .outerjoin(StructuralMasterSlot, DailyLedger.master_slot_id == StructuralMasterSlot.id)
             .filter(
-                (DailyLedger.active_instructor_id == user.id)
-                | (DailyLedger.substitute_instructor_id == user.id),
+                (DailyLedger.active_lead_id == user.id)
+                | (DailyLedger.substitute_lead_id == user.id),
                 DailyLedger.target_date.between(start_range, end_range),
             )
             .all()
         )
     else:
-        # Student feed: ledger entries for their registered courses
+        # Member feed: ledger entries for their registered activities
         ledger_entries = (
             db.query(DailyLedger)
-            .join(CourseOffering, DailyLedger.course_offering_id == CourseOffering.id)
+            .join(Activity, DailyLedger.activity_id == Activity.id)
             .join(StructuralMasterSlot, DailyLedger.master_slot_id == StructuralMasterSlot.id)
-            .join(CourseRegistration, CourseRegistration.course_offering_id == CourseOffering.id)
+            .join(ActivityEnrollment, ActivityEnrollment.activity_id == Activity.id)
             .filter(
-                CourseRegistration.student_id == user.id,
+                ActivityEnrollment.member_id == user.id,
                 DailyLedger.target_date.between(start_range, end_range),
             )
             .all()
@@ -93,7 +93,7 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
     lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
-        "PRODID:-//ChronosLedger Engine//CampusOS 2026//EN",
+        "PRODID:-//ChronosLedger Engine//Chronos 2026//EN",
         f"X-WR-CALNAME:Chronos Timeline - {user.full_name}",
         "X-WR-TIMEZONE:UTC",
         "CALSCALE:GREGORIAN",
@@ -101,7 +101,7 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
 
     for entry in ledger_entries:
         slot = entry.master_slot
-        offering = entry.course_offering
+        offering = entry.activity
         if not offering:
             continue
 
@@ -118,16 +118,16 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
             dtend_line = f"DTEND;VALUE=DATE:{next_day.strftime('%Y%m%d')}"
             uid_time = "000000"
 
-        summary = f"[{offering.course_code}] {offering.course_title}"
+        summary = f"[{offering.activity_code}] {offering.activity_title}"
         if entry.operational_state.value == "PROXY_SUBSTITUTE":
             summary += " (Proxy Assignment)"
         elif entry.operational_state.value == "ON_LEAVE":
-            summary += " [CANCELLED — Faculty Absent]"
+            summary += " [CANCELLED — Staff Absent]"
 
         lines.extend(
             [
                 "BEGIN:VEVENT",
-                f"UID:slot_{entry.target_date.strftime('%Y%m%d')}_{offering.course_code}_{uid_time}@chronos.internal",
+                f"UID:slot_{entry.target_date.strftime('%Y%m%d')}_{offering.activity_code}_{uid_time}@chronos.internal",
                 dtstart_line,
                 dtend_line,
                 f"SUMMARY:{summary}",

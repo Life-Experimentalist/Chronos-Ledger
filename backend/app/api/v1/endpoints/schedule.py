@@ -8,35 +8,35 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.redis_client import get_redis
-from app.core.security import ensure_department_scope, get_current_user, require_roles
-from app.models.db import AcademicCycle, CourseOffering, DailyLedger, StructuralMasterSlot, User
+from app.core.security import ensure_unit_scope, get_current_user, require_roles
+from app.models.db import Activity, DailyLedger, PlanningCycle, StructuralMasterSlot, User
 from app.schemas.schedule import (
-    AcademicCycleCreate,
-    AcademicCycleResponse,
     DailyLedgerUpdate,
-    FacultyLocationResponse,
     MasterSlotCreate,
+    PlanningCycleCreate,
+    PlanningCycleResponse,
+    StaffLocationResponse,
 )
-from app.services.location_resolver import determine_faculty_current_state
+from app.services.location_resolver import determine_staff_current_state
 
 router = APIRouter()
 
 
-# ── Academic Cycles ──────────────────────────────────────────────────────────
+# ── Planning Cycles ──────────────────────────────────────────────────────────
 
 
-@router.get("/cycles", response_model=list[AcademicCycleResponse])
+@router.get("/cycles", response_model=list[PlanningCycleResponse])
 def list_cycles(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    return db.query(AcademicCycle).all()
+    return db.query(PlanningCycle).all()
 
 
-@router.post("/cycles", response_model=AcademicCycleResponse)
+@router.post("/cycles", response_model=PlanningCycleResponse)
 def create_cycle(
-    payload: AcademicCycleCreate,
+    payload: PlanningCycleCreate,
     db: Session = Depends(get_db),
     _=Depends(require_roles("SUPER_ADMIN")),
 ):
-    cycle = AcademicCycle(**payload.model_dump())
+    cycle = PlanningCycle(**payload.model_dump())
     db.add(cycle)
     db.commit()
     db.refresh(cycle)
@@ -47,7 +47,7 @@ def create_cycle(
 def close_cycle(
     cycle_id: int, db: Session = Depends(get_db), _=Depends(require_roles("SUPER_ADMIN"))
 ):
-    cycle = db.query(AcademicCycle).filter(AcademicCycle.id == cycle_id).first()
+    cycle = db.query(PlanningCycle).filter(PlanningCycle.id == cycle_id).first()
     if not cycle:
         raise HTTPException(status_code=404, detail="Cycle not found")
     cycle.operational_status = False
@@ -62,12 +62,12 @@ def clone_cycle_offerings(
     db: Session = Depends(get_db),
     _=Depends(require_roles("SUPER_ADMIN")),
 ):
-    old_offerings = db.query(CourseOffering).filter(CourseOffering.cycle_id == old_id).all()
+    old_offerings = db.query(Activity).filter(Activity.cycle_id == old_id).all()
     for offering in old_offerings:
-        new = CourseOffering(
-            course_code=offering.course_code,
-            course_title=offering.course_title,
-            department_code=offering.department_code,
+        new = Activity(
+            activity_code=offering.activity_code,
+            activity_title=offering.activity_title,
+            unit_code=offering.unit_code,
             cycle_id=new_id,
         )
         db.add(new)
@@ -86,15 +86,15 @@ def list_master_slots(
 ):
     q = db.query(StructuralMasterSlot)
     if cycle_id:
-        q = q.join(CourseOffering).filter(CourseOffering.cycle_id == cycle_id)
+        q = q.join(Activity).filter(Activity.cycle_id == cycle_id)
     return [
         {
             "id": s.id,
             "day_of_week_index": s.day_of_week_index,
             "time_window_start": str(s.time_window_start),
             "time_window_end": str(s.time_window_end),
-            "course_offering_id": s.course_offering_id,
-            "primary_instructor_id": s.primary_instructor_id,
+            "activity_id": s.activity_id,
+            "primary_lead_id": s.primary_lead_id,
             "target_room_identifier": s.target_room_identifier,
         }
         for s in q.all()
@@ -105,14 +105,12 @@ def list_master_slots(
 def create_master_slot(
     payload: MasterSlotCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "DEPT_ADMIN")),
+    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
 ):
-    offering = (
-        db.query(CourseOffering).filter(CourseOffering.id == payload.course_offering_id).first()
-    )
+    offering = db.query(Activity).filter(Activity.id == payload.activity_id).first()
     if not offering:
-        raise HTTPException(status_code=404, detail="Course offering not found")
-    ensure_department_scope(current_user, offering.department_code)
+        raise HTTPException(status_code=404, detail="Activity offering not found")
+    ensure_unit_scope(current_user, offering.unit_code)
     slot = StructuralMasterSlot(**payload.model_dump())
     db.add(slot)
     db.commit()
@@ -131,41 +129,41 @@ def get_today_ledger(
     today = datetime.date.today()
     q = db.query(DailyLedger).filter(DailyLedger.target_date == today)
 
-    if current_user.role_type.value == "FACULTY":
+    if current_user.role_type.value == "STAFF":
         q = q.filter(
-            (DailyLedger.active_instructor_id == current_user.id)
-            | (DailyLedger.substitute_instructor_id == current_user.id)
+            (DailyLedger.active_lead_id == current_user.id)
+            | (DailyLedger.substitute_lead_id == current_user.id)
         )
-    elif current_user.role_type.value == "STUDENT":
-        from app.models.db import CourseRegistration
+    elif current_user.role_type.value == "MEMBER":
+        from app.models.db import ActivityEnrollment
 
         registered_ids = [
-            r.course_offering_id
-            for r in db.query(CourseRegistration)
-            .filter(CourseRegistration.student_id == current_user.id)
+            r.activity_id
+            for r in db.query(ActivityEnrollment)
+            .filter(ActivityEnrollment.member_id == current_user.id)
             .all()
         ]
-        q = q.filter(DailyLedger.course_offering_id.in_(registered_ids))
+        q = q.filter(DailyLedger.activity_id.in_(registered_ids))
 
     entries = q.all()
     result = []
     for e in entries:
         slot = e.master_slot
-        offering = e.course_offering
+        offering = e.activity
         result.append(
             {
                 "id": e.id,
                 "target_date": str(e.target_date),
-                "course_code": offering.course_code if offering else None,
-                "course_title": offering.course_title if offering else None,
+                "activity_code": offering.activity_code if offering else None,
+                "activity_title": offering.activity_title if offering else None,
                 "target_room_identifier": e.target_room_identifier,
                 "time_window_start": str(slot.time_window_start) if slot else None,
                 "time_window_end": str(slot.time_window_end) if slot else None,
                 "delivery_format": e.delivery_format.value,
                 "virtual_connection_string": e.virtual_connection_string,
                 "operational_state": e.operational_state.value,
-                "active_instructor_id": e.active_instructor_id,
-                "substitute_instructor_id": e.substitute_instructor_id,
+                "active_lead_id": e.active_lead_id,
+                "substitute_lead_id": e.substitute_lead_id,
                 "latitude_target": float(e.latitude_target) if e.latitude_target else None,
                 "longitude_target": float(e.longitude_target) if e.longitude_target else None,
                 "altitude_target": float(e.altitude_target) if e.altitude_target else None,
@@ -180,55 +178,55 @@ def update_ledger_entry(
     ledger_id: int,
     payload: DailyLedgerUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "DEPT_ADMIN")),
+    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
 ):
     entry = db.query(DailyLedger).filter(DailyLedger.id == ledger_id).first()
     if not entry:
         raise HTTPException(status_code=404, detail="Ledger entry not found")
-    ensure_department_scope(current_user, entry.course_offering.department_code)
+    ensure_unit_scope(current_user, entry.activity.unit_code)
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(entry, field, value)
     db.commit()
     return {"message": "Updated"}
 
 
-# ── Faculty Location Resolution ───────────────────────────────────────────────
+# ── Staff Location Resolution ───────────────────────────────────────────────
 
 
-@router.get("/faculty/{faculty_id}/location", response_model=FacultyLocationResponse)
-def get_faculty_location(
-    faculty_id: str,
+@router.get("/staff/{staff_id}/location", response_model=StaffLocationResponse)
+def get_staff_location(
+    staff_id: str,
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    faculty = db.query(User).filter(User.id == faculty_id).first()
-    if not faculty:
-        raise HTTPException(status_code=404, detail="Faculty not found")
+    staff = db.query(User).filter(User.id == staff_id).first()
+    if not staff:
+        raise HTTPException(status_code=404, detail="Staff not found")
 
     redis = get_redis()
-    result = determine_faculty_current_state(faculty_id, db, redis)
-    return FacultyLocationResponse(
-        faculty_id=faculty_id,
-        full_name=faculty.full_name,
-        occupancy_index=faculty.current_occupancy_index.value,
+    result = determine_staff_current_state(staff_id, db, redis)
+    return StaffLocationResponse(
+        staff_id=staff_id,
+        full_name=staff.full_name,
+        occupancy_index=staff.current_occupancy_index.value,
         **result,
     )
 
 
-@router.get("/faculty/all/locations")
-def get_all_faculty_locations(db: Session = Depends(get_db), _=Depends(get_current_user)):
+@router.get("/staff/all/locations")
+def get_all_staff_locations(db: Session = Depends(get_db), _=Depends(get_current_user)):
     from app.models.db import InstitutionalRole
 
-    faculty_list = db.query(User).filter(User.role_type == InstitutionalRole.FACULTY).all()
+    staff_list = db.query(User).filter(User.role_type == InstitutionalRole.STAFF).all()
     redis = get_redis()
     results = []
-    for f in faculty_list:
-        location = determine_faculty_current_state(f.id, db, redis)
+    for f in staff_list:
+        location = determine_staff_current_state(f.id, db, redis)
         results.append(
             {
-                "faculty_id": f.id,
+                "staff_id": f.id,
                 "full_name": f.full_name,
-                "department_code": f.department_code,
+                "unit_code": f.unit_code,
                 "occupancy_index": f.current_occupancy_index.value,
                 **location,
             }

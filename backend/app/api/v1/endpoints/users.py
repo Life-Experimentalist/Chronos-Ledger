@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import (
-    ensure_department_scope,
+    ensure_unit_scope,
     get_current_user,
     hash_password,
     require_roles,
@@ -21,18 +21,18 @@ router = APIRouter()
 @router.get("/", response_model=list[UserResponse])
 def list_users(
     role: str | None = None,
-    department: str | None = None,
+    unit: str | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "DEPT_ADMIN")),
+    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
 ):
     q = db.query(User)
     if role:
         q = q.filter(User.role_type == role)
-    if department:
-        q = q.filter(User.department_code == department)
-    # A department admin only ever sees their own department, whatever they ask for.
-    if current_user.role_type == InstitutionalRole.DEPT_ADMIN:
-        q = q.filter(User.department_code == current_user.department_code)
+    if unit:
+        q = q.filter(User.unit_code == unit)
+    # A unit admin only ever sees their own unit, whatever they ask for.
+    if current_user.role_type == InstitutionalRole.UNIT_ADMIN:
+        q = q.filter(User.unit_code == current_user.unit_code)
     return q.all()
 
 
@@ -40,12 +40,12 @@ def list_users(
 def create_user(
     payload: UserCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "DEPT_ADMIN")),
+    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
 ):
-    admin_roles = (InstitutionalRole.SUPER_ADMIN, InstitutionalRole.DEPT_ADMIN)
+    admin_roles = (InstitutionalRole.SUPER_ADMIN, InstitutionalRole.UNIT_ADMIN)
     if payload.role_type in admin_roles and current_user.role_type != InstitutionalRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Only a super-admin can create admin accounts")
-    ensure_department_scope(current_user, payload.department_code)
+    ensure_unit_scope(current_user, payload.unit_code)
     if db.query(User).filter(User.id == payload.id).first():
         raise HTTPException(status_code=409, detail="User ID already exists")
     if db.query(User).filter(User.email_address == payload.email_address).first():
@@ -57,7 +57,7 @@ def create_user(
         email_address=payload.email_address,
         credential_secure_hash=hash_password(payload.password),
         role_type=payload.role_type,
-        department_code=payload.department_code,
+        unit_code=payload.unit_code,
         assigned_base_station=payload.assigned_base_station,
         reporting_line_manager=payload.reporting_line_manager,
     )
@@ -67,26 +67,26 @@ def create_user(
     return user
 
 
-# NOTE: /faculty/available MUST be declared before /{user_id} or FastAPI
-# will match the literal string "faculty" as a user_id path param.
-@router.get("/faculty/available")
-def list_available_faculty(
-    department: str | None = None,
+# NOTE: /staff/available MUST be declared before /{user_id} or FastAPI
+# will match the literal string "staff" as a user_id path param.
+@router.get("/staff/available")
+def list_available_staff(
+    unit: str | None = None,
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    q = db.query(User).filter(User.role_type == InstitutionalRole.FACULTY)
-    if department:
-        q = q.filter(User.department_code == department)
-    faculty = q.all()
+    q = db.query(User).filter(User.role_type == InstitutionalRole.STAFF)
+    if unit:
+        q = q.filter(User.unit_code == unit)
+    staff = q.all()
     return [
         {
             "id": f.id,
             "full_name": f.full_name,
-            "department_code": f.department_code,
+            "unit_code": f.unit_code,
             "current_occupancy_index": f.current_occupancy_index.value,
         }
-        for f in faculty
+        for f in staff
     ]
 
 
@@ -98,14 +98,14 @@ def get_user(
 ):
     if current_user.id != user_id and current_user.role_type.value not in (
         "SUPER_ADMIN",
-        "DEPT_ADMIN",
+        "UNIT_ADMIN",
     ):
         raise HTTPException(status_code=403, detail="Access denied")
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if current_user.id != user_id:
-        ensure_department_scope(current_user, user.department_code)
+        ensure_unit_scope(current_user, user.unit_code)
     return user
 
 
@@ -114,18 +114,18 @@ def update_user(
     user_id: str,
     payload: UserUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "DEPT_ADMIN")),
+    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
 ):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    admin_roles = (InstitutionalRole.SUPER_ADMIN, InstitutionalRole.DEPT_ADMIN)
+    admin_roles = (InstitutionalRole.SUPER_ADMIN, InstitutionalRole.UNIT_ADMIN)
     if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Only a super-admin can modify admin accounts")
-    ensure_department_scope(current_user, user.department_code)
-    if payload.department_code is not None:
-        # A department admin cannot move a user into or out of another department.
-        ensure_department_scope(current_user, payload.department_code)
+    ensure_unit_scope(current_user, user.unit_code)
+    if payload.unit_code is not None:
+        # A unit admin cannot move a user into or out of another unit.
+        ensure_unit_scope(current_user, payload.unit_code)
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(user, field, value)
     db.commit()

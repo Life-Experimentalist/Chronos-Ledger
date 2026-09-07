@@ -33,9 +33,9 @@ def generate_feed_token() -> str:
 
 class InstitutionalRole(enum.StrEnum):
     SUPER_ADMIN = "SUPER_ADMIN"
-    DEPT_ADMIN = "DEPT_ADMIN"
-    FACULTY = "FACULTY"
-    STUDENT = "STUDENT"
+    UNIT_ADMIN = "UNIT_ADMIN"
+    STAFF = "STAFF"
+    MEMBER = "MEMBER"
 
 
 class DynamicState(enum.StrEnum):
@@ -71,18 +71,16 @@ class LogVerificationState(enum.StrEnum):
     VERIFIED_DENIED = "VERIFIED_DENIED"
 
 
-class AcademicCycle(Base):
-    __tablename__ = "academic_cycles"
+class PlanningCycle(Base):
+    __tablename__ = "planning_cycles"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     cycle_label = Column(String(50), nullable=False)
     date_bounds_start = Column(Date, nullable=False)
     date_bounds_end = Column(Date, nullable=False)
     operational_status = Column(Boolean, default=False, nullable=False)
 
-    course_offerings = relationship(
-        "CourseOffering", back_populates="cycle", cascade="all, delete-orphan"
-    )
+    activities = relationship("Activity", back_populates="cycle", cascade="all, delete-orphan")
 
 
 class User(Base):
@@ -92,10 +90,12 @@ class User(Base):
     full_name = Column(String(120), nullable=False)
     email_address = Column(String(120), unique=True, nullable=False)
     credential_secure_hash = Column(String(255), nullable=False)
-    role_type = Column(Enum(InstitutionalRole), nullable=False)
-    department_code = Column(String(50), nullable=True)
+    role_type = Column(Enum(InstitutionalRole, name="institutional_role"), nullable=False)
+    unit_code = Column(String(50), nullable=True)
     assigned_base_station = Column(String(100), default="Staff Room Main")
-    current_occupancy_index = Column(Enum(AccessReadiness), default=AccessReadiness.OPEN_AD_HOC)
+    current_occupancy_index = Column(
+        Enum(AccessReadiness, name="access_readiness"), default=AccessReadiness.OPEN_AD_HOC
+    )
     reporting_line_manager = Column(
         String(50), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -105,64 +105,58 @@ class User(Base):
     )
 
     manager = relationship("User", remote_side="User.id", foreign_keys=[reporting_line_manager])
-    course_registrations = relationship(
-        "CourseRegistration", back_populates="student", cascade="all, delete-orphan"
+    activity_enrollments = relationship(
+        "ActivityEnrollment", back_populates="member", cascade="all, delete-orphan"
     )
 
 
-class CourseOffering(Base):
-    __tablename__ = "course_offerings"
-    __table_args__ = (UniqueConstraint("course_code", "cycle_id", name="uq_course_cycle"),)
+class Activity(Base):
+    __tablename__ = "activities"
+    __table_args__ = (UniqueConstraint("activity_code", "cycle_id", name="uq_activity_cycle"),)
 
-    id = Column(Integer, primary_key=True, index=True)
-    course_code = Column(String(30), nullable=False)
-    course_title = Column(String(150), nullable=False)
-    department_code = Column(String(50), nullable=False)
-    cycle_id = Column(Integer, ForeignKey("academic_cycles.id", ondelete="CASCADE"), nullable=False)
+    id = Column(Integer, primary_key=True)
+    activity_code = Column(String(30), nullable=False)
+    activity_title = Column(String(150), nullable=False)
+    unit_code = Column(String(50), nullable=False)
+    cycle_id = Column(Integer, ForeignKey("planning_cycles.id", ondelete="CASCADE"), nullable=False)
 
-    cycle = relationship("AcademicCycle", back_populates="course_offerings")
+    cycle = relationship("PlanningCycle", back_populates="activities")
     master_slots = relationship(
-        "StructuralMasterSlot", back_populates="course_offering", cascade="all, delete-orphan"
+        "StructuralMasterSlot", back_populates="activity", cascade="all, delete-orphan"
     )
     registrations = relationship(
-        "CourseRegistration", back_populates="course_offering", cascade="all, delete-orphan"
+        "ActivityEnrollment", back_populates="activity", cascade="all, delete-orphan"
     )
 
 
-class CourseRegistration(Base):
-    __tablename__ = "course_registrations"
+class ActivityEnrollment(Base):
+    __tablename__ = "activity_enrollments"
     __table_args__ = (
-        UniqueConstraint("course_offering_id", "student_id", name="unique_student_registration"),
+        UniqueConstraint("activity_id", "member_id", name="unique_member_registration"),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
-    course_offering_id = Column(
-        Integer, ForeignKey("course_offerings.id", ondelete="CASCADE"), nullable=False
-    )
-    student_id = Column(String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    id = Column(Integer, primary_key=True)
+    activity_id = Column(Integer, ForeignKey("activities.id", ondelete="CASCADE"), nullable=False)
+    member_id = Column(String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
-    course_offering = relationship("CourseOffering", back_populates="registrations")
-    student = relationship("User", back_populates="course_registrations")
+    activity = relationship("Activity", back_populates="registrations")
+    member = relationship("User", back_populates="activity_enrollments")
 
 
 class StructuralMasterSlot(Base):
     __tablename__ = "structural_master_slots"
     __table_args__ = (CheckConstraint("day_of_week_index BETWEEN 1 AND 7"),)
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     day_of_week_index = Column(Integer, nullable=False)
     time_window_start = Column(Time, nullable=False)
     time_window_end = Column(Time, nullable=False)
-    course_offering_id = Column(
-        Integer, ForeignKey("course_offerings.id", ondelete="CASCADE"), nullable=False
-    )
-    primary_instructor_id = Column(
-        String(50), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
+    activity_id = Column(Integer, ForeignKey("activities.id", ondelete="CASCADE"), nullable=False)
+    primary_lead_id = Column(String(50), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     target_room_identifier = Column(String(30), nullable=False)
 
-    course_offering = relationship("CourseOffering", back_populates="master_slots")
-    primary_instructor = relationship("User", foreign_keys=[primary_instructor_id])
+    activity = relationship("Activity", back_populates="master_slots")
+    primary_lead = relationship("User", foreign_keys=[primary_lead_id])
     daily_ledger_entries = relationship(
         "DailyLedger", back_populates="master_slot", cascade="all, delete-orphan"
     )
@@ -171,29 +165,31 @@ class StructuralMasterSlot(Base):
 class DailyLedger(Base):
     __tablename__ = "daily_ledger"
 
-    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, index=True)
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
     target_date = Column(Date, nullable=False, index=True)
     master_slot_id = Column(
         Integer, ForeignKey("structural_master_slots.id", ondelete="CASCADE"), nullable=True
     )
-    course_offering_id = Column(
-        Integer, ForeignKey("course_offerings.id", ondelete="CASCADE"), nullable=False
-    )
-    active_instructor_id = Column(String(50), ForeignKey("users.id"), nullable=True)
-    substitute_instructor_id = Column(String(50), ForeignKey("users.id"), nullable=True)
+    activity_id = Column(Integer, ForeignKey("activities.id", ondelete="CASCADE"), nullable=False)
+    active_lead_id = Column(String(50), ForeignKey("users.id"), nullable=True)
+    substitute_lead_id = Column(String(50), ForeignKey("users.id"), nullable=True)
     target_room_identifier = Column(String(30), nullable=False)
-    delivery_format = Column(Enum(ExecutionMode), default=ExecutionMode.PHYSICAL)
+    delivery_format = Column(
+        Enum(ExecutionMode, name="execution_mode"), default=ExecutionMode.PHYSICAL
+    )
     virtual_connection_string = Column(Text, nullable=True)
     latitude_target = Column(Numeric(10, 8), nullable=True)
     longitude_target = Column(Numeric(11, 8), nullable=True)
     altitude_target = Column(Numeric(6, 2), nullable=True)
     precision_radius_meters = Column(Integer, default=15)
-    operational_state = Column(Enum(DynamicState), default=DynamicState.SCHEDULED)
+    operational_state = Column(
+        Enum(DynamicState, name="dynamic_state"), default=DynamicState.SCHEDULED
+    )
 
     master_slot = relationship("StructuralMasterSlot", back_populates="daily_ledger_entries")
-    active_instructor = relationship("User", foreign_keys=[active_instructor_id])
-    substitute_instructor = relationship("User", foreign_keys=[substitute_instructor_id])
-    course_offering = relationship("CourseOffering")
+    active_lead = relationship("User", foreign_keys=[active_lead_id])
+    substitute_lead = relationship("User", foreign_keys=[substitute_lead_id])
+    activity = relationship("Activity")
     verification_records = relationship(
         "VerificationLedger", back_populates="ledger_instance", cascade="all, delete-orphan"
     )
@@ -205,14 +201,15 @@ class DailyLedger(Base):
 class ReverseRsvpLog(Base):
     __tablename__ = "reverse_rsvp_logs"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     submitting_user_id = Column(
         String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     target_absence_date = Column(Date, nullable=False)
     context_justification = Column(Text, nullable=False)
     approval_state = Column(
-        Enum(LogVerificationState), default=LogVerificationState.PENDING_VERIFICATION
+        Enum(LogVerificationState, name="log_verification_state"),
+        default=LogVerificationState.PENDING_VERIFICATION,
     )
     authorized_by_user_id = Column(
         String(50), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -226,28 +223,28 @@ class VerificationLedger(Base):
     __tablename__ = "verification_ledger"
     __table_args__ = (
         UniqueConstraint(
-            "ledger_instance_id", "student_id", name="single_student_per_instance_record"
+            "ledger_instance_id", "member_id", name="single_member_per_instance_record"
         ),
     )
 
-    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, index=True)
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
     ledger_instance_id = Column(
         BigInteger, ForeignKey("daily_ledger.id", ondelete="CASCADE"), nullable=False
     )
-    student_id = Column(String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    marking_status = Column(Enum(VerificationMetric), nullable=False)
+    member_id = Column(String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    marking_status = Column(Enum(VerificationMetric, name="verification_metric"), nullable=False)
     authorizing_agent_id = Column(String(50), ForeignKey("users.id"), nullable=True)
     modification_timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     ledger_instance = relationship("DailyLedger", back_populates="verification_records")
-    student = relationship("User", foreign_keys=[student_id])
+    member = relationship("User", foreign_keys=[member_id])
     authorizing_agent = relationship("User", foreign_keys=[authorizing_agent_id])
 
 
 class LedgerAnnotation(Base):
     __tablename__ = "ledger_annotations"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     ledger_instance_id = Column(
         BigInteger, ForeignKey("daily_ledger.id", ondelete="CASCADE"), nullable=False
     )
@@ -263,20 +260,19 @@ class LedgerAnnotation(Base):
 class GuestGateRegistry(Base):
     __tablename__ = "guest_gate_registry"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     guest_name = Column(String(100), nullable=False)
     contact_phone = Column(String(20), nullable=False)
     originating_body = Column(String(150), nullable=False)
-    target_faculty_id = Column(
-        String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
+    target_staff_id = Column(String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     visitation_intent = Column(Text, nullable=False)
     handshake_status = Column(
-        Enum(LogVerificationState), default=LogVerificationState.PENDING_VERIFICATION
+        Enum(LogVerificationState, name="log_verification_state"),
+        default=LogVerificationState.PENDING_VERIFICATION,
     )
     timestamp_marked = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
-    target_faculty = relationship("User", foreign_keys=[target_faculty_id])
+    target_staff = relationship("User", foreign_keys=[target_staff_id])
 
 
 class RefreshToken(Base):

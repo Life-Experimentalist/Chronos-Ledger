@@ -1,7 +1,7 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
-from tests.conftest import ADMIN_PASSWORD, FACULTY_PASSWORD, STUDENT_PASSWORD, login
+from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, login
 
 
 def test_login_returns_token_and_profile(client, seed_users):
@@ -41,17 +41,17 @@ def test_me_requires_a_token(client, seed_users):
 
 
 def test_me_returns_current_user(client, seed_users):
-    headers = login(client, "faculty@test.internal", FACULTY_PASSWORD)
+    headers = login(client, "staff@test.internal", STAFF_PASSWORD)
     res = client.get("/api/v1/auth/me", headers=headers)
     assert res.status_code == 200
     body = res.json()
     assert body["id"] == "FAC001"
-    assert body["role_type"] == "FACULTY"
-    assert body["department_code"] == "CSE"
+    assert body["role_type"] == "STAFF"
+    assert body["unit_code"] == "CSE"
 
 
 def test_change_password_rejects_wrong_current(client, seed_users):
-    headers = login(client, "faculty@test.internal", FACULTY_PASSWORD)
+    headers = login(client, "staff@test.internal", STAFF_PASSWORD)
     res = client.post(
         "/api/v1/auth/change-password",
         headers=headers,
@@ -61,23 +61,23 @@ def test_change_password_rejects_wrong_current(client, seed_users):
 
 
 def test_change_password_rotates_and_clears_first_login_flag(client, seed_users):
-    headers = login(client, "faculty@test.internal", FACULTY_PASSWORD)
+    headers = login(client, "staff@test.internal", STAFF_PASSWORD)
     res = client.post(
         "/api/v1/auth/change-password",
         headers=headers,
-        json={"current_password": FACULTY_PASSWORD, "new_password": "NewPass456!"},
+        json={"current_password": STAFF_PASSWORD, "new_password": "NewPass456!"},
     )
     assert res.status_code == 200
 
     # Old password no longer works; new one does, and the flag is cleared.
     old = client.post(
         "/api/v1/auth/login",
-        json={"email": "faculty@test.internal", "password": FACULTY_PASSWORD},
+        json={"email": "staff@test.internal", "password": STAFF_PASSWORD},
     )
     assert old.status_code == 401
     fresh = client.post(
         "/api/v1/auth/login",
-        json={"email": "faculty@test.internal", "password": "NewPass456!"},
+        json={"email": "staff@test.internal", "password": "NewPass456!"},
     )
     assert fresh.status_code == 200
     assert fresh.json()["initial_login_state"] is False
@@ -103,8 +103,8 @@ def test_first_login_admin_is_gated_until_password_change(client, db, seed_users
 
 
 def test_first_login_gate_skips_non_admin_roles(client, seed_users):
-    # Faculty and students are provisioned by an admin, not by a published
+    # Staff and members are provisioned by an admin, not by a published
     # default credential, so their first login is not gated.
-    assert seed_users["student"].initial_login_state is True
-    headers = login(client, "student@test.internal", STUDENT_PASSWORD)
-    assert client.get("/api/v1/users/faculty/available", headers=headers).status_code == 200
+    assert seed_users["member"].initial_login_state is True
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    assert client.get("/api/v1/users/staff/available", headers=headers).status_code == 200

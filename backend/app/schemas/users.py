@@ -13,7 +13,7 @@ class UserCreate(BaseModel):
     email_address: EmailStr
     password: str
     role_type: InstitutionalRole
-    department_code: str | None = None
+    unit_code: str | None = None
     assigned_base_station: str | None = "Staff Room Main"
     reporting_line_manager: str | None = None
 
@@ -21,7 +21,7 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     full_name: str | None = None
     email_address: EmailStr | None = None
-    department_code: str | None = None
+    unit_code: str | None = None
     assigned_base_station: str | None = None
     reporting_line_manager: str | None = None
 
@@ -35,7 +35,7 @@ class UserResponse(BaseModel):
     full_name: str
     email_address: str
     role_type: InstitutionalRole
-    department_code: str | None
+    unit_code: str | None
     assigned_base_station: str | None
     current_occupancy_index: AccessReadiness
     reporting_line_manager: str | None

@@ -6,11 +6,11 @@ import datetime
 from sqlalchemy.orm import Session
 
 from app.models.db import (
-    AcademicCycle,
-    CourseOffering,
+    Activity,
     DailyLedger,
     DynamicState,
     LogVerificationState,
+    PlanningCycle,
     ReverseRsvpLog,
     StructuralMasterSlot,
 )
@@ -21,22 +21,22 @@ def generate_daily_ledger_entries(target_date: datetime.date, db: Session) -> in
 
     slots = (
         db.query(StructuralMasterSlot)
-        .join(CourseOffering, StructuralMasterSlot.course_offering_id == CourseOffering.id)
-        .join(AcademicCycle, CourseOffering.cycle_id == AcademicCycle.id)
+        .join(Activity, StructuralMasterSlot.activity_id == Activity.id)
+        .join(PlanningCycle, Activity.cycle_id == PlanningCycle.id)
         .filter(
             StructuralMasterSlot.day_of_week_index == day_index,
-            AcademicCycle.operational_status,
+            PlanningCycle.operational_status,
         )
         .all()
     )
 
     created = 0
     for slot in slots:
-        # Check for approved leave on this date for this instructor
+        # Check for approved leave on this date for this lead
         leave = (
             db.query(ReverseRsvpLog)
             .filter(
-                ReverseRsvpLog.submitting_user_id == slot.primary_instructor_id,
+                ReverseRsvpLog.submitting_user_id == slot.primary_lead_id,
                 ReverseRsvpLog.target_absence_date == target_date,
                 ReverseRsvpLog.approval_state == LogVerificationState.VERIFIED_APPROVED,
             )
@@ -56,8 +56,8 @@ def generate_daily_ledger_entries(target_date: datetime.date, db: Session) -> in
         entry = DailyLedger(
             target_date=target_date,
             master_slot_id=slot.id,
-            course_offering_id=slot.course_offering_id,
-            active_instructor_id=slot.primary_instructor_id,
+            activity_id=slot.activity_id,
+            active_lead_id=slot.primary_lead_id,
             target_room_identifier=slot.target_room_identifier,
             operational_state=initial_state,
         )

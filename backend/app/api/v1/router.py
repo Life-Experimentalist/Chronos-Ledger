@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     calendar_sync,
     guest,
     ingestion,
+    org_config,
     schedule,
     users,
     websocket,
@@ -16,6 +17,7 @@ from app.api.v1.endpoints import (
 
 api_router = APIRouter()
 
+api_router.include_router(org_config.router, prefix="/config", tags=["Configuration"])
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(users.router, prefix="/users", tags=["Users"])
 api_router.include_router(schedule.router, prefix="/schedule", tags=["Schedule"])

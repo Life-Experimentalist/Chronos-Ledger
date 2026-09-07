@@ -10,7 +10,7 @@ from app.models.db import LogVerificationState, VerificationMetric
 
 class AttendanceMarkRequest(BaseModel):
     ledger_instance_id: int
-    student_id: str
+    member_id: str
     marking_status: VerificationMetric
     user_lat: float | None = None
     user_lon: float | None = None
@@ -25,7 +25,7 @@ class AttendanceBatchRequest(BaseModel):
 class AttendanceResponse(BaseModel):
     id: int
     ledger_instance_id: int
-    student_id: str
+    member_id: str
     marking_status: VerificationMetric
     authorizing_agent_id: str | None
     modification_timestamp: datetime

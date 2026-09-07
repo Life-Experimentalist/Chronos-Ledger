@@ -137,7 +137,7 @@ def get_me(current_user: User = Depends(get_current_user)):
         "full_name": current_user.full_name,
         "email_address": current_user.email_address,
         "role_type": current_user.role_type.value,
-        "department_code": current_user.department_code,
+        "unit_code": current_user.unit_code,
         "current_occupancy_index": current_user.current_occupancy_index.value,
         "initial_login_state": current_user.initial_login_state,
     }

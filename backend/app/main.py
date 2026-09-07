@@ -45,7 +45,7 @@ def _run_ledger_generator():
 
 app = FastAPI(
     title="Chronos Ledger API",
-    description="Campus Schedule & Attendance Management System",
+    description="Organization Schedule & Attendance Management System",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",

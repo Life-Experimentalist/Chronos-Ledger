@@ -4,7 +4,7 @@
 [project]
 name = "chronos-ledger-backend"
 version = "1.0.0"
-description = "Chronos Ledger — Campus Schedule & Attendance Management Backend"
+description = "Chronos Ledger — Organization Schedule & Attendance Management Backend"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.11"
 authors = [

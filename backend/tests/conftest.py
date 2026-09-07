@@ -22,14 +22,14 @@ engine = create_engine(
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 ADMIN_PASSWORD = "AdminPass123!"
-FACULTY_PASSWORD = "FacultyPass123!"
-STUDENT_PASSWORD = "StudentPass123!"
+STAFF_PASSWORD = "StaffPass123!"
+MEMBER_PASSWORD = "MemberPass123!"
 
 # bcrypt is deliberately slow; hash each seed password once per run.
 _HASHES = {
     "admin": hash_password(ADMIN_PASSWORD),
-    "faculty": hash_password(FACULTY_PASSWORD),
-    "student": hash_password(STUDENT_PASSWORD),
+    "staff": hash_password(STAFF_PASSWORD),
+    "member": hash_password(MEMBER_PASSWORD),
 }
 
 
@@ -57,21 +57,21 @@ def seed_users(db):
             # so the seed admin starts past that gate.
             initial_login_state=False,
         ),
-        "faculty": User(
+        "staff": User(
             id="FAC001",
-            full_name="Faculty One",
-            email_address="faculty@test.internal",
-            credential_secure_hash=_HASHES["faculty"],
-            role_type=InstitutionalRole.FACULTY,
-            department_code="CSE",
+            full_name="Staff One",
+            email_address="staff@test.internal",
+            credential_secure_hash=_HASHES["staff"],
+            role_type=InstitutionalRole.STAFF,
+            unit_code="CSE",
         ),
-        "student": User(
+        "member": User(
             id="STU001",
-            full_name="Student One",
-            email_address="student@test.internal",
-            credential_secure_hash=_HASHES["student"],
-            role_type=InstitutionalRole.STUDENT,
-            department_code="CSE",
+            full_name="Member One",
+            email_address="member@test.internal",
+            credential_secure_hash=_HASHES["member"],
+            role_type=InstitutionalRole.MEMBER,
+            unit_code="CSE",
         ),
     }
     db.add_all(users.values())

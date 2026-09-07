@@ -9,24 +9,24 @@ from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
 from app.models.db import (
-    CourseOffering,
-    CourseRegistration,
+    Activity,
+    ActivityEnrollment,
     InstitutionalRole,
     StructuralMasterSlot,
     User,
 )
 
 REQUIRED_COLUMNS = {
-    "student_id",
-    "student_name",
-    "student_email",
-    "subject_code",
-    "subject_title",
-    "department",
+    "member_id",
+    "member_name",
+    "member_email",
+    "activity_code",
+    "activity_title",
+    "unit",
     "day_of_week_index",
     "time_window_start",
     "time_window_end",
-    "teacher_id",
+    "lead_id",
     "room",
 }
 
@@ -46,7 +46,7 @@ class ChronosIngestionEngine:
     def __init__(self, db: Session):
         self.db = db
 
-    def process_student_centric_matrix(self, file_path: str, cycle_id: int) -> dict[str, Any]:
+    def process_member_centric_matrix(self, file_path: str, cycle_id: int) -> dict[str, Any]:
         try:
             df = pd.read_csv(file_path)
         except Exception as e:
@@ -60,35 +60,35 @@ class ChronosIngestionEngine:
 
         try:
             for _, row in df.iterrows():
-                # 1. Upsert student user
-                student = self.db.query(User).filter(User.id == str(row["student_id"])).first()
-                if not student:
-                    student = User(
-                        id=str(row["student_id"]),
-                        full_name=str(row["student_name"]),
-                        email_address=str(row["student_email"]),
+                # 1. Upsert member user
+                member = self.db.query(User).filter(User.id == str(row["member_id"])).first()
+                if not member:
+                    member = User(
+                        id=str(row["member_id"]),
+                        full_name=str(row["member_name"]),
+                        email_address=str(row["member_email"]),
                         credential_secure_hash=hash_password("ChangeMe2026!"),
-                        role_type=InstitutionalRole.STUDENT,
-                        department_code=str(row["department"]),
+                        role_type=InstitutionalRole.MEMBER,
+                        unit_code=str(row["unit"]),
                     )
-                    self.db.add(student)
+                    self.db.add(member)
                 else:
-                    student.full_name = str(row["student_name"])
+                    member.full_name = str(row["member_name"])
 
-                # 2. Upsert course offering
+                # 2. Upsert activity offering
                 offering = (
-                    self.db.query(CourseOffering)
+                    self.db.query(Activity)
                     .filter(
-                        CourseOffering.course_code == str(row["subject_code"]),
-                        CourseOffering.cycle_id == cycle_id,
+                        Activity.activity_code == str(row["activity_code"]),
+                        Activity.cycle_id == cycle_id,
                     )
                     .first()
                 )
                 if not offering:
-                    offering = CourseOffering(
-                        course_code=str(row["subject_code"]),
-                        course_title=str(row["subject_title"]),
-                        department_code=str(row["department"]),
+                    offering = Activity(
+                        activity_code=str(row["activity_code"]),
+                        activity_title=str(row["activity_title"]),
+                        unit_code=str(row["unit"]),
                         cycle_id=cycle_id,
                     )
                     self.db.add(offering)
@@ -96,28 +96,26 @@ class ChronosIngestionEngine:
 
                 # 3. Upsert registration
                 reg = (
-                    self.db.query(CourseRegistration)
+                    self.db.query(ActivityEnrollment)
                     .filter(
-                        CourseRegistration.course_offering_id == offering.id,
-                        CourseRegistration.student_id == str(row["student_id"]),
+                        ActivityEnrollment.activity_id == offering.id,
+                        ActivityEnrollment.member_id == str(row["member_id"]),
                     )
                     .first()
                 )
                 if not reg:
                     self.db.add(
-                        CourseRegistration(
-                            course_offering_id=offering.id, student_id=str(row["student_id"])
-                        )
+                        ActivityEnrollment(activity_id=offering.id, member_id=str(row["member_id"]))
                     )
 
-                # 4. Upsert master slot (deduplicate by course + day + start time)
+                # 4. Upsert master slot (deduplicate by activity + day + start time)
                 t_start = _parse_time(row["time_window_start"])
                 t_end = _parse_time(row["time_window_end"])
 
                 slot = (
                     self.db.query(StructuralMasterSlot)
                     .filter(
-                        StructuralMasterSlot.course_offering_id == offering.id,
+                        StructuralMasterSlot.activity_id == offering.id,
                         StructuralMasterSlot.day_of_week_index == int(row["day_of_week_index"]),
                         StructuralMasterSlot.time_window_start == t_start,
                     )
@@ -129,8 +127,8 @@ class ChronosIngestionEngine:
                             day_of_week_index=int(row["day_of_week_index"]),
                             time_window_start=t_start,
                             time_window_end=t_end,
-                            course_offering_id=offering.id,
-                            primary_instructor_id=str(row["teacher_id"]),
+                            activity_id=offering.id,
+                            primary_lead_id=str(row["lead_id"]),
                             target_room_identifier=str(row["room"]),
                         )
                     )
@@ -138,7 +136,7 @@ class ChronosIngestionEngine:
                 records_processed += 1
                 # The session runs with autoflush=False, so without this flush
                 # the dedup queries above cannot see rows added for earlier CSV
-                # lines: every student sharing a class would add a duplicate
+                # lines: every member sharing a class would add a duplicate
                 # registration and master slot.
                 self.db.flush()
 

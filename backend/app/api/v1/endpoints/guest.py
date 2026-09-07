@@ -16,10 +16,10 @@ from app.models.db import (
     User,
 )
 from app.schemas.guest import (
-    FacultyAvailabilityResponse,
     GuestCheckInRequest,
     GuestDecisionRequest,
     GuestResponse,
+    StaffAvailabilityResponse,
 )
 
 router = APIRouter()
@@ -34,19 +34,19 @@ _AVAILABILITY_LABELS = {
 
 @router.post("/register-checkin")
 async def process_guest_entry(payload: GuestCheckInRequest, db: Session = Depends(get_db)):
-    faculty = db.query(User).filter(User.id == payload.target_faculty_id).first()
-    if not faculty or faculty.role_type not in (
-        InstitutionalRole.FACULTY,
+    staff = db.query(User).filter(User.id == payload.target_staff_id).first()
+    if not staff or staff.role_type not in (
+        InstitutionalRole.STAFF,
         InstitutionalRole.SUPER_ADMIN,
-        InstitutionalRole.DEPT_ADMIN,
+        InstitutionalRole.UNIT_ADMIN,
     ):
-        raise HTTPException(status_code=404, detail="Faculty member not found")
+        raise HTTPException(status_code=404, detail="Staff member not found")
 
     entry = GuestGateRegistry(
         guest_name=payload.guest_name,
         contact_phone=payload.contact_phone,
         originating_body=payload.originating_body,
-        target_faculty_id=payload.target_faculty_id,
+        target_staff_id=payload.target_staff_id,
         visitation_intent=payload.visitation_intent,
     )
     db.add(entry)
@@ -54,7 +54,7 @@ async def process_guest_entry(payload: GuestCheckInRequest, db: Session = Depend
     db.refresh(entry)
 
     await socket_broker.forward_direct_message(
-        payload.target_faculty_id,
+        payload.target_staff_id,
         "GUEST_HANDSHAKE_REQ",
         {
             "transaction_reference": entry.id,
@@ -63,7 +63,7 @@ async def process_guest_entry(payload: GuestCheckInRequest, db: Session = Depend
             "intent": payload.visitation_intent,
         },
     )
-    return {"registration_state": "PENDING_FACULTY_AUTH", "reference_token": entry.id}
+    return {"registration_state": "PENDING_STAFF_AUTH", "reference_token": entry.id}
 
 
 @router.patch("/{entry_id}/decide")
@@ -77,7 +77,7 @@ async def decide_guest_entry(
         db.query(GuestGateRegistry)
         .filter(
             GuestGateRegistry.id == entry_id,
-            GuestGateRegistry.target_faculty_id == current_user.id,
+            GuestGateRegistry.target_staff_id == current_user.id,
         )
         .first()
     )
@@ -97,23 +97,23 @@ def get_pending_guests(
     return (
         db.query(GuestGateRegistry)
         .filter(
-            GuestGateRegistry.target_faculty_id == current_user.id,
+            GuestGateRegistry.target_staff_id == current_user.id,
             GuestGateRegistry.handshake_status == LogVerificationState.PENDING_VERIFICATION,
         )
         .all()
     )
 
 
-@router.get("/directory", response_model=list[FacultyAvailabilityResponse])
-def get_faculty_directory(name: str | None = None, db: Session = Depends(get_db)):
-    q = db.query(User).filter(User.role_type == InstitutionalRole.FACULTY)
+@router.get("/directory", response_model=list[StaffAvailabilityResponse])
+def get_staff_directory(name: str | None = None, db: Session = Depends(get_db)):
+    q = db.query(User).filter(User.role_type == InstitutionalRole.STAFF)
     if name:
         q = q.filter(User.full_name.ilike(f"%{name}%"))
     return [
-        FacultyAvailabilityResponse(
-            faculty_id=f.id,
+        StaffAvailabilityResponse(
+            staff_id=f.id,
             full_name=f.full_name,
-            department_code=f.department_code,
+            unit_code=f.unit_code,
             availability_label=_AVAILABILITY_LABELS.get(f.current_occupancy_index, "Unknown"),
         )
         for f in q.limit(20).all()

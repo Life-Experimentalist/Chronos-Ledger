@@ -12,7 +12,7 @@ class GuestCheckInRequest(BaseModel):
     guest_name: str
     contact_phone: str
     originating_body: str
-    target_faculty_id: str
+    target_staff_id: str
     visitation_intent: str
 
 
@@ -25,7 +25,7 @@ class GuestResponse(BaseModel):
     guest_name: str
     contact_phone: str
     originating_body: str
-    target_faculty_id: str
+    target_staff_id: str
     visitation_intent: str
     handshake_status: LogVerificationState
     timestamp_marked: datetime
@@ -33,8 +33,8 @@ class GuestResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class FacultyAvailabilityResponse(BaseModel):
-    faculty_id: str
+class StaffAvailabilityResponse(BaseModel):
+    staff_id: str
     full_name: str
-    department_code: str | None
+    unit_code: str | None
     availability_label: str

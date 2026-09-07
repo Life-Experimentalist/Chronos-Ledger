@@ -19,8 +19,8 @@ async def upload_csv(
     cycle_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    # The matrix rewrites offerings and registrations across every department,
-    # so no department-scoped admin can upload it.
+    # The matrix rewrites offerings and registrations across every unit,
+    # so no unit-scoped admin can upload it.
     _=Depends(require_roles("SUPER_ADMIN")),
 ):
     if not file.filename.endswith(".csv"):
@@ -34,7 +34,7 @@ async def upload_csv(
             f.write(content)
 
         engine = ChronosIngestionEngine(db)
-        result = engine.process_student_centric_matrix(tmp_path, cycle_id)
+        result = engine.process_member_centric_matrix(tmp_path, cycle_id)
 
         if result["status"] == "FAILED":
             raise HTTPException(status_code=422, detail=result["error_log"])
