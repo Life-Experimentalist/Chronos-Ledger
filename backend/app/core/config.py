@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_contact_email: str = "admin@org.internal"
 
-    # Telemetry — opt-in. Off by default so a self-hosted instance never
+    # Telemetry, opt-in. Off by default so a self-hosted instance never
     # reaches a service the operator does not run. Set both to enable.
     telemetry_enabled: bool = False
     telemetry_endpoint: str = ""

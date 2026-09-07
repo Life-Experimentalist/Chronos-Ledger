@@ -39,7 +39,7 @@ def _parse_time(raw: str) -> datetime.time:
             return datetime.datetime.strptime(raw, fmt).time()
         except ValueError:
             continue
-    raise ValueError(f"Cannot parse time value '{raw}' — expected HH:MM or HH:MM:SS")
+    raise ValueError(f"Cannot parse time value '{raw}', expected HH:MM or HH:MM:SS")
 
 
 class ChronosIngestionEngine:

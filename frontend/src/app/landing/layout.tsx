@@ -1,5 +1,5 @@
-// Copyright 2026 Chronos Ledger Contributors — Apache 2.0
-// Server Component layout — owns all SEO metadata for /landing.
+// Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
+// Server Component layout, owns all SEO metadata for /landing.
 // The page itself is 'use client' so metadata must live here.
 
 import type { Metadata } from 'next'
@@ -9,7 +9,7 @@ const SITE_URL = 'https://chronos.vkrishna04.me'
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
 
-  title: 'Chronos Ledger — Organization Schedule & Attendance Management',
+  title: 'Chronos Ledger: Organization Schedule & Attendance Management',
   description:
     'Self-hosted PWA for universities and organizations. Geofenced attendance, real-time staff locator, offline-first architecture, and smart absence management. Deploy on your organization intranet in under 5 minutes with Docker.',
 
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
     type: 'website',
     url: SITE_URL,
     siteName: 'Chronos Ledger',
-    title: 'Chronos Ledger — Organization Schedule & Attendance Management',
+    title: 'Chronos Ledger: Organization Schedule & Attendance Management',
     description:
       'Self-hosted PWA for universities. Geofenced attendance, staff tracking, offline-first. Deploy in 5 minutes with Docker.',
     images: [
@@ -46,7 +46,7 @@ export const metadata: Metadata = {
         url: `${SITE_URL}/icons/og-image.png`,
         width: 1200,
         height: 630,
-        alt: 'Chronos Ledger — Organization Management PWA',
+        alt: 'Chronos Ledger: Organization Management PWA',
       },
     ],
     locale: 'en_US',
@@ -54,7 +54,7 @@ export const metadata: Metadata = {
 
   twitter: {
     card: 'summary_large_image',
-    title: 'Chronos Ledger — Organization Schedule & Attendance Management',
+    title: 'Chronos Ledger: Organization Schedule & Attendance Management',
     description:
       'Self-hosted PWA for universities. Geofenced attendance, staff tracking, offline-first.',
     images: [`${SITE_URL}/icons/og-image.png`],

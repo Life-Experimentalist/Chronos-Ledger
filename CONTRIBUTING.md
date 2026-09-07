@@ -108,11 +108,11 @@ CI runs the same checks automatically. PRs cannot merge until all jobs are green
 ```
 backend/app/
   core/           Config, DB, Redis, WebSocket manager, security
-  models/         SQLAlchemy ORM models (db.py — all 9 tables)
+  models/         SQLAlchemy ORM models (db.py, all 9 tables)
   schemas/        Pydantic request/response models per domain
   api/v1/         Route handlers (one file per domain)
-  services/       Business logic — geo_fence, reverse_rsvp, location_resolver, ingestion_engine
-  cron/           APScheduler jobs — ledger_generator
+  services/       Business logic, geo_fence, reverse_rsvp, location_resolver, ingestion_engine
+  cron/           APScheduler jobs, ledger_generator
 
 frontend/src/
   app/            Next.js App Router pages (admin, staff, member, guest, landing)
@@ -134,13 +134,13 @@ uv run alembic revision --autogenerate -m "describe the change"
 uv run alembic upgrade head
 ```
 
-Review the generated file in `backend/alembic/versions/` before committing. Autogenerate is not perfect — check for missing `server_default`, wrong `nullable`, or dropped-index regressions.
+Review the generated file in `backend/alembic/versions/` before committing. Autogenerate is not perfect, check for missing `server_default`, wrong `nullable`, or dropped-index regressions.
 
 ---
 
 ## API Changes
 
-All endpoint changes must be reflected in `docs/openapi.yaml`. The OpenAPI contract is the source of truth for the API surface — keep it in sync with the route handlers and Pydantic schemas.
+All endpoint changes must be reflected in `docs/openapi.yaml`. The OpenAPI contract is the source of truth for the API surface, keep it in sync with the route handlers and Pydantic schemas.
 
 ---
 

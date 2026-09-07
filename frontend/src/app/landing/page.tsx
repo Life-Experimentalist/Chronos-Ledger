@@ -76,7 +76,7 @@ export default function LandingPage() {
           className="text-lg text-chronos-muted max-w-2xl mx-auto mb-10"
         >
           Chronos Ledger is a production-ready PWA for universities and organizations. Live timetables,
-          geofenced attendance, staff location resolution, and smart offline notifications — all
+          geofenced attendance, staff location resolution, and smart offline notifications, all of it
           self-hosted on your organization intranet.
         </motion.p>
 
@@ -104,7 +104,7 @@ export default function LandingPage() {
             <span className="w-3 h-3 rounded-full bg-red-500/70" />
             <span className="w-3 h-3 rounded-full bg-yellow-500/70" />
             <span className="w-3 h-3 rounded-full bg-green-500/70" />
-            <span className="ml-3 text-xs text-chronos-muted font-mono">chronos-ledger — docker compose up</span>
+            <span className="ml-3 text-xs text-chronos-muted font-mono">chronos-ledger $ docker compose up</span>
           </div>
           <div className="p-6 font-mono text-sm space-y-1.5">
             {[
@@ -178,7 +178,7 @@ export default function LandingPage() {
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">Four role-specific interfaces</h2>
             <p className="text-chronos-muted max-w-xl mx-auto">
-              Each role sees exactly what they need — nothing more, nothing less.
+              Each role sees exactly what they need, nothing more, nothing less.
             </p>
           </div>
 
@@ -228,7 +228,7 @@ export default function LandingPage() {
             <ul className="space-y-3">
               {[
                 'Attendance marks queue in IndexedDB and flush on reconnect',
-                'Today\'s schedule cached for 12 hours — works fully offline',
+                'Today\'s schedule cached for 12 hours, works fully offline',
                 'Class start notifications fire even when the app is closed',
                 'Workbox NetworkFirst for APIs · CacheFirst for static assets',
               ].map((item) => (
@@ -455,7 +455,7 @@ const FEATURES = [
   },
   {
     title: 'Real-Time WebSocket',
-    desc: 'JWT-authenticated persistent connections. Instant guest handshake requests, absence approvals, and organization broadcasts — no polling.',
+    desc: 'JWT-authenticated persistent connections. Instant guest handshake requests, absence approvals, and organization broadcasts, no polling.',
     icon: Zap,
     iconBg: 'bg-chronos-warning/10',
     iconColor: 'text-chronos-warning',
@@ -483,7 +483,7 @@ const FEATURES = [
   },
   {
     title: 'Offline Notifications',
-    desc: 'Class reminders fire 15 minutes before start — even offline. Scheduled via JS timers while active and Periodic Background Sync when the app is closed.',
+    desc: 'Class reminders fire 15 minutes before start, even offline. Scheduled via JS timers while active and Periodic Background Sync when the app is closed.',
     icon: Bell,
     iconBg: 'bg-chronos-teal/10',
     iconColor: 'text-chronos-teal',

@@ -1,9 +1,9 @@
-name: GitHub Pages — Landing
+name: GitHub Pages (Landing)
 
-# Copyright 2026 Chronos Ledger Contributors — Apache 2.0
+# Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
 #
 # Deploys the standalone docs/index.html to GitHub Pages.
-# No build step — pure static HTML/CSS/JS.
+# No build step, pure static HTML/CSS/JS.
 
 on:
   push:

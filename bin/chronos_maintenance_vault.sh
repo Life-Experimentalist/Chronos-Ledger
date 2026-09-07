@@ -12,7 +12,7 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 DATABASE_URL="${DATABASE_URL:-postgresql://chronos_admin:SecureCloud2026@localhost:5432/chronos_ledger}"
 
 echo "============================================================"
-echo " Chronos Ledger — Structural Integrity Check"
+echo " Chronos Ledger: Structural Integrity Check"
 echo " Timestamp: $TIMESTAMP"
 echo "============================================================"
 

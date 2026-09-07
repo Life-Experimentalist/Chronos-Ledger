@@ -54,7 +54,7 @@ The backend prints `Application startup complete.` when it is ready. If it never
 PostgreSQL is not ready yet, or the `DATABASE_URL` is misconfigured.
 
 1. Verify the postgres container is running: `docker compose ps`
-2. Check `.env` — `DB_PASSWORD` must match the password embedded in `DATABASE_URL` (or use the flat variable substitution in `docker-compose.yml`).
+2. Check `.env`: `DB_PASSWORD` must match the password embedded in `DATABASE_URL` (or use the flat variable substitution in `docker-compose.yml`).
 3. If postgres crashed, inspect its logs: `docker compose logs db`
 
 The most common cause is a password mismatch. Run `docker compose down -v` to wipe volumes, fix `.env`, and run `docker compose up` again.
@@ -119,7 +119,7 @@ Also ensure `APP_CORS_ORIGINS` in `.env` includes `http://192.168.1.10`.
 | Email | `admin@org.internal` |
 | Password | `ChronosAdmin2026!` |
 
-**Change this immediately** — the admin is prompted to do so on first login via the Onboarding Wizard.
+**Change this immediately**, the admin is prompted to do so on first login via the Onboarding Wizard.
 
 ---
 
@@ -185,19 +185,19 @@ Automatically on first login when `initial_login_state` is `true` for a `SUPER_A
 | 2. Create planning cycle | Yes | No |
 | 3. Import CSV | Yes | No |
 | 4. Generate ledger | Recommended | Yes |
-| 5. Done | — | — |
+| 5. Done | - | - |
 
 ---
 
 ### CSV import succeeded but the timetable looks empty
 
-The ledger is not generated automatically after import. Go to **Step 4 — Generate Ledger** in the wizard (or Admin Dashboard → Import → Generate Daily Ledger). The nightly cron runs at midnight, but you can trigger it manually from the UI.
+The ledger is not generated automatically after import. Go to **Step 4: Generate Ledger** in the wizard (or Admin Dashboard → Import → Generate Daily Ledger). The nightly cron runs at midnight, but you can trigger it manually from the UI.
 
 ---
 
 ### I need to re-run the wizard for a new planning cycle
 
-Use the **Setup Guide** link from the Admin Dashboard. On Step 2, create a new planning cycle (leave the old one — historical data is preserved under the previous cycle). Then re-upload the new term's CSV.
+Use the **Setup Guide** link from the Admin Dashboard. On Step 2, create a new planning cycle (leave the old one, historical data is preserved under the previous cycle). Then re-upload the new term's CSV.
 
 The new cycle becomes active immediately for ledger generation.
 
@@ -229,7 +229,7 @@ Column names are case-sensitive. Extra columns are ignored. Times accept `HH:MM`
 
 ### Import returns "duplicate key" errors
 
-The import is idempotent — re-running it with the same data is safe. "Duplicate key" errors suggest the CSV has internal duplicates (the same member+activity+slot appears twice). Remove duplicates and re-upload.
+The import is idempotent, re-running it with the same data is safe. "Duplicate key" errors suggest the CSV has internal duplicates (the same member+activity+slot appears twice). Remove duplicates and re-upload.
 
 ---
 
@@ -247,7 +247,7 @@ Fix the offending rows and re-upload; re-running a corrected file is safe.
 
 ## Attendance & Geofencing
 
-### Members cannot mark attendance — "Location unavailable"
+### Members cannot mark attendance: "Location unavailable"
 
 The browser geolocation API requires HTTPS or localhost. If the app is served over plain HTTP, the location prompt will be blocked by the browser.
 
@@ -272,7 +272,7 @@ docker compose exec db psql -U chronos_admin -d chronos_ledger -c \
 
 ### The altitude check is blocking members on the correct floor
 
-The altitude delta threshold is `|Δalt| < 4 metres`. GPS altitude accuracy is typically ±10–20m on mobile devices, making this check unreliable outdoors. The check only fires when the device reports altitude — if the device does not expose it, the check is skipped.
+The altitude delta threshold is `|Δalt| < 4 metres`. GPS altitude accuracy is typically ±10–20m on mobile devices, making this check unreliable outdoors. The check only fires when the device reports altitude, if the device does not expose it, the check is skipped.
 
 If you want to widen the threshold, it is a constant in `backend/app/services/geo_fence.py`:
 
@@ -324,13 +324,13 @@ The ledger is a materialized daily snapshot. Approved absences cascade `ON_LEAVE
 
 The staff member must be online with the app open. The notification arrives via WebSocket to `/staff/dashboard`. If they are offline, the request stays pending in the database and will appear when they next log in.
 
-Check that the staff member's email in the guest form exactly matches their account email — the lookup is case-insensitive but the email must exist in the system.
+Check that the staff member's email in the guest form exactly matches their account email, the lookup is case-insensitive but the email must exist in the system.
 
 ---
 
-### Guest check-in kiosk is accessible without a login — is this intentional?
+### Guest check-in kiosk is accessible without a login, is this intentional?
 
-Yes. The guest kiosk (`/guest/kiosk`) is explicitly public. It does not expose any internal data — it only allows submitting a visit request and viewing the staff notification status. The underlying API endpoints (`/api/v1/guest/*`) are similarly unauthenticated by design.
+Yes. The guest kiosk (`/guest/kiosk`) is explicitly public. It does not expose any internal data, it only allows submitting a visit request and viewing the staff notification status. The underlying API endpoints (`/api/v1/guest/*`) are similarly unauthenticated by design.
 
 ---
 
@@ -339,7 +339,7 @@ Yes. The guest kiosk (`/guest/kiosk`) is explicitly public. It does not expose a
 ### Push notifications are not appearing
 
 1. Confirm the user has granted notification permission (browser prompt when first logging in).
-2. Verify VAPID keys are set in `.env` — `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_CONTACT_EMAIL`.
+2. Verify VAPID keys are set in `.env`: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_CONTACT_EMAIL`.
 3. Check that the frontend was built with the matching `NEXT_PUBLIC_VAPID_PUBLIC_KEY`.
 4. VAPID public key must be the same value in both places. Regenerate with `npx web-push generate-vapid-keys` if unsure, then rebuild.
 
@@ -347,7 +347,7 @@ Yes. The guest kiosk (`/guest/kiosk`) is explicitly public. It does not expose a
 
 ### Class reminder push fires too early or too late
 
-Reminders fire 15 minutes before the slot's `time_window_start` via `periodicsync` in the service worker. The accuracy depends on when the browser chooses to fire the periodic sync — browsers enforce a minimum interval of ~1 hour for battery reasons.
+Reminders fire 15 minutes before the slot's `time_window_start` via `periodicsync` in the service worker. The accuracy depends on when the browser chooses to fire the periodic sync, browsers enforce a minimum interval of ~1 hour for battery reasons.
 
 For more reliable reminders, the user must keep the tab open (the service worker runs JavaScript timers when the tab is active).
 
@@ -359,13 +359,13 @@ For more reliable reminders, the user must keep the tab open (the service worker
 
 The WebSocket connects to `NEXT_PUBLIC_WS_URL`. In the GHCR image this defaults to `/ws` (same-origin). If you are running the frontend dev server and the backend separately, ensure `NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws`.
 
-Also check nginx is proxying `/ws` correctly — see `nginx/nginx.conf`.
+Also check nginx is proxying `/ws` correctly, see `nginx/nginx.conf`.
 
 ---
 
 ### WebSocket disconnects every few minutes
 
-Nginx has a default proxy read timeout of 60 seconds. The Chronos Ledger nginx config sets `proxy_read_timeout 3600s` on the `/ws` location. If you see 60-second drops, nginx.conf may not have been updated — verify:
+Nginx has a default proxy read timeout of 60 seconds. The Chronos Ledger nginx config sets `proxy_read_timeout 3600s` on the `/ws` location. If you see 60-second drops, nginx.conf may not have been updated, verify:
 
 ```bash
 docker compose exec nginx cat /etc/nginx/nginx.conf | grep proxy_read_timeout
@@ -421,7 +421,7 @@ docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Chronos Ledger images are built with SBOM and provenance attestation — verify with:
+Chronos Ledger images are built with SBOM and provenance attestation, verify with:
 
 ```bash
 docker buildx imagetools inspect ghcr.io/Life-Experimentalist/chronos-ledger-backend:v1.2.0
@@ -475,11 +475,11 @@ If it still fails, check that the repository is in the `Life-Experimentalist` or
 ### Release Please is not creating a release PR
 
 Likely causes:
-1. Commits are not following [Conventional Commits](https://www.conventionalcommits.org/) — only `feat:`, `fix:`, `perf:`, and `security:` prefixes create release PRs.
+1. Commits are not following [Conventional Commits](https://www.conventionalcommits.org/), only `feat:`, `fix:`, `perf:`, and `security:` prefixes create release PRs.
 2. `release-please-config.json` or `.release-please-manifest.json` is missing or malformed.
 3. The `GITHUB_TOKEN` permissions do not include `pull-requests: write`.
 
-Check `release.yml` — it declares `permissions: { contents: write, pull-requests: write, packages: write }`.
+Check `release.yml`, it declares `permissions: { contents: write, pull-requests: write, packages: write }`.
 
 ---
 
@@ -488,11 +488,11 @@ Check `release.yml` — it declares `permissions: { contents: write, pull-reques
 ### How do I start a new planning cycle or term?
 
 1. Open the Onboarding Wizard: Admin Dashboard → **Setup Guide**
-2. Skip to **Step 2 — Create Cycle**. Fill in the new term's start and end dates.
-3. Move to **Step 3 — Import CSV**. Upload the new term's timetable CSV.
+2. Skip to **Step 2: Create Cycle**. Fill in the new term's start and end dates.
+3. Move to **Step 3: Import CSV**. Upload the new term's timetable CSV.
 4. Click **Generate Ledger** to populate the first day's entries.
 
-The old cycle is preserved in full — historical attendance records and ledger snapshots remain untouched. The new cycle is set as active.
+The old cycle is preserved in full, historical attendance records and ledger snapshots remain untouched. The new cycle is set as active.
 
 ---
 
@@ -506,7 +506,7 @@ No. The system maintains one active cycle at a time. Switching cycles makes the 
 
 1. Prepare a CSV with only the new unit's data.
 2. Import it via Admin Dashboard → Import Data → CSV Import Zone.
-3. The import is idempotent — existing records are not duplicated; new ones are created.
+3. The import is idempotent, existing records are not duplicated; new ones are created.
 4. Regenerate the ledger to include the new slots in today's schedule.
 
 ---
@@ -518,7 +518,7 @@ No. The system maintains one active cycle at a time. Switching cycles makes the 
 All data stays on your organization server. A default install sends nothing to any external service:
 
 - **Telemetry (opt-in, off by default):** Anonymous view counts sent to a [CFlair-Counter](https://github.com/Life-Experimentalist/CFlair-Counter) instance you point it at. No PII. Requires both `NEXT_PUBLIC_TELEMETRY_ENABLED=true` and a non-empty `NEXT_PUBLIC_TELEMETRY_ENDPOINT` at build time.
-- **Web Push:** Push payloads are routed through the browser vendor's push service (Google FCM for Chrome, Mozilla for Firefox). Payload content is a short status string — no member names or sensitive data.
+- **Web Push:** Push payloads are routed through the browser vendor's push service (Google FCM for Chrome, Mozilla for Firefox). Payload content is a short status string, no member names or sensitive data.
 
 ---
 
@@ -540,4 +540,4 @@ Then rebuild the frontend image. This removes all telemetry code paths at compil
 
 ### GDPR / data retention
 
-Chronos Ledger is designed for on-premises deployment — the deploying institution is the data controller. There is no built-in automated retention or purge schedule. Administrators are responsible for implementing any required retention policies directly on the PostgreSQL database.
+Chronos Ledger is designed for on-premises deployment, the deploying institution is the data controller. There is no built-in automated retention or purge schedule. Administrators are responsible for implementing any required retention policies directly on the PostgreSQL database.

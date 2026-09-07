@@ -1,7 +1,7 @@
-// Copyright 2026 Chronos Ledger Contributors — Apache 2.0
+// Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
 //
 // Lightweight telemetry via CFlair-Counter (Life-Experimentalist/CFlair-Counter).
-// Sends anonymous view counts — no PII, no session tracking.
+// Sends anonymous view counts, no PII, no session tracking.
 //
 // Opt-out: Admin → Settings → Privacy → disable telemetry.
 // The opt-out preference is stored in localStorage under `chronos_telemetry_opted_out`.
@@ -28,7 +28,7 @@ export function setTelemetryOptOut(optOut: boolean): void {
 }
 
 /**
- * Record a named view event. Fire-and-forget — never throws, never blocks.
+ * Record a named view event. Fire-and-forget, never throws, never blocks.
  * Only sends if telemetry is enabled and globally configured.
  *
  * @param page  Suffix appended to the project name, e.g. "landing", "app"

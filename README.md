@@ -6,11 +6,11 @@
 
   ----
 
-  **Organization Schedule & Attendance Management — self-hosted, offline-first, production-ready.**
+  **Organization Schedule & Attendance Management, self-hosted, offline-first, production-ready.**
 
 
   [![CI](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml)  [![Release](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/release.yml/badge.svg)](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/release.yml)  [![License](https://img.shields.io/badge/License-Apache_2.0-14b8a6.svg)](LICENSE)
-  [![Docker — Backend](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-backend/size?label=backend)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-backend)  [![Docker — Web](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-web/size?label=web)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-web)
+  [![Docker: Backend](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-backend/size?label=backend)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-backend)  [![Docker: Web](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-web/size?label=web)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-web)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-10b981.svg)](https://github.com/Life-Experimentalist/chronos-ledger/pulls)  [![Views](https://counter.vkrishna04.me/api/views/chronos-ledger-landing/badge)](https://github.com/Life-Experimentalist/chronos-ledger)
 
 </div>
@@ -21,7 +21,7 @@
 
 Universities and organizations track attendance on paper, manage timetables in Excel, and learn of staff absences only when members complain. Organization networks are unreliable. Staff don't know where their colleagues are. Visitors have no formal check-in system.
 
-**Chronos Ledger** solves all of this in a single, self-hosted, Docker-deployable stack that runs entirely on your organization intranet — no cloud subscription, no data leaving your network.
+**Chronos Ledger** solves all of this in a single, self-hosted, Docker-deployable stack that runs entirely on your organization intranet, no cloud subscription, no data leaving your network.
 
 ---
 
@@ -39,7 +39,7 @@ Universities and organizations track attendance on paper, manage timetables in E
 
 ---
 
-## Quick Start — One Command
+## Quick Start: One Command
 
 ```bash
 # Clone, configure, and launch everything
@@ -100,8 +100,8 @@ Full diagrams with Mermaid charts: [`docs/architecture.md`](docs/architecture.md
 Members mark attendance via GPS. The server runs a Haversine distance check **plus** an altitude delta (`|Δalt| < 4m`) to prevent members on floors above or below from registering. When GPS accuracy exceeds 30m, the client flags a BSSID Wi-Fi fallback.
 
 ### 4-Tier Staff Location Resolution
-Always know where staff are — in priority order:
-1. **Redis manual override** (e.g., "In meeting — back at 15:00")
+Always know where staff are, in priority order:
+1. **Redis manual override** (e.g., "In meeting, back at 15:00")
 2. **Approved absence** from the daily exception log
 3. **Active master slot** room from the live timetable
 4. **Base station fallback** (their configured office/staffroom)
@@ -116,7 +116,7 @@ Organization Wi-Fi drops. Chronos Ledger keeps working:
 - Class reminders fire up to 20 minutes before start, even with the app closed, via `periodicsync` in the service worker
 
 ### Real-Time WebSocket Hub
-JWT-authenticated persistent connections. Guest handshake requests, absence approvals, and ledger state changes arrive in milliseconds — no polling.
+JWT-authenticated persistent connections. Guest handshake requests, absence approvals, and ledger state changes arrive in milliseconds, no polling.
 
 ### CSV Bulk Import
 Drop a member-centric CSV on the Admin dashboard. One upload creates/updates users, activity offerings, master timetable slots, and member registrations atomically and idempotently.
@@ -131,7 +131,7 @@ Drop a member-centric CSV on the Admin dashboard. One upload creates/updates use
 | **Unit Admin**  | `/admin/dashboard`   | Absence approvals, ledger overrides for own unit                 |
 | **Staff**     | `/staff/dashboard` | Availability switcher, attendance matrix, absence requests, guest desk |
 | **Member**     | `/member/dashboard` | Live timeline, geofenced self-mark, staff locator, offline queue     |
-| **Guest**       | `/guest/kiosk`       | No login — check-in form, real-time staff notification               |
+| **Guest**       | `/guest/kiosk`       | No login, check-in form, real-time staff notification               |
 
 ---
 
@@ -265,9 +265,9 @@ GHCR images:
 
 | Variable                 | Required    | Description                                                 |
 | ------------------------ | ----------- | ----------------------------------------------------------- |
-| `JWT_SECRET_SIGNING_KEY` | **yes**     | 64-char hex — `openssl rand -hex 32`                        |
+| `JWT_SECRET_SIGNING_KEY` | **yes**     | 64-char hex: `openssl rand -hex 32`                        |
 | `DB_PASSWORD`            | **yes**     | PostgreSQL password                                         |
-| `VAPID_PUBLIC_KEY`       | recommended | Web Push — `npx web-push generate-vapid-keys`               |
+| `VAPID_PUBLIC_KEY`       | recommended | Web Push: `npx web-push generate-vapid-keys`               |
 | `VAPID_PRIVATE_KEY`      | recommended | Web Push                                                    |
 | `VAPID_CONTACT_EMAIL`    | recommended | Admin contact for push service                              |
 | `NEXT_PUBLIC_API_URL`    | dev only    | Baked in at build time; defaults to `/api/v1` in GHCR image |
@@ -297,13 +297,13 @@ The Alembic seed migration creates one super-admin:
 
 | Document                                       | Description                                                            |
 | ---------------------------------------------- | ---------------------------------------------------------------------- |
-| [`docs/openapi.yaml`](docs/openapi.yaml)       | OpenAPI 3.1 contract — all endpoints, schemas, enums                   |
+| [`docs/openapi.yaml`](docs/openapi.yaml)       | OpenAPI 3.1 contract, all endpoints, schemas, enums                   |
 | [`docs/architecture.md`](docs/architecture.md) | System topology, module deps, location resolution, WebSocket lifecycle |
 | [`docs/data-model.md`](docs/data-model.md)     | ERD for all 10 database tables                                         |
 | [`docs/flows.md`](docs/flows.md)               | Sequence diagrams: attendance, RSVP, guest handshake, ledger cron      |
 | [`docs/api.md`](docs/api.md)                   | Human-readable API reference with examples                             |
 | [`docs/deployment.md`](docs/deployment.md)     | Deployment guide, cycle rollover, TLS, scaling                         |
-| [`docs/faq.md`](docs/faq.md)                   | FAQ & troubleshooting — setup, auth, CSV import, geofencing, CI/CD     |
+| [`docs/faq.md`](docs/faq.md)                   | FAQ & troubleshooting, setup, auth, CSV import, geofencing, CI/CD     |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md)           | Development setup, commit conventions, PR checklist                    |
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)     | Community standards and enforcement                                    |
 | [`SECURITY.md`](SECURITY.md)                   | Vulnerability reporting and disclosure policy                          |
@@ -313,9 +313,9 @@ The Alembic seed migration creates one super-admin:
 
 ## Telemetry
 
-Telemetry is **off by default** — a stock build sends nothing anywhere, and the `ghcr.io` image is built from `nginx/Dockerfile` with those same defaults. Nothing in a default install reaches a host you do not run.
+Telemetry is **off by default**, a stock build sends nothing anywhere, and the `ghcr.io` image is built from `nginx/Dockerfile` with those same defaults. Nothing in a default install reaches a host you do not run.
 
-If you turn it on, Chronos Ledger reports **anonymous, aggregate view counts** to a [CFlair-Counter](https://github.com/Life-Experimentalist/CFlair-Counter) instance — a privacy-first, self-hostable counter. No IP addresses, usernames, or session data are collected or transmitted.
+If you turn it on, Chronos Ledger reports **anonymous, aggregate view counts** to a [CFlair-Counter](https://github.com/Life-Experimentalist/CFlair-Counter) instance, a privacy-first, self-hostable counter. No IP addresses, usernames, or session data are collected or transmitted.
 
 ### What is tracked, if you opt in
 
@@ -326,7 +326,7 @@ If you turn it on, Chronos Ledger reports **anonymous, aggregate view counts** t
 
 ### Opt in
 
-Set both at build time — either is enough to keep it off:
+Set both at build time, either is enough to keep it off:
 
 ```bash
 NEXT_PUBLIC_TELEMETRY_ENABLED=true
@@ -345,7 +345,7 @@ Contributions are welcome. Please:
 
 1. Fork the repo and create a feature branch.
 2. Follow [Conventional Commits](https://www.conventionalcommits.org/) so Release Please can generate the changelog.
-3. Open a PR — CI runs automatically (lint, type-check, build, Trivy scan).
+3. Open a PR: CI runs automatically (lint, type-check, build, Trivy scan).
 4. All checks must pass before merge.
 
 Commit examples:

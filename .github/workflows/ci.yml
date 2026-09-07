@@ -1,6 +1,6 @@
 name: CI
 
-# Copyright 2026 Chronos Ledger Contributors — Apache 2.0
+# Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
 #
 # Runs on every pull request and on every push to main.
 # All jobs must pass before a branch can merge.
@@ -18,7 +18,7 @@ concurrency:
 jobs:
   # ── Backend: lint ──────────────────────────────────────────────────────────
   backend-lint:
-    name: Backend — ruff lint
+    name: Backend, ruff lint
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -67,7 +67,7 @@ jobs:
 
   # ── Frontend: lint + type-check + build ───────────────────────────────────
   frontend-check:
-    name: Frontend — lint + type-check + build
+    name: Frontend, lint + type-check + build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -102,7 +102,7 @@ jobs:
 
   # ── Security: Trivy filesystem vulnerability scan ─────────────────────────
   security-scan:
-    name: Security — Trivy scan
+    name: Security (Trivy scan)
     runs-on: ubuntu-latest
     permissions:
       security-events: write
@@ -129,7 +129,7 @@ jobs:
 
   # ── Docker: verify both images build cleanly ──────────────────────────────
   docker-build-check:
-    name: Docker — build check (no push)
+    name: Docker, build check (no push)
     runs-on: ubuntu-latest
     needs: [backend-lint, frontend-check]
 

@@ -1,5 +1,5 @@
 'use client'
-// Copyright 2026 Chronos Ledger Contributors — Apache 2.0
+// Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
 
 import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -361,13 +361,13 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
                 <h2 className="text-xl font-bold text-chronos-text">Generate today&apos;s ledger</h2>
                 <p className="text-sm text-chronos-muted mt-1">
                   The daily ledger materialises your timetable into session records that attendance, proxies, and notifications are built on.
-                  The nightly cron job does this automatically — this button generates it for today immediately.
+                  The nightly cron job does this automatically, this button generates it for today immediately.
                 </p>
               </div>
               <div className="bg-chronos-teal/5 border border-chronos-teal/20 rounded-lg p-4 flex gap-3">
                 <Info className="w-4 h-4 text-chronos-teal shrink-0 mt-0.5" />
                 <p className="text-sm text-chronos-text-dim">
-                  Safe to run multiple times — existing entries are skipped (idempotent).
+                  Safe to run multiple times, existing entries are skipped (idempotent).
                   The cron job runs automatically at 23:00 UTC each night.
                 </p>
               </div>

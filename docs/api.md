@@ -1,8 +1,8 @@
 # API Reference
 
-<!-- Copyright 2026 Chronos Ledger Contributors — Apache 2.0 -->
+<!-- Copyright 2026 Chronos Ledger Contributors (Apache 2.0) -->
 
-**Machine-readable contract**: [`docs/openapi.yaml`](openapi.yaml) — OpenAPI 3.1.
+**Machine-readable contract**: [`docs/openapi.yaml`](openapi.yaml): OpenAPI 3.1.
 
 **Interactive UI** (live server): `http://<server>/docs` (Swagger UI) · `http://<server>/redoc` (ReDoc)
 
@@ -51,7 +51,7 @@ Higher roles inherit the permissions of all roles below them. Role is embedded i
 }
 ```
 
-`initial_login_state: true` on first login — the client should redirect to the change-password flow.
+`initial_login_state: true` on first login, the client should redirect to the change-password flow.
 
 ### POST /auth/change-password
 
@@ -139,7 +139,7 @@ Returns today's `DailyLedger` entries scoped to the caller's role:
 
 ```json
 {
-  "resolved_location": "Room 204 — Active Class",
+  "resolved_location": "Room 204: Active Class",
   "status": "SCHEDULED",
   "staff_id": "FAC001",
   "full_name": "Dr. Priya Sharma",
@@ -243,7 +243,7 @@ Public kiosk endpoint. Fires a real-time WebSocket notification to the target st
 
 ### GET /guest/directory `[no auth]`
 
-`?name=<string>` — case-insensitive name search. Returns staff with `OPEN_AD_HOC` or `VERY_FREE` status.
+`?name=<string>`, case-insensitive name search. Returns staff with `OPEN_AD_HOC` or `VERY_FREE` status.
 
 ### GET /guest/ `[STAFF]`
 
@@ -277,7 +277,7 @@ Upload a `multipart/form-data` CSV file. Required columns:
 | `lead_id` | FAC001 |
 | `room` | Room 204 |
 
-Import is idempotent — re-uploading the same file is safe.
+Import is idempotent, re-uploading the same file is safe.
 
 ### POST /ingestion/generate-ledger `[ADMIN]`
 
@@ -317,4 +317,4 @@ Persistent receive-only connection. Events delivered as JSON frames:
 | `GUEST_HANDSHAKE_REQ` | Target staff | `{transaction_id, guest_name, originating_body, intent}` |
 | `LEDGER_STATE_CHANGE` | All connected users | `{ledger_id, new_state}` |
 
-The client sends no upstream frames — the connection is subscribe-only.
+The client sends no upstream frames, the connection is subscribe-only.

@@ -10,7 +10,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [1.0.0] — 2026-05-19
+## [1.0.0], 2026-05-19
 
 ### Features
 
@@ -18,7 +18,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - 4-tier faculty location resolution (Redis override → absence log → master slot → base station)
 - Reverse RSVP absence system with line-manager approval workflow
 - Real-time WebSocket hub for guest handshakes, absence approvals, and ledger state
-- Bulk CSV import — creates/updates users, courses, timetable slots, and registrations atomically
+- Bulk CSV import, creates/updates users, courses, timetable slots, and registrations atomically
 - Nightly ledger generator via APScheduler cron
 - Guest Kiosk with zero-login campus visit check-in
 - Offline-first PWA with IndexedDB queue, Background Sync, and Web Push reminders

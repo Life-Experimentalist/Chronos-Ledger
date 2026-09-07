@@ -1,6 +1,6 @@
-name: CD — Build & Push to GHCR
+name: CD (Build & Push to GHCR)
 
-# Copyright 2026 Chronos Ledger Contributors — Apache 2.0
+# Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
 #
 # Triggered automatically on every push to main (after CI passes).
 # Also callable from the release workflow with an explicit version tag.
@@ -42,7 +42,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       # ── Backend image ──────────────────────────────────────────────────────
-      - name: Extract metadata — backend
+      - name: Extract metadata, backend
         id: meta-backend
         uses: docker/metadata-action@v5
         with:
@@ -69,7 +69,7 @@ jobs:
           sbom: true
 
       # ── Web image (nginx + pre-built Next.js static files) ────────────────
-      - name: Extract metadata — web
+      - name: Extract metadata, web
         id: meta-web
         uses: docker/metadata-action@v5
         with:

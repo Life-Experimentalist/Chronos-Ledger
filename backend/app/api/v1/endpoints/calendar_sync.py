@@ -122,7 +122,7 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
         if entry.operational_state.value == "PROXY_SUBSTITUTE":
             summary += " (Proxy Assignment)"
         elif entry.operational_state.value == "ON_LEAVE":
-            summary += " [CANCELLED — Staff Absent]"
+            summary += " [CANCELLED: Staff Absent]"
 
         lines.extend(
             [

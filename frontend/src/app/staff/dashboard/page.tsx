@@ -72,7 +72,7 @@ function StaffDashboardContent() {
           </div>
         </header>
 
-        {/* Status Switcher — always visible */}
+        {/* Status Switcher, always visible */}
         <div className="px-6 pt-4 shrink-0">
           <StatusSwitcher userId={user.user_id} />
         </div>
@@ -115,7 +115,7 @@ function StaffDashboardContent() {
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="font-semibold text-chronos-text">{entry.activity_code} — {entry.activity_title}</p>
+                          <p className="font-semibold text-chronos-text">{entry.activity_code}, {entry.activity_title}</p>
                           <p className="text-sm text-chronos-text-dim mt-0.5">Room {entry.target_room_identifier} · {entry.time_window_start} – {entry.time_window_end}</p>
                         </div>
                         <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${

@@ -125,7 +125,7 @@ export default function GuestKioskPage() {
               {searchResults.length > 0 && (
                 <div className="glass-card overflow-hidden">
                   <div className="p-4 border-b border-chronos-border/40">
-                    <p className="text-xs text-chronos-muted">{searchResults.length} result(s) — select to proceed</p>
+                    <p className="text-xs text-chronos-muted">{searchResults.length} result(s), select to proceed</p>
                   </div>
                   <div className="divide-y divide-chronos-border/20">
                     {searchResults.map((staff) => (

@@ -8,7 +8,7 @@
 set -e
 
 echo "========================================================================="
-echo " CHRONOS LEDGER — Intranet Auto-Discovery Initialization"
+echo " CHRONOS LEDGER: Intranet Auto-Discovery Initialization"
 echo "========================================================================="
 
 # Detect local IPv4 address (works on Linux and macOS)

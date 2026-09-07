@@ -16,7 +16,7 @@ interface GeolocationState {
   isWatching: boolean
 }
 
-const GPS_ACCURACY_THRESHOLD = 30 // metres — above this we try BSSID fallback
+const GPS_ACCURACY_THRESHOLD = 30 // metres, above this we try BSSID fallback
 
 export function useGeolocation() {
   const [state, setState] = useState<GeolocationState>({

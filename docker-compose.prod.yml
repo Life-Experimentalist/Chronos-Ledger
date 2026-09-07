@@ -1,7 +1,7 @@
 
-# Copyright 2026 Chronos Ledger Contributors — Apache 2.0
+# Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
 #
-# Production Docker Compose — pulls pre-built images from GHCR.
+# Production Docker Compose, pulls pre-built images from GHCR.
 # No local build required; swap in any released version instantly.
 #
 # Usage:
@@ -12,13 +12,13 @@
 #   VERSION=v1.2.0 docker compose -f docker-compose.prod.yml up -d
 #
 # Required env vars (set in .env or export before running):
-#   JWT_SECRET_SIGNING_KEY  — openssl rand -hex 32
-#   DB_PASSWORD             — strong random password
-#   VAPID_PUBLIC_KEY        — npx web-push generate-vapid-keys
-#   VAPID_PRIVATE_KEY       — (same command)
-#   VAPID_CONTACT_EMAIL     — admin reachable email
-#   GHCR_OWNER              — your GitHub org/username (default: Life-Experimentalist)
-#   VERSION                 — image tag to deploy  (default: latest)
+#   JWT_SECRET_SIGNING_KEY , openssl rand -hex 32
+#   DB_PASSWORD            , strong random password
+#   VAPID_PUBLIC_KEY       , npx web-push generate-vapid-keys
+#   VAPID_PRIVATE_KEY      , (same command)
+#   VAPID_CONTACT_EMAIL    , admin reachable email
+#   GHCR_OWNER             , your GitHub org/username (default: Life-Experimentalist)
+#   VERSION                , image tag to deploy  (default: latest)
 
 x-restart: &restart
   restart: unless-stopped

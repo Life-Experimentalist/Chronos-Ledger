@@ -14,14 +14,14 @@ def determine_staff_current_state(staff_id: str, db: Session, redis_cache: Redis
     date_str = now.date()
     day_index = now.isoweekday()
 
-    # Tier 1 — Redis manual status override (TTL-based, e.g. "in meeting", "out for lunch")
+    # Tier 1: Redis manual status override (TTL-based, e.g. "in meeting", "out for lunch")
     # redis-py returns bytes; decode before use.
     cached_raw = redis_cache.get(f"state_override:{staff_id}")
     if cached_raw:
         cached = cached_raw.decode("utf-8") if isinstance(cached_raw, bytes) else cached_raw
         return {"resolved_location": "ISOLATED_CELL", "status": cached}
 
-    # Tier 2 — Daily exception log (leaves, proxies, ad-hoc)
+    # Tier 2: Daily exception log (leaves, proxies, ad-hoc)
     daily = (
         db.query(DailyLedger, StructuralMasterSlot)
         .join(StructuralMasterSlot, DailyLedger.master_slot_id == StructuralMasterSlot.id)
@@ -49,7 +49,7 @@ def determine_staff_current_state(staff_id: str, db: Session, redis_cache: Redis
                 "status": f"Teaching {offering.activity_code if offering else 'class'} in Room {ledger.target_room_identifier}",
             }
 
-    # Tier 3 — Structural master timetable
+    # Tier 3: Structural master timetable
     master = (
         db.query(StructuralMasterSlot, Activity)
         .join(Activity, StructuralMasterSlot.activity_id == Activity.id)
@@ -68,7 +68,7 @@ def determine_staff_current_state(staff_id: str, db: Session, redis_cache: Redis
             "status": f"Teaching {offering.activity_code} in Room {slot.target_room_identifier}",
         }
 
-    # Tier 4 — Base station fallback
+    # Tier 4: Base station fallback
     user = db.query(User).filter(User.id == staff_id).first()
     base = user.assigned_base_station if user else "Staff Room"
     return {"resolved_location": base, "status": "Available / Unassigned"}

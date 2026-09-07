@@ -110,7 +110,7 @@ components:
           example: Dr. Priya Sharma
         initial_login_state:
           type: boolean
-          description: True on first login — client should prompt password change.
+          description: True on first login, client should prompt password change.
 
     ChangePasswordRequest:
       type: object
@@ -1218,7 +1218,7 @@ paths:
       summary: Register an organization visitor (kiosk)
       security: []
       description: >
-        No authentication required — this is the public kiosk endpoint.
+        No authentication required, this is the public kiosk endpoint.
         Fires a `GUEST_HANDSHAKE_REQ` WebSocket event to the target staff member.
       requestBody:
         required: true
@@ -1318,7 +1318,7 @@ paths:
         `time_window_end` (HH:MM), `lead_id`, `room`.
 
         Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations.
-        Idempotent — re-uploading the same CSV is safe.
+        Idempotent, re-uploading the same CSV is safe.
       parameters:
         - name: cycle_id
           in: query
@@ -1367,7 +1367,7 @@ paths:
       summary: Trigger daily ledger generation
       description: >
         Requires admin. Generates `DailyLedger` rows from `StructuralMasterSlot`
-        for a given date (defaults to tomorrow). Safe to re-run — existing rows are skipped.
+        for a given date (defaults to tomorrow). Safe to re-run, existing rows are skipped.
       requestBody:
         content:
           application/json:
@@ -1443,7 +1443,7 @@ paths:
                     example: ok
 
 # ─────────────────────────────────────────────
-# WebSocket (informational — not an HTTP path)
+# WebSocket (informational, not an HTTP path)
 # ─────────────────────────────────────────────
 # WebSocket endpoint: ws://<server>/ws?token=<jwt>
 #

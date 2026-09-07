@@ -13,7 +13,7 @@ def validate_3d_presence(
     target_alt: float,
     allowed_radius_meters: float,
 ) -> bool:
-    # Altitude check — 4 m limit prevents cross-floor spoofing
+    # Altitude check, 4 m limit prevents cross-floor spoofing
     if abs(user_alt - target_alt) > 4.0:
         return False
 

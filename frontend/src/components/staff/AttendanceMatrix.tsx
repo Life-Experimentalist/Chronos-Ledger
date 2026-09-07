@@ -85,7 +85,7 @@ export function AttendanceMatrix({ classes, selectedEntry, onSelectEntry }: Atte
         <div className="glass-card p-5">
           <div className="flex items-center justify-between mb-5">
             <div>
-              <p className="font-semibold text-chronos-text">{selectedEntry.activity_code} — {selectedEntry.activity_title}</p>
+              <p className="font-semibold text-chronos-text">{selectedEntry.activity_code}, {selectedEntry.activity_title}</p>
               <p className="text-sm text-chronos-text-dim mt-0.5">Room {selectedEntry.target_room_identifier} · {selectedEntry.time_window_start} – {selectedEntry.time_window_end}</p>
             </div>
             <div className="flex items-center gap-2">

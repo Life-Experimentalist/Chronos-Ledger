@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2026 Chronos Ledger Contributors — Apache 2.0
+# Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
 #
 # One-command organization deployment script.
 # Detects the server's LAN IP, configures the environment, and launches
@@ -32,7 +32,7 @@ err()    { echo -e "${RED}  ✗${NC} $*" >&2; exit 1; }
 header() { echo -e "\n${BOLD}$*${NC}"; }
 
 # ── Preflight checks ──────────────────────────────────────────────────────────
-header "Chronos Ledger — Setup"
+header "Chronos Ledger: Setup"
 log "Checking prerequisites..."
 
 command -v docker  >/dev/null 2>&1 || err "Docker is not installed. Install from https://docs.docker.com/get-docker/"
@@ -72,7 +72,7 @@ if [[ ! -f .env ]]; then
   cp .env.example .env
   ok "Created .env from template"
 else
-  warn ".env already exists — skipping creation (using existing values)"
+  warn ".env already exists, skipping creation (using existing values)"
 fi
 
 # Generate JWT secret if placeholder is still present
@@ -132,7 +132,7 @@ if grep -q "your_vapid" .env 2>/dev/null; then
       fi
     fi
   else
-    warn "Node.js/npx not found — skipping VAPID key generation."
+    warn "Node.js/npx not found, skipping VAPID key generation."
     warn "Push notifications will not work. Run: npx web-push generate-vapid-keys"
   fi
 fi
@@ -151,8 +151,8 @@ done
 if [[ -z "${MODE}" ]]; then
 header "Deployment mode"
 echo ""
-echo "  [1] Build locally  — builds images from source (slower, always fresh)"
-echo "  [2] Pull from GHCR — pulls pre-built images (faster, requires login for private repos)"
+echo "  [1] Build locally , builds images from source (slower, always fresh)"
+echo "  [2] Pull from GHCR, pulls pre-built images (faster, requires login for private repos)"
 echo ""
 read -rp "  Choose [1]: " MODE
 MODE="${MODE:-1}"

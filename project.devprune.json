@@ -15,7 +15,7 @@
       {
         "path": "backend/.ruff_cache",
         "rebuild": "uv run --directory backend ruff check .",
-        "why": "Ruff's incremental lint cache. Pure cache — deleting it only makes the next lint run slower, and any ruff invocation rebuilds it."
+        "why": "Ruff's incremental lint cache. Pure cache, deleting it only makes the next lint run slower, and any ruff invocation rebuilds it."
       }
     ]
   }

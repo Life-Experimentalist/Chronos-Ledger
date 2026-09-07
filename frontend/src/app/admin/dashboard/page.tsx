@@ -165,7 +165,7 @@ function AdminDashboardContent() {
                       {todayLedger.slice(0, 8).map((entry) => (
                         <div key={entry.id} className="flex items-center justify-between py-2 border-b border-chronos-border/20 last:border-0">
                           <div>
-                            <span className="text-sm font-medium text-chronos-text">{entry.activity_code} — {entry.activity_title}</span>
+                            <span className="text-sm font-medium text-chronos-text">{entry.activity_code}, {entry.activity_title}</span>
                             <span className="text-xs text-chronos-muted ml-3">Room {entry.target_room_identifier} · {entry.time_window_start} – {entry.time_window_end}</span>
                           </div>
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${

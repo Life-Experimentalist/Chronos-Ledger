@@ -64,7 +64,7 @@ export async function queueAttendanceMark(token: string, payload: object): Promi
 
   if ('serviceWorker' in navigator && 'SyncManager' in window) {
     const registration = await navigator.serviceWorker.ready
-    // @ts-ignore — SyncManager may not be in TS types for all targets
+    // @ts-ignore: SyncManager may not be in TS types for all targets
     await registration.sync.register('attendance-sync')
   }
 }

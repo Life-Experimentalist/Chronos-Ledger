@@ -1,6 +1,6 @@
 name: Release
 
-# Copyright 2026 Chronos Ledger Contributors — Apache 2.0
+# Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
 #
 # Automated releases using Release Please (google-github-actions/release-please-action).
 # How it works:

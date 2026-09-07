@@ -3,7 +3,7 @@
 #
 # Dependabot configuration for automated dependency updates.
 # Security alerts are filed as PRs immediately; version updates are weekly.
-# Grouped updates reduce PR noise — all non-security bumps arrive as a
+# Grouped updates reduce PR noise, all non-security bumps arrive as a
 # single "chore: bump X dependencies" PR per ecosystem per week.
 
 version: 2
@@ -22,7 +22,7 @@ updates:
       python-deps:
         patterns: ["*"]
         exclude-patterns:
-          # Security fixes must not be grouped — they get their own PRs
+          # Security fixes must not be grouped, they get their own PRs
           - "PyJWT"
           - "bcrypt"
           - "cryptography"

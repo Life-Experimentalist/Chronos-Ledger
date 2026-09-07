@@ -90,7 +90,7 @@ export function ProximityCard({ currentEntry, userId }: ProximityCardProps) {
       {pendingCount > 0 && (
         <div className="bg-chronos-warning/10 border border-chronos-warning/20 rounded-xl p-3 flex items-center gap-2 text-xs text-chronos-warning">
           <Wifi className="w-4 h-4" />
-          {pendingCount} attendance mark(s) queued offline — will sync when connected
+          {pendingCount} attendance mark(s) queued offline, will sync when connected
         </div>
       )}
 
@@ -121,13 +121,13 @@ export function ProximityCard({ currentEntry, userId }: ProximityCardProps) {
         {error ? (
           <div className="flex items-center gap-2 text-xs text-chronos-warning">
             <AlertCircle className="w-4 h-4 shrink-0" />
-            {error} — BSSID Wi-Fi fallback will be used
+            {error}: BSSID Wi-Fi fallback will be used
           </div>
         ) : position ? (
           <div className="space-y-1.5 text-xs text-chronos-text-dim">
             <div className="flex items-center gap-1.5">
               <span className={`w-1.5 h-1.5 rounded-full ${hasGoodAccuracy ? 'bg-chronos-emerald' : 'bg-chronos-warning'} animate-pulse`} />
-              Accuracy: {position.accuracy.toFixed(0)}m {hasGoodAccuracy ? '(Good)' : '(Poor — BSSID fallback active)'}
+              Accuracy: {position.accuracy.toFixed(0)}m {hasGoodAccuracy ? '(Good)' : '(Poor: BSSID fallback active)'}
             </div>
             <p className="font-mono text-[10px] text-chronos-muted">
               {position.lat.toFixed(6)}, {position.lon.toFixed(6)} · Alt {position.alt.toFixed(1)}m
@@ -193,7 +193,7 @@ export function ProximityCard({ currentEntry, userId }: ProximityCardProps) {
                 <MapPin className="w-6 h-6" />
               )}
               {currentEntry.operational_state === 'ON_LEAVE'
-                ? 'Class Cancelled — Staff Absent'
+                ? 'Class Cancelled: Staff Absent'
                 : marking
                 ? 'Verifying Location...'
                 : canMark

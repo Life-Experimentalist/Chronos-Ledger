@@ -1,6 +1,6 @@
 # Key Flows
 
-<!-- Copyright 2026 Chronos Ledger Contributors — Apache 2.0 -->
+<!-- Copyright 2026 Chronos Ledger Contributors (Apache 2.0) -->
 
 Sequence diagrams for the four core interaction flows. Each diagram is followed
 by a plain-English walk-through of every significant step.
@@ -44,9 +44,9 @@ sequenceDiagram
 
 **Step-by-step:**
 
-1. The member opens the **ProximityCard** component which starts a GPS watch via `useGeolocation.ts`. The hook calls `navigator.geolocation.watchPosition` (stable `useRef` for the watch ID — fixes a prior bug where a plain object was used).
+1. The member opens the **ProximityCard** component which starts a GPS watch via `useGeolocation.ts`. The hook calls `navigator.geolocation.watchPosition` (stable `useRef` for the watch ID, fixes a prior bug where a plain object was used).
 2. **Online path**: Coordinates + ledger ID are posted to `/attendance/mark`. The backend queries the `DailyLedger` row for the geofence target coordinates and calls `geo_fence.check_geofence()`. The function runs a Haversine 2D distance check then validates `|user_alt - target_alt| < 4m` to prevent members on adjacent floors from registering.
-3. If the check passes, a `VerificationLedger` row is upserted (idempotent — re-marking is allowed, last write wins).
+3. If the check passes, a `VerificationLedger` row is upserted (idempotent, re-marking is allowed, last write wins).
 4. **Offline path**: The mark is written to the `attendance-queue` IndexedDB store. The service worker's `background-sync` tag `sync-attendance` is registered. On reconnect, the SW replays the queue to `/attendance/mark` and clears the store entry on 2xx response.
 
 ---
@@ -146,7 +146,7 @@ flowchart TD
     LOOP{For each slot} --> CHK
 
     CHK{DailyLedger row<br/>already exists<br/>for date + slot?}
-    CHK -->|Yes| SKIP[Skip — idempotent]
+    CHK -->|Yes| SKIP[Skip, idempotent]
     CHK -->|No| INS
 
     INS[INSERT DailyLedger
@@ -165,5 +165,5 @@ flowchart TD
 1. APScheduler (configured in `backend/app/main.py`) triggers `cron/ledger_generator.generate_tomorrow_ledger()` at 00:05 UTC daily.
 2. The active `PlanningCycle` is queried. If none is active (e.g., term break), the job is a no-op.
 3. For tomorrow's `day_of_week_index`, all `StructuralMasterSlot` rows for that day are fetched.
-4. For each slot, an existence check is performed. This makes the job fully **idempotent** — safe to re-run manually via `POST /ingestion/generate-ledger` without creating duplicates.
+4. For each slot, an existence check is performed. This makes the job fully **idempotent**, safe to re-run manually via `POST /ingestion/generate-ledger` without creating duplicates.
 5. New rows are inserted with `operational_state = SCHEDULED` and the slot's lead. Staff/admins can subsequently mutate the row (substitute lead, delivery format, geofence coords) via `PATCH /schedule/ledger/{id}`.
