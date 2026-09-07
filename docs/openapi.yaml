@@ -96,7 +96,7 @@ components:
       properties:
         access_token:
           type: string
-          description: Signed JWT. Include as `Authorization: Bearer <token>`.
+          description: "Signed JWT. Include as `Authorization: Bearer <token>`."
         token_type:
           type: string
           example: bearer
