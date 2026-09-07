@@ -130,7 +130,8 @@ export function ProximityCard({ currentEntry, userId }: ProximityCardProps) {
               Accuracy: {position.accuracy.toFixed(0)}m {hasGoodAccuracy ? '(Good)' : '(Poor: BSSID fallback active)'}
             </div>
             <p className="font-mono text-[10px] text-chronos-muted">
-              {position.lat.toFixed(6)}, {position.lon.toFixed(6)} · Alt {position.alt.toFixed(1)}m
+              {position.lat.toFixed(6)}, {position.lon.toFixed(6)}
+              {position.alt !== null && ` · Alt ${position.alt.toFixed(1)}m`}
             </p>
           </div>
         ) : (

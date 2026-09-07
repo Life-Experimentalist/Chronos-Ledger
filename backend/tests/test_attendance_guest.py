@@ -16,7 +16,7 @@ from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, logi
 TODAY = datetime.date.today()
 
 
-def _make_ledger(db, lead_id=None, with_geo=False):
+def _make_ledger(db, lead_id=None, with_geo=False, alt_target=920.0):
     cycle = PlanningCycle(
         cycle_label="Odd 2026",
         date_bounds_start=TODAY - datetime.timedelta(days=30),
@@ -42,7 +42,7 @@ def _make_ledger(db, lead_id=None, with_geo=False):
     if with_geo:
         ledger.latitude_target = 12.9716
         ledger.longitude_target = 77.5946
-        ledger.altitude_target = 920.0
+        ledger.altitude_target = alt_target
         ledger.precision_radius_meters = 15
     db.add(ledger)
     db.commit()
@@ -130,6 +130,106 @@ def test_omitting_coordinates_is_rejected_on_geofenced_session(client, db, seed_
     res = client.post(
         "/api/v1/attendance/mark",
         json={"ledger_instance_id": ledger.id, "member_id": "STU001", "marking_status": "PRESENT"},
+        headers=headers,
+    )
+    assert res.status_code == 400
+    assert "geo-fenced" in res.json()["detail"]
+
+
+def test_geofence_accepts_member_without_altitude(client, db, seed_users):
+    """A device that reports no altitude must still be able to check in.
+
+    Laptops, and any phone on a network-based fix, return altitude: null. The
+    horizontal radius is the real fence; the floor check is a bonus when the
+    hardware can supply it, never a precondition for marking attendance.
+    """
+    ledger = _make_ledger(db, with_geo=True)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9716,
+            "user_lon": 77.5946,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_geofence_still_rejects_far_member_without_altitude(client, db, seed_users):
+    ledger = _make_ledger(db, with_geo=True)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9816,
+            "user_lon": 77.5946,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 400
+    assert "geofence" in res.json()["detail"].lower()
+
+
+def test_geofence_rejects_wrong_floor_when_altitude_is_supplied(client, db, seed_users):
+    ledger = _make_ledger(db, with_geo=True)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9716,
+            "user_lon": 77.5946,
+            "user_alt": 970.0,  # 50 m above target, several floors up
+        },
+        headers=headers,
+    )
+    assert res.status_code == 400
+    assert "geofence" in res.json()["detail"].lower()
+
+
+def test_geofence_engages_when_the_ledger_has_no_altitude_target(client, db, seed_users):
+    """lat/lon alone must fence.
+
+    Requiring all three targets meant an admin who left the optional altitude
+    blank silently got no fence at all.
+    """
+    ledger = _make_ledger(db, with_geo=True, alt_target=None)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9816,
+            "user_lon": 77.5946,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 400
+    assert "geofence" in res.json()["detail"].lower()
+
+
+def test_missing_longitude_is_rejected_on_geofenced_session(client, db, seed_users):
+    ledger = _make_ledger(db, with_geo=True)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9716,
+        },
         headers=headers,
     )
     assert res.status_code == 400

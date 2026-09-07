@@ -6,7 +6,8 @@ import { useState, useRef, useCallback } from 'react'
 export interface GeoPosition {
   lat: number
   lon: number
-  alt: number
+  /** null when the device cannot vouch for its vertical accuracy. */
+  alt: number | null
   accuracy: number
 }
 
@@ -17,6 +18,12 @@ interface GeolocationState {
 }
 
 const GPS_ACCURACY_THRESHOLD = 30 // metres, above this we try BSSID fallback
+
+// Raw GPS altitude carries two to three times the horizontal error, which is
+// several storeys. Only forward an altitude the device says is good to about
+// one floor, which in practice means a barometer-aided fix. Everything else
+// reports null and is fenced on the horizontal radius alone.
+const ALTITUDE_ACCURACY_THRESHOLD = 4 // metres
 
 export function useGeolocation() {
   const [state, setState] = useState<GeolocationState>({
@@ -42,7 +49,11 @@ export function useGeolocation() {
           position: {
             lat: pos.coords.latitude,
             lon: pos.coords.longitude,
-            alt: pos.coords.altitude ?? 0,
+            alt:
+              pos.coords.altitudeAccuracy != null &&
+              pos.coords.altitudeAccuracy <= ALTITUDE_ACCURACY_THRESHOLD
+                ? pos.coords.altitude
+                : null,
             accuracy: pos.coords.accuracy,
           },
           error: null,

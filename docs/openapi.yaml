@@ -361,7 +361,7 @@ components:
           format: double
           nullable: true
           example: 920.5
-          description: Altitude in metres. Used with lat/lon for 3D geofence check.
+          description: Altitude in metres. Optional. The floor check runs only when the client supplies an altitude it can vouch for, and is skipped otherwise; a geo-fenced session requires lat/lon alone.
 
     AttendanceBatchRequest:
       type: object

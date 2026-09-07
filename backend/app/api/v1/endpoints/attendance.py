@@ -52,13 +52,15 @@ async def mark_attendance(
         if payload.member_id != current_user.id:
             raise HTTPException(status_code=403, detail="Cannot mark attendance for another member")
 
-        geo_targets = [ledger.latitude_target, ledger.longitude_target, ledger.altitude_target]
+        # The horizontal target is what makes a session fenced. Altitude is
+        # optional on both sides: requiring altitude_target here meant a ledger
+        # with only lat/lon was silently not fenced at all.
         if (
-            all(v is not None for v in geo_targets)
+            ledger.latitude_target is not None
+            and ledger.longitude_target is not None
             and ledger.delivery_format == ExecutionMode.PHYSICAL
         ):
-            coords = [payload.user_lat, payload.user_lon, payload.user_alt]
-            if any(v is None for v in coords):
+            if payload.user_lat is None or payload.user_lon is None:
                 raise HTTPException(
                     status_code=400,
                     detail="This session is geo-fenced; location coordinates are required",
@@ -69,7 +71,7 @@ async def mark_attendance(
                 payload.user_alt,
                 float(ledger.latitude_target),
                 float(ledger.longitude_target),
-                float(ledger.altitude_target),
+                float(ledger.altitude_target) if ledger.altitude_target is not None else None,
                 ledger.precision_radius_meters or 15,
             )
             if not valid:
