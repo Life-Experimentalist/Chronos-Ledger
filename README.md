@@ -265,7 +265,7 @@ GHCR images:
 
 | Variable                 | Required    | Description                                                 |
 | ------------------------ | ----------- | ----------------------------------------------------------- |
-| `JWT_SECRET_SIGNING_KEY` | **yes**     | 64-char hex: `openssl rand -hex 32`                        |
+| `JWT_SECRET_SIGNING_KEY` | **yes**     | 64-char hex: `openssl rand -hex 32`. Production refuses to start on the placeholder or on anything under 32 characters. |
 | `DB_PASSWORD`            | **yes**     | PostgreSQL password                                         |
 | `VAPID_PUBLIC_KEY`       | recommended | Web Push: `npx web-push generate-vapid-keys`               |
 | `VAPID_PRIVATE_KEY`      | recommended | Web Push                                                    |

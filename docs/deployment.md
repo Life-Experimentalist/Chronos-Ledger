@@ -67,7 +67,7 @@ cp .env.example .env
 ```
 
 Edit `.env` and set:
-- `JWT_SECRET_SIGNING_KEY`, generate with `openssl rand -hex 32`
+- `JWT_SECRET_SIGNING_KEY`, generate with `openssl rand -hex 32`. With `APP_ENV=production` the backend refuses to start while this is still the placeholder, is shorter than 32 characters, or `DATABASE_URL` still carries the password from `.env.example`.
 - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`, generate with `npx web-push generate-vapid-keys`
 - `VAPID_CONTACT_EMAIL`, a reachable admin email
 - `DB_PASSWORD`, change from the default before first launch
