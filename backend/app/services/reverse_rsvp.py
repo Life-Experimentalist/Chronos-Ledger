@@ -47,5 +47,18 @@ def commit_absence_override(log_id: int, execution_agent: str, target_state: str
             DailyLedger.active_lead_id == log.submitting_user_id,
             DailyLedger.target_date == log.target_absence_date,
         ).update({"operational_state": DynamicState.ON_LEAVE, "substitute_lead_id": None})
+    else:
+        # A decision can be revisited: an approval reversed, a request denied
+        # after someone already approved it. Without this the day stays
+        # ON_LEAVE forever and nobody is scheduled to run it.
+        #
+        # Only rows still sitting at ON_LEAVE are touched. A day that since
+        # became PROXY_SUBSTITUTE has a cover assigned and is no longer this
+        # request's business; anything else was set deliberately by an admin.
+        db.query(DailyLedger).filter(
+            DailyLedger.active_lead_id == log.submitting_user_id,
+            DailyLedger.target_date == log.target_absence_date,
+            DailyLedger.operational_state == DynamicState.ON_LEAVE,
+        ).update({"operational_state": DynamicState.SCHEDULED})
 
     db.commit()
