@@ -1427,7 +1427,7 @@ paths:
         upload it.
         The CSV must contain these columns (case-sensitive):
         `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`,
-        `unit`, `day_of_week_index` (0=Mon), `time_window_start` (HH:MM),
+        `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM),
         `time_window_end` (HH:MM), `lead_id`, `room`.
 
         Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations.
