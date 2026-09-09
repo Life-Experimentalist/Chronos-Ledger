@@ -1882,6 +1882,13 @@ paths:
         for part of the window it would move to. A refusal changes nothing:
         the room is resolved and the holds are checked before any day is
         withdrawn or any field is written.
+
+
+        A change that leaves the room, weekday and window alone is not
+        checked, so a new lead can be set on a slot a hold is already sitting
+        on. Such a hold predates this rule or was written straight into the
+        database, and refusing would leave the lead unfixable short of
+        cancelling somebody else's booking.
       parameters:
         - name: slot_id
           in: path

@@ -217,14 +217,20 @@ def update_master_slot(
     moving_to = None
     if "target_room_identifier" in fields:
         moving_to = get_or_create_room(fields.pop("target_room_identifier"), db)
-    _refuse_if_held(
-        db,
-        slot.activity.cycle,
-        moving_to.id if moving_to else slot.resource_id,
-        weekday,
-        start,
-        end,
-    )
+    resource_id = moving_to.id if moving_to else slot.resource_id
+    if (resource_id, weekday, start, end) != (
+        slot.resource_id,
+        slot.day_of_week_index,
+        slot.time_window_start,
+        slot.time_window_end,
+    ):
+        # Only when the change would actually move the class. A hold sitting
+        # on a slot's own window predates this rule or was written straight
+        # into the database, and either way changing that slot's lead must
+        # not be refused over it: there would be no way to fix the lead
+        # short of cancelling somebody else's booking. The same guard the
+        # CSV importer uses, for the same reason.
+        _refuse_if_held(db, slot.activity.cycle, resource_id, weekday, start, end)
 
     removed = 0
     if weekday != slot.day_of_week_index:

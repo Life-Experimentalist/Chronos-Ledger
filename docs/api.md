@@ -518,6 +518,13 @@ onwards and never backwards, and nothing at all if the slot belongs to a
 closed cycle, because such a slot does not occupy the room and a booking is
 already accepted on top of one.
 
+A `PATCH` is only checked when it would actually move the class. Changing the
+lead on a slot, or anything else that leaves the room, weekday and window
+alone, is allowed even where a hold is sitting on that slot already: such a
+hold predates this rule or was written straight into the database, and
+refusing would leave the lead unfixable short of cancelling somebody else's
+booking.
+
 A refused `PATCH` changes nothing. The room is resolved and the holds are
 checked before any day the slot has already produced is withdrawn.
 

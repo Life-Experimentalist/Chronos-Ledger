@@ -75,6 +75,27 @@ def _hold(client, headers, resource_id, on, start="09:00", end="10:00", key="hol
     return r.json()
 
 
+def _hold_written_straight_in(db, resource_id, on, key="legacy-0000-0001"):
+    """A hold the booking endpoint would refuse, because a class is already
+    there. That is how every hold older than this rule got into the table,
+    and the two guards that let such a slot still be changed are the point of
+    the tests that use this."""
+    db.add(
+        Reservation(
+            resource_id=resource_id,
+            reserved_date=on,
+            time_window_start=datetime.time(9, 0),
+            time_window_end=datetime.time(10, 0),
+            purpose="Placed before the rule existed",
+            requested_by_id="ADM001",
+            idempotency_key=key,
+            request_fingerprint="x" * 64,
+            status=ReservationStatus.HELD,
+        )
+    )
+    db.commit()
+
+
 def _new_slot(client, headers, activity_id, room="LH-201", day=None, start="09:00", end="10:00"):
     return client.post(
         "/api/v1/schedule/slots",
@@ -223,6 +244,27 @@ def test_a_refused_move_leaves_the_slot_and_the_days_it_made_alone(client, db, s
     assert db.query(DailyLedger).count() == 1
 
 
+def test_a_change_that_leaves_the_slot_where_it_is_is_not_checked(client, db, seed_users):
+    """Changing the lead on a slot a hold is already sitting on has to work.
+    Refusing it would leave the lead unfixable short of cancelling somebody
+    else's booking, and the hold is not being displaced by the change."""
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    room = _room(db)
+    activity = _activity(db)
+    slot_id = _new_slot(client, headers, activity.id).json()["id"]
+    _hold_written_straight_in(db, room.id, TOMORROW)
+
+    r = client.patch(
+        f"/api/v1/schedule/slots/{slot_id}",
+        headers=headers,
+        json={"primary_lead_id": "ADM001"},
+    )
+    assert r.status_code == 200, r.text
+
+    db.expire_all()
+    assert db.query(StructuralMasterSlot).one().primary_lead_id == "ADM001"
+
+
 # ── Uploading a timetable ────────────────────────────────────────────────────
 
 
@@ -269,20 +311,7 @@ def test_a_re_upload_that_changes_nothing_is_not_refused_by_a_hold(client, db, s
     assert _upload(client, headers, cycle.id, _csv(_row())).status_code == 200
 
     room = db.query(Resource).filter(Resource.code == "LH-201").one()
-    db.add(
-        Reservation(
-            resource_id=room.id,
-            reserved_date=TOMORROW,
-            time_window_start=datetime.time(9, 0),
-            time_window_end=datetime.time(10, 0),
-            purpose="Placed before the rule existed",
-            requested_by_id="ADM001",
-            idempotency_key="legacy-0000-0001",
-            request_fingerprint="x" * 64,
-            status=ReservationStatus.HELD,
-        )
-    )
-    db.commit()
+    _hold_written_straight_in(db, room.id, TOMORROW)
 
     r = _upload(client, headers, cycle.id, _csv(_row()))
     assert r.json()["status"] == "SUCCESS", r.text
