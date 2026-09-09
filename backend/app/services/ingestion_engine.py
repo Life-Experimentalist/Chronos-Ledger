@@ -16,6 +16,7 @@ from app.models.db import (
     User,
 )
 from app.services.master_slot import propagate_slot_corrections
+from app.services.resource import get_or_create_room
 
 REQUIRED_COLUMNS = {
     "member_id",
@@ -172,6 +173,7 @@ class ChronosIngestionEngine:
                     )
                     .first()
                 )
+                room = get_or_create_room(str(row["room"]), self.db)
                 if not slot:
                     self.db.add(
                         StructuralMasterSlot(
@@ -180,13 +182,14 @@ class ChronosIngestionEngine:
                             time_window_end=t_end,
                             activity_id=offering.id,
                             primary_lead_id=str(row["lead_id"]),
-                            target_room_identifier=str(row["room"]),
+                            resource_id=room.id,
+                            target_room_identifier=room.code,
                         )
                     )
                 elif (
                     slot.time_window_end != t_end
                     or slot.primary_lead_id != str(row["lead_id"])
-                    or slot.target_room_identifier != str(row["room"])
+                    or slot.resource_id != room.id
                 ):
                     # A re-uploaded file is a correction. This branch used to
                     # not exist: a slot matching on (activity, day, start) was
@@ -202,7 +205,8 @@ class ChronosIngestionEngine:
 
                     slot.time_window_end = t_end
                     slot.primary_lead_id = str(row["lead_id"])
-                    slot.target_room_identifier = str(row["room"])
+                    slot.resource_id = room.id
+                    slot.target_room_identifier = room.code
                     corrected[slot.id] = slot
 
                 records_processed += 1

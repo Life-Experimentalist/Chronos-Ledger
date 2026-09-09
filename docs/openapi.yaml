@@ -349,8 +349,14 @@ components:
         substitute_lead_id:
           type: string
           nullable: true
+        resource_id:
+          type: integer
+          nullable: true
+          description: The room this is booked in. Prefer this over target_room_identifier.
         target_room_identifier:
           type: string
+          nullable: true
+          description: The room's name, mirrored from the resource. Being retired.
         delivery_format:
           $ref: "#/components/schemas/ExecutionMode"
         virtual_connection_string:

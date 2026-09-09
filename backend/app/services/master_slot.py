@@ -27,6 +27,10 @@ def propagate_slot_corrections(slots: list[StructuralMasterSlot], db: Session) -
     Room and lead are safe to overwrite here because nothing else writes
     them. DailyLedgerUpdate exposes neither, so a row that disagrees with
     its slot disagrees only because the slot moved on after materialization.
+
+    The room comparison is on resource_id, not on the room's name: renaming
+    a room is one row in resources and must not read as every day of every
+    class having moved.
     """
     if not slots:
         return {"ledger_rows_updated": 0, "ledger_rows_kept": 0}
@@ -62,7 +66,7 @@ def propagate_slot_corrections(slots: list[StructuralMasterSlot], db: Session) -
         if row.id in in_use:
             continue
         slot = by_id[row.master_slot_id]
-        if row.target_room_identifier != slot.target_room_identifier:
+        if row.resource_id != slot.resource_id:
             # The geofence was pinned to the old room. Leaving it would fence
             # members out of the room they have just been told to go to, so it
             # is cleared for an admin to set again. A cleared fence shows up in
@@ -70,6 +74,7 @@ def propagate_slot_corrections(slots: list[StructuralMasterSlot], db: Session) -
             row.latitude_target = None
             row.longitude_target = None
             row.altitude_target = None
+        row.resource_id = slot.resource_id
         row.target_room_identifier = slot.target_room_identifier
         row.active_lead_id = slot.primary_lead_id
         updated += 1

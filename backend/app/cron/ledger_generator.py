@@ -58,6 +58,7 @@ def generate_daily_ledger_entries(target_date: datetime.date, db: Session) -> in
             master_slot_id=slot.id,
             activity_id=slot.activity_id,
             active_lead_id=slot.primary_lead_id,
+            resource_id=slot.resource_id,
             target_room_identifier=slot.target_room_identifier,
             operational_state=initial_state,
         )

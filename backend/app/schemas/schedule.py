@@ -63,7 +63,8 @@ class DailyLedgerResponse(BaseModel):
     activity_id: int
     active_lead_id: str | None
     substitute_lead_id: str | None
-    target_room_identifier: str
+    resource_id: int | None = None
+    target_room_identifier: str | None
     delivery_format: ExecutionMode
     virtual_connection_string: str | None
     operational_state: DynamicState

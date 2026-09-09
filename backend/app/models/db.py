@@ -71,6 +71,22 @@ class LogVerificationState(enum.StrEnum):
     VERIFIED_DENIED = "VERIFIED_DENIED"
 
 
+class ResourceType(enum.StrEnum):
+    """What a bookable thing is.
+
+    Only these two exist because only these two are created. ROOM is what
+    the import and the backfill produce. PERSON exists because
+    Resource.user_id ships alongside it: a resource row carrying a user is a
+    person, and a column that says so with no value to say it with would be
+    incoherent. Adding a kind later is one ALTER TYPE, and the modes a kind
+    can be consumed in (exclusive, pooled, shared) are a separate axis that
+    is not stored yet.
+    """
+
+    ROOM = "ROOM"
+    PERSON = "PERSON"
+
+
 class PlanningCycle(Base):
     __tablename__ = "planning_cycles"
 
@@ -143,6 +159,40 @@ class ActivityEnrollment(Base):
     member = relationship("User", back_populates="activity_enrollments")
 
 
+class Resource(Base):
+    """A thing a reservation consumes: a room today, a person or a machine later.
+
+    Rooms used to be a bare string repeated on every slot and every generated
+    day, which meant nothing could hold a room's capacity or its coordinates,
+    a rename had to be found and replaced everywhere, and two rows naming the
+    same room were the same room only by spelling.
+
+    code is unique, and one row per distinct string is exactly what the
+    backfill produces. It is deliberately not scoped by unit: two units both
+    calling a room "101" is a real fact about the data that the data cannot
+    resolve, so the import treats them as one room rather than inventing a
+    distinction it cannot verify.
+    """
+
+    __tablename__ = "resources"
+
+    id = Column(Integer, primary_key=True)
+    code = Column(String(30), nullable=False, unique=True, index=True)
+    label = Column(String(120), nullable=False)
+    resource_type = Column(
+        Enum(ResourceType, name="resource_type"), nullable=False, default=ResourceType.ROOM
+    )
+    unit_code = Column(String(50), nullable=True)
+    capacity = Column(Integer, nullable=True)
+    # A resource row with user_id set is a person. Without it, staff
+    # availability and room availability become two mechanisms that drift.
+    user_id = Column(String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    latitude = Column(Numeric(10, 8), nullable=True)
+    longitude = Column(Numeric(11, 8), nullable=True)
+    altitude_target = Column(Numeric(6, 2), nullable=True)
+    active = Column(Boolean, default=True, nullable=False)
+
+
 class StructuralMasterSlot(Base):
     __tablename__ = "structural_master_slots"
     __table_args__ = (CheckConstraint("day_of_week_index BETWEEN 1 AND 7"),)
@@ -153,10 +203,14 @@ class StructuralMasterSlot(Base):
     time_window_end = Column(Time, nullable=False)
     activity_id = Column(Integer, ForeignKey("activities.id", ondelete="CASCADE"), nullable=False)
     primary_lead_id = Column(String(50), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    target_room_identifier = Column(String(30), nullable=False)
+    resource_id = Column(Integer, ForeignKey("resources.id"), nullable=True, index=True)
+    # Kept in step with the resource by every write path, and read by the
+    # frontend and the calendar feed, until they move to resource_id.
+    target_room_identifier = Column(String(30), nullable=True)
 
     activity = relationship("Activity", back_populates="master_slots")
     primary_lead = relationship("User", foreign_keys=[primary_lead_id])
+    resource = relationship("Resource", foreign_keys=[resource_id])
     daily_ledger_entries = relationship(
         "DailyLedger", back_populates="master_slot", cascade="all, delete-orphan"
     )
@@ -173,7 +227,8 @@ class DailyLedger(Base):
     activity_id = Column(Integer, ForeignKey("activities.id", ondelete="CASCADE"), nullable=False)
     active_lead_id = Column(String(50), ForeignKey("users.id"), nullable=True)
     substitute_lead_id = Column(String(50), ForeignKey("users.id"), nullable=True)
-    target_room_identifier = Column(String(30), nullable=False)
+    resource_id = Column(Integer, ForeignKey("resources.id"), nullable=True, index=True)
+    target_room_identifier = Column(String(30), nullable=True)
     delivery_format = Column(
         Enum(ExecutionMode, name="execution_mode"), default=ExecutionMode.PHYSICAL
     )
@@ -187,6 +242,7 @@ class DailyLedger(Base):
     )
 
     master_slot = relationship("StructuralMasterSlot", back_populates="daily_ledger_entries")
+    resource = relationship("Resource", foreign_keys=[resource_id])
     active_lead = relationship("User", foreign_keys=[active_lead_id])
     substitute_lead = relationship("User", foreign_keys=[substitute_lead_id])
     activity = relationship("Activity")

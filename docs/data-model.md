@@ -40,6 +40,20 @@ erDiagram
         int cycle_id FK "→ PlanningCycle.id"
     }
 
+    Resource {
+        int id PK
+        string code UK "the room name, unique"
+        string label
+        string resource_type "ROOM | PERSON"
+        string unit_code "nullable"
+        int capacity "nullable"
+        string user_id FK "→ User.id (nullable, set = this resource is a person)"
+        float latitude "nullable"
+        float longitude "nullable"
+        float altitude_target "nullable"
+        bool active
+    }
+
     StructuralMasterSlot {
         int id PK
         int day_of_week_index "1 = Monday … 7 = Sunday"
@@ -47,7 +61,8 @@ erDiagram
         time time_window_end
         int activity_id FK "→ Activity.id"
         string primary_lead_id FK "→ User.id (nullable)"
-        string target_room_identifier
+        int resource_id FK "→ Resource.id (nullable)"
+        string target_room_identifier "mirror of Resource.code, being retired"
     }
 
     ActivityEnrollment {
@@ -63,7 +78,8 @@ erDiagram
         int master_slot_id FK "→ StructuralMasterSlot.id (nullable)"
         string active_lead_id FK "→ User.id (nullable)"
         string substitute_lead_id FK "→ User.id (nullable)"
-        string target_room_identifier
+        int resource_id FK "→ Resource.id (nullable)"
+        string target_room_identifier "mirror of Resource.code, being retired"
         string delivery_format "PHYSICAL | ONLINE_STREAM"
         string virtual_connection_string "nullable"
         string operational_state "DynamicState enum"
@@ -116,6 +132,9 @@ erDiagram
     Activity ||--o{ ActivityEnrollment : "enrols members"
     Activity ||--o{ DailyLedger : "materialised as"
     StructuralMasterSlot ||--o{ DailyLedger : "source slot"
+    Resource ||--o{ StructuralMasterSlot : "booked by"
+    Resource ||--o{ DailyLedger : "booked by"
+    User ||--o| Resource : "is bookable as"
     User ||--o{ ActivityEnrollment : "member enrols"
     User ||--o{ DailyLedger : "teaches (active)"
     User ||--o{ DailyLedger : "substitutes"
@@ -139,6 +158,13 @@ The scheduling container. Only one cycle should have `operational_status = true`
 ### `Activity`
 A activity within a cycle. A single activity can appear in multiple cycles as independent `Activity` rows, enabling year-over-year history without aliasing.
 
+### `Resource`
+A thing a reservation consumes. Every room is one row, created on first sight by whichever path names it: `services/resource.py::get_or_create_room` is the only writer, so the importer, `POST /schedule/slots` and the demo seed all resolve to the same row rather than to three spellings of one room.
+
+`code` is unique and deliberately not scoped by unit. Two units both calling a room "101" is a fact about the data that the data cannot resolve, so they are one room rather than a distinction the system invented.
+
+`user_id` marks a resource that is a person, so that staff availability and room availability do not become two mechanisms that drift apart. `latitude`, `longitude` and `altitude_target` are the room's own geofence, as opposed to the per-day override on a `DailyLedger` row.
+
 ### `StructuralMasterSlot`
 The repeating weekly timetable entry. `day_of_week_index` follows Python's `date.isoweekday()` convention (1 = Monday, 7 = Sunday), enforced by a CHECK constraint. These are the *template* rows that `ledger_generator` reads each night.
 
@@ -147,6 +173,8 @@ Member-to-activity enrolment. Created in bulk by `ingestion_engine` during CSV i
 
 ### `DailyLedger`
 The materialised daily schedule. Generated nightly from `StructuralMasterSlot` by `cron/ledger_generator.py`. Contains mutable state: `operational_state` (can be flipped to `ON_LEAVE` by an approved absence), substitute lead, and geofence coordinates (overridable per-session for ad-hoc room changes).
+
+`resource_id` is the room. `target_room_identifier` is kept in step with `Resource.code` by every write path so existing readers keep working, and is dropped once they have moved to the key. Correcting a slot's room clears the row's geofence override, because a fence around the room the class has just left would shut out the people who went to the right one.
 
 ### `VerificationLedger`
 One row per member per ledger entry. `authorizing_agent_id` is `null` for self-marks and set to the staff/admin user_id for batch marks. The same row is overwritten on re-mark (upsert logic in `attendance.py`).

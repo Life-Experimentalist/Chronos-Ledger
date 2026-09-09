@@ -18,6 +18,7 @@ from app.schemas.schedule import (
     StaffLocationResponse,
 )
 from app.services.location_resolver import determine_staff_current_state
+from app.services.resource import get_or_create_room
 
 router = APIRouter()
 
@@ -95,6 +96,7 @@ def list_master_slots(
             "time_window_end": str(s.time_window_end),
             "activity_id": s.activity_id,
             "primary_lead_id": s.primary_lead_id,
+            "resource_id": s.resource_id,
             "target_room_identifier": s.target_room_identifier,
         }
         for s in q.all()
@@ -111,7 +113,8 @@ def create_master_slot(
     if not offering:
         raise HTTPException(status_code=404, detail="Activity offering not found")
     ensure_unit_scope(current_user, offering.unit_code)
-    slot = StructuralMasterSlot(**payload.model_dump())
+    room = get_or_create_room(payload.target_room_identifier, db)
+    slot = StructuralMasterSlot(**payload.model_dump(), resource_id=room.id)
     db.add(slot)
     db.commit()
     db.refresh(slot)
@@ -156,6 +159,7 @@ def get_today_ledger(
                 "target_date": str(e.target_date),
                 "activity_code": offering.activity_code if offering else None,
                 "activity_title": offering.activity_title if offering else None,
+                "resource_id": e.resource_id,
                 "target_room_identifier": e.target_room_identifier,
                 "time_window_start": str(slot.time_window_start) if slot else None,
                 "time_window_end": str(slot.time_window_end) if slot else None,

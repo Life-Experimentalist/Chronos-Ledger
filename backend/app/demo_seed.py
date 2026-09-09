@@ -29,6 +29,7 @@ from app.models.db import (
     StructuralMasterSlot,
     User,
 )
+from app.services.resource import get_or_create_room
 
 DEMO_UNIT = "CORE"
 DEMO_KIOSK_ID = "DEMO-KIOSK01"
@@ -127,6 +128,7 @@ def seed() -> None:
         )
         db.add(cycle)
         db.flush()
+        demo_room = get_or_create_room("ROOM-1", db)
 
         for code, title, lead_id, windows in DEMO_ACTIVITIES:
             activity = Activity(
@@ -147,7 +149,8 @@ def seed() -> None:
                             time_window_end=datetime.time.fromisoformat(end),
                             activity_id=activity.id,
                             primary_lead_id=lead_id,
-                            target_room_identifier="ROOM-1",
+                            resource_id=demo_room.id,
+                            target_room_identifier=demo_room.code,
                         )
                     )
 
