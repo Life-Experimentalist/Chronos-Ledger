@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.models.db import WILDCARD_SCOPE
 
 settings = get_settings()
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -79,7 +80,33 @@ def verify_jwt_token_string(token: str) -> dict[str, Any] | None:
     return decode_token(token)
 
 
+def required_scope(method: str, path: str) -> str | None:
+    """The scope a request needs, read off the request itself.
+
+    Every route lives under /api/v1/<area>/..., and the area is the router
+    prefix: schedule, resources, attendance, users, ingestion and so on. A
+    scope is that area and whether the request reads or writes, so a key can
+    be issued for schedule:read without anybody having to annotate two dozen
+    endpoints and without a new endpoint silently defaulting to open.
+
+    Returns None for a path with no area, which the caller refuses. A key
+    that cannot be told what it is reaching should not reach it.
+    """
+    parts = path.strip("/").split("/")
+    if len(parts) < 3 or parts[0] != "api":
+        return None
+    return f"{parts[2]}:{'read' if method in ('GET', 'HEAD', 'OPTIONS') else 'write'}"
+
+
+def key_allows(scopes: str, needed: str | None) -> bool:
+    held = {s.strip() for s in (scopes or "").split(",") if s.strip()}
+    if WILDCARD_SCOPE in held:
+        return True
+    return needed is not None and needed in held
+
+
 def get_current_user_id(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     api_key: str | None = Header(default=None, alias="X-API-Key"),
     db: Session = Depends(get_db),
@@ -102,6 +129,24 @@ def get_current_user_id(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid API key",
+            )
+        # Expiry and scope are checked here, where the key is looked up, and
+        # nowhere else. A second gate somewhere further in is a gate some
+        # future endpoint forgets to stand behind.
+        if row.expires_at is not None:
+            expires_at = (
+                row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=UTC)
+            )
+            if expires_at <= datetime.now(UTC):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="API key expired",
+                )
+        needed = required_scope(request.method, request.url.path)
+        if not key_allows(row.scopes, needed):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"API key is not scoped for {needed or 'this request'}",
             )
         return row.user_id
 

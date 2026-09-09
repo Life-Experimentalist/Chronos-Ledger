@@ -349,6 +349,11 @@ class RefreshToken(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 
+# A key holding this instead of a scope list may do anything its bound user
+# may do. Every key issued before scopes existed is one of these.
+WILDCARD_SCOPE = "*"
+
+
 class ApiKey(Base):
     """A long-lived machine credential for external integrations, bound to a
     normal user row (a service account). Only the SHA-256 hash is stored; the
@@ -364,4 +369,16 @@ class ApiKey(Base):
     user_id = Column(
         String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    # Comma separated, one entry per allowed "<area>:<read|write>". The single
+    # entry "*" is every area, which is what a key without scopes has always
+    # been and what the migration backfills. Bound as a string rather than a
+    # table because a scope is never queried across keys: it is read once,
+    # with the key, on the request the key authenticates. Text rather than a
+    # width because a key naming every area twice is already 265 characters,
+    # and a width Postgres enforces is a width SQLite would let the tests
+    # sail past.
+    scopes = Column(Text, nullable=False, default=WILDCARD_SCOPE)
+    # Null means the key never expires, which is what every key issued before
+    # this column existed was.
+    expires_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))

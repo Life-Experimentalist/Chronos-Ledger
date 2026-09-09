@@ -21,6 +21,9 @@ Authorization: Bearer <access_token>
 
 Tokens expire after `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` (default: 480 min / 8 hours).
 
+An API key in `X-API-Key` is accepted anywhere a Bearer token is. See
+[API keys](#api-keys).
+
 ### Role hierarchy
 
 ```mermaid
@@ -62,6 +65,95 @@ Higher roles inherit the permissions of all roles below them. Role is embedded i
 ### GET /auth/me
 
 Returns the current user's `UserResponse` (see Users section).
+
+---
+
+## API keys
+
+A key authenticates a machine the way a token authenticates a person. Send it
+in `X-API-Key` and it works on every endpoint a token works on. It acts as the
+user it is bound to, so bind one to a service account and not to a person: a
+key bound to an admin can do everything that admin can.
+
+Unlike a token, a key can be narrowed to part of the API and can be made to
+run out.
+
+### Scopes
+
+A scope is `<area>:read` or `<area>:write`. The area is the path segment after
+`/api/v1`, and `GET`, `HEAD` and `OPTIONS` are reads while everything else is
+a write. The scope a request needs is therefore read off the request, which
+means no endpoint has to opt in to being covered and a new endpoint cannot
+land open by nobody remembering to annotate it.
+
+| Area | Covers |
+|---|---|
+| `config` | `/config` |
+| `auth` | login, password change, `/auth/me` |
+| `api-keys` | issuing, listing and revoking keys |
+| `users` | the user directory |
+| `schedule` | slots, the daily ledger, cycles, staff locations |
+| `attendance` | marking, absence requests, annotations |
+| `guest` | the kiosk endpoints |
+| `ingestion` | CSV upload and ledger generation |
+| `sync` | the calendar feed |
+
+A key holding `schedule:read` passes `GET /schedule/slots` and is refused
+`POST /schedule/slots` with `403` and a detail naming `schedule:write`. The
+same key is refused `GET /users/` naming `users:read`: holding one area says
+nothing about another.
+
+The single scope `*` is every area. That is what a key created without naming
+any scopes gets, and what every key issued before scopes existed was
+backfilled to, so nothing that worked before stopped working. `GET /api-keys/`
+shows the scopes of each key, which is how you find the unrestricted ones.
+
+### Expiry
+
+`expires_at` is checked on the request rather than by a sweep, so a key stops
+working the moment it runs out, answering `401` with `API key expired`. Omit
+the field for a key that never runs out. A time already in the past is refused
+at creation: a key that is dead on arrival is a mistake, not a request.
+
+### POST /api-keys/ `[SUPER_ADMIN]`
+
+```json
+{
+  "label": "PulseWard HMS",
+  "user_id": "SVC001",
+  "scopes": ["schedule:read", "attendance:read"],
+  "expires_at": "2027-01-01T00:00:00Z"
+}
+```
+
+`scopes` and `expires_at` are both optional. Omitting `scopes` gives `*`; an
+empty array is refused, since a key that can reach nothing is not a key
+anybody wants.
+
+```json
+{
+  "id": 3,
+  "key_prefix": "ck_8Kd2mQ7x",
+  "label": "PulseWard HMS",
+  "user_id": "SVC001",
+  "scopes": "attendance:read,schedule:read",
+  "expires_at": "2027-01-01T00:00:00Z",
+  "created_at": "2026-09-09T10:14:00Z",
+  "api_key": "ck_8Kd2mQ7xR3nL9vB5tY1wZ0aC6eF4gH2jK8mN"
+}
+```
+
+`api_key` appears here and nowhere else. Only its hash is stored, so a lost
+key is revoked and reissued, never recovered. Scopes come back sorted and
+deduplicated.
+
+### GET /api-keys/ `[SUPER_ADMIN]`
+
+Every key, without its secret.
+
+### DELETE /api-keys/{key_id} `[SUPER_ADMIN]`
+
+Revokes immediately: the next request using it gets `401`.
 
 ---
 
@@ -253,6 +345,11 @@ The kiosk endpoint. The visitor does not log in; the kiosk device sends an
 admin-issued API key in `X-API-Key`. Fires a real-time WebSocket notification
 to the target staff. Every field is length-bounded, and `contact_phone` accepts
 only digits, spaces and `+ ( ) -`.
+
+A lobby terminal is the clearest case for a narrow key: `["guest:read",
+"guest:write"]` lets it check people in and read the directory and nothing
+else, which matters for a device sitting in a public space. See
+[Scopes](#scopes).
 
 ```json
 {

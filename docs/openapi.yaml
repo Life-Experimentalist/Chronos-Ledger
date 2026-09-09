@@ -14,10 +14,11 @@ info:
     Organization Schedule & Attendance Management REST API.
 
     **Authentication**: All endpoints except `/config` and `/auth/login`
-    require a Bearer JWT in the `Authorization` header. The two kiosk
-    endpoints, `/guest/register-checkin` and `/guest/directory`, accept an
-    API key in `X-API-Key` instead, since a lobby terminal has no one to
-    sign in.
+    require a Bearer JWT in the `Authorization` header. An API key in
+    `X-API-Key` is accepted in place of one anywhere, which is how a lobby
+    terminal with no one to sign in reaches `/guest/register-checkin` and
+    `/guest/directory`. A key can be narrowed to part of the API and given
+    an end date: see the `ApiKeyAuth` security scheme.
 
     **Roles**: `SUPER_ADMIN` > `UNIT_ADMIN` > `STAFF` > `MEMBER`.
     Role requirements are noted on each endpoint.
@@ -50,10 +51,25 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
-      description: >
+      description: |
         A machine credential bound to a service-account user. Accepted anywhere
         a Bearer token is, and acts as the bound user, so roles and unit scoping
         apply unchanged. This is how a lobby kiosk authenticates.
+
+        A key can also be narrowed and given an end date, which a Bearer token
+        cannot be. `scopes` is a comma separated list of `<area>:read` and
+        `<area>:write`, where the area is the path segment after `/api/v1`:
+        `schedule`, `attendance`, `users`, `ingestion`, `guest`, `sync`,
+        `config`, `auth`, `api-keys`. `GET`, `HEAD` and `OPTIONS` are
+        reads and everything else is a write, so `schedule:read` passes
+        `GET /schedule/slots` and is refused `POST /schedule/slots` with a 403
+        naming `schedule:write`. The single scope `*` is every area, which is
+        what a key issued before scopes existed holds and what a key created
+        without naming any gets.
+
+        `expires_at` is checked on the request, not by a sweep, so a key stops
+        working the moment it runs out and answers 401 `API key expired`. A
+        null expiry never runs out.
 
   schemas:
     # ── Enumerations ──────────────────────────
@@ -336,6 +352,84 @@ components:
         reporting_line_manager:
           type: string
           nullable: true
+
+    # ── API keys ─────────────────────────────
+    ApiKeyCreate:
+      type: object
+      required: [label, user_id]
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: What this key is for, so it can be recognised in the list.
+          example: PulseWard HMS
+        user_id:
+          type: string
+          description: >
+            The user this key acts as. The key can never do more than that
+            user can, whatever its scopes say.
+          example: SVC001
+        scopes:
+          type: array
+          nullable: true
+          minItems: 1
+          items:
+            type: string
+            pattern: "^(\\*|[a-z][a-z-]*:(read|write))$"
+          description: >
+            Areas this key may reach. Omit the field for an unrestricted key;
+            an empty array is refused, since a key that can reach nothing is
+            not a key anybody wants. Stored sorted and deduplicated.
+          example: [schedule:read, attendance:read]
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            When the key stops working. Omit for a key that never does. A time
+            already past is refused at creation.
+          example: "2027-01-01T00:00:00Z"
+
+    ApiKeyResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        key_prefix:
+          type: string
+          description: The first 12 characters, enough to tell two keys apart.
+          example: ck_8Kd2mQ7x
+        label:
+          type: string
+        user_id:
+          type: string
+        scopes:
+          type: string
+          description: Comma separated, or `*` for a key that was never narrowed.
+          example: attendance:read,schedule:read
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    ApiKeyCreated:
+      allOf:
+        - $ref: "#/components/schemas/ApiKeyResponse"
+        - type: object
+          required: [api_key]
+          properties:
+            api_key:
+              type: string
+              description: >
+                The raw key. Returned exactly once, here. Only its hash is
+                stored, so it cannot be shown again and a lost key has to be
+                revoked and reissued.
+              example: ck_8Kd2mQ7xR3nL9vB5tY1wZ0aC6eF4gH2jK8mN
 
     # ── Schedule ──────────────────────────────
     PlanningCycleCreate:
@@ -1136,6 +1230,86 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UserResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── API keys ─────────────────────────────
+  /api-keys/:
+    get:
+      tags: [API Keys]
+      summary: List issued keys
+      description: >
+        Requires `SUPER_ADMIN`. Shows what each key is scoped to and when it
+        runs out, which is how an unrestricted key left over from before
+        scopes existed becomes visible.
+      responses:
+        "200":
+          description: Every key, without its secret.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiKeyResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+    post:
+      tags: [API Keys]
+      summary: Issue a key
+      description: >
+        Requires `SUPER_ADMIN`. The raw key is in the response and nowhere
+        else. Bind it to a service account rather than to a person: the key
+        acts as that user, so a person's key inherits everything they can do.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiKeyCreate"
+      responses:
+        "201":
+          description: Key issued. The `api_key` field will not be shown again.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyCreated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No such user to bind the key to.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            A scope that is not a scope, an empty scope list, or an
+            `expires_at` already in the past.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api-keys/{key_id}:
+    delete:
+      tags: [API Keys]
+      summary: Revoke a key
+      description: >
+        Requires `SUPER_ADMIN`. Takes effect on the next request that uses it.
+      parameters:
+        - name: key_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Revoked.
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
