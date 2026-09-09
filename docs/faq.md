@@ -446,6 +446,11 @@ Check if the CVE affects Chronos Ledger's actual usage (many CVEs in base images
 2. If it's in the base image (`node:20-alpine`, `python:3.11-slim`, or `nginx:1.27-alpine`), we will update the `FROM` line once the upstream image is patched.
 3. If it's in a dependency, update via `uv add <package>@<fixed-version>` or `npm install <package>@<fixed-version>`.
 
+A HIGH is reported and does not stop the build. A CRITICAL with a published fix
+does stop it, and no image is pushed until it is dealt with. A CRITICAL with no
+fix available anywhere is reported but not blocking, because there would be
+nothing to do about it except turn the check off.
+
 ---
 
 ## CI/CD & GHCR

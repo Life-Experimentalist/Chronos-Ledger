@@ -109,12 +109,21 @@ jobs:
     name: Security (Trivy scan)
     runs-on: ubuntu-latest
     permissions:
+      # Naming any scope sets every other one to none, so checkout needs
+      # saying out loud. It matters more now that publishing waits on this job.
+      contents: read
       security-events: write
 
     steps:
       - uses: actions/checkout@v5
 
-      - name: Run Trivy filesystem scan
+      # Two passes, because they answer different questions. The first one
+      # reports: everything critical and everything high, written to the
+      # Security tab so somebody can triage it without reading a build log.
+      # The second one blocks, and only on critical, so a known-exploitable
+      # dependency cannot reach the registry while the merely-worrying ones
+      # do not hold up a release nobody would otherwise stop.
+      - name: Trivy scan, report every finding
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
@@ -130,6 +139,21 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
+
+      # Runs after the upload on purpose. This is the step allowed to fail,
+      # and the Security tab should already have the findings by the time it
+      # does. ignore-unfixed stays on: a critical with no patch published
+      # anywhere would otherwise block every build until upstream moves, which
+      # turns the gate into something people switch off.
+      - name: Trivy scan, fail the build on anything critical
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL
+          exit-code: 1
+          ignore-unfixed: true
+          format: table
 
   # ── Docker: verify both images build cleanly ──────────────────────────────
   docker-build-check:
