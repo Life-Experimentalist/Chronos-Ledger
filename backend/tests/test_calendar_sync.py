@@ -88,6 +88,10 @@ def _seed_schedule(
         slot_id = slot.id
     ledger = DailyLedger(
         target_date=TODAY,
+        # Copied off the slot, the way the generator copies it. A day with no
+        # slot has no window either, which is what an ad-hoc day is.
+        time_window_start=start if with_slot else None,
+        time_window_end=end if with_slot else None,
         master_slot_id=slot_id,
         activity_id=offering.id,
         active_lead_id="FAC001",

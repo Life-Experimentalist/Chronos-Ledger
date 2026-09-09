@@ -13,6 +13,7 @@ what has already happened is never rewritten to match what is planned now.
 
 import datetime
 
+from app.core.time import org_today
 from app.cron.ledger_generator import generate_daily_ledger_entries
 from app.models.db import (
     DailyLedger,
@@ -56,7 +57,7 @@ def _mark(db, entry_id):
 # ── PATCH ─────────────────────────────────────────────────────────────────────
 
 
-def test_a_moved_time_needs_no_propagation(client, db, seed_users):
+def test_a_moved_time_is_copied_onto_the_days_still_to_come(client, db, seed_users):
     headers, slot = _timetable(client, db, seed_users)
     assert generate_daily_ledger_entries(TOMORROW, db) == 1
 
@@ -68,10 +69,38 @@ def test_a_moved_time_needs_no_propagation(client, db, seed_users):
     assert r.status_code == 200, r.text
 
     db.expire_all()
-    # The day reads its window off the slot, so it moved without being touched.
+    # The day carries its own window, so the new one is written onto it the
+    # same way a new room or lead is.
     entry = db.query(DailyLedger).one()
-    assert entry.master_slot.time_window_start == datetime.time(10, 0)
+    assert entry.time_window_start == datetime.time(10, 0)
+    assert entry.time_window_end == datetime.time(11, 0)
     assert r.json()["ledger_rows_removed"] == 0
+
+
+def test_a_moved_time_does_not_reach_back_into_the_days_already_run(client, db, seed_users):
+    """Moving a class to 10:00 does not mean it ran at 10:00 last week.
+
+    While the window lived only on the slot there was no way to have both:
+    every day the class had ever run reported whatever time the slot said
+    today, and a day somebody was marked present at said the wrong hour.
+    """
+    day = YESTERDAY.isoweekday()
+    headers, slot = _timetable(client, db, seed_users, day=day)
+    assert generate_daily_ledger_entries(YESTERDAY, db) == 1
+
+    r = client.patch(
+        f"/api/v1/schedule/slots/{slot.id}",
+        headers=headers,
+        json={"time_window_start": "10:00:00", "time_window_end": "11:00:00"},
+    )
+    assert r.status_code == 200, r.text
+
+    db.expire_all()
+    entry = db.query(DailyLedger).one()
+    assert entry.time_window_start == datetime.time(9, 0)
+    assert entry.time_window_end == datetime.time(10, 0)
+    # The slot itself did move: it is the days behind it that stayed.
+    assert _slots(db)[0].time_window_start == datetime.time(10, 0)
 
 
 def test_a_window_cannot_be_collapsed_by_patching_one_end(client, db, seed_users):
@@ -347,12 +376,52 @@ def test_a_detached_day_still_reaches_a_member_calendar(client, db, seed_users):
     token = db.query(User).filter(User.id == "STU900").one().calendar_feed_token
     feed = client.get(f"/api/v1/sync/user-feed/{token}.ics")
     assert feed.status_code == 200, feed.text
-    # No window to put it in, so it lands as an all-day event rather than
-    # disappearing out of the feed the way an inner join used to make it.
-    assert f"DTSTART;VALUE=DATE:{YESTERDAY.strftime('%Y%m%d')}" in feed.text
+    # Still a timed event. The day was copied off the slot when it was
+    # generated, so losing the slot does not lose the hour it ran at. It used
+    # to be demoted to an all-day date, which told a member who had already
+    # been marked present that the class had no time.
+    assert f"DTSTART:{YESTERDAY.strftime('%Y%m%d')}T" in feed.text
+    assert "VALUE=DATE" not in feed.text
+
+
+def test_a_deleted_slot_leaves_its_days_their_hour(client, db, seed_users):
+    """The row keeps the window, not just the feed rendering of it."""
+    day = YESTERDAY.isoweekday()
+    headers, slot = _timetable(client, db, seed_users, day=day)
+    assert generate_daily_ledger_entries(YESTERDAY, db) == 1
+    _mark(db, db.query(DailyLedger).one().id)
+    assert client.delete(f"/api/v1/schedule/slots/{slot.id}", headers=headers).status_code == 200
+
+    db.expire_all()
+    entry = db.query(DailyLedger).one()
+    assert entry.master_slot_id is None
+    assert entry.time_window_start == datetime.time(9, 0)
+    assert entry.time_window_end == datetime.time(10, 0)
 
 
 def test_deleting_a_slot_that_is_not_there_is_a_404(client, db, seed_users):
     _make_cycle(db)
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
     assert client.delete("/api/v1/schedule/slots/9999", headers=headers).status_code == 404
+
+
+def test_the_dashboard_still_names_the_hour_of_a_detached_day(client, db, seed_users):
+    """GET /schedule/ledger/today used to answer null for a day with no slot.
+
+    A day is removed rather than detached only from today onward, so this
+    builds the row the way an orphan actually looks: a window, and nothing to
+    point at. The endpoint read both times off the slot, so the dashboard
+    showed a class with no time next to one with a time, and nothing on the
+    row said why.
+    """
+    headers, slot = _timetable(client, db, seed_users, day=org_today().isoweekday())
+    assert generate_daily_ledger_entries(org_today(), db) == 1
+    db.query(DailyLedger).update({DailyLedger.master_slot_id: None})
+    db.query(StructuralMasterSlot).filter(StructuralMasterSlot.id == slot.id).delete()
+    db.commit()
+
+    r = client.get("/api/v1/schedule/ledger/today", headers=headers)
+    assert r.status_code == 200, r.text
+    assert [(e["time_window_start"], e["time_window_end"]) for e in r.json()] == [
+        ("09:00:00", "10:00:00")
+    ]

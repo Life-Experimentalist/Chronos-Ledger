@@ -10,7 +10,12 @@ from app.core.time import org_now, window_span
 from app.models.db import Activity, DailyLedger, DynamicState, StructuralMasterSlot, User
 
 
-def _covers(day: datetime.date, slot: StructuralMasterSlot, instant: datetime.datetime) -> bool:
+def _covers(
+    day: datetime.date,
+    start: datetime.time,
+    end: datetime.time,
+    instant: datetime.datetime,
+) -> bool:
     """Whether a window opened on this date is running at this instant.
 
     Half open, the start in and the end out, which is what every other
@@ -23,8 +28,11 @@ def _covers(day: datetime.date, slot: StructuralMasterSlot, instant: datetime.da
     zero length interval and a half open overlap of one of those is always
     empty, so an overlap test would answer no at every instant, the one the
     shift starts on included.
+
+    Two times rather than the row holding them, because a generated day and a
+    weekly slot each have a window now and neither is the other.
     """
-    starts, ends = window_span(day, slot.time_window_start, slot.time_window_end)
+    starts, ends = window_span(day, start, end)
     return starts <= instant < ends
 
 
@@ -57,23 +65,36 @@ def determine_staff_current_state(staff_id: str, db: Session, redis_cache: Redis
     # is still running outranks one that started this morning.
 
     # Tier 2: Daily exception log (leaves, proxies, ad-hoc)
+    #
+    # The day's own window, and no join to the slot that produced it. The join
+    # was an inner one, so a day whose slot had since been deleted and an
+    # ad-hoc day that never had one were both invisible here. Somebody on
+    # approved leave from a class later taken off the timetable was reported
+    # as teaching it, because the tier that knew about the leave never saw the
+    # row and tier 3 answered instead.
     daily = next(
         (
-            pair
-            for pair in db.query(DailyLedger, StructuralMasterSlot)
-            .join(StructuralMasterSlot, DailyLedger.master_slot_id == StructuralMasterSlot.id)
+            ledger
+            for ledger in db.query(DailyLedger)
             .filter(
                 DailyLedger.active_lead_id == staff_id,
                 DailyLedger.target_date.in_((yesterday, today)),
+                DailyLedger.time_window_start.isnot(None),
+                DailyLedger.time_window_end.isnot(None),
             )
-            .order_by(DailyLedger.target_date, StructuralMasterSlot.time_window_start)
+            .order_by(DailyLedger.target_date, DailyLedger.time_window_start)
             .all()
-            if _covers(pair[0].target_date, pair[1], instant)
+            if _covers(
+                ledger.target_date,
+                ledger.time_window_start,
+                ledger.time_window_end,
+                instant,
+            )
         ),
         None,
     )
     if daily:
-        ledger, slot = daily
+        ledger = daily
         if ledger.operational_state == DynamicState.ON_LEAVE:
             return {"resolved_location": "OFF_CAMPUS", "status": "On Approved Leave"}
         if ledger.operational_state == DynamicState.PROXY_SUBSTITUTE:
@@ -102,7 +123,11 @@ def determine_staff_current_state(staff_id: str, db: Session, redis_cache: Redis
     ]
     candidates.sort(key=lambda found: (found[0], found[1].time_window_start))
     master = next(
-        ((slot, offering) for day, slot, offering in candidates if _covers(day, slot, instant)),
+        (
+            (slot, offering)
+            for day, slot, offering in candidates
+            if _covers(day, slot.time_window_start, slot.time_window_end, instant)
+        ),
         None,
     )
     if master:

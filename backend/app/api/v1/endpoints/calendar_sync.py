@@ -15,7 +15,6 @@ from app.models.db import (
     ActivityEnrollment,
     DailyLedger,
     InstitutionalRole,
-    StructuralMasterSlot,
     User,
     generate_feed_token,
 )
@@ -162,7 +161,6 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
         ledger_entries = (
             db.query(DailyLedger)
             .join(Activity, DailyLedger.activity_id == Activity.id)
-            .outerjoin(StructuralMasterSlot, DailyLedger.master_slot_id == StructuralMasterSlot.id)
             .filter(
                 (DailyLedger.active_lead_id == user.id)
                 | (DailyLedger.substitute_lead_id == user.id),
@@ -202,25 +200,31 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
     written_at = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
 
     for entry in ledger_entries:
-        slot = entry.master_slot
         offering = entry.activity
         if not offering:
             continue
 
-        if slot:
-            # target_date is the day the slot opens on, so a night shift ends
+        starts_at = entry.time_window_start
+        ends_at = entry.time_window_end
+        if starts_at and ends_at:
+            # target_date is the day the window opens on, so a night shift ends
             # on the day after it. Handing the same date to both would write an
             # event that finishes sixteen hours before it starts, which a strict
             # calendar client rejects and a lenient one draws backwards.
-            _, ends = window_span(entry.target_date, slot.time_window_start, slot.time_window_end)
-            dtstart_line = f"DTSTART:{_utc_stamp(entry.target_date, slot.time_window_start)}"
-            dtend_line = f"DTEND:{_utc_stamp(ends.date(), slot.time_window_end)}"
+            _, ends = window_span(entry.target_date, starts_at, ends_at)
+            dtstart_line = f"DTSTART:{_utc_stamp(entry.target_date, starts_at)}"
+            dtend_line = f"DTEND:{_utc_stamp(ends.date(), ends_at)}"
             # The wall clock reading, not the UTC one. A UID has to name the
             # same event for the life of the event, and a UTC time would move
             # under it the first time the zone changed offset.
-            uid_time = slot.time_window_start.strftime("%H%M%S")
+            uid_time = starts_at.strftime("%H%M%S")
         else:
-            # Ad-hoc entry without a master slot: an all-day event. RFC 5545 makes
+            # The day's own window, not the slot's. Reading it back through the
+            # slot meant a class removed from the timetable turned every day it
+            # had already run into an all-day event, and moving a class to
+            # another hour moved the days it had already run with it.
+            #
+            # Ad-hoc entry with no window: an all-day event. RFC 5545 makes
             # DTSTART default to DATE-TIME, so a date-only value must declare
             # VALUE=DATE, and the all-day DTEND is non-inclusive (the next day).
             # No zone on either: a date is a date wherever it is read.

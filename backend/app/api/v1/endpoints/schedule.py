@@ -216,14 +216,15 @@ def update_master_slot(
 ):
     """Change a slot, and take the days it has already produced with it.
 
-    Times need no propagation: a ledger row has no times of its own and
-    reads them off the slot. That also means moving a class to 10:00 shows
-    every day it has already run at 10:00, which is wrong for the days that
-    ran at 09:00 and stays wrong until the ledger carries its own window.
+    Times, lead and room are copied onto the days that are still plans, by
+    the same function the importer uses, so a correction typed into the API
+    and a correction uploaded as a CSV reach the same rows and skip the same
+    ones.
 
-    Lead and room are copied onto the days that are still plans, by the same
-    function the importer uses, so a correction typed into the API and a
-    correction uploaded as a CSV reach the same rows and skip the same ones.
+    The times are copied rather than read back through the slot, and the
+    filter on future dates is what makes that correct: a class moved to 10:00
+    runs at 10:00 from tomorrow, and the days it already ran at 09:00 still
+    say 09:00. Reading them off the slot rewrote history instead.
 
     Moving the slot to another weekday is the one change that cannot be
     copied across: the days already generated sit on the old weekday and
@@ -297,6 +298,11 @@ def delete_master_slot(
     to call this, so the six weeks have to survive it. Days from today
     onward are still only plans and are removed; days already past keep
     everything recorded on them and are left with no slot to point at.
+
+    Everything includes the hour they ran at, now that a day carries its own
+    window. Before that the window lived only on the slot, so deleting one
+    turned every day it had already produced into a day nobody could say the
+    time of, on a calendar feed and in the API alike.
     """
     slot = db.query(StructuralMasterSlot).filter(StructuralMasterSlot.id == slot_id).first()
     if not slot:
@@ -378,7 +384,6 @@ def get_today_ledger(
     entries = q.all()
     result = []
     for e in entries:
-        slot = e.master_slot
         offering = e.activity
         result.append(
             {
@@ -388,8 +393,12 @@ def get_today_ledger(
                 "activity_title": offering.activity_title if offering else None,
                 "resource_id": e.resource_id,
                 "target_room_identifier": e.target_room_identifier,
-                "time_window_start": str(slot.time_window_start) if slot else None,
-                "time_window_end": str(slot.time_window_end) if slot else None,
+                # The day's own window. It used to be read back off the slot,
+                # so a class taken off the timetable made every day it had
+                # already run report no time at all, and moving a class to a
+                # different hour moved the days it had already run with it.
+                "time_window_start": str(e.time_window_start) if e.time_window_start else None,
+                "time_window_end": str(e.time_window_end) if e.time_window_end else None,
                 "delivery_format": e.delivery_format.value,
                 "virtual_connection_string": e.virtual_connection_string,
                 "operational_state": e.operational_state.value,

@@ -49,9 +49,16 @@ def propagate_slot_corrections(slots: list[StructuralMasterSlot], db: Session) -
     annotated. Everything else is counted and handed back, so the caller can
     say what it left alone instead of silently diverging from the timetable.
 
-    Room and lead are safe to overwrite here because nothing else writes
-    them. DailyLedgerUpdate exposes neither, so a row that disagrees with
-    its slot disagrees only because the slot moved on after materialization.
+    Room, lead and window are safe to overwrite here because nothing else
+    writes them. DailyLedgerUpdate exposes none of them, so a row that
+    disagrees with its slot disagrees only because the slot moved on after
+    materialization.
+
+    The window is copied for the same reason as the room, and the date filter
+    is what makes it correct: only days that have not happened yet are moved.
+    A class rescheduled to 10:00 runs at 10:00 from tomorrow, and the days it
+    already ran at 09:00 keep saying 09:00. Before the ledger carried its own
+    window there was no way to have both.
 
     The room comparison is on resource_id, not on the room's name: renaming
     a room is one row in resources and must not read as every day of every
@@ -90,6 +97,8 @@ def propagate_slot_corrections(slots: list[StructuralMasterSlot], db: Session) -
         row.resource_id = slot.resource_id
         row.target_room_identifier = slot.target_room_identifier
         row.active_lead_id = slot.primary_lead_id
+        row.time_window_start = slot.time_window_start
+        row.time_window_end = slot.time_window_end
         updated += 1
 
     return {"ledger_rows_updated": updated, "ledger_rows_kept": len(rows) - updated}

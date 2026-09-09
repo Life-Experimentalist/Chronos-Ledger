@@ -55,6 +55,11 @@ def generate_daily_ledger_entries(target_date: datetime.date, db: Session) -> in
 
         entry = DailyLedger(
             target_date=target_date,
+            # Copied, not pointed at. The slot may be edited or deleted after
+            # today has been generated, and neither should reach back and
+            # change what time a day that has already happened ran at.
+            time_window_start=slot.time_window_start,
+            time_window_end=slot.time_window_end,
             master_slot_id=slot.id,
             activity_id=slot.activity_id,
             active_lead_id=slot.primary_lead_id,

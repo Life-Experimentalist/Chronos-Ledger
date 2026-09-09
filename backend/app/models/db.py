@@ -236,6 +236,20 @@ class DailyLedger(Base):
 
     id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
     target_date = Column(Date, nullable=False, index=True)
+    # Copied from the slot when the day is generated rather than read back
+    # through it. A day is a booking on a date and had no window of its own,
+    # so deleting a slot nulled master_slot_id and the days it had already
+    # produced forgot what time they happened at: the calendar feed demoted
+    # them to all-day events and the API returned null. Editing a slot's
+    # times rewrote history the same way, showing every day it had already
+    # run at the new time.
+    #
+    # Nullable, because an ad-hoc day has no window by design and because a
+    # day orphaned before this column existed has no slot left to copy from.
+    # An end earlier than a start means the day finishes on the following
+    # date, the same rule window_span keeps everywhere else.
+    time_window_start = Column(Time, nullable=True)
+    time_window_end = Column(Time, nullable=True)
     master_slot_id = Column(
         Integer, ForeignKey("structural_master_slots.id", ondelete="SET NULL"), nullable=True
     )

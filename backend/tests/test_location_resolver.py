@@ -102,6 +102,9 @@ def _ledger(db, slot: StructuralMasterSlot, day: datetime.date, state: DynamicSt
     db.add(
         DailyLedger(
             target_date=day,
+            # Copied off the slot, the way the generator copies it.
+            time_window_start=slot.time_window_start,
+            time_window_end=slot.time_window_end,
             master_slot_id=slot.id,
             activity_id=slot.activity_id,
             active_lead_id="FAC001",
@@ -216,3 +219,42 @@ def test_a_ledger_row_from_a_finished_night_shift_is_not_reported(db, seed_users
     _ledger(db, slot, MONDAY, DynamicState.SCHEDULED, "W-9")
     at(TUESDAY, 7, 0)
     assert _state(db)["status"] == "Available / Unassigned"
+
+
+def test_leave_on_a_class_taken_off_the_timetable_is_still_leave(db, seed_users, at):
+    """The tier 2 join used to be an inner one.
+
+    A slot deleted after the day was generated nulls the day's
+    master_slot_id, on purpose, so that the attendance marked against it
+    survives. The join then dropped the row, tier 2 saw nothing, and somebody
+    on approved leave was reported as teaching a class that is no longer on
+    the timetable at all. The row's own window is what tier 2 reads now, so
+    the deletion changes nothing it needs.
+    """
+    slot = _slot(db, 1, DAY)
+    _ledger(db, slot, MONDAY, DynamicState.ON_LEAVE, "W-9")
+    db.query(DailyLedger).update({DailyLedger.master_slot_id: None})
+    db.query(StructuralMasterSlot).filter(StructuralMasterSlot.id == slot.id).delete()
+    db.commit()
+
+    at(MONDAY, 9, 30)
+    assert _state(db)["resolved_location"] == "OFF_CAMPUS"
+
+
+def test_an_adhoc_day_with_no_window_is_not_reported(db, seed_users, at):
+    """A day nobody gave a time to is not a day somebody is on shift for.
+
+    It has to be skipped rather than crash: window_span has two times to work
+    with or it has nothing, and a row with none is exactly what an ad-hoc
+    entry is before anyone fills the times in.
+    """
+    slot = _slot(db, 1, DAY)
+    _ledger(db, slot, MONDAY, DynamicState.SCHEDULED, "W-9")
+    db.query(DailyLedger).update(
+        {DailyLedger.time_window_start: None, DailyLedger.time_window_end: None}
+    )
+    db.commit()
+
+    at(MONDAY, 9, 30)
+    # Tier 2 skips it and tier 3 answers off the slot, which still has a window.
+    assert _state(db)["resolved_location"] == "W-1"

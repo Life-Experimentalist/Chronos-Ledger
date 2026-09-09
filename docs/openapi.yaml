@@ -829,8 +829,8 @@ components:
         ledger_rows_detached:
           type: integer
           description: >
-            Days already past. They keep their room, lead and attendance, and
-            their master_slot_id becomes null.
+            Days already past. They keep their room, lead, window and
+            attendance, and their master_slot_id becomes null.
 
     DailyLedgerUpdate:
       type: object
@@ -1926,10 +1926,11 @@ paths:
       tags: [Schedule]
       summary: Change a master slot, and the days it has already produced
       description: >
-        Admin only. Times need no propagation: a generated day has no window
-        of its own and reads the slot's. A new lead or room is copied onto
-        the days that are still plans, while days carrying attendance or a
-        note are counted and left alone.
+        Admin only. A new window, lead or room is copied onto the days that
+        are still plans, while days carrying attendance or a note are counted
+        and left alone. Only days after today are moved, so a class shifted
+        to 10:00 runs at 10:00 from tomorrow and the days it already ran at
+        09:00 still say 09:00.
 
 
         Moving the slot to another weekday is the one change that cannot be
@@ -2000,8 +2001,11 @@ paths:
         nothing is deleted and the response names those dates.
 
 
-        A detached day has no time window, because the window lived on the
-        slot. It appears on a calendar feed as an all-day event.
+        A detached day keeps its window. The day was copied off the slot when
+        it was generated, so losing the slot does not lose the hour it ran at
+        and it stays a timed event on a calendar feed. Days generated before
+        the ledger carried its own window have none to keep and still appear
+        as all-day events.
       parameters:
         - name: slot_id
           in: path
@@ -2619,8 +2623,10 @@ paths:
         Timed sessions are written as UTC instants (DTSTART and DTEND end in Z),
         converted from the organization's wall clock through ORG_TIMEZONE, so a
         subscriber reading the feed from anywhere sees the session at the moment
-        it happens. Entries with no master slot are all-day dates and carry no
-        zone, because a date reads the same everywhere.
+        it happens. An entry with no window of its own is an all-day date and
+        carries no zone, because a date reads the same everywhere. That is an
+        ad-hoc day nobody gave a time to, or a day generated before the ledger
+        carried its own window.
       parameters:
         - name: user_id
           in: path
