@@ -302,8 +302,15 @@ Upload a `multipart/form-data` CSV file. Required columns:
 | `lead_id` | FAC001 |
 | `room` | Room 204 |
 
-Import is idempotent, re-uploading the same file is safe. A member who
-already exists is left alone, password included.
+Import is idempotent, and a re-upload is how a timetable is corrected in
+bulk. A slot matching an existing one on activity, weekday and start time
+has its end time, lead and room brought into line, and the days already
+generated from it follow. The exception is a day somebody has already
+marked or annotated: those are counted in `ledger_rows_kept` and left
+disagreeing with the timetable on purpose, because they record what
+happened rather than what was planned. A member who already exists keeps
+their password, and somebody promoted to STAFF since the last import stays
+STAFF.
 
 Every member the file creates gets an individual random password, returned
 once in the response and never stored:
@@ -321,6 +328,39 @@ once in the response and never stored:
 Save that list. The server keeps only the bcrypt hash, so a lost password
 has to be reissued one member at a time through
 `POST /users/{user_id}/reset-password`.
+
+**An import never removes anything.** A file covering one unit cannot be
+told apart from a timetable that lost every other unit, so slots and
+enrollments the cycle holds that the file does not mention come back in
+`not_in_file` for somebody to decide about:
+
+```json
+{
+  "status": "SUCCESS",
+  "rows_ingested": 412,
+  "slots_corrected": 2,
+  "ledger_rows_updated": 5,
+  "ledger_rows_kept": 1,
+  "not_in_file": {
+    "slots": [
+      { "id": 87, "activity_code": "PH101", "day_of_week_index": 3, "time_window_start": "11:00:00", "room": "LH-305" }
+    ],
+    "enrollments": [
+      { "member_id": "STU20210044", "activity_code": "PH101" }
+    ]
+  }
+}
+```
+
+The report is scoped to the units named in the file, so a CSE upload does
+not list every ECE class every time. Act on a reported slot with
+`DELETE /schedule/slots/{id}`, which keeps the days already past.
+
+A class whose start time moved shows up here too. The slot match is on
+activity, weekday and start time, so a class moved from 09:00 to 14:00 does
+not match: it arrives as a second slot and the 09:00 one is reported rather
+than guessed at. No column in the file can say "this is the 09:00 class,
+moved", and guessing wrong would delete somebody's timetable.
 
 **Practical size limit.** Each new member costs one bcrypt hash on the
 request thread, roughly half a second, and the work happens before the

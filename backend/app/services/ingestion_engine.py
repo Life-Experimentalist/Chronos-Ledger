@@ -68,6 +68,14 @@ class ChronosIngestionEngine:
         # generated from them are brought into line once at the end rather
         # than once per CSV row.
         corrected: dict[int, StructuralMasterSlot] = {}
+        # What the file accounted for, gathered as the loop matches each row,
+        # so the orphan report below is computed from the same match the
+        # import itself made. A second key written separately would drift
+        # from this one and the report would start naming rows the file did
+        # in fact cover.
+        seen_slots: set[int] = set()
+        seen_enrollments: set[tuple[int, str]] = set()
+        units: set[str] = set()
 
         try:
             for _, row in df.iterrows():
@@ -153,6 +161,8 @@ class ChronosIngestionEngine:
                     self.db.add(
                         ActivityEnrollment(activity_id=offering.id, member_id=str(row["member_id"]))
                     )
+                seen_enrollments.add((offering.id, str(row["member_id"])))
+                units.add(str(row["unit"]))
 
                 # 4. Upsert master slot (deduplicate by activity + day + start time)
                 t_start = _parse_time(row["time_window_start"])
@@ -175,17 +185,16 @@ class ChronosIngestionEngine:
                 )
                 room = get_or_create_room(str(row["room"]), self.db)
                 if not slot:
-                    self.db.add(
-                        StructuralMasterSlot(
-                            day_of_week_index=int(row["day_of_week_index"]),
-                            time_window_start=t_start,
-                            time_window_end=t_end,
-                            activity_id=offering.id,
-                            primary_lead_id=str(row["lead_id"]),
-                            resource_id=room.id,
-                            target_room_identifier=room.code,
-                        )
+                    slot = StructuralMasterSlot(
+                        day_of_week_index=int(row["day_of_week_index"]),
+                        time_window_start=t_start,
+                        time_window_end=t_end,
+                        activity_id=offering.id,
+                        primary_lead_id=str(row["lead_id"]),
+                        resource_id=room.id,
+                        target_room_identifier=room.code,
                     )
+                    self.db.add(slot)
                 elif (
                     slot.time_window_end != t_end
                     or slot.primary_lead_id != str(row["lead_id"])
@@ -215,8 +224,11 @@ class ChronosIngestionEngine:
                 # lines: every member sharing a class would add a duplicate
                 # registration and master slot.
                 self.db.flush()
+                # After the flush, so a slot this row created has an id.
+                seen_slots.add(slot.id)
 
             propagation = propagate_slot_corrections(list(corrected.values()), self.db)
+            orphans = self._orphans(cycle_id, units, seen_slots, seen_enrollments)
 
             self.db.commit()
             return {
@@ -224,9 +236,72 @@ class ChronosIngestionEngine:
                 "rows_ingested": records_processed,
                 "provisioned_credentials": provisioned,
                 "slots_corrected": len(corrected),
+                "not_in_file": orphans,
                 **propagation,
             }
 
         except Exception as e:
             self.db.rollback()
             return {"status": "FAILED", "error_log": str(e)}
+
+    def _orphans(
+        self,
+        cycle_id: int,
+        units: set[str],
+        seen_slots: set[int],
+        seen_enrollments: set[tuple[int, str]],
+    ) -> dict[str, list[dict[str, Any]]]:
+        """What the cycle holds that this file did not mention.
+
+        A report and never an action. The import has no way to tell a class
+        that ended from a file that only covers half the timetable, and a
+        partial upload treated as authoritative would delete every enrollment
+        it happened not to list. So this names the rows and leaves them alone,
+        and somebody decides.
+
+        Scoped to the units the file names, not to the whole cycle. A file
+        covering CSE would otherwise report every ECE class as missing, every
+        time, which teaches an admin to skip past the field.
+        """
+        codes = dict(
+            self.db.query(Activity.id, Activity.activity_code)
+            .filter(Activity.cycle_id == cycle_id, Activity.unit_code.in_(units))
+            .all()
+        )
+        if not codes:
+            return {"slots": [], "enrollments": []}
+        activity_ids = list(codes)
+
+        slots = [
+            {
+                "id": slot.id,
+                "activity_code": codes[slot.activity_id],
+                "day_of_week_index": slot.day_of_week_index,
+                "time_window_start": str(slot.time_window_start),
+                "room": slot.resource.code if slot.resource else slot.target_room_identifier,
+            }
+            for slot in self.db.query(StructuralMasterSlot)
+            .filter(StructuralMasterSlot.activity_id.in_(activity_ids))
+            .all()
+            if slot.id not in seen_slots
+        ]
+
+        enrollments = [
+            {"member_id": reg.member_id, "activity_code": codes[reg.activity_id]}
+            for reg in self.db.query(ActivityEnrollment)
+            .filter(ActivityEnrollment.activity_id.in_(activity_ids))
+            .all()
+            if (reg.activity_id, reg.member_id) not in seen_enrollments
+        ]
+
+        return {
+            "slots": sorted(
+                slots,
+                key=lambda s: (
+                    s["activity_code"],
+                    s["day_of_week_index"],
+                    s["time_window_start"],
+                ),
+            ),
+            "enrollments": sorted(enrollments, key=lambda e: (e["activity_code"], e["member_id"])),
+        }

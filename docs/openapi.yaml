@@ -218,10 +218,83 @@ components:
             these passwords: save them or reset the members individually.
           items:
             $ref: "#/components/schemas/ProvisionedCredential"
+        slots_corrected:
+          type: integer
+          description: >
+            Slots this file changed rather than created. Re-uploading a file
+            with a corrected room or lead is how a timetable is edited in
+            bulk; a slot whose start time moved does not match and arrives as
+            a second slot instead, with the original reported in not_in_file.
+        ledger_rows_updated:
+          type: integer
+          description: >
+            Days already generated from a corrected slot that were still
+            plans and now carry the new lead and room. A day whose room
+            changed also has its geofence cleared, because the old one
+            fenced members out of the room they have just been sent to.
+        ledger_rows_kept:
+          type: integer
+          description: >
+            Days left alone because attendance or a note has been recorded
+            against them. They now disagree with the timetable on purpose:
+            they record what happened. Days already past are never touched
+            and are not counted here.
+        not_in_file:
+          $ref: "#/components/schemas/ImportOrphans"
         error_log:
           type: string
           description: Present when status is FAILED.
       required: [status]
+
+    ImportOrphans:
+      type: object
+      description: >
+        What the cycle holds that this file did not mention. A report and
+        never an action: a file covering half a timetable cannot be told
+        apart from a timetable that lost half its classes, so nothing here
+        is removed and somebody decides.
+
+
+        Scoped to the units named in the file, not to the whole cycle, so a
+        file covering one unit does not report every class in every other
+        unit each time it is uploaded.
+      properties:
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrphanSlot"
+        enrollments:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrphanEnrollment"
+      required: [slots, enrollments]
+
+    OrphanSlot:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: What DELETE /schedule/slots/{slot_id} takes, if it should go.
+        activity_code:
+          type: string
+        day_of_week_index:
+          type: integer
+        time_window_start:
+          type: string
+          format: time
+        room:
+          type: string
+          nullable: true
+      required: [id, activity_code, day_of_week_index, time_window_start]
+
+    OrphanEnrollment:
+      type: object
+      properties:
+        member_id:
+          type: string
+        activity_code:
+          type: string
+      required: [member_id, activity_code]
 
     PasswordResetResponse:
       type: object
@@ -1693,6 +1766,11 @@ paths:
         Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations.
         Idempotent, re-uploading the same CSV is safe: an existing member
         keeps their password.
+
+
+        Never removes. Slots and enrollments the cycle holds that the file
+        does not mention come back in `not_in_file` for somebody to act on,
+        which is what makes a partial upload safe.
 
         Each new member costs a bcrypt hash on the request thread, about
         half a second, so a file creating more than roughly 100 new
