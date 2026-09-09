@@ -8,6 +8,7 @@ but it is keyed by an unguessable per-user token, never the plain user id.
 
 import datetime
 
+from app.core.time import org_today
 from app.models.db import (
     Activity,
     ActivityEnrollment,
@@ -19,7 +20,7 @@ from app.models.db import (
 )
 from tests.conftest import STAFF_PASSWORD, login
 
-TODAY = datetime.date.today()
+TODAY = org_today()
 
 
 def _seed_schedule(db, state=DynamicState.SCHEDULED, with_slot=True, substitute=None):

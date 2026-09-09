@@ -6,6 +6,7 @@ import datetime
 
 import pytest
 
+from app.core.time import org_today
 from app.models.db import (
     Activity,
     DailyLedger,
@@ -17,7 +18,7 @@ from app.models.db import (
 )
 from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, login
 
-TODAY = datetime.date.today()
+TODAY = org_today()
 
 
 def _make_ledger(db, lead_id=None, with_geo=False, alt_target=920.0):

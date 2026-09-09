@@ -71,6 +71,7 @@ Edit `.env` and set:
 - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`, generate with `npx web-push generate-vapid-keys`
 - `VAPID_CONTACT_EMAIL`, a reachable admin email
 - `DB_PASSWORD`, change from the default before first launch
+- `ORG_TIMEZONE`, the IANA name of where the organization is, such as `Asia/Kolkata`. It decides which day the dashboard shows, which day the nightly generator lays down, and when 23:00 is. A container runs UTC, so leaving it unset puts an organization that is not in UTC a whole offset out. An offset like `+05:30` is refused, because it cannot know when daylight saving moves, and a name no zone database knows stops the server rather than falling back quietly.
 
 ### 2. Launch with auto-discovery
 

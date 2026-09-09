@@ -549,7 +549,7 @@ wheels = [
 
 [[package]]
 name = "chronos-ledger-backend"
-version = "1.0.0"
+version = "0.9.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
@@ -570,6 +570,7 @@ dependencies = [
     { name = "pywebpush" },
     { name = "redis" },
     { name = "sqlalchemy" },
+    { name = "tzdata" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "websockets" },
 ]
@@ -616,6 +617,7 @@ requires-dist = [
     { name = "redis", specifier = ">=5.2.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.0" },
     { name = "sqlalchemy", specifier = ">=2.0.36" },
+    { name = "tzdata", specifier = ">=2024.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
     { name = "websockets", specifier = ">=14.1" },
 ]

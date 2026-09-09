@@ -16,6 +16,7 @@ into the past and every test here would start passing for the wrong reason.
 
 import datetime
 
+from app.core.time import org_today
 from app.cron.ledger_generator import generate_daily_ledger_entries
 from app.models.db import (
     Activity,
@@ -32,7 +33,7 @@ from tests.test_import_corrections import TOMORROW, _csv, _row
 from tests.test_ingestion import _make_cycle, _upload
 
 # The class sits on tomorrow's weekday, which is what _row imports onto too.
-NEXT_WEEK = datetime.date.today() + datetime.timedelta(days=7)
+NEXT_WEEK = org_today() + datetime.timedelta(days=7)
 A_WEEK_AGO = TOMORROW - datetime.timedelta(days=7)
 
 HELD = "the resource is held for part of that window"
@@ -48,8 +49,8 @@ def _room(db, code="LH-201"):
 def _activity(db, is_open=True, code="CS101"):
     cycle = PlanningCycle(
         cycle_label="Cycle",
-        date_bounds_start=datetime.date.today() - datetime.timedelta(days=30),
-        date_bounds_end=datetime.date.today() + datetime.timedelta(days=300),
+        date_bounds_start=org_today() - datetime.timedelta(days=30),
+        date_bounds_end=org_today() + datetime.timedelta(days=300),
         operational_status=is_open,
     )
     db.add(cycle)

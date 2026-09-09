@@ -3,10 +3,9 @@
 
 """Keeping already-materialized days in step with a corrected master slot."""
 
-import datetime
-
 from sqlalchemy.orm import Session
 
+from app.core.time import org_today
 from app.models.db import (
     DailyLedger,
     LedgerAnnotation,
@@ -66,7 +65,7 @@ def propagate_slot_corrections(slots: list[StructuralMasterSlot], db: Session) -
         db.query(DailyLedger)
         .filter(
             DailyLedger.master_slot_id.in_(by_id),
-            DailyLedger.target_date > datetime.date.today(),
+            DailyLedger.target_date > org_today(),
         )
         .all()
     )

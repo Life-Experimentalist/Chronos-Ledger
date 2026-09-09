@@ -3,7 +3,9 @@
 
 from functools import lru_cache
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Values that are published in this repository. A deployment running on any of
@@ -44,6 +46,10 @@ class Settings(BaseSettings):
     # Organization
     org_domain_mask: str = "org.internal"
     org_profile: Literal["generic", "campus", "hospital"] = "generic"
+    # An IANA name, not an offset. "Asia/Kolkata", not "+05:30": an offset
+    # cannot know when daylight saving moves, and a schedule that runs across
+    # a spring forward would drift by an hour for half the year.
+    org_timezone: str = "UTC"
 
     # VAPID (Web Push)
     vapid_public_key: str = ""
@@ -58,6 +64,30 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.app_cors_origins.split(",") if o.strip()]
+
+    @field_validator("org_timezone")
+    @classmethod
+    def _zone_must_exist(cls, name: str) -> str:
+        """Refuse a name no zone database knows, at startup.
+
+        Unlike the secret checks below this one is a pydantic validator,
+        because a timezone name is not a secret and echoing the bad value is
+        exactly what the operator needs to see. Falling back to UTC instead
+        would put the whole schedule an offset out and say nothing.
+
+        A slim container may have no zone database at all, in which case
+        every name but UTC fails here. tzdata is a dependency for that
+        reason, so the failure is a typo rather than a missing package.
+        """
+        try:
+            ZoneInfo(name)
+        except (ZoneInfoNotFoundError, ValueError) as bad:
+            raise ValueError(
+                f"ORG_TIMEZONE={name!r} is not an IANA timezone name. "
+                "It wants something like 'Asia/Kolkata' or 'Europe/London', "
+                "not an offset like '+05:30'."
+            ) from bad
+        return name
 
 
 def describe_production_secret_problems(settings: Settings) -> list[str]:

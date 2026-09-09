@@ -56,6 +56,10 @@ services:
       - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
       - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-15}
       - APP_ENV=${APP_ENV:-production}
+      # Decides what "today" means. A container runs UTC, so an
+      # organization that is not in UTC needs this or the dashboard is a
+      # whole offset out. IANA name, not an offset.
+      - ORG_TIMEZONE=${ORG_TIMEZONE:-UTC}
       - APP_CORS_ORIGINS=${APP_CORS_ORIGINS:-http://localhost}
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}

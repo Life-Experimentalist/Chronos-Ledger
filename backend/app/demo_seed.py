@@ -19,6 +19,7 @@ import datetime
 
 from app.core.database import SessionLocal
 from app.core.security import generate_api_key, hash_api_key, hash_password
+from app.core.time import org_today
 from app.cron.ledger_generator import generate_daily_ledger_entries
 from app.models.db import (
     Activity,
@@ -97,7 +98,7 @@ def provision_demo_kiosk(db) -> str:
 def seed() -> None:
     db = SessionLocal()
     try:
-        today = datetime.date.today()
+        today = org_today()
         if db.query(User).filter(User.id == "DEMO-STF01").first():
             created = generate_daily_ledger_entries(today, db)
             print(f"Demo data already present; topped up {created} ledger rows for {today}.")

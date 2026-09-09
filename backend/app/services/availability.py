@@ -25,6 +25,7 @@ import datetime
 
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.time import org_today
 from app.models.db import (
     Activity,
     PlanningCycle,
@@ -124,7 +125,7 @@ def held_against_slot(
         .filter(
             Reservation.resource_id == resource_id,
             Reservation.status == ReservationStatus.HELD,
-            Reservation.reserved_date >= datetime.date.today(),
+            Reservation.reserved_date >= org_today(),
         )
         .all()
         if held.reserved_date.isoweekday() == weekday

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import require_roles
+from app.core.time import org_tomorrow
 from app.services.ingestion_engine import ChronosIngestionEngine
 
 router = APIRouter()
@@ -58,7 +59,7 @@ def trigger_ledger_generation(
     if target_date:
         date_obj = datetime.date.fromisoformat(target_date)
     else:
-        date_obj = datetime.date.today() + datetime.timedelta(days=1)
+        date_obj = org_tomorrow()
 
     generate_daily_ledger_entries(date_obj, db)
     return {"status": "generated", "date": str(date_obj)}

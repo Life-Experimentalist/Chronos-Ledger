@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.core.time import org_today
 from app.models.db import (
     Activity,
     ActivityEnrollment,
@@ -54,8 +55,8 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="Feed not found")
 
-    start_range = datetime.date.today() - datetime.timedelta(days=7)
-    end_range = datetime.date.today() + datetime.timedelta(days=30)
+    start_range = org_today() - datetime.timedelta(days=7)
+    end_range = org_today() + datetime.timedelta(days=30)
 
     is_staff = user.role_type in (
         InstitutionalRole.STAFF,

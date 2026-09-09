@@ -13,6 +13,7 @@ calendar client rejects and slots nobody is ever "in".
 import datetime
 import io
 
+from app.core.time import org_today
 from app.models.db import Activity, PlanningCycle, StructuralMasterSlot
 from tests.conftest import ADMIN_PASSWORD, login
 
@@ -23,7 +24,7 @@ HEADER = (
 
 
 def _seed_offering(db):
-    today = datetime.date.today()
+    today = org_today()
     cycle = PlanningCycle(
         cycle_label="Validation 2026",
         date_bounds_start=today - datetime.timedelta(days=30),

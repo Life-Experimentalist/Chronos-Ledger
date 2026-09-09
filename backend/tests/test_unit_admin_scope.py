@@ -11,6 +11,7 @@ batch-mark their attendance, and upload the institution-wide CSV matrix.
 import datetime
 
 from app.core.security import hash_password
+from app.core.time import org_today
 from app.models.db import (
     Activity,
     DailyLedger,
@@ -20,7 +21,7 @@ from app.models.db import (
 )
 from tests.conftest import ADMIN_PASSWORD, login
 
-TODAY = datetime.date.today()
+TODAY = org_today()
 UNIT_ADMIN_PASSWORD = "UnitAdminPass123!"
 _UNIT_ADMIN_HASH = hash_password(UNIT_ADMIN_PASSWORD)
 

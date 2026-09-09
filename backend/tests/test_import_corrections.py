@@ -11,6 +11,7 @@ a day somebody has already marked, and any day in the past.
 
 import datetime
 
+from app.core.time import org_today
 from app.cron.ledger_generator import generate_daily_ledger_entries
 from app.models.db import (
     Activity,
@@ -23,8 +24,8 @@ from app.models.db import (
 from tests.conftest import ADMIN_PASSWORD, login
 from tests.test_ingestion import HEADER, _make_cycle, _upload
 
-TOMORROW = datetime.date.today() + datetime.timedelta(days=1)
-YESTERDAY = datetime.date.today() - datetime.timedelta(days=1)
+TOMORROW = org_today() + datetime.timedelta(days=1)
+YESTERDAY = org_today() - datetime.timedelta(days=1)
 
 
 def _row(

@@ -10,6 +10,7 @@ and every write path resolving through it rather than inventing a spelling.
 
 import datetime
 
+from app.core.time import org_today
 from app.cron.ledger_generator import generate_daily_ledger_entries
 from app.models.db import (
     Activity,
@@ -204,7 +205,7 @@ def test_a_past_day_can_name_a_room_no_slot_names(client, db, seed_users):
     """
     cycle = _make_cycle(db)
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
-    yesterday = datetime.date.today() - datetime.timedelta(days=1)
+    yesterday = org_today() - datetime.timedelta(days=1)
     day = yesterday.isoweekday()
     assert _upload(client, headers, cycle.id, _csv(_row(room="LH-201", day=day))).status_code == 200
     assert generate_daily_ledger_entries(yesterday, db) == 1

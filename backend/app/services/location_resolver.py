@@ -1,16 +1,16 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
-import datetime
 
 from redis import Redis
 from sqlalchemy.orm import Session
 
+from app.core.time import org_now
 from app.models.db import Activity, DailyLedger, DynamicState, StructuralMasterSlot, User
 
 
 def determine_staff_current_state(staff_id: str, db: Session, redis_cache: Redis) -> dict:
-    now = datetime.datetime.now()
+    now = org_now()
     date_str = now.date()
     day_index = now.isoweekday()
 

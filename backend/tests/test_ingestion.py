@@ -5,6 +5,7 @@
 import datetime
 import io
 
+from app.core.time import org_today
 from app.models.db import (
     Activity,
     ActivityEnrollment,
@@ -21,7 +22,7 @@ HEADER = (
 
 
 def _make_cycle(db):
-    today = datetime.date.today()
+    today = org_today()
     cycle = PlanningCycle(
         cycle_label="Ingest 2026",
         date_bounds_start=today - datetime.timedelta(days=30),

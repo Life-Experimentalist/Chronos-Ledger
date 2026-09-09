@@ -33,6 +33,10 @@ dependencies = [
     "pywebpush>=2.0.3",
     "aiofiles>=24.1.0",
     "email-validator>=2.2.0",
+    # zoneinfo reads the operating system's zone database, and a slim image
+    # ships without one. ORG_TIMEZONE would then fail for every name but UTC,
+    # on the deployment shape most likely to be used.
+    "tzdata>=2024.2",
 ]
 
 [project.optional-dependencies]

@@ -1,7 +1,6 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
-import datetime
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -12,10 +11,15 @@ from fastapi.middleware.gzip import GZipMiddleware
 from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.database import SessionLocal
+from app.core.time import org_timezone, org_tomorrow
 from app.cron.ledger_generator import generate_daily_ledger_entries
 
 settings = get_settings()
-scheduler = AsyncIOScheduler()
+# Pinned to the organization's zone, not the container's. Unpinned, "23:00"
+# meant 23:00 UTC, which is 04:30 the next morning in Kolkata and lunchtime in
+# Los Angeles, so the nightly job ran in the middle of the working day for
+# half the world.
+scheduler = AsyncIOScheduler(timezone=org_timezone())
 
 
 @asynccontextmanager
@@ -35,7 +39,7 @@ async def lifespan(_app: FastAPI):
 
 
 def _run_ledger_generator():
-    tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+    tomorrow = org_tomorrow()
     db = SessionLocal()
     try:
         generate_daily_ledger_entries(tomorrow, db)

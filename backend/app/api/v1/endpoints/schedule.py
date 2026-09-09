@@ -1,7 +1,6 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
-import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
@@ -10,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.redis_client import get_redis
 from app.core.security import ensure_unit_scope, get_current_user, require_roles
+from app.core.time import org_today
 from app.models.db import Activity, DailyLedger, PlanningCycle, StructuralMasterSlot, User
 from app.schemas.resources import ReservationConflict
 from app.schemas.schedule import (
@@ -269,7 +269,7 @@ def delete_master_slot(
         db.query(DailyLedger)
         .filter(
             DailyLedger.master_slot_id == slot.id,
-            DailyLedger.target_date < datetime.date.today(),
+            DailyLedger.target_date < org_today(),
         )
         .count()
     )
@@ -291,7 +291,7 @@ def _withdraw_planned_days(slot: StructuralMasterSlot, db: Session, why: str) ->
         db.query(DailyLedger)
         .filter(
             DailyLedger.master_slot_id == slot.id,
-            DailyLedger.target_date >= datetime.date.today(),
+            DailyLedger.target_date >= org_today(),
         )
         .all()
     )
@@ -318,7 +318,7 @@ def get_today_ledger(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    today = datetime.date.today()
+    today = org_today()
     q = db.query(DailyLedger).filter(DailyLedger.target_date == today)
 
     if current_user.role_type.value == "STAFF":
