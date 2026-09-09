@@ -59,8 +59,8 @@ components:
         A key can also be narrowed and given an end date, which a Bearer token
         cannot be. `scopes` is a comma separated list of `<area>:read` and
         `<area>:write`, where the area is the path segment after `/api/v1`:
-        `schedule`, `attendance`, `users`, `ingestion`, `guest`, `sync`,
-        `config`, `auth`, `api-keys`. `GET`, `HEAD` and `OPTIONS` are
+        `schedule`, `resources`, `attendance`, `users`, `ingestion`, `guest`,
+        `sync`, `config`, `auth`, `api-keys`. `GET`, `HEAD` and `OPTIONS` are
         reads and everything else is a write, so `schedule:read` passes
         `GET /schedule/slots` and is refused `POST /schedule/slots` with a 403
         naming `schedule:write`. The single scope `*` is every area, which is
@@ -381,7 +381,7 @@ components:
             Areas this key may reach. Omit the field for an unrestricted key;
             an empty array is refused, since a key that can reach nothing is
             not a key anybody wants. Stored sorted and deduplicated.
-          example: [schedule:read, attendance:read]
+          example: [schedule:read, resources:read]
         expires_at:
           type: string
           format: date-time
@@ -407,7 +407,7 @@ components:
         scopes:
           type: string
           description: Comma separated, or `*` for a key that was never narrowed.
-          example: attendance:read,schedule:read
+          example: resources:read,schedule:read
         expires_at:
           type: string
           format: date-time
@@ -430,6 +430,124 @@ components:
                 stored, so it cannot be shown again and a lost key has to be
                 revoked and reissued.
               example: ck_8Kd2mQ7xR3nL9vB5tY1wZ0aC6eF4gH2jK8mN
+
+    # ── Resources ─────────────────────────────
+    ResourceResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+          description: The importer's match key. Not editable.
+          example: LH-3
+        label:
+          type: string
+          example: Lecture Hall 3
+        resource_type:
+          type: string
+          enum: [ROOM, PERSON]
+        unit_code:
+          type: string
+          nullable: true
+        capacity:
+          type: integer
+          nullable: true
+        user_id:
+          type: string
+          nullable: true
+          description: Set when this resource is a person.
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
+          nullable: true
+        altitude_target:
+          type: number
+          nullable: true
+        active:
+          type: boolean
+
+    ResourceUpdate:
+      type: object
+      description: >
+        Every field is optional and a field left out is left alone. code,
+        resource_type and user_id are absent on purpose: code is the importer's
+        match key, and a room that becomes a person is a different resource,
+        not an edit.
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 120
+        capacity:
+          type: integer
+          minimum: 0
+          nullable: true
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+          nullable: true
+          description: >
+            Set or cleared together with longitude. Setting the pair is what
+            switches geofencing on for sessions held here.
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+          nullable: true
+        altitude_target:
+          type: number
+          nullable: true
+          description: Optional. Without it the fence is horizontal only.
+        active:
+          type: boolean
+
+    BusyInterval:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-01-05"
+        start:
+          type: string
+          format: time
+          example: "09:00:00"
+        end:
+          type: string
+          format: time
+          example: "10:00:00"
+        activity_id:
+          type: integer
+        activity_code:
+          type: string
+          nullable: true
+        master_slot_id:
+          type: integer
+
+    AvailabilityResponse:
+      type: object
+      properties:
+        resource_id:
+          type: integer
+        code:
+          type: string
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        busy:
+          type: array
+          description: >
+            Busy intervals, not free ones. Times are naive wall clock in the
+            organisation's own timezone, with no offset and no Z.
+          items:
+            $ref: "#/components/schemas/BusyInterval"
 
     # ── Schedule ──────────────────────────────
     PlanningCycleCreate:
@@ -1314,6 +1432,143 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  # ── Resources ─────────────────────────────
+  /resources/:
+    get:
+      tags: [Resources]
+      summary: List resources
+      description: >
+        Every room, person and piece of equipment the schedule can point at.
+        Readable by anyone signed in: an external system that has to book a
+        room needs to be able to find it first.
+      parameters:
+        - name: resource_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [ROOM, PERSON]
+        - name: active
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Resources, ordered by code.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ResourceResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /resources/{resource_id}:
+    parameters:
+      - name: resource_id
+        in: path
+        required: true
+        schema:
+          type: integer
+    patch:
+      tags: [Resources]
+      summary: Update a resource
+      description: >
+        Fill in what a CSV could not know: capacity, and where the room
+        physically is. Setting latitude and longitude is what switches
+        geofencing on for every session held there.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResourceUpdate"
+      responses:
+        "200":
+          description: The resource as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResourceResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: >
+            latitude and longitude were not set or cleared together, or a
+            coordinate was out of range.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /resources/{resource_id}/availability:
+    get:
+      tags: [Resources]
+      summary: When a resource is already taken
+      description: >
+        Expands the weekly slots pointing at this resource over the range,
+        inclusive of both ends. A slot counts when its cycle is flagged open;
+        cycle date bounds are not consulted, because nightly ledger generation
+        does not consult them either, and answering otherwise would report a
+        room free on a date the generator is going to fill.
+
+
+        The daily ledger is not read. It only ever holds tomorrow, so a
+        resource would come back free on every date past it. That also means a
+        day-level change made through PATCH /schedule/ledger/{ledger_id} is not
+        reflected here. An inactive resource still answers: retiring a room
+        does not clear its calendar.
+      parameters:
+        - name: resource_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-01-05"
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-01-11"
+      responses:
+        "200":
+          description: The busy intervals in the range.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilityResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: >
+            from was after to, or the inclusive range was longer than 366
+            days.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ── Schedule ──────────────────────────────
   /schedule/slots:

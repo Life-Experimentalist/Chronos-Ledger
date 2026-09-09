@@ -37,6 +37,34 @@ router = APIRouter()
 # ── Attendance Marking ────────────────────────────────────────────────────────
 
 
+def _fence_target(ledger: DailyLedger) -> tuple[float, float, float | None] | None:
+    """Where this session physically is, if anywhere says.
+
+    The day's own coordinates win, since they are the override an admin sets
+    when one day of something happens somewhere else. Otherwise the room's,
+    which is where a fence normally comes from: nothing writes the day's copy
+    on its own, so before rooms could carry coordinates this check had no way
+    to engage at all.
+
+    Taken as a whole triple from whichever source supplies the pair, never an
+    altitude from the room read against a latitude from the day.
+    """
+    if ledger.latitude_target is not None and ledger.longitude_target is not None:
+        return (
+            float(ledger.latitude_target),
+            float(ledger.longitude_target),
+            float(ledger.altitude_target) if ledger.altitude_target is not None else None,
+        )
+    room = ledger.resource
+    if room is not None and room.latitude is not None and room.longitude is not None:
+        return (
+            float(room.latitude),
+            float(room.longitude),
+            float(room.altitude_target) if room.altitude_target is not None else None,
+        )
+    return None
+
+
 def _ensure_can_mark_ledger(current_user: User, ledger: DailyLedger) -> None:
     """Who may mark someone else's attendance on this ledger.
 
@@ -68,23 +96,21 @@ async def mark_attendance(
         # The horizontal target is what makes a session fenced. Altitude is
         # optional on both sides: requiring altitude_target here meant a ledger
         # with only lat/lon was silently not fenced at all.
-        if (
-            ledger.latitude_target is not None
-            and ledger.longitude_target is not None
-            and ledger.delivery_format == ExecutionMode.PHYSICAL
-        ):
+        target = _fence_target(ledger)
+        if target is not None and ledger.delivery_format == ExecutionMode.PHYSICAL:
             if payload.user_lat is None or payload.user_lon is None:
                 raise HTTPException(
                     status_code=400,
                     detail="This session is geo-fenced; location coordinates are required",
                 )
+            target_lat, target_lon, target_alt = target
             valid = validate_3d_presence(
                 payload.user_lat,
                 payload.user_lon,
                 payload.user_alt,
-                float(ledger.latitude_target),
-                float(ledger.longitude_target),
-                float(ledger.altitude_target) if ledger.altitude_target is not None else None,
+                target_lat,
+                target_lon,
+                target_alt,
                 ledger.precision_radius_meters or 15,
             )
             if not valid:

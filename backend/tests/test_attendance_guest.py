@@ -10,6 +10,8 @@ from app.models.db import (
     Activity,
     DailyLedger,
     PlanningCycle,
+    Resource,
+    ResourceType,
     ReverseRsvpLog,
     VerificationLedger,
 )
@@ -236,6 +238,162 @@ def test_missing_longitude_is_rejected_on_geofenced_session(client, db, seed_use
     )
     assert res.status_code == 400
     assert "geo-fenced" in res.json()["detail"]
+
+
+def _put_in_room(db, ledger, lat=12.9716, lon=77.5946, alt=920.0):
+    """Give the ledger a room that knows where it is."""
+    room = Resource(
+        code="LH-101",
+        label="LH-101",
+        resource_type=ResourceType.ROOM,
+        latitude=lat,
+        longitude=lon,
+        altitude_target=alt,
+    )
+    db.add(room)
+    db.flush()
+    ledger.resource_id = room.id
+    db.commit()
+    return room
+
+
+def test_the_room_fences_the_session_when_the_day_says_nothing(client, db, seed_users):
+    """The first way a fence can actually be switched on.
+
+    Nothing has ever written daily_ledger.latitude_target: the only writes in
+    the codebase set it to None. So until a room could carry coordinates and
+    the check could fall back to them, this branch was unreachable through
+    the API and every fenced session was in fact unfenced.
+    """
+    ledger = _make_ledger(db)
+    _put_in_room(db, ledger)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9816,  # about 1.1 km north of the room
+            "user_lon": 77.5946,
+            "user_alt": 920.0,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 400
+    assert "geofence" in res.json()["detail"].lower()
+
+
+def test_a_member_in_the_room_is_marked(client, db, seed_users):
+    ledger = _make_ledger(db)
+    _put_in_room(db, ledger)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9716,
+            "user_lon": 77.5946,
+            "user_alt": 921.0,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    assert db.query(VerificationLedger).filter_by(ledger_instance_id=ledger.id).count() == 1
+
+
+def test_the_day_overrides_the_room_it_is_normally_in(client, db, seed_users):
+    """One day held somewhere else is what the ledger's own copy is for.
+
+    The room here is a kilometre from where the day says it is. A member
+    standing at the day's coordinates is present; the room's must not be
+    consulted at all, or the override would fence people into both places.
+    """
+    ledger = _make_ledger(db, with_geo=True)
+    _put_in_room(db, ledger, lat=12.9816, lon=77.5946)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9716,
+            "user_lon": 77.5946,
+            "user_alt": 921.0,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_a_room_with_no_coordinates_leaves_the_session_unfenced(client, db, seed_users):
+    """A room nobody has placed yet must not start refusing marks."""
+    ledger = _make_ledger(db)
+    _put_in_room(db, ledger, lat=None, lon=None, alt=None)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={"ledger_instance_id": ledger.id, "member_id": "STU001", "marking_status": "PRESENT"},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_the_room_altitude_is_not_mixed_with_the_day_coordinates(client, db, seed_users):
+    """The triple comes from one source or the other, never half of each.
+
+    The day names lat/lon and no altitude. The room, several floors below,
+    names one. Reading the room's altitude against the day's position would
+    reject a member standing exactly where the day says to stand.
+    """
+    ledger = _make_ledger(db, with_geo=True, alt_target=None)
+    _put_in_room(db, ledger, alt=850.0)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9716,
+            "user_lon": 77.5946,
+            "user_alt": 920.0,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_an_admin_can_place_a_room_and_the_fence_starts_working(client, db, seed_users):
+    """End to end: the route that switches geofencing on."""
+    ledger = _make_ledger(db)
+    room = _put_in_room(db, ledger, lat=None, lon=None, alt=None)
+    admin = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    placed = client.patch(
+        f"/api/v1/resources/{room.id}",
+        json={"latitude": 12.9716, "longitude": 77.5946, "altitude_target": 920.0},
+        headers=admin,
+    )
+    assert placed.status_code == 200, placed.text
+
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9816,
+            "user_lon": 77.5946,
+            "user_alt": 920.0,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 400
+    assert "geofence" in res.json()["detail"].lower()
 
 
 def test_batch_mark_requires_assigned_lead(client, db, seed_users):

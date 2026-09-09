@@ -259,14 +259,23 @@ Options:
 
 ### Attendance is being rejected with "Outside geofence"
 
-The server-side check uses the room's configured lat/lon plus a 30-metre radius. If the room coordinates in the database are wrong, every mark attempt will fail.
+The server-side check uses the room's coordinates and a 15-metre radius. A room placed at the wrong point refuses every mark; a room never placed at all is not fenced, and every mark is accepted.
 
-Update room coordinates:
+Find the room and see where it thinks it is:
 
 ```bash
-docker compose exec db psql -U chronos_admin -d chronos_ledger -c \
-  "UPDATE master_slots SET room_lat = 12.9716, room_lon = 77.5946 WHERE target_room_identifier = 'LH-3';"
+curl -H "Authorization: Bearer $TOKEN" "https://chronos.example.org/api/v1/resources/?code=LH-3"
 ```
+
+Then move it, using the `id` that came back:
+
+```bash
+curl -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"latitude": 12.9716, "longitude": 77.5946, "altitude_target": 920.0}' "https://chronos.example.org/api/v1/resources/12"
+```
+
+`latitude` and `longitude` are set or cleared together: sending one without the other is refused, since half a location fences the room to a point on the equator. `altitude_target` is optional, and a room without one is fenced horizontally only.
+
+One day held somewhere else is a day-level override, `PATCH /schedule/ledger/{id}` with `latitude_target` and `longitude_target`. Where a day carries its own coordinates the room's are not consulted. The radius is the day's `precision_radius_meters`, defaulting to 15 metres.
 
 ---
 
@@ -277,7 +286,7 @@ The altitude delta threshold is `|Δalt| < 4 metres`. GPS altitude accuracy is t
 If you want to widen the threshold, it is a constant in `backend/app/services/geo_fence.py`:
 
 ```python
-ALT_DELTA_THRESHOLD_M = 4.0   # change to 10.0 for looser enforcement
+FLOOR_TOLERANCE_METERS = 4.0   # change to 10.0 for looser enforcement
 ```
 
 ---

@@ -92,6 +92,7 @@ land open by nobody remembering to annotate it.
 | `auth` | login, password change, `/auth/me` |
 | `api-keys` | issuing, listing and revoking keys |
 | `users` | the user directory |
+| `resources` | rooms and their availability |
 | `schedule` | slots, the daily ledger, cycles, staff locations |
 | `attendance` | marking, absence requests, annotations |
 | `guest` | the kiosk endpoints |
@@ -121,7 +122,7 @@ at creation: a key that is dead on arrival is a mistake, not a request.
 {
   "label": "PulseWard HMS",
   "user_id": "SVC001",
-  "scopes": ["schedule:read", "attendance:read"],
+  "scopes": ["schedule:read", "resources:read"],
   "expires_at": "2027-01-01T00:00:00Z"
 }
 ```
@@ -136,7 +137,7 @@ anybody wants.
   "key_prefix": "ck_8Kd2mQ7x",
   "label": "PulseWard HMS",
   "user_id": "SVC001",
-  "scopes": "attendance:read,schedule:read",
+  "scopes": "resources:read,schedule:read",
   "expires_at": "2027-01-01T00:00:00Z",
   "created_at": "2026-09-09T10:14:00Z",
   "api_key": "ck_8Kd2mQ7xR3nL9vB5tY1wZ0aC6eF4gH2jK8mN"
@@ -212,6 +213,106 @@ Update staff occupancy. Enum values: `OPEN_AD_HOC`, `BUSY`, `CRITICAL_DO_NOT_DIS
 ```json
 { "status": "BUSY" }
 ```
+
+---
+
+## Resources
+
+A resource is a thing the schedule can point at: a room, a person, a piece of
+equipment. Rooms arrive from a CSV import knowing only their name, so capacity
+and coordinates are filled in here.
+
+### GET /resources/
+
+Optional filters: `resource_type` (`ROOM` or `PERSON`), `active`, `code`.
+Readable by anyone signed in.
+
+```json
+[
+  {
+    "id": 12,
+    "code": "LH-3",
+    "label": "Lecture Hall 3",
+    "resource_type": "ROOM",
+    "unit_code": null,
+    "capacity": 90,
+    "user_id": null,
+    "latitude": 12.9716,
+    "longitude": 77.5946,
+    "altitude_target": 920.0,
+    "active": true
+  }
+]
+```
+
+### GET /resources/{id}/availability?from={date}&to={date}
+
+When the resource is already taken, between two dates inclusive. Both
+parameters are required.
+
+```json
+{
+  "resource_id": 12,
+  "code": "LH-3",
+  "from": "2026-01-05",
+  "to": "2026-01-11",
+  "busy": [
+    {
+      "date": "2026-01-05",
+      "start": "09:00:00",
+      "end": "10:00:00",
+      "activity_id": 4,
+      "activity_code": "CS101",
+      "master_slot_id": 7
+    }
+  ]
+}
+```
+
+Busy intervals, not free ones. Free time is the complement against whatever
+hours the caller considers open, and only the caller knows those.
+
+Times are naive wall clock in the organisation's own timezone, the same as the
+slot stores. They carry no offset and no `Z`.
+
+What counts as taken: a weekly slot pointing at this resource, whose cycle is
+flagged open. Cycle date bounds are **not** consulted, because nightly ledger
+generation does not consult them either. Answering otherwise would report a
+room free on a date the generator is going to fill.
+
+Two things this does not see. A day-level change made through
+`PATCH /schedule/ledger/{id}` lives on the day, not on the slot, so it is not
+reflected. And an inactive resource still answers: retiring a room does not
+clear its calendar.
+
+`from` after `to` is `422` (`from must not be after to`). A range longer than
+366 days inclusive is `422` (`the range must not exceed 366 days`), which
+leaves room for the next twelve months from any date, leap years included.
+
+### PATCH /resources/{id} `[SUPER_ADMIN]`
+
+```json
+{
+  "label": "Lecture Hall 3",
+  "capacity": 90,
+  "latitude": 12.9716,
+  "longitude": 77.5946,
+  "altitude_target": 920.0,
+  "active": true
+}
+```
+
+Every field is optional, and a field left out is left alone. `latitude` and
+`longitude` are set or cleared together: sending one without the other is
+`422`, since half a location fences the room to a point on the equator.
+Setting them is what switches geofencing on for every session held there, so
+until a room is placed, its sessions are not fenced at all.
+
+`code`, `resource_type` and `user_id` cannot be changed here. `code` is the
+importer's match key, so renaming it would make the next upload create a
+second row rather than find this one; change `label` instead, which is what
+gets shown. A room that becomes a person is not an edit, it is a different
+resource.
 
 ---
 
