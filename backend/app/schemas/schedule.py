@@ -46,6 +46,27 @@ class MasterSlotCreate(BaseModel):
         return self
 
 
+class MasterSlotUpdate(BaseModel):
+    """What an admin may change about a slot that already exists.
+
+    activity_id is deliberately absent. Every day the slot has produced
+    carries its own copy of the activity, so moving a slot to a different
+    one would leave every past day recording a class that is no longer the
+    class it belongs to. Pointing a slot at another activity is deleting
+    this slot and creating one there, and it should have to say so.
+
+    The window is validated in the endpoint rather than here: patching only
+    the start time can invert a window whose end this payload never names,
+    and only the merged values can tell.
+    """
+
+    day_of_week_index: int | None = Field(default=None, ge=1, le=7)
+    time_window_start: time | None = None
+    time_window_end: time | None = None
+    primary_lead_id: str | None = None
+    target_room_identifier: str | None = None
+
+
 class DailyLedgerUpdate(BaseModel):
     operational_state: DynamicState | None = None
     substitute_lead_id: str | None = None

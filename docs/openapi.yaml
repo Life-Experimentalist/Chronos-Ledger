@@ -300,6 +300,125 @@ components:
         operational_status:
           type: boolean
 
+    MasterSlotCreate:
+      type: object
+      required:
+        [
+          day_of_week_index,
+          time_window_start,
+          time_window_end,
+          activity_id,
+          target_room_identifier,
+        ]
+      properties:
+        day_of_week_index:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: ISO weekday, 1 = Monday through 7 = Sunday.
+        time_window_start:
+          type: string
+          format: time
+          example: "09:00:00"
+        time_window_end:
+          type: string
+          format: time
+          description: Must be after the start. Windows crossing midnight are not supported.
+          example: "10:00:00"
+        activity_id:
+          type: integer
+        primary_lead_id:
+          type: string
+          nullable: true
+        target_room_identifier:
+          type: string
+          description: >
+            The room's name. Resolved to a resource, creating one on first
+            sight, so a room does not have to be registered before a
+            timetable can name it. Surrounding spaces are stripped.
+          example: LH-201
+
+    MasterSlotUpdate:
+      type: object
+      description: >
+        Every field is optional and only the fields present are changed.
+        activity_id is absent on purpose: every day the slot has produced
+        carries its own copy of the activity, so pointing the slot at
+        another one is a delete and a create, not an edit.
+      properties:
+        day_of_week_index:
+          type: integer
+          minimum: 1
+          maximum: 7
+        time_window_start:
+          type: string
+          format: time
+        time_window_end:
+          type: string
+          format: time
+        primary_lead_id:
+          type: string
+          nullable: true
+        target_room_identifier:
+          type: string
+
+    MasterSlotResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        day_of_week_index:
+          type: integer
+        time_window_start:
+          type: string
+          format: time
+        time_window_end:
+          type: string
+          format: time
+        activity_id:
+          type: integer
+        primary_lead_id:
+          type: string
+          nullable: true
+        resource_id:
+          type: integer
+          nullable: true
+          description: Prefer this over target_room_identifier.
+        target_room_identifier:
+          type: string
+          nullable: true
+          description: The room's name, mirrored from the resource. Being retired.
+
+    SlotUpdateResult:
+      type: object
+      properties:
+        ledger_rows_updated:
+          type: integer
+          description: Days that were still plans and now carry the new lead or room.
+        ledger_rows_kept:
+          type: integer
+          description: >
+            Days left as they were because attendance or a note has been
+            recorded against them. They now disagree with the timetable, and
+            that is deliberate: they record what happened.
+        ledger_rows_removed:
+          type: integer
+          description: >
+            Days withdrawn because the slot moved to another weekday and they
+            sit on the old one. Zero for every other change.
+
+    SlotDeletionResult:
+      type: object
+      properties:
+        ledger_rows_removed:
+          type: integer
+          description: Days from today onward, which were still only plans.
+        ledger_rows_detached:
+          type: integer
+          description: >
+            Days already past. They keep their room, lead and attendance, and
+            their master_slot_id becomes null.
+
     DailyLedgerUpdate:
       type: object
       properties:
@@ -631,6 +750,14 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: >
+        The request would destroy or contradict a record. The detail names
+        the dates that stand in the way.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
 
 # Either credential is accepted on every endpoint below.
 security:
@@ -942,6 +1069,133 @@ paths:
           $ref: "#/components/responses/NotFound"
 
   # ── Schedule ──────────────────────────────
+  /schedule/slots:
+    get:
+      tags: [Schedule]
+      summary: List master slots
+      description: >
+        The recurring timetable, before any day is generated from it. Filter
+        by cycle to get one term's worth.
+      parameters:
+        - name: cycle_id
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Master slots.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MasterSlotResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags: [Schedule]
+      summary: Add a master slot
+      description: Admin only. A UNIT_ADMIN may only add slots inside their own unit.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MasterSlotCreate"
+      responses:
+        "200":
+          description: The slot's id.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /schedule/slots/{slot_id}:
+    patch:
+      tags: [Schedule]
+      summary: Change a master slot, and the days it has already produced
+      description: >
+        Admin only. Times need no propagation: a generated day has no window
+        of its own and reads the slot's. A new lead or room is copied onto
+        the days that are still plans, while days carrying attendance or a
+        note are counted and left alone.
+
+
+        Moving the slot to another weekday is the one change that cannot be
+        copied across, because the days already generated sit on the old
+        weekday. Those are withdrawn for the generator to lay down again, and
+        the request is refused with 409 if any of them has been marked.
+      parameters:
+        - name: slot_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MasterSlotUpdate"
+      responses:
+        "200":
+          description: What the change reached and what it left alone.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlotUpdateResult"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+    delete:
+      tags: [Schedule]
+      summary: Take a master slot off the timetable
+      description: >
+        Admin only. Days from today onward are still plans and are removed;
+        days already past keep their attendance and notes and are left with
+        no slot to point at. If any day from today onward has been marked,
+        nothing is deleted and the response names those dates.
+
+
+        A detached day has no time window, because the window lived on the
+        slot. It appears on a calendar feed as an all-day event.
+      parameters:
+        - name: slot_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: What was removed and what was kept.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlotDeletionResult"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /schedule/ledger/today:
     get:
       tags: [Schedule]

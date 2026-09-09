@@ -211,9 +211,12 @@ class StructuralMasterSlot(Base):
     activity = relationship("Activity", back_populates="master_slots")
     primary_lead = relationship("User", foreign_keys=[primary_lead_id])
     resource = relationship("Resource", foreign_keys=[resource_id])
-    daily_ledger_entries = relationship(
-        "DailyLedger", back_populates="master_slot", cascade="all, delete-orphan"
-    )
+    # No delete cascade on purpose. Deleting a slot used to delete every day
+    # it had ever produced, attendance and all, so removing a cancelled class
+    # from the timetable erased the record that it had ever run. Days that are
+    # still only plans are removed by the delete endpoint; days that became
+    # records are left behind with master_slot_id nulled.
+    daily_ledger_entries = relationship("DailyLedger", back_populates="master_slot")
 
 
 class DailyLedger(Base):
@@ -222,7 +225,7 @@ class DailyLedger(Base):
     id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
     target_date = Column(Date, nullable=False, index=True)
     master_slot_id = Column(
-        Integer, ForeignKey("structural_master_slots.id", ondelete="CASCADE"), nullable=True
+        Integer, ForeignKey("structural_master_slots.id", ondelete="SET NULL"), nullable=True
     )
     activity_id = Column(Integer, ForeignKey("activities.id", ondelete="CASCADE"), nullable=False)
     active_lead_id = Column(String(50), ForeignKey("users.id"), nullable=True)

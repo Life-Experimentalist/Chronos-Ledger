@@ -13,11 +13,13 @@ from app.models.db import Activity, DailyLedger, PlanningCycle, StructuralMaster
 from app.schemas.schedule import (
     DailyLedgerUpdate,
     MasterSlotCreate,
+    MasterSlotUpdate,
     PlanningCycleCreate,
     PlanningCycleResponse,
     StaffLocationResponse,
 )
 from app.services.location_resolver import determine_staff_current_state
+from app.services.master_slot import propagate_slot_corrections, rows_in_use
 from app.services.resource import get_or_create_room
 
 router = APIRouter()
@@ -114,11 +116,136 @@ def create_master_slot(
         raise HTTPException(status_code=404, detail="Activity offering not found")
     ensure_unit_scope(current_user, offering.unit_code)
     room = get_or_create_room(payload.target_room_identifier, db)
-    slot = StructuralMasterSlot(**payload.model_dump(), resource_id=room.id)
+    # room.code, not the payload: get_or_create_room strips the name, and a
+    # slot whose mirror is spelled differently from its resource is exactly
+    # the drift the resource table exists to end.
+    slot = StructuralMasterSlot(
+        **payload.model_dump(exclude={"target_room_identifier"}),
+        resource_id=room.id,
+        target_room_identifier=room.code,
+    )
     db.add(slot)
     db.commit()
     db.refresh(slot)
     return {"id": slot.id}
+
+
+@router.patch("/slots/{slot_id}")
+def update_master_slot(
+    slot_id: int,
+    payload: MasterSlotUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+):
+    """Change a slot, and take the days it has already produced with it.
+
+    Times need no propagation: a ledger row has no times of its own and
+    reads them off the slot. That also means moving a class to 10:00 shows
+    every day it has already run at 10:00, which is wrong for the days that
+    ran at 09:00 and stays wrong until the ledger carries its own window.
+
+    Lead and room are copied onto the days that are still plans, by the same
+    function the importer uses, so a correction typed into the API and a
+    correction uploaded as a CSV reach the same rows and skip the same ones.
+
+    Moving the slot to another weekday is the one change that cannot be
+    copied across: the days already generated sit on the old weekday and
+    there is no version of them on the new one. Those are withdrawn so the
+    generator can lay them down again, and the request is refused outright
+    if any of them has already been marked.
+    """
+    slot = db.query(StructuralMasterSlot).filter(StructuralMasterSlot.id == slot_id).first()
+    if not slot:
+        raise HTTPException(status_code=404, detail="Master slot not found")
+    ensure_unit_scope(current_user, slot.activity.unit_code)
+
+    fields = payload.model_dump(exclude_unset=True)
+    start = fields.get("time_window_start", slot.time_window_start)
+    end = fields.get("time_window_end", slot.time_window_end)
+    if end <= start:
+        raise HTTPException(
+            status_code=422,
+            detail="time_window_end must be after time_window_start",
+        )
+
+    day_moved = fields.get("day_of_week_index", slot.day_of_week_index) != slot.day_of_week_index
+    removed = 0
+    if day_moved:
+        removed = _withdraw_planned_days(slot, db, "moved to another weekday")
+
+    if "target_room_identifier" in fields:
+        room = get_or_create_room(fields.pop("target_room_identifier"), db)
+        slot.resource_id = room.id
+        slot.target_room_identifier = room.code
+    for field, value in fields.items():
+        setattr(slot, field, value)
+
+    result = propagate_slot_corrections([slot], db)
+    db.commit()
+    return {**result, "ledger_rows_removed": removed}
+
+
+@router.delete("/slots/{slot_id}")
+def delete_master_slot(
+    slot_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+):
+    """Take a slot off the timetable without taking its history with it.
+
+    A class that ran for six weeks and then stopped is the ordinary reason
+    to call this, so the six weeks have to survive it. Days from today
+    onward are still only plans and are removed; days already past keep
+    everything recorded on them and are left with no slot to point at.
+    """
+    slot = db.query(StructuralMasterSlot).filter(StructuralMasterSlot.id == slot_id).first()
+    if not slot:
+        raise HTTPException(status_code=404, detail="Master slot not found")
+    ensure_unit_scope(current_user, slot.activity.unit_code)
+
+    detached = (
+        db.query(DailyLedger)
+        .filter(
+            DailyLedger.master_slot_id == slot.id,
+            DailyLedger.target_date < datetime.date.today(),
+        )
+        .count()
+    )
+    removed = _withdraw_planned_days(slot, db, "deleted")
+    db.delete(slot)
+    db.commit()
+    return {"ledger_rows_removed": removed, "ledger_rows_detached": detached}
+
+
+def _withdraw_planned_days(slot: StructuralMasterSlot, db: Session, why: str) -> int:
+    """Remove the days this slot has laid down that have not happened yet.
+
+    Today counts as not yet happened. A day nobody has marked is a plan and
+    withdrawing it costs nothing; a day somebody has marked is a record, and
+    rather than quietly keep it as a class that no longer exists anywhere in
+    the timetable, the whole request is refused and the dates are named.
+    """
+    planned = (
+        db.query(DailyLedger)
+        .filter(
+            DailyLedger.master_slot_id == slot.id,
+            DailyLedger.target_date >= datetime.date.today(),
+        )
+        .all()
+    )
+    blocked = rows_in_use([row.id for row in planned], db)
+    if blocked:
+        dates = sorted(str(row.target_date) for row in planned if row.id in blocked)
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"This slot cannot be {why} while days it has produced carry "
+                f"attendance or notes: {', '.join(dates)}"
+            ),
+        )
+    for row in planned:
+        db.delete(row)
+    return len(planned)
 
 
 # ── Daily Ledger ──────────────────────────────────────────────────────────────

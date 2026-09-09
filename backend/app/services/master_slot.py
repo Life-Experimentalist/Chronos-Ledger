@@ -15,6 +15,32 @@ from app.models.db import (
 )
 
 
+def rows_in_use(row_ids: list[int], db: Session) -> set[int]:
+    """Which of these ledger rows have stopped being only a plan.
+
+    A row is a plan until somebody marks attendance against it or writes a
+    note on it. After that it is a record of a day that happened, and the
+    two things that may not touch it are a correction rewriting it and a
+    slot delete removing it. Both ask this function so they cannot drift
+    apart on what counts.
+    """
+    if not row_ids:
+        return set()
+    used = {
+        r[0]
+        for r in db.query(VerificationLedger.ledger_instance_id)
+        .filter(VerificationLedger.ledger_instance_id.in_(row_ids))
+        .distinct()
+    }
+    used.update(
+        r[0]
+        for r in db.query(LedgerAnnotation.ledger_instance_id)
+        .filter(LedgerAnnotation.ledger_instance_id.in_(row_ids))
+        .distinct()
+    )
+    return used
+
+
 def propagate_slot_corrections(slots: list[StructuralMasterSlot], db: Session) -> dict[str, int]:
     """Copy each slot's lead and room onto the days it has already produced.
 
@@ -47,19 +73,7 @@ def propagate_slot_corrections(slots: list[StructuralMasterSlot], db: Session) -
     if not rows:
         return {"ledger_rows_updated": 0, "ledger_rows_kept": 0}
 
-    row_ids = [row.id for row in rows]
-    in_use = {
-        r[0]
-        for r in db.query(VerificationLedger.ledger_instance_id)
-        .filter(VerificationLedger.ledger_instance_id.in_(row_ids))
-        .distinct()
-    }
-    in_use.update(
-        r[0]
-        for r in db.query(LedgerAnnotation.ledger_instance_id)
-        .filter(LedgerAnnotation.ledger_instance_id.in_(row_ids))
-        .distinct()
-    )
+    in_use = rows_in_use([row.id for row in rows], db)
 
     updated = 0
     for row in rows:

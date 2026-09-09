@@ -81,7 +81,6 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
         ledger_entries = (
             db.query(DailyLedger)
             .join(Activity, DailyLedger.activity_id == Activity.id)
-            .join(StructuralMasterSlot, DailyLedger.master_slot_id == StructuralMasterSlot.id)
             .join(ActivityEnrollment, ActivityEnrollment.activity_id == Activity.id)
             .filter(
                 ActivityEnrollment.member_id == user.id,
