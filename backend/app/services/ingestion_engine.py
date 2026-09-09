@@ -15,6 +15,7 @@ from app.models.db import (
     StructuralMasterSlot,
     User,
 )
+from app.services.master_slot import propagate_slot_corrections
 
 REQUIRED_COLUMNS = {
     "member_id",
@@ -62,6 +63,10 @@ class ChronosIngestionEngine:
         # never logged: the database keeps only the bcrypt hash, as it does for
         # every other account.
         provisioned: list[dict[str, str]] = []
+        # Slots this file actually changed, collected so the days already
+        # generated from them are brought into line once at the end rather
+        # than once per CSV row.
+        corrected: dict[int, StructuralMasterSlot] = {}
 
         try:
             for _, row in df.iterrows():
@@ -90,6 +95,27 @@ class ChronosIngestionEngine:
                     )
                 else:
                     member.full_name = str(row["member_name"])
+                    member.unit_code = str(row["unit"])
+                    if member.email_address != str(row["member_email"]):
+                        # email_address is unique. Letting the collision reach
+                        # the database turns a fixable typo into a rolled-back
+                        # import explained by a raw driver error.
+                        clash = (
+                            self.db.query(User)
+                            .filter(
+                                User.email_address == str(row["member_email"]),
+                                User.id != member.id,
+                            )
+                            .first()
+                        )
+                        if clash:
+                            raise ValueError(
+                                f"member '{row['member_id']}': email "
+                                f"{row['member_email']} already belongs to '{clash.id}'"
+                            )
+                        member.email_address = str(row["member_email"])
+                    # role_type is deliberately not touched. Somebody promoted
+                    # to STAFF since the last import stays STAFF.
 
                 # 2. Upsert activity offering
                 offering = (
@@ -109,6 +135,9 @@ class ChronosIngestionEngine:
                     )
                     self.db.add(offering)
                     self.db.flush()
+                else:
+                    offering.activity_title = str(row["activity_title"])
+                    offering.unit_code = str(row["unit"])
 
                 # 3. Upsert registration
                 reg = (
@@ -154,6 +183,27 @@ class ChronosIngestionEngine:
                             target_room_identifier=str(row["room"]),
                         )
                     )
+                elif (
+                    slot.time_window_end != t_end
+                    or slot.primary_lead_id != str(row["lead_id"])
+                    or slot.target_room_identifier != str(row["room"])
+                ):
+                    # A re-uploaded file is a correction. This branch used to
+                    # not exist: a slot matching on (activity, day, start) was
+                    # skipped, so moving a class to another room, or handing it
+                    # to another lead, and re-importing did nothing at all and
+                    # said nothing about having done nothing.
+                    #
+                    # A changed start time is a different story. It does not
+                    # match, so it arrives as a second slot and the original
+                    # stays. The file has no column that could say "this is the
+                    # 09:00 class, moved", so the import cannot know, and
+                    # guessing would silently delete somebody's timetable.
+
+                    slot.time_window_end = t_end
+                    slot.primary_lead_id = str(row["lead_id"])
+                    slot.target_room_identifier = str(row["room"])
+                    corrected[slot.id] = slot
 
                 records_processed += 1
                 # The session runs with autoflush=False, so without this flush
@@ -162,11 +212,15 @@ class ChronosIngestionEngine:
                 # registration and master slot.
                 self.db.flush()
 
+            propagation = propagate_slot_corrections(list(corrected.values()), self.db)
+
             self.db.commit()
             return {
                 "status": "SUCCESS",
                 "rows_ingested": records_processed,
                 "provisioned_credentials": provisioned,
+                "slots_corrected": len(corrected),
+                **propagation,
             }
 
         except Exception as e:
