@@ -47,6 +47,66 @@ def rotate_feed_token(
     return _feed_payload(current_user)
 
 
+def _escape(text: str) -> str:
+    """A value written so a calendar parser reads it as one piece of text.
+
+    RFC 5545 gives four characters a meaning inside a TEXT value, and a
+    timetable is full of all of them because the titles come out of a CSV that
+    somebody typed. A comma separates values, so "Ward round, morning" arrived
+    as two. A semicolon starts a parameter. A newline ends the property, and a
+    title carrying one could open a property, or a whole second event, that
+    nobody put in the timetable: the same shape as an injection anywhere else,
+    with a calendar as the target.
+
+    The backslash goes first, or the backslashes added by the three
+    replacements after it would be escaped a second time and the value would
+    come out the other end with the marks still in it.
+    """
+    return (
+        text.replace("\\", "\\\\")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+        .replace("\r\n", "\\n")
+        .replace("\r", "\\n")
+        .replace("\n", "\\n")
+    )
+
+
+def _fold(line: str) -> str:
+    """A content line broken to the 75 octets RFC 5545 asks of one.
+
+    Octets and not characters. A name in Devanagari or a title with an accent
+    in it weighs more than one byte per character, and a parser counting bytes
+    would take the knife to a character halfway through and hand back
+    mojibake. So this walks characters and counts what each one weighs, and
+    the cut never lands inside one.
+
+    A continuation line opens with a single space that the parser throws away
+    again, and that space is itself part of the 75, so a continuation has 74
+    to spend. Splitting an escape sequence across a fold is safe: unfolding
+    runs before the value is read, so the two halves are back together by the
+    time anything looks at them.
+    """
+    if len(line.encode("utf-8")) <= 75:
+        return line
+
+    parts: list[str] = []
+    chunk: list[str] = []
+    used = 0
+    budget = 75
+    for character in line:
+        weight = len(character.encode("utf-8"))
+        if used + weight > budget:
+            parts.append("".join(chunk))
+            chunk = []
+            used = 0
+            budget = 74
+        chunk.append(character)
+        used += weight
+    parts.append("".join(chunk))
+    return "\r\n ".join(parts)
+
+
 def _utc_stamp(day: datetime.date, wall: datetime.time) -> str:
     """A wall clock reading on a date, written as the instant it actually is.
 
@@ -127,7 +187,7 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
         "PRODID:-//ChronosLedger Engine//Chronos 2026//EN",
-        f"X-WR-CALNAME:Chronos Timeline - {user.full_name}",
+        f"X-WR-CALNAME:{_escape(f'Chronos Timeline - {user.full_name}')}",
         # A display hint some clients read when they show a calendar's own
         # zone. The timed values below are UTC instants and carry their zone
         # with them, so nothing depends on this being right, but naming a
@@ -135,6 +195,11 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
         f"X-WR-TIMEZONE:{org_timezone().key}",
         "CALSCALE:GREGORIAN",
     ]
+
+    # RFC 5545 requires DTSTAMP on every VEVENT, and strict parsers reject a
+    # component without one. It is when this copy of the event was written,
+    # not when the session runs, so one reading serves the whole response.
+    written_at = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
 
     for entry in ledger_entries:
         slot = entry.master_slot
@@ -165,18 +230,25 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
         elif entry.operational_state.value == "ON_LEAVE":
             summary += " [CANCELLED: Staff Absent]"
 
+        # A UID is a TEXT value like any other, and the activity code sitting
+        # in the middle of this one came off a spreadsheet.
+        uid = f"slot_{entry.target_date.strftime('%Y%m%d')}_{offering.activity_code}_{uid_time}@chronos.internal"
+        location = f"Room {entry.target_room_identifier}"
+        description = f"Status: {entry.operational_state.value} | Synchronized via Chronos Ledger."
+
         lines.extend(
             [
                 "BEGIN:VEVENT",
-                f"UID:slot_{entry.target_date.strftime('%Y%m%d')}_{offering.activity_code}_{uid_time}@chronos.internal",
+                f"UID:{_escape(uid)}",
+                f"DTSTAMP:{written_at}",
                 dtstart_line,
                 dtend_line,
-                f"SUMMARY:{summary}",
-                f"LOCATION:Room {entry.target_room_identifier}",
-                f"DESCRIPTION:Status: {entry.operational_state.value} | Synchronized via Chronos Ledger.",
+                f"SUMMARY:{_escape(summary)}",
+                f"LOCATION:{_escape(location)}",
+                f"DESCRIPTION:{_escape(description)}",
                 "END:VEVENT",
             ]
         )
 
     lines.append("END:VCALENDAR")
-    return Response(content="\r\n".join(lines), media_type="text/calendar")
+    return Response(content="\r\n".join(_fold(line) for line in lines), media_type="text/calendar")

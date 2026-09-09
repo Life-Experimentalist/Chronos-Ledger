@@ -55,6 +55,7 @@ def _seed_schedule(
     substitute=None,
     start=datetime.time(10, 0),
     end=datetime.time(11, 0),
+    title="Distributed Systems",
 ):
     cycle = PlanningCycle(
         cycle_label="Cal 2026",
@@ -66,7 +67,7 @@ def _seed_schedule(
     db.flush()
     offering = Activity(
         activity_code="CS500",
-        activity_title="Distributed Systems",
+        activity_title=title,
         unit_code="CSE",
         cycle_id=cycle.id,
     )
@@ -213,6 +214,87 @@ def test_the_calendar_names_the_zone_the_organization_is_in(client, db, seed_use
     org_zone(IST)
     _seed_schedule(db)
     assert f"X-WR-TIMEZONE:{IST}" in client.get(_feed_url(db, "FAC001")).text
+
+
+# ── What a title can and cannot do to the file ───────────────────────────────
+
+
+def _unfold(body: str) -> str:
+    """Put the continuation lines back onto the lines they came off, which is
+    the first thing a parser does and the last thing it undoes."""
+    return body.replace("\r\n ", "")
+
+
+def test_a_comma_in_a_title_does_not_split_the_summary(client, db, seed_users):
+    """A comma separates values in a TEXT property, so a perfectly ordinary
+    title arrived at the other end as two of them."""
+    _seed_schedule(db, title="Ward round, morning")
+    body = client.get(_feed_url(db, "FAC001")).text
+    assert "SUMMARY:[CS500] Ward round\\, morning" in body
+
+
+def test_the_characters_that_mean_something_are_all_escaped(client, db, seed_users):
+    """Backslash, semicolon, comma, newline. The backslash has to go first or
+    the marks added for the other three get escaped a second time."""
+    _seed_schedule(db, title="a;b,c\\d\ne")
+    body = client.get(_feed_url(db, "FAC001")).text
+    assert "SUMMARY:[CS500] a\\;b\\,c\\\\d\\ne" in body
+
+
+def test_a_title_cannot_smuggle_a_second_event_into_the_file(client, db, seed_users):
+    """A newline ends a property, so a title carrying one could write its own
+    event into somebody's calendar. The titles come out of an uploaded CSV,
+    which makes this an injection with a calendar as the target."""
+    _seed_schedule(db, title="Real\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nSUMMARY:Fake")
+    lines = _unfold(client.get(_feed_url(db, "FAC001")).text).split("\r\n")
+    # Counted as lines, because lines are what a parser sees. The words are
+    # still in there, sitting inside the summary where they belong.
+    assert lines.count("BEGIN:VEVENT") == 1
+    assert lines.count("END:VEVENT") == 1
+    assert not any(line.startswith("SUMMARY:Fake") for line in lines)
+
+
+def test_the_calendar_name_is_escaped_as_well(client, db, seed_users):
+    """It carries a person's name, and a person's name is typed in by a
+    person."""
+    db.query(User).filter(User.id == "FAC001").update({"full_name": "Rao, Priya"})
+    db.commit()
+    _seed_schedule(db)
+    body = client.get(_feed_url(db, "FAC001")).text
+    assert "X-WR-CALNAME:Chronos Timeline - Rao\\, Priya" in body
+
+
+def test_every_event_carries_a_dtstamp(client, db, seed_users):
+    """RFC 5545 requires one on every VEVENT, and a strict parser drops a
+    component that has none."""
+    _seed_schedule(db)
+    lines = _unfold(client.get(_feed_url(db, "FAC001")).text).split("\r\n")
+    stamps = [line for line in lines if line.startswith("DTSTAMP:")]
+    assert len(stamps) == 1
+    assert stamps[0].endswith("Z")
+
+
+def test_no_content_line_runs_past_seventy_five_octets(client, db, seed_users):
+    """A long title is the normal case, not the odd one: SUMMARY has spent
+    sixteen characters on the activity code before the title starts."""
+    long_title = " ".join(["Advanced"] * 12) + " Systems"
+    _seed_schedule(db, title=long_title)
+    body = client.get(_feed_url(db, "FAC001")).text
+    for line in body.split("\r\n"):
+        assert len(line.encode("utf-8")) <= 75, line
+    assert f"SUMMARY:[CS500] {long_title}" in _unfold(body)
+
+
+def test_folding_never_cuts_a_character_in_half(client, db, seed_users):
+    """The limit is 75 octets and not 75 characters. A title in a script that
+    spends three bytes a character would have a cut counted in bytes land in
+    the middle of one, and the reader gets mojibake."""
+    long_title = " ".join(["प्रबंधन"] * 20)
+    _seed_schedule(db, title=long_title)
+    body = client.get(_feed_url(db, "FAC001")).text
+    for line in body.split("\r\n"):
+        assert len(line.encode("utf-8")) <= 75, line
+    assert f"SUMMARY:[CS500] {long_title}" in _unfold(body)
 
 
 def test_unknown_token_is_404(client, db, seed_users):
