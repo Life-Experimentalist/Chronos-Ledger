@@ -35,6 +35,10 @@ RANGE_TOO_LONG = f"the range must not exceed {MAX_RANGE_DAYS} days"
 ALREADY_TAKEN = "the resource is already taken for part of that window"
 KEY_REUSED = "that Idempotency-Key was used for a different request"
 NOT_YOUR_HOLD = "only the caller that took a hold may cancel it"
+# The name migration 010 gave the exclusion constraint. Postgres puts it in
+# the error text, which is how an overlap is told apart from the unique key
+# on the idempotency key: both arrive here as one IntegrityError.
+OVERLAP_CONSTRAINT = "ex_reservations_no_overlap"
 
 
 @router.get("/", response_model=list[ResourceResponse])
@@ -154,6 +158,40 @@ def _fingerprint(resource_id: int, payload: ReservationCreate) -> str:
     return hashlib.sha256(asked.encode("utf-8")).hexdigest()
 
 
+def _conflicts_for(db: Session, resource_id: int, payload: ReservationCreate) -> list[dict]:
+    """What already holds any part of the asked-for window.
+
+    Exactly the two queries GET availability runs, through the same expansion.
+    A booking accepted for an hour availability calls busy is the double
+    booking this endpoint exists to prevent, so the two cannot be allowed to
+    answer differently.
+
+    Asked twice: once before inserting, and again if the database refuses the
+    insert, because by then somebody else's row is in the table and is the
+    thing to name.
+    """
+    return clashing(
+        occupied(
+            booked_slots(db, resource_id),
+            held_reservations(db, resource_id, payload.date, payload.date),
+            payload.date,
+            payload.date,
+        ),
+        payload.start,
+        payload.end,
+    )
+
+
+def _already_taken(conflicts: list[dict]) -> HTTPException:
+    # jsonable_encoder because the detail of an HTTPException is serialised
+    # straight to JSON, with none of the conversion a response_model would
+    # have done for the dates and times in here.
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=jsonable_encoder({"message": ALREADY_TAKEN, "conflicts": conflicts}),
+    )
+
+
 def _view(reservation: Reservation, resource: Resource) -> dict:
     return {
         "id": reservation.id,
@@ -202,21 +240,28 @@ def create_reservation(
     availability calls busy is the double booking this endpoint exists to
     prevent, so the two cannot be allowed to answer differently.
 
-    The check and the insert are not one atomic step. The resource row is
-    locked first, which serialises two callers racing for the same room on a
-    database that takes row locks, and the unique key stops the same request
-    being counted twice. Neither is the real answer: that is a database level
-    exclusion constraint over the window, and it is the next migration.
+    The check and the insert are not one atomic step, and two callers can both
+    pass the check before either inserts. Hold against hold, that no longer
+    decides anything: migration 010 put an exclusion constraint on the table
+    and the database refuses the second row whatever the timing was. The loser
+    is told 409, the same as if the check had caught it.
+
+    Hold against timetable is still the check plus the row lock. A slot lives
+    in another table and no constraint spans the two, so a booking and a class
+    landing on the same room at the same instant is held off by locking the
+    resource row, which is a lock and not a rule: it works where the database
+    takes it and does nothing where it does not.
 
     The rule runs both ways. A class cannot be put on top of a hold either:
     creating a slot, moving one, and uploading a timetable are all refused
     where a booking already stands, so a hold taken here holds against the
     timetable and not only against other holds.
     """
+    # Still here, and now for one job: holding a booking off against a class,
+    # which is in another table and so is out of reach of the constraint.
     # with_for_update compiles to nothing on SQLite, which is what the suite
     # runs on, so this serialises two callers on Postgres and is a no-op in
-    # the tests. The tests cannot prove it; the exclusion constraint that
-    # replaces it can.
+    # the tests, which is why that overlap is the one the tests cannot prove.
     resource = db.query(Resource).filter(Resource.id == resource_id).with_for_update().first()
     if not resource:
         raise HTTPException(status_code=404, detail="Resource not found")
@@ -232,24 +277,9 @@ def create_reservation(
         response.status_code = status.HTTP_200_OK
         return _view(seen, resource)
 
-    conflicts = clashing(
-        occupied(
-            booked_slots(db, resource_id),
-            held_reservations(db, resource_id, payload.date, payload.date),
-            payload.date,
-            payload.date,
-        ),
-        payload.start,
-        payload.end,
-    )
+    conflicts = _conflicts_for(db, resource_id, payload)
     if conflicts:
-        # jsonable_encoder because the detail of an HTTPException is
-        # serialised straight to JSON, with none of the conversion a
-        # response_model would have done for the dates and times in here.
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=jsonable_encoder({"message": ALREADY_TAKEN, "conflicts": conflicts}),
-        )
+        raise _already_taken(conflicts)
 
     reservation = Reservation(
         resource_id=resource_id,
@@ -265,10 +295,20 @@ def create_reservation(
     db.add(reservation)
     try:
         db.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
+        db.rollback()
+        if OVERLAP_CONSTRAINT in str(exc.orig):
+            # Somebody else took the window between the check above and this
+            # insert, and the constraint caught what the check could not.
+            # Asking again names the row that won, so the caller is told what
+            # it lost to rather than only that it lost. Once a window is
+            # allowed to cross midnight (I-07) this can come back empty, since
+            # the check compares times inside one date and the constraint does
+            # not: a 409 with nothing listed is still the truth, and closing
+            # that gap belongs to the change that opens it.
+            raise _already_taken(_conflicts_for(db, resource_id, payload)) from None
         # Two copies of the same request arrived at once and the loser lands
         # here. The winner's row is the answer to both.
-        db.rollback()
         won = db.query(Reservation).filter(Reservation.idempotency_key == idempotency_key).first()
         if won is None or won.request_fingerprint != fingerprint:
             raise HTTPException(status_code=422, detail=KEY_REUSED) from None

@@ -284,6 +284,17 @@ class Reservation(Base):
     a timetable can be compared without a conversion that neither of them
     carries the information to make. A window may not cross midnight, which
     is the same limit a slot has.
+
+    Two HELD rows on one resource may not overlap, and the database refuses
+    them: an EXCLUDE USING gist constraint named ex_reservations_no_overlap,
+    added by migration 010. It is not in __table_args__ and cannot be. An
+    exclusion constraint is a Postgres construct, the test suite builds its
+    schema with create_all on SQLite, and SQLite has no compiler for one, so
+    putting it here would stop the suite from starting. The cost of that is
+    real and worth naming: this class no longer describes the whole table, and
+    a reader who trusts it will not know the rule is there. Read migration 010
+    for the expression, and note that the tests which prove it only run
+    against a real PostgreSQL.
     """
 
     __tablename__ = "reservations"

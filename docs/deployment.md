@@ -131,6 +131,13 @@ The frontend dev server proxies `/api/v1` to `localhost:8000` via `next.config.j
 Alembic reads `DATABASE_URL` from the environment, override the `alembic.ini`
 default by exporting `DATABASE_URL` before running migrations.
 
+Migration 010 runs `CREATE EXTENSION IF NOT EXISTS btree_gist` before it adds
+the constraint that stops two holds overlapping on one resource. On PostgreSQL
+13 and later btree_gist is a trusted extension, so the database owner can
+install it and no superuser is involved. On an older server, or on a managed
+host that restricts extensions, run `CREATE EXTENSION btree_gist;` once as a
+superuser against the target database and then run the migration again.
+
 ---
 
 ## Planning Cycle Rollover
