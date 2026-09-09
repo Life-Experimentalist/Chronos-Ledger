@@ -160,7 +160,7 @@ Drop a member-centric CSV on the Admin dashboard. One upload creates/updates use
 chronos-ledger/
 ├── .github/
 │   ├── workflows/
-│   │   ├── ci.yml          # Lint, type-check, build, Trivy scan
+│   │   ├── ci.yml          # Lint, tests, type-check, build, Trivy, publish
 │   │   ├── cd.yml          # Build & push to GHCR (main + releases)
 │   │   └── release.yml     # Release Please automated semver releases
 │   └── dependabot.yml      # Automated dep updates (pip, npm, Docker, Actions)
@@ -240,14 +240,16 @@ App: `http://localhost:3000`
 ## CI/CD Pipeline
 
 ```
-Pull Request ──▶ ci.yml ──▶ ruff + mypy
-                       ├──▶ eslint + tsc + build
-                       ├──▶ Trivy security scan
+Pull Request ──▶ ci.yml ──▶ ruff format + ruff check
+                       ├──▶ pytest
+                       ├──▶ eslint + tsc + next build
+                       ├──▶ Trivy scan (critical fails the build)
                        └──▶ Docker build check (no push)
 
-Push to main ──▶ ci.yml (all above)
-             └──▶ cd.yml ──▶ Build backend + web images
-                         └──▶ Push to GHCR (sha tag + latest)
+Push to main ──▶ ci.yml (all of the above)
+                       └──▶ every gate green ──▶ cd.yml
+                                                 └──▶ Push to GHCR
+                                                       (sha tag + latest)
 
 Merge release PR ──▶ release.yml ──▶ GitHub Release created
                                  ├──▶ CHANGELOG.md updated
@@ -346,7 +348,7 @@ Contributions are welcome. Please:
 
 1. Fork the repo and create a feature branch.
 2. Follow [Conventional Commits](https://www.conventionalcommits.org/) so Release Please can generate the changelog.
-3. Open a PR: CI runs automatically (lint, type-check, build, Trivy scan).
+3. Open a PR: CI runs automatically (lint, tests, type-check, build, Trivy scan).
 4. All checks must pass before merge.
 
 Commit examples:
