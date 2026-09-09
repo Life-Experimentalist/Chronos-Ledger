@@ -514,6 +514,13 @@ components:
         reservation_id, and a reservation carries the reverse. What a booking
         is for is deliberately not here, because this is readable by anyone
         signed in.
+
+
+        The date is the day the window opened on and end_date the day it
+        finishes on. They differ when the window ran past midnight, and
+        then the date can fall before the range that returned the
+        interval: a booking dated Monday from 22:00 to 06:00 is on
+        Tuesday's calendar.
       properties:
         date:
           type: string
@@ -523,6 +530,18 @@ components:
           type: string
           format: time
           example: "09:00:00"
+        end_date:
+          type: string
+          format: date
+          description: >
+            Always present, and the same as date for a window that
+            finishes on the day it started. It is spelled out rather than
+            left to be inferred, because inferring it wrong is silent: a
+            reader that takes date with end and ignores this computes
+            minus sixteen hours for a night shift running 22:00 to 06:00,
+            and a plausible answer for every interval written before
+            overnight windows existed.
+          example: "2026-01-05"
         end:
           type: string
           format: time
@@ -568,6 +587,9 @@ components:
         date:
           type: string
           format: date
+          description: >
+            The day the window opens on. A window that runs past midnight
+            finishes on the day after this one.
           example: "2026-01-06"
         start:
           type: string
@@ -576,6 +598,12 @@ components:
         end:
           type: string
           format: time
+          description: >
+            Earlier than the start means the window runs past midnight and
+            finishes on the day after `date`: 22:00 to 06:00 is an eight
+            hour night shift. Equal to the start is refused, because 09:00
+            to 09:00 is either nothing at all or a full day and there is no
+            way to tell which was meant.
           example: "15:00"
         purpose:
           type: string
@@ -1625,6 +1653,16 @@ paths:
         day-level change made through PATCH /schedule/ledger/{ledger_id} is not
         reflected here. An inactive resource still answers: retiring a room
         does not clear its calendar.
+
+
+        A busy interval's date can be the day before `from`. A booking
+        that runs past midnight is dated the day it opened on and occupies
+        the morning after, so a caller asking about Tuesday is told about a
+        hold dated Monday that ends at six. Read each interval by its own
+        date and end_date and not by the range that returned it: grouping
+        by date alone files that hold under a day nobody asked about, and
+        discarding anything outside the range shows a ward as free while it
+        is staffed.
       parameters:
         - name: resource_id
           in: path
@@ -1684,7 +1722,15 @@ paths:
 
 
         Windows are half open, so an interval ending at ten and one starting
-        at ten do not clash. A window may not cross midnight.
+        at ten do not clash. A window may end earlier than it starts, and
+        that is how it says it runs past midnight: 22:00 to 06:00 is a
+        night shift of eight hours, and date is the day it opens on. Equal
+        times are refused, because 09:00 to 09:00 is either nothing at all
+        or a full day and there is no way to tell which was meant.
+
+
+        A weekly slot cannot cross midnight yet, so an overnight booking is
+        checked against a timetable that cannot answer in kind.
       parameters:
         - name: resource_id
           in: path

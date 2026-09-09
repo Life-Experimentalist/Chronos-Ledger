@@ -35,6 +35,9 @@ from tests.test_ingestion import _make_cycle, _upload
 # The class sits on tomorrow's weekday, which is what _row imports onto too.
 NEXT_WEEK = org_today() + datetime.timedelta(days=7)
 A_WEEK_AGO = TOMORROW - datetime.timedelta(days=7)
+# A hold that opens tomorrow night finishes on this one, so a class here is
+# checked against a hold dated the day before it.
+DAY_AFTER = TOMORROW + datetime.timedelta(days=1)
 
 HELD = "the resource is held for part of that window"
 
@@ -194,6 +197,48 @@ def test_a_closed_cycle_is_not_checked(client, db, seed_users):
     _hold(client, headers, room.id, TOMORROW)
 
     r = _new_slot(client, headers, activity.id)
+    assert r.status_code == 200, r.text
+
+
+def test_a_class_is_refused_where_a_hold_runs_into_that_morning(client, db, seed_users):
+    """The clash a weekday comparison cannot see.
+
+    A ward held from 22:00 tomorrow until 06:00 the day after is dated
+    tomorrow, and a class at five the following morning is on a different
+    weekday entirely. Matching weekday to weekday finds nothing and the class
+    lands on top of a room somebody else is standing in. So each hold is
+    tried against the dates a slot on this weekday could have, and this one
+    is reached from the day after the hold opened.
+    """
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    room = _room(db)
+    activity = _activity(db)
+    night = _hold(client, headers, room.id, TOMORROW, start="22:00", end="06:00")
+
+    r = _new_slot(
+        client, headers, activity.id, day=DAY_AFTER.isoweekday(), start="05:00", end="07:00"
+    )
+    assert r.status_code == 409, r.text
+
+    body = r.json()["detail"]
+    assert body["message"] == HELD
+    assert [c["reservation_id"] for c in body["conflicts"]] == [night["id"]]
+    assert body["conflicts"][0]["date"] == str(TOMORROW)
+    assert db.query(StructuralMasterSlot).count() == 0
+
+
+def test_a_class_after_an_overnight_hold_has_ended_is_allowed(client, db, seed_users):
+    """The hold reaches into that morning and stops at six. A class at seven
+    is not in its way, and a check that widened the weekday without comparing
+    the hours would refuse the whole day after every night shift."""
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    room = _room(db)
+    activity = _activity(db)
+    _hold(client, headers, room.id, TOMORROW, start="22:00", end="06:00")
+
+    r = _new_slot(
+        client, headers, activity.id, day=DAY_AFTER.isoweekday(), start="07:00", end="08:00"
+    )
     assert r.status_code == 200, r.text
 
 

@@ -260,11 +260,22 @@ parameters are required.
     {
       "date": "2026-01-05",
       "start": "09:00:00",
+      "end_date": "2026-01-05",
       "end": "10:00:00",
       "activity_id": 4,
       "activity_code": "CS101",
       "master_slot_id": 7,
       "reservation_id": null
+    },
+    {
+      "date": "2026-01-05",
+      "start": "22:00:00",
+      "end_date": "2026-01-06",
+      "end": "06:00:00",
+      "activity_id": null,
+      "activity_code": null,
+      "master_slot_id": null,
+      "reservation_id": 31
     }
   ]
 }
@@ -287,6 +298,16 @@ slot carries `activity_id`, `activity_code` and `master_slot_id` with a null
 `reservation_id`; a reservation carries the reverse. What a booking is for is
 deliberately not here: this route is readable by anyone signed in, and the
 purpose is returned only to the caller that made the booking.
+
+An interval carries `end_date` as well as `date`, and the two differ when the
+window ran past midnight. `date` is the day it opened on, which for an
+overnight interval is the day before the one it occupies, so an interval's
+`date` can be earlier than `from`: a booking dated Monday from `22:00` to
+`06:00` is on Tuesday's calendar and comes back when you ask about Tuesday.
+Read each interval by its own `date` and `end_date` and not by the range that
+returned it. Grouping by `date` alone files that hold under a day nobody asked
+about, and discarding anything outside the range shows a ward as free while it
+is staffed.
 
 Two things this does not see. A day-level change made through
 `PATCH /schedule/ledger/{id}` lives on the day, not on the slot, so it is not
@@ -381,6 +402,7 @@ ran into:
       {
         "date": "2026-01-06",
         "start": "14:30:00",
+        "end_date": "2026-01-06",
         "end": "15:30:00",
         "activity_id": null,
         "activity_code": null,
@@ -394,9 +416,18 @@ ran into:
 
 Windows are half open, so an interval ending at ten and one starting at ten do
 not clash. Back to back bookings are the normal case and refusing them would
-make a room unusable in any schedule that runs on the hour. `end` must be
-after `start`, and a window may not cross midnight, which is the same limit a
-slot has.
+make a room unusable in any schedule that runs on the hour.
+
+An `end` earlier than the `start` means the window runs past midnight and
+finishes on the day after `date`: `22:00` to `06:00` is a night shift of eight
+hours, not a negative sixteen. No field says which day the end falls on, only
+that rule. `end` equal to `start` is `422`, because `09:00` to `09:00` is
+either nothing at all or a full day and there is no way to tell which was
+meant.
+
+A weekly slot cannot cross midnight yet, so an overnight booking is checked
+against a timetable that cannot answer in kind. Until that changes, a night
+shift is a hold and not a slot.
 
 What this refuses is exactly what `GET availability` calls busy: the same two
 queries, through the same expansion. The rule runs both ways. A class cannot
@@ -406,10 +437,12 @@ already stands. A hold taken here holds against the timetable and not only
 against other holds.
 
 Two callers racing for the same window are serialised by a row lock on the
-resource, and two copies of one request collide on the unique key index.
-Neither is the same thing as a database level exclusion constraint over the
-window, which is the migration after this one; until it lands, the overlap
-check and the insert are two steps rather than one.
+resource, two copies of one request collide on the unique key index, and
+underneath both sits an exclusion constraint over the window itself, added
+by migration 010. The second row is refused whatever order the two callers
+arrive in. When the constraint is what catches it, the window is looked up
+again and the `409` names the hold that won rather than only saying this
+one lost.
 
 ### DELETE /resources/{id}/reservations/{reservation_id} `[SUPER_ADMIN, UNIT_ADMIN]`
 
@@ -500,6 +533,7 @@ where the room is already held for part of that window:
       {
         "date": "2026-03-04",
         "start": "09:00:00",
+        "end_date": "2026-03-04",
         "end": "10:00:00",
         "activity_id": null,
         "activity_code": null,

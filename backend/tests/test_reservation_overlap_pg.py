@@ -239,6 +239,49 @@ def test_the_same_window_on_another_date_is_not_a_clash(db, resource):
     assert _held_on(db, resource.id) == 2
 
 
+def test_a_hold_may_run_past_midnight(db, resource):
+    """The row migration 009's constraint refused and 011 allows.
+
+    Worth a test of its own rather than only a step inside the overlap ones:
+    if the check constraint were still >, every test below would fail for
+    that reason instead of the one it was written for.
+    """
+    db.add(_hold(resource.id, 22, 6, "night-shift"))
+    db.commit()
+
+    assert _held_on(db, resource.id) == 1
+
+
+def test_two_holds_cannot_share_an_hour_across_midnight(db, resource):
+    """Migration 010's CASE, exercised by a row for the first time.
+
+    It was written before anything could produce a window that needed it,
+    which meant the expression was checked and its effect was not. A hold
+    running to six and one starting at five the same morning are two rows on
+    two dates, and the constraint has to see them as one clash.
+    """
+    db.add(_hold(resource.id, 22, 6, "night-shift"))
+    db.commit()
+
+    db.add(_hold(resource.id, 5, 7, "early-round", day=OTHER_DAY))
+    with pytest.raises(IntegrityError) as refused:
+        db.commit()
+    assert "ex_reservations_no_overlap" in str(refused.value.orig)
+
+
+def test_a_hold_may_begin_where_an_overnight_one_ends(db, resource):
+    """Half open across midnight, not only within a day. A handover at six is
+    how a shift rota works, and a constraint that refused it would make every
+    night shift block the morning after it."""
+    db.add(_hold(resource.id, 22, 6, "night-shift"))
+    db.commit()
+
+    db.add(_hold(resource.id, 6, 14, "day-shift", day=OTHER_DAY))
+    db.commit()
+
+    assert _held_on(db, resource.id) == 2
+
+
 def test_the_database_refuses_an_overlap_the_endpoint_did_not_see(db, resource, monkeypatch):
     """The branch that exists for the race, reached without running a race.
 
@@ -302,6 +345,75 @@ def test_the_database_refuses_an_overlap_the_endpoint_did_not_see(db, resource, 
                 "start": "10:00:00",
                 "end": "12:00:00",
                 "purpose": "Second ward round",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert blind.status_code == 409, blind.text
+    detail = blind.json()["detail"]
+    assert detail["message"] == resources.ALREADY_TAKEN
+    assert [entry["reservation_id"] for entry in detail["conflicts"]] == [winner.id]
+    assert len(seen) == 2, "the endpoint never asked again after the database refused it"
+
+
+def test_the_409_for_an_overnight_loser_still_names_what_beat_it(db, resource, monkeypatch):
+    """The gap the comment in the endpoint used to describe, now closed.
+
+    While the check compared times inside one date and the constraint did
+    not, a caller whose overnight booking the database refused was told 409
+    with an empty list: it had lost to something the endpoint could not see
+    to name. _conflicts_for now expands both dates a wrapping window touches,
+    so the row that won is found on the second ask.
+    """
+    db.add(
+        User(
+            id="PGADM",
+            full_name="Postgres Admin",
+            email_address="pg-admin@test.internal",
+            credential_secure_hash=hash_password(ADMIN_PASSWORD),
+            role_type=InstitutionalRole.SUPER_ADMIN,
+            initial_login_state=False,
+        )
+    )
+    # A plain morning hold on the day after. Nothing about it crosses
+    # midnight; the window being refused is the one that does.
+    winner = _hold(resource.id, 5, 7, "already-held", day=OTHER_DAY)
+    db.add(winner)
+    db.commit()
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app)
+        token = client.post(
+            "/api/v1/auth/login",
+            json={"email": "pg-admin@test.internal", "password": ADMIN_PASSWORD},
+        )
+        assert token.status_code == 200, token.text
+        headers = {
+            "Authorization": f"Bearer {token.json()['access_token']}",
+            "Idempotency-Key": "an-overnight-key-never-used",
+        }
+
+        honest = resources._conflicts_for
+        seen = []
+
+        def blind_once(*args, **kwargs):
+            seen.append(1)
+            return [] if len(seen) == 1 else honest(*args, **kwargs)
+
+        monkeypatch.setattr(resources, "_conflicts_for", blind_once)
+        blind = client.post(
+            f"/api/v1/resources/{resource.id}/reservations",
+            headers=headers,
+            json={
+                "date": DAY.isoformat(),
+                "start": "22:00:00",
+                "end": "06:00:00",
+                "purpose": "Night ward round",
             },
         )
     finally:

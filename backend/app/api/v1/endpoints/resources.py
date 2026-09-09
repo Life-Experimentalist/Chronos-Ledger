@@ -88,6 +88,14 @@ def resource_availability(
     An inactive resource still answers. What is on its calendar is a fact
     about the past and about slots nobody has moved yet, and hiding it would
     make retiring a room look like clearing it.
+
+    A busy interval's date can be the day before `from`. A booking that runs
+    past midnight is dated the day it opened on and occupies the morning
+    after, so a caller asking about Tuesday is told about a hold dated Monday
+    that ends at six. Read each interval by its own date and end_date and not
+    by the range that returned it; a client that groups by date alone will
+    file that hold under a day it did not ask about, and one that discards
+    anything outside the range will show a ward as free while it is staffed.
     """
     resource = db.query(Resource).filter(Resource.id == resource_id).first()
     if not resource:
@@ -169,14 +177,23 @@ def _conflicts_for(db: Session, resource_id: int, payload: ReservationCreate) ->
     Asked twice: once before inserting, and again if the database refuses the
     insert, because by then somebody else's row is in the table and is the
     thing to name.
+
+    A window that runs past midnight is asked about over two days, not one.
+    Expanding only the date it opened on would leave out everything sitting
+    on the far side of midnight, and a booking from 22:00 to 06:00 would be
+    accepted straight through the top of somebody else's morning.
     """
+    last = payload.date
+    if payload.end < payload.start:
+        last += datetime.timedelta(days=1)
     return clashing(
         occupied(
             booked_slots(db, resource_id),
-            held_reservations(db, resource_id, payload.date, payload.date),
+            held_reservations(db, resource_id, payload.date, last),
             payload.date,
-            payload.date,
+            last,
         ),
+        payload.date,
         payload.start,
         payload.end,
     )
@@ -301,11 +318,7 @@ def create_reservation(
             # Somebody else took the window between the check above and this
             # insert, and the constraint caught what the check could not.
             # Asking again names the row that won, so the caller is told what
-            # it lost to rather than only that it lost. Once a window is
-            # allowed to cross midnight (I-07) this can come back empty, since
-            # the check compares times inside one date and the constraint does
-            # not: a 409 with nothing listed is still the truth, and closing
-            # that gap belongs to the change that opens it.
+            # it lost to rather than only that it lost.
             raise _already_taken(_conflicts_for(db, resource_id, payload)) from None
         # Two copies of the same request arrived at once and the loser lands
         # here. The winner's row is the answer to both.

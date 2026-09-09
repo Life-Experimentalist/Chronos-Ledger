@@ -137,6 +137,7 @@ def test_a_hold_shows_up_on_the_calendar(client, db, seed_users):
         {
             "date": "2026-01-06",
             "start": "14:00:00",
+            "end_date": "2026-01-06",
             "end": "15:00:00",
             "activity_id": None,
             "activity_code": None,
@@ -302,12 +303,126 @@ def test_another_date_is_not_blocked(client, db, seed_users):
     assert _book(client, headers, room.id, key="monday-hold-01", on=MONDAY).status_code == 201
 
 
-def test_a_window_that_ends_before_it_starts_is_refused(client, db, seed_users):
+def test_a_window_that_ends_where_it_starts_is_refused(client, db, seed_users):
+    """The one pair of times that has no reading.
+
+    An end before a start means the window runs past midnight, so 15:00 to
+    14:00 is twenty three hours and is allowed. 14:00 to 14:00 is either no
+    time at all or a whole day, the row looks the same either way, and one
+    reading clashes with nothing while the other clashes with everything.
+    """
     room = _room(db)
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
 
-    assert _book(client, headers, room.id, start="15:00", end="14:00").status_code == 422
     assert _book(client, headers, room.id, start="14:00", end="14:00").status_code == 422
+
+
+# -- Past midnight ------------------------------------------------------------
+#
+# A night shift is one window, not two, and the row says so by ending earlier
+# than it starts. Every test below is written against the times a ward or a
+# cleaning crew actually works, because the point of the change is that those
+# shifts stopped needing two bookings and a note.
+
+
+def test_a_hold_may_run_past_midnight(client, db, seed_users):
+    room = _room(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+
+    taken = _book(client, headers, room.id, on=MONDAY, start="22:00", end="06:00")
+    assert taken.status_code == 201, taken.text
+    body = taken.json()
+    # The date is the day it opened on, and the times are stored as sent.
+    # Nothing is normalised into a second row on Tuesday.
+    assert (body["date"], body["start"], body["end"]) == ("2026-01-05", "22:00:00", "06:00:00")
+
+
+def test_an_overnight_hold_is_on_the_next_mornings_calendar(client, db, seed_users):
+    """The reason end_date is on the wire.
+
+    Asked about Tuesday alone, a caller has to hear about the hold that has
+    been running since Monday night. Its date is the Monday, so a client that
+    files intervals by date will file this one outside the range it asked
+    for, and that is why the field saying where it ends is not left to be
+    worked out.
+    """
+    room = _room(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    held = _book(client, headers, room.id, on=MONDAY, start="22:00", end="06:00").json()
+
+    busy = _busy(client, headers, room.id, from_=TUESDAY, to=TUESDAY)
+    assert busy == [
+        {
+            "date": "2026-01-05",
+            "start": "22:00:00",
+            "end_date": "2026-01-06",
+            "end": "06:00:00",
+            "activity_id": None,
+            "activity_code": None,
+            "master_slot_id": None,
+            "reservation_id": held["id"],
+        }
+    ]
+
+
+def test_an_overnight_hold_blocks_the_morning_it_runs_into(client, db, seed_users):
+    room = _room(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    night = _book(
+        client, headers, room.id, key="night-shift-001", on=MONDAY, start="22:00", end="06:00"
+    ).json()
+
+    clash = _book(
+        client, headers, room.id, key="early-round-01", on=TUESDAY, start="05:00", end="07:00"
+    )
+    assert clash.status_code == 409, clash.text
+    assert [c["reservation_id"] for c in clash.json()["detail"]["conflicts"]] == [night["id"]]
+
+
+def test_a_morning_hold_blocks_the_night_before_running_into_it(client, db, seed_users):
+    """The same clash asked from the other side.
+
+    Availability and booking have to agree, and so do the two orders these
+    can arrive in. Catching it one way round only would mean whichever
+    request came second decided whether the room was double booked.
+    """
+    room = _room(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    early = _book(
+        client, headers, room.id, key="early-round-01", on=TUESDAY, start="05:00", end="07:00"
+    ).json()
+
+    clash = _book(
+        client, headers, room.id, key="night-shift-001", on=MONDAY, start="22:00", end="06:00"
+    )
+    assert clash.status_code == 409, clash.text
+    assert [c["reservation_id"] for c in clash.json()["detail"]["conflicts"]] == [early["id"]]
+
+
+def test_a_hold_may_begin_where_an_overnight_one_ends(client, db, seed_users):
+    """Half open still, across midnight as well as within a day. A handover
+    at six is the normal shape of a shift rota, and refusing it would make
+    every night shift block the morning after it."""
+    room = _room(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    _book(client, headers, room.id, key="night-shift-001", on=MONDAY, start="22:00", end="06:00")
+
+    handover = _book(
+        client, headers, room.id, key="day-shift-0001", on=TUESDAY, start="06:00", end="14:00"
+    )
+    assert handover.status_code == 201, handover.text
+
+
+def test_an_overnight_hold_does_not_block_the_evening_two_days_on(client, db, seed_users):
+    """It runs into Tuesday morning and stops there, not into Tuesday night."""
+    room = _room(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    _book(client, headers, room.id, key="night-shift-001", on=MONDAY, start="22:00", end="06:00")
+
+    later = _book(
+        client, headers, room.id, key="night-shift-002", on=TUESDAY, start="22:00", end="06:00"
+    )
+    assert later.status_code == 201, later.text
 
 
 def test_booking_a_room_that_is_not_there_is_404(client, db, seed_users):

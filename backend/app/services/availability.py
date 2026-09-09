@@ -41,6 +41,51 @@ from app.models.db import (
 MAX_RANGE_DAYS = 366
 
 
+def _span(
+    day: datetime.date, start: datetime.time, end: datetime.time
+) -> tuple[datetime.datetime, datetime.datetime]:
+    """The two instants a window opened on this date actually runs between.
+
+    A window whose end is earlier than its start runs past midnight and
+    finishes on the following date. 22:00 to 06:00 is eight hours on a night
+    shift, not a negative sixteen, and a ward or a factory line that runs one
+    is ordinary rather than exotic.
+
+    That encoding is the whole of it: there is no column saying which day the
+    end falls on, only the two times and the rule that a backwards pair means
+    the next day. Every comparison in this module goes through here so the
+    rule is stated once, and migration 010 writes the same rule in SQL for the
+    exclusion constraint on reservations.
+
+    Equal times are not a window this can describe and are refused at the
+    edge, in the schema validators and in a check constraint, because 09:00 to
+    09:00 would be either nothing at all or a full day and there is no way to
+    tell which was meant.
+    """
+    ends_on = day + datetime.timedelta(days=1) if end < start else day
+    return datetime.datetime.combine(day, start), datetime.datetime.combine(ends_on, end)
+
+
+def _bounds(entry: dict) -> tuple[datetime.datetime, datetime.datetime]:
+    """The same two instants, for a busy interval that already carries its end date."""
+    return (
+        datetime.datetime.combine(entry["date"], entry["start"]),
+        datetime.datetime.combine(entry["end_date"], entry["end"]),
+    )
+
+
+def _overlaps(
+    first: tuple[datetime.datetime, datetime.datetime],
+    second: tuple[datetime.datetime, datetime.datetime],
+) -> bool:
+    """Half open, so a window ending at ten and one starting at ten do not clash.
+
+    Back to back bookings are the normal case, and refusing them would make a
+    room unusable in every schedule that runs on the hour.
+    """
+    return first[0] < second[1] and second[0] < first[1]
+
+
 def booked_slots(db: Session, resource_id: int) -> list[StructuralMasterSlot]:
     """The weekly slots that count against this resource.
 
@@ -71,13 +116,19 @@ def held_reservations(
     A cancelled reservation stays in the table and stops occupying anything.
     The row is kept because a cancellation is an event an outside system has
     to hear about, and a deleted row is not an event.
+
+    The day before the range is fetched too. A booking dated Monday that runs
+    from 22:00 to 06:00 occupies Tuesday morning, so a caller asking only
+    about Tuesday has to be told about it or the room reads as free at five in
+    the morning while somebody is in it. Fetching it is not the same as
+    reporting it: occupied() drops whatever turns out not to reach the range.
     """
     return (
         db.query(Reservation)
         .filter(
             Reservation.resource_id == resource_id,
             Reservation.status == ReservationStatus.HELD,
-            Reservation.reserved_date >= from_date,
+            Reservation.reserved_date >= from_date - datetime.timedelta(days=1),
             Reservation.reserved_date <= to_date,
         )
         .all()
@@ -86,9 +137,11 @@ def held_reservations(
 
 def _held_interval(held: Reservation) -> dict:
     """One booking, in the shape every busy interval takes."""
+    _, ends = _span(held.reserved_date, held.time_window_start, held.time_window_end)
     return {
         "date": held.reserved_date,
         "start": held.time_window_start,
+        "end_date": ends.date(),
         "end": held.time_window_end,
         "activity_id": None,
         "activity_code": None,
@@ -118,19 +171,34 @@ def held_against_slot(
     onwards, never backwards, so a hold that has already passed cannot be
     sat on by a class created after it. Counting those would mean a Monday
     class could not be created because the room was held one Monday in March.
+
+    Matching the weekday is not the same as matching the date, once either
+    side may run past midnight. A hold dated Tuesday that starts at five in
+    the morning is sat on by a Monday slot running 22:00 to 06:00, and a hold
+    dated Monday running 22:00 to 06:00 is sat on by a Tuesday slot starting
+    at five. So each hold is tried against the three dates a slot on this
+    weekday could have and still touch it, its own and the two either side.
+    Only one of those three is this weekday, so a hold can be named once at
+    most. Nothing further apart can reach it: both windows are under a day.
     """
-    on_this_weekday = [
-        _held_interval(held)
-        for held in db.query(Reservation)
+    clashes = []
+    for held in (
+        db.query(Reservation)
         .filter(
             Reservation.resource_id == resource_id,
             Reservation.status == ReservationStatus.HELD,
             Reservation.reserved_date >= org_today(),
         )
         .all()
-        if held.reserved_date.isoweekday() == weekday
-    ]
-    return clashing(on_this_weekday, start, end)
+    ):
+        for offset in (-1, 0, 1):
+            slot_date = held.reserved_date + datetime.timedelta(days=offset)
+            if slot_date.isoweekday() != weekday:
+                continue
+            taken = _span(held.reserved_date, held.time_window_start, held.time_window_end)
+            if _overlaps(_span(slot_date, start, end), taken):
+                clashes.append(_held_interval(held))
+    return clashes
 
 
 def occupied(
@@ -156,7 +224,18 @@ def occupied(
     so which kind an interval is can be read off the fields that are set.
     What a booking is for is deliberately not here: a room's calendar is
     visible to everyone signed in, and the purpose of a booking need not be.
+
+    An interval is reported when the hours it covers reach into the range,
+    not when its date falls inside it. Those were the same test until a
+    window could run past midnight, and they are not the same now: a booking
+    dated Monday from 22:00 to 06:00 is on the calendar for a caller asking
+    about Tuesday, and its date is the Monday it opened on. So an entry's
+    date can be one day before the range that returned it.
     """
+    range_from = datetime.datetime.combine(from_date, datetime.time.min)
+    range_to = datetime.datetime.combine(to_date + datetime.timedelta(days=1), datetime.time.min)
+    asked = (range_from, range_to)
+
     by_weekday: dict[int, list] = {}
     for slot in slots:
         by_weekday.setdefault(slot.day_of_week_index, []).append(slot)
@@ -170,6 +249,7 @@ def occupied(
                 {
                     "date": day,
                     "start": slot.time_window_start,
+                    "end_date": day,
                     "end": slot.time_window_end,
                     "activity_id": slot.activity_id,
                     "activity_code": activity.activity_code if activity else None,
@@ -180,18 +260,23 @@ def occupied(
         day += datetime.timedelta(days=1)
 
     for held in reservations:
-        if from_date <= held.reserved_date <= to_date:
-            busy.append(_held_interval(held))
+        entry = _held_interval(held)
+        if _overlaps(_bounds(entry), asked):
+            busy.append(entry)
 
-    busy.sort(key=lambda entry: (entry["date"], entry["start"], entry["end"]))
+    busy.sort(key=lambda entry: (entry["date"], entry["start"], entry["end_date"], entry["end"]))
     return busy
 
 
-def clashing(busy: list[dict], start: datetime.time, end: datetime.time) -> list[dict]:
-    """The intervals that overlap the window, out of a day's busy list.
+def clashing(
+    busy: list[dict], day: datetime.date, start: datetime.time, end: datetime.time
+) -> list[dict]:
+    """The intervals that overlap a window opened on this date, out of a busy list.
 
-    Half open: an interval ending at ten and one starting at ten do not
-    clash. Back to back bookings are the normal case and refusing them would
-    make a room unusable in every schedule that runs on the hour.
+    Takes the date as well as the two times, because the times alone no
+    longer say when the window is. 23:00 to 01:00 and 01:00 to 23:00 are the
+    same pair of times and are almost disjoint, and which one is meant is
+    decided by _span from the order they come in.
     """
-    return [entry for entry in busy if entry["start"] < end and start < entry["end"]]
+    window = _span(day, start, end)
+    return [entry for entry in busy if _overlaps(_bounds(entry), window)]

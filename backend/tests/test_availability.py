@@ -85,6 +85,7 @@ def test_a_weekly_slot_lands_on_the_one_matching_day(client, db, seed_users):
         {
             "date": "2026-01-05",
             "start": "09:00:00",
+            "end_date": "2026-01-05",
             "end": "10:00:00",
             "activity_id": slot.activity_id,
             "activity_code": "CS101",

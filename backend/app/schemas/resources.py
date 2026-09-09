@@ -70,10 +70,18 @@ class BusyInterval(BaseModel):
     readable by anyone signed in, and "this room is held from two until
     three" is a fact about the room, while what is happening in it need not
     be.
+
+    end_date is always set, and is the same as date for an interval that
+    finishes on the day it started. It is spelled out rather than left to be
+    inferred because inferring it wrong is silent: a reader that takes date
+    with end and ignores end_date computes minus sixteen hours for a night
+    shift running 22:00 to 06:00, and gets a plausible answer for every
+    interval written before overnight windows existed.
     """
 
     date: datetime.date
     start: datetime.time
+    end_date: datetime.date
     end: datetime.time
     activity_id: int | None
     activity_code: str | None
@@ -103,14 +111,22 @@ class ReservationCreate(BaseModel):
     purpose: str = Field(min_length=1, max_length=200)
 
     @model_validator(mode="after")
-    def _ends_after_it_starts(self):
-        # Equal times would book nothing and clash with nothing, and a window
-        # that ends before it starts would clash with everything after it.
-        # Crossing midnight is not supported here because it is not supported
-        # on a slot either, so a booking that did would be invisible to the
-        # timetable it has to be compared against.
-        if self.end <= self.start:
-            raise ValueError("end must be after start")
+    def _is_a_window_at_all(self):
+        # An end earlier than the start means the window runs past midnight
+        # and finishes on the next date: 22:00 to 06:00 is a night shift.
+        # The date field is the day it opens on.
+        #
+        # Equal times are refused and always will be. 09:00 to 09:00 is
+        # either nothing at all or a full twenty four hours, there is no way
+        # to tell which was meant, and both readings are trouble: one books
+        # a window that clashes with nothing, the other one that clashes with
+        # everything.
+        #
+        # A weekly slot still cannot cross midnight. Until it can, a booking
+        # that does is compared against slots that do not, which is correct
+        # as far as it goes and is not the whole timetable.
+        if self.end == self.start:
+            raise ValueError("end must not equal start")
         return self
 
 
