@@ -263,7 +263,8 @@ parameters are required.
       "end": "10:00:00",
       "activity_id": 4,
       "activity_code": "CS101",
-      "master_slot_id": 7
+      "master_slot_id": 7,
+      "reservation_id": null
     }
   ]
 }
@@ -275,10 +276,17 @@ hours the caller considers open, and only the caller knows those.
 Times are naive wall clock in the organisation's own timezone, the same as the
 slot stores. They carry no offset and no `Z`.
 
-What counts as taken: a weekly slot pointing at this resource, whose cycle is
-flagged open. Cycle date bounds are **not** consulted, because nightly ledger
-generation does not consult them either. Answering otherwise would report a
-room free on a date the generator is going to fill.
+What counts as taken: a weekly slot pointing at this resource whose cycle is
+flagged open, and any reservation on it that has not been cancelled. Cycle
+date bounds are **not** consulted, because nightly ledger generation does not
+consult them either. Answering otherwise would report a room free on a date
+the generator is going to fill.
+
+Which kind an interval is can be read off the fields that are filled in. A
+slot carries `activity_id`, `activity_code` and `master_slot_id` with a null
+`reservation_id`; a reservation carries the reverse. What a booking is for is
+deliberately not here: this route is readable by anyone signed in, and the
+purpose is returned only to the caller that made the booking.
 
 Two things this does not see. A day-level change made through
 `PATCH /schedule/ledger/{id}` lives on the day, not on the slot, so it is not
@@ -313,6 +321,107 @@ importer's match key, so renaming it would make the next upload create a
 second row rather than find this one; change `label` instead, which is what
 gets shown. A room that becomes a person is not an edit, it is a different
 resource.
+
+### POST /resources/{id}/reservations `[SUPER_ADMIN, UNIT_ADMIN]`
+
+Hold a resource for one dated window. This is the route an outside system uses
+to take a room: a hospital system books a consulting room here the same way an
+admin would.
+
+An `Idempotency-Key` header is required, 8 to 120 characters, and a UUID is
+the right shape. It is required rather than optional because a booking client
+talking over a network retries, and a retry that books a second room is worse
+than one that fails outright.
+
+```json
+// POST /api/v1/resources/12/reservations
+// Idempotency-Key: 6f1c2e40-2c5f-4d0e-9a5b-1c7c0f9c3a11
+{
+  "date": "2026-01-06",
+  "start": "14:00",
+  "end": "15:00",
+  "purpose": "Ward round"
+}
+```
+
+`201` with the hold:
+
+```json
+{
+  "id": 31,
+  "resource_id": 12,
+  "resource_code": "LH-3",
+  "date": "2026-01-06",
+  "start": "14:00:00",
+  "end": "15:00:00",
+  "purpose": "Ward round",
+  "status": "HELD",
+  "requested_by_id": "ADM001",
+  "idempotency_key": "6f1c2e40-2c5f-4d0e-9a5b-1c7c0f9c3a11",
+  "created_at": "2026-01-05T09:14:22Z",
+  "cancelled_at": null
+}
+```
+
+The same key sent again with the same body returns `200` and the original row,
+cancelled or not: a retry is asking what happened, not asking for a second
+room. The same key with a different body is `422` (`that Idempotency-Key was
+used for a different request`). The resource is part of what the key is
+checked against, so pointing one key at two different rooms is that same
+`422` rather than a quiet double booking.
+
+`409` when something already has part of the window, and the body says what it
+ran into:
+
+```json
+{
+  "detail": {
+    "message": "the resource is already taken for part of that window",
+    "conflicts": [
+      {
+        "date": "2026-01-06",
+        "start": "14:30:00",
+        "end": "15:30:00",
+        "activity_id": null,
+        "activity_code": null,
+        "master_slot_id": null,
+        "reservation_id": 28
+      }
+    ]
+  }
+}
+```
+
+Windows are half open, so an interval ending at ten and one starting at ten do
+not clash. Back to back bookings are the normal case and refusing them would
+make a room unusable in any schedule that runs on the hour. `end` must be
+after `start`, and a window may not cross midnight, which is the same limit a
+slot has.
+
+What this refuses is exactly what `GET availability` calls busy: the same two
+queries, through the same expansion. The reverse does not hold yet. A booking
+will not be accepted on top of a class, but a class can still be scheduled on
+top of a booking, because `POST /schedule/slots` does not check reservations.
+Until that lands the timetable is the authority, and a hold is a hold against
+other holds.
+
+Two callers racing for the same window are serialised by a row lock on the
+resource, and two copies of one request collide on the unique key index.
+Neither is the same thing as a database level exclusion constraint over the
+window, which is the migration after this one; until it lands, the overlap
+check and the insert are two steps rather than one.
+
+### DELETE /resources/{id}/reservations/{reservation_id} `[SUPER_ADMIN, UNIT_ADMIN]`
+
+Let a hold go. Returns the reservation with `status` set to `CANCELLED` and
+`cancelled_at` filled in. The row stays: a deleted row cannot be told to
+anybody, and a system that was informed the room was held has to be able to
+learn that it no longer is.
+
+The freed window is bookable again immediately and stops appearing in
+availability. Cancelling twice is not an error and returns the same timestamp,
+because the caller wanted the room free and the room is free. Cancelling
+through the wrong resource id is `404`.
 
 ---
 

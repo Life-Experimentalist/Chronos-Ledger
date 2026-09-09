@@ -87,6 +87,18 @@ class ResourceType(enum.StrEnum):
     PERSON = "PERSON"
 
 
+class ReservationStatus(enum.StrEnum):
+    """A hold either stands or it has been let go.
+
+    Cancelling keeps the row rather than deleting it. A cancellation is
+    something an outside system has to be told about, and there is nothing
+    left to tell it about once the row is gone.
+    """
+
+    HELD = "HELD"
+    CANCELLED = "CANCELLED"
+
+
 class PlanningCycle(Base):
     __tablename__ = "planning_cycles"
 
@@ -255,6 +267,60 @@ class DailyLedger(Base):
     annotations = relationship(
         "LedgerAnnotation", back_populates="ledger_instance", cascade="all, delete-orphan"
     )
+
+
+class Reservation(Base):
+    """A hold an outside system places on a resource, for one dated window.
+
+    Its own table rather than a slot or a ledger row, because it is neither.
+    A slot is a weekly repeat belonging to an activity inside a planning
+    cycle; a ledger row is one generated day that attendance gets marked
+    against. A reservation belongs to nobody's timetable and nobody takes
+    attendance at it. Expressing one as a slot would have meant inventing an
+    activity and a cycle for every booking, and expressing one as a ledger
+    row would have meant every attendance path learning to skip it.
+
+    Times are naive wall clock, the same as the slot stores, so a booking and
+    a timetable can be compared without a conversion that neither of them
+    carries the information to make. A window may not cross midnight, which
+    is the same limit a slot has.
+    """
+
+    __tablename__ = "reservations"
+    __table_args__ = (
+        CheckConstraint("time_window_end > time_window_start", name="ck_reservations_window"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    resource_id = Column(
+        Integer, ForeignKey("resources.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    reserved_date = Column(Date, nullable=False, index=True)
+    time_window_start = Column(Time, nullable=False)
+    time_window_end = Column(Time, nullable=False)
+    purpose = Column(String(200), nullable=False)
+    # The caller, resolved the way every other endpoint resolves one. An API
+    # key acts as the user it is bound to, so a machine booking a room is
+    # recorded as that service account and needs no identity of its own.
+    requested_by_id = Column(String(50), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # Unique across every resource, not per resource. A caller reusing one
+    # key for two different rooms has a bug, and a collision here says so
+    # rather than quietly booking both.
+    idempotency_key = Column(String(120), nullable=False, unique=True, index=True)
+    # sha256 of what was asked for, the resource included. The same key with
+    # the same request gets the original row back; the same key with a
+    # different request is refused, because at that point the caller has lost
+    # track of which of the two it meant.
+    request_fingerprint = Column(String(64), nullable=False)
+    status = Column(
+        Enum(ReservationStatus, name="reservation_status"),
+        nullable=False,
+        default=ReservationStatus.HELD,
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+
+    resource = relationship("Resource")
 
 
 class ReverseRsvpLog(Base):

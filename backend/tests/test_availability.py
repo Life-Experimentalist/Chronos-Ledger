@@ -89,6 +89,10 @@ def test_a_weekly_slot_lands_on_the_one_matching_day(client, db, seed_users):
             "activity_id": slot.activity_id,
             "activity_code": "CS101",
             "master_slot_id": slot.id,
+            # A slot carries no reservation, and a reservation carries no
+            # activity. Which kind an interval is can be read off the fields
+            # that are filled in.
+            "reservation_id": None,
         }
     ]
 

@@ -507,6 +507,13 @@ components:
 
     BusyInterval:
       type: object
+      description: >
+        One window in which a resource is taken, by a weekly slot or by a
+        reservation. Which kind it is can be read off the fields that are
+        filled in: a slot carries the activity fields and a null
+        reservation_id, and a reservation carries the reverse. What a booking
+        is for is deliberately not here, because this is readable by anyone
+        signed in.
       properties:
         date:
           type: string
@@ -522,11 +529,16 @@ components:
           example: "10:00:00"
         activity_id:
           type: integer
+          nullable: true
         activity_code:
           type: string
           nullable: true
         master_slot_id:
           type: integer
+          nullable: true
+        reservation_id:
+          type: integer
+          nullable: true
 
     AvailabilityResponse:
       type: object
@@ -548,6 +560,89 @@ components:
             organisation's own timezone, with no offset and no Z.
           items:
             $ref: "#/components/schemas/BusyInterval"
+
+    ReservationCreate:
+      type: object
+      required: [date, start, end, purpose]
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-01-06"
+        start:
+          type: string
+          format: time
+          example: "14:00"
+        end:
+          type: string
+          format: time
+          example: "15:00"
+        purpose:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: Ward round
+
+    ReservationResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        resource_id:
+          type: integer
+        resource_code:
+          type: string
+        date:
+          type: string
+          format: date
+        start:
+          type: string
+          format: time
+        end:
+          type: string
+          format: time
+        purpose:
+          type: string
+          description: >
+            Returned only to the caller that made the booking. It is not on
+            the availability calendar, which anyone signed in can read.
+        status:
+          type: string
+          enum: [HELD, CANCELLED]
+        requested_by_id:
+          type: string
+          nullable: true
+          description: >
+            Null once the account that booked it has been deleted. A hold
+            outlives the service account that placed it.
+        idempotency_key:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    ReservationConflict:
+      type: object
+      description: >
+        The body of a 409. What the booking ran into, not merely that it ran
+        into something, so a caller can pick its next hour without asking
+        availability again and diffing the answers. Nested under detail like
+        every other error here, so one error handler reads them all.
+      properties:
+        detail:
+          type: object
+          properties:
+            message:
+              type: string
+              example: the resource is already taken for part of that window
+            conflicts:
+              type: array
+              items:
+                $ref: "#/components/schemas/BusyInterval"
 
     # ── Schedule ──────────────────────────────
     PlanningCycleCreate:
@@ -1569,6 +1664,126 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /resources/{resource_id}/reservations:
+    post:
+      tags: [Resources]
+      summary: Hold a resource for one dated window
+      description: >
+        Requires `SUPER_ADMIN` or `UNIT_ADMIN`. The route an outside system
+        uses to take a room. What it refuses is exactly what GET availability
+        calls busy, through the same queries and the same expansion, so a
+        caller cannot read an hour as free and then be refused it.
+
+
+        The reverse does not hold yet. A booking will not be accepted on top
+        of a class, but a class can still be scheduled on top of a booking,
+        because POST /schedule/slots does not check reservations. Until that
+        lands the timetable is the authority and a hold is a hold against
+        other holds.
+
+
+        Windows are half open, so an interval ending at ten and one starting
+        at ten do not clash. A window may not cross midnight.
+      parameters:
+        - name: resource_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: >
+            Unique across every caller and every resource. A UUID is the right
+            shape. Required rather than optional because a booking client
+            retries, and a retry that books a second room is worse than one
+            that fails.
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 120
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReservationCreate"
+      responses:
+        "201":
+          description: The hold was taken.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+        "200":
+          description: >
+            The same key and the same body arrived again. This is the original
+            hold, cancelled or not: a retry is asking what happened, not
+            asking for a second room.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Something already holds part of that window.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationConflict"
+        "422":
+          description: >
+            end was not after start, or the Idempotency-Key had already been
+            used for a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /resources/{resource_id}/reservations/{reservation_id}:
+    delete:
+      tags: [Resources]
+      summary: Let a hold go
+      description: >
+        Requires `SUPER_ADMIN` or `UNIT_ADMIN`. Marks the reservation
+        cancelled and leaves the row in place. A deleted row cannot be told to
+        anybody, and a system that was informed the room was held has to be
+        able to learn that it no longer is.
+
+
+        The freed window is bookable again immediately and stops appearing in
+        availability. Cancelling twice is not an error and returns the same
+        timestamp. Cancelling through the wrong resource id is a 404.
+      parameters:
+        - name: resource_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: reservation_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The cancelled hold.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   # ── Schedule ──────────────────────────────
   /schedule/slots:
