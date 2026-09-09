@@ -2550,6 +2550,11 @@ paths:
         Returns standard iCalendar (text/calendar) content.
         Staff feed includes all sessions where they are active or substitute lead.
         Member feed includes all registered activities.
+        Timed sessions are written as UTC instants (DTSTART and DTEND end in Z),
+        converted from the organization's wall clock through ORG_TIMEZONE, so a
+        subscriber reading the feed from anywhere sees the session at the moment
+        it happens. Entries with no master slot are all-day dates and carry no
+        zone, because a date reads the same everywhere.
       parameters:
         - name: user_id
           in: path

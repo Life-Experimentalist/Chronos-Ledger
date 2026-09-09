@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.core.time import org_today
+from app.core.time import org_timezone, org_today
 from app.models.db import (
     Activity,
     ActivityEnrollment,
@@ -45,6 +45,39 @@ def rotate_feed_token(
     current_user.calendar_feed_token = generate_feed_token()
     db.commit()
     return _feed_payload(current_user)
+
+
+def _utc_stamp(day: datetime.date, wall: datetime.time) -> str:
+    """A wall clock reading on a date, written as the instant it actually is.
+
+    A slot stores 09:00 with no zone attached, because 09:00 is what the
+    timetable says. A calendar client needs an instant, and this feed used to
+    hand it the bare digits, which RFC 5545 calls a floating time: every
+    client reads it in whatever zone the person holding the phone is sitting
+    in. For an organization at UTC+5:30 that put a nine o'clock class at half
+    past two in the afternoon, and the calendar header said UTC while the
+    values were not UTC either.
+
+    Written as a UTC instant rather than with a TZID, because these are dated
+    occurrences that have already been worked out, not recurrence rules. An
+    instant is unambiguous, every client renders it in the reader's own zone,
+    and there is no hand-written VTIMEZONE to get wrong. That trade turns
+    around if master slots ever emit RRULEs: a repeating 09:00 has to keep
+    saying 09:00 across a daylight saving move, and only a TZID can say that.
+
+    Daylight saving is handled by the conversion, which is the whole reason
+    for going through a real zone rather than adding a fixed offset. combine
+    leaves fold at 0, so a wall time inside a repeated hour takes the first of
+    the two and a wall time inside a skipped hour takes the offset from before
+    the jump. Scheduling a class at 02:30 on the morning a zone springs
+    forward is a mistake in the timetable, not something a calendar feed can
+    resolve.
+
+    When a window is allowed to run past midnight (I-07), its end falls on the
+    following date, and the caller passes that date rather than the slot's.
+    """
+    local = datetime.datetime.combine(day, wall, tzinfo=org_timezone())
+    return local.astimezone(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 @router.get("/user-feed/{feed_token}.ics")
@@ -95,7 +128,11 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
         "VERSION:2.0",
         "PRODID:-//ChronosLedger Engine//Chronos 2026//EN",
         f"X-WR-CALNAME:Chronos Timeline - {user.full_name}",
-        "X-WR-TIMEZONE:UTC",
+        # A display hint some clients read when they show a calendar's own
+        # zone. The timed values below are UTC instants and carry their zone
+        # with them, so nothing depends on this being right, but naming a
+        # zone the organization is not in would be a lie on the face of it.
+        f"X-WR-TIMEZONE:{org_timezone().key}",
         "CALSCALE:GREGORIAN",
     ]
 
@@ -106,13 +143,17 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
             continue
 
         if slot:
-            dtstart_line = f"DTSTART:{entry.target_date.strftime('%Y%m%d')}T{slot.time_window_start.strftime('%H%M%S')}"
-            dtend_line = f"DTEND:{entry.target_date.strftime('%Y%m%d')}T{slot.time_window_end.strftime('%H%M%S')}"
+            dtstart_line = f"DTSTART:{_utc_stamp(entry.target_date, slot.time_window_start)}"
+            dtend_line = f"DTEND:{_utc_stamp(entry.target_date, slot.time_window_end)}"
+            # The wall clock reading, not the UTC one. A UID has to name the
+            # same event for the life of the event, and a UTC time would move
+            # under it the first time the zone changed offset.
             uid_time = slot.time_window_start.strftime("%H%M%S")
         else:
             # Ad-hoc entry without a master slot: an all-day event. RFC 5545 makes
             # DTSTART default to DATE-TIME, so a date-only value must declare
             # VALUE=DATE, and the all-day DTEND is non-inclusive (the next day).
+            # No zone on either: a date is a date wherever it is read.
             next_day = entry.target_date + datetime.timedelta(days=1)
             dtstart_line = f"DTSTART;VALUE=DATE:{entry.target_date.strftime('%Y%m%d')}"
             dtend_line = f"DTEND;VALUE=DATE:{next_day.strftime('%Y%m%d')}"
