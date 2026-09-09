@@ -34,14 +34,15 @@ class MasterSlotCreate(BaseModel):
     target_room_identifier: str
 
     @model_validator(mode="after")
-    def _window_runs_forward(self):
-        # Windows that cross midnight are not supported yet: the ledger,
-        # attendance resolver and calendar feed all assume start < end
-        # within one day. Reject at the edge instead of breaking there.
-        if self.time_window_end <= self.time_window_start:
+    def _is_a_window_at_all(self):
+        # An end earlier than the start means the window runs past midnight
+        # and finishes on the day after the one it opened on, which is what a
+        # night shift is. Equal times are refused: 09:00 to 09:00 is either
+        # nothing at all or a whole day and the row does not say which.
+        if self.time_window_end == self.time_window_start:
             raise ValueError(
-                "time_window_end must be after time_window_start "
-                "(windows crossing midnight are not supported yet)"
+                "time_window_end must not equal time_window_start "
+                "(an end earlier than the start means the window crosses midnight)"
             )
         return self
 
@@ -56,8 +57,8 @@ class MasterSlotUpdate(BaseModel):
     this slot and creating one there, and it should have to say so.
 
     The window is validated in the endpoint rather than here: patching only
-    the start time can invert a window whose end this payload never names,
-    and only the merged values can tell.
+    the start time can land it on an end this payload never names, and only
+    the merged values can tell.
     """
 
     day_of_week_index: int | None = Field(default=None, ge=1, le=7)

@@ -18,6 +18,8 @@ from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, login
 # Explicit dates, never "today plus one": a weekday computed from the day the
 # suite happens to run is a test that only tests something two days in seven.
 MONDAY = datetime.date(2026, 1, 5)
+TUESDAY = datetime.date(2026, 1, 6)
+WEDNESDAY = datetime.date(2026, 1, 7)
 SUNDAY = datetime.date(2026, 1, 11)
 
 
@@ -96,6 +98,63 @@ def test_a_weekly_slot_lands_on_the_one_matching_day(client, db, seed_users):
             "reservation_id": None,
         }
     ]
+
+
+def test_a_slot_the_day_before_the_range_is_not_reported(client, db, seed_users):
+    """The expansion starts a day early and then has to throw that day away.
+
+    Monday is walked so that a Monday night shift can be found, and a Monday
+    nine to ten has to be dropped again on the way out. Without the drop a
+    caller asking about Tuesday alone is told the room is busy on Monday, and
+    every range in the system reads one day wider than it was asked for.
+    """
+    room = _room(db)
+    _slot(db, room, _cycle(db), day=1, start="09:00", end="10:00")
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+
+    body = _availability(client, headers, room.id, from_=TUESDAY, to=TUESDAY).json()
+    assert body["busy"] == []
+
+
+def test_a_night_slot_is_reported_on_the_morning_it_runs_into(client, db, seed_users):
+    """The reason the expansion starts a day early at all.
+
+    A Monday shift from 22:00 to 06:00 is on Tuesday's calendar, and its date
+    is the Monday it opened on. A caller asking about Tuesday alone gets an
+    interval dated the day before, which is why the response documents both
+    dates: filing this under date and ignoring end_date puts a night shift on
+    a day nobody asked about, and dropping it as out of range shows a staffed
+    ward as free until six.
+    """
+    room = _room(db)
+    slot = _slot(db, room, _cycle(db), day=1, start="22:00", end="06:00")
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+
+    body = _availability(client, headers, room.id, from_=TUESDAY, to=TUESDAY).json()
+    assert body["busy"] == [
+        {
+            "date": "2026-01-05",
+            "start": "22:00:00",
+            "end_date": "2026-01-06",
+            "end": "06:00:00",
+            "activity_id": slot.activity_id,
+            "activity_code": "CS101",
+            "master_slot_id": slot.id,
+            "reservation_id": None,
+        }
+    ]
+
+
+def test_a_night_slot_is_not_reported_two_days_on(client, db, seed_users):
+    """It reaches into Tuesday morning and stops there. A caller asking about
+    Wednesday hears nothing, which a range widened by a whole day rather than
+    by the hours the window covers would get wrong."""
+    room = _room(db)
+    _slot(db, room, _cycle(db), day=1, start="22:00", end="06:00")
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+
+    body = _availability(client, headers, room.id, from_=WEDNESDAY, to=WEDNESDAY).json()
+    assert body["busy"] == []
 
 
 def test_a_longer_range_repeats_the_slot_every_week(client, db, seed_users):

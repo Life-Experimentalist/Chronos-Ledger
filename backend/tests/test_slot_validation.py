@@ -1,13 +1,18 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
-"""Slot input validation: inverted or midnight-crossing time windows and
-out-of-range weekdays are rejected at the edge with a 422 (API) or a FAILED
-result (CSV ingestion), never accepted or surfaced as a 500.
+"""Slot input validation: a zero length window or an out of range weekday is
+refused at the edge with a 422, whether it arrives through the API or through
+an imported matrix, and never surfaces as a 500.
 
-The ledger generator, location resolver and calendar feed all assume
-start < end within one day, so an inverted window would produce events a
-calendar client rejects and slots nobody is ever "in".
+An end earlier than a start is not one of those. It means the window runs past
+midnight and finishes on the day after the one it opened on, which is what a
+night shift is, and window_span expands it that way everywhere it is read. It
+is accepted here on purpose, and these tests hold it accepted.
+
+Equal times are the one pair that cannot be read at all. 09:00 to 09:00 is
+either nothing or a whole day and the row does not say which, so it is refused
+in the schema, in the endpoint that patches a slot, and in the importer.
 """
 
 import datetime
@@ -56,6 +61,22 @@ def _slot_payload(offering, **overrides):
     return payload
 
 
+def _csv(day: int, start: str, end: str) -> str:
+    return (
+        HEADER + "\n"
+        f"STU950,Night Shift,night@test.internal,NS101,Night Rounds,CSE,{day},"
+        f"{start},{end},FAC001,W-1\n"
+    )
+
+
+def _upload(client, headers, cycle, csv_text: str):
+    return client.post(
+        f"/api/v1/ingestion/upload-csv?cycle_id={cycle.id}",
+        headers=headers,
+        files={"file": ("matrix.csv", io.BytesIO(csv_text.encode()), "text/csv")},
+    )
+
+
 def test_valid_slot_is_accepted(client, db, seed_users):
     _, offering = _seed_offering(db)
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
@@ -63,7 +84,13 @@ def test_valid_slot_is_accepted(client, db, seed_users):
     assert r.status_code == 200, r.text
 
 
-def test_inverted_window_is_rejected_with_422(client, db, seed_users):
+def test_a_window_that_runs_past_midnight_is_accepted(client, db, seed_users):
+    """A night shift is a window, not a typo.
+
+    The stored row is read back rather than trusting the 200. A validator that
+    quietly swapped the two times would answer exactly the same way and mean
+    the opposite: a sixteen hour day shift instead of an eight hour night.
+    """
     _, offering = _seed_offering(db)
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
     r = client.post(
@@ -71,8 +98,14 @@ def test_inverted_window_is_rejected_with_422(client, db, seed_users):
         headers=headers,
         json=_slot_payload(offering, time_window_start="22:00:00", time_window_end="06:00:00"),
     )
-    assert r.status_code == 422, r.text
-    assert "midnight" in r.text
+    assert r.status_code == 200, r.text
+
+    db.expire_all()
+    slot = db.query(StructuralMasterSlot).one()
+    assert (slot.time_window_start, slot.time_window_end) == (
+        datetime.time(22, 0),
+        datetime.time(6, 0),
+    )
 
 
 def test_zero_length_window_is_rejected_with_422(client, db, seed_users):
@@ -98,19 +131,39 @@ def test_out_of_range_weekday_is_422_not_500(client, db, seed_users):
         assert r.status_code == 422, r.text
 
 
-def test_csv_with_inverted_window_fails_and_ingests_nothing(client, db, seed_users):
+def test_csv_with_a_night_shift_ingests_it(client, db, seed_users):
+    """The importer reads the same rule as the API.
+
+    A matrix is where most night shifts actually arrive, so refusing them
+    here would leave a ward's only route in by hand written POSTs.
+    """
     cycle, _ = _seed_offering(db)
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
-    csv_text = (
-        HEADER + "\n"
-        "STU950,Night Shift,night@test.internal,NS101,Night Rounds,CSE,3,22:00,06:00,FAC001,W-1\n"
+
+    r = _upload(client, headers, cycle, _csv(3, "22:00", "06:00"))
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "SUCCESS"
+
+    db.expire_all()
+    slot = db.query(StructuralMasterSlot).one()
+    assert (slot.time_window_start, slot.time_window_end) == (
+        datetime.time(22, 0),
+        datetime.time(6, 0),
     )
-    r = client.post(
-        f"/api/v1/ingestion/upload-csv?cycle_id={cycle.id}",
-        headers=headers,
-        files={"file": ("matrix.csv", io.BytesIO(csv_text.encode()), "text/csv")},
-    )
+
+
+def test_csv_with_a_zero_length_window_fails_and_ingests_nothing(client, db, seed_users):
+    """The whole upload fails, not the row.
+
+    A matrix that is wrong in one place is usually wrong in others, and half
+    a timetable in the database is harder to recover from than none of it.
+    """
+    cycle, _ = _seed_offering(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+
+    r = _upload(client, headers, cycle, _csv(3, "09:00", "09:00"))
     assert r.status_code == 422, r.text
-    assert "midnight" in r.json()["detail"]
+    assert "same as time_window_start" in r.json()["detail"]
+
     db.expire_all()
     assert db.query(StructuralMasterSlot).count() == 0

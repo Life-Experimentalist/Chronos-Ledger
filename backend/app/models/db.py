@@ -287,13 +287,14 @@ class Reservation(Base):
     A window may run past midnight, and an end earlier than a start is how it
     says so: 22:00 to 06:00 is a night shift of eight hours, and reserved_date
     is the day it opens on. There is no column holding the date it ends on,
-    only that rule, and app.services.availability._span is where the rule is
+    only that rule, and app.core.time.window_span is where the rule is
     applied. Equal times are refused, by ck_reservations_window since
     migration 011, because 09:00 to 09:00 could mean nothing at all or a full
     day and the row does not say which.
 
-    A weekly slot cannot cross midnight yet, so a booking that does is
-    compared against a timetable that cannot answer in kind.
+    A weekly slot reads its two times by the same rule, so a night shift can
+    be a recurring slot and not only a one off booking, and a booking that
+    runs past midnight is compared against the whole timetable.
 
     Two HELD rows on one resource may not overlap, and the database refuses
     them: an EXCLUDE USING gist constraint named ex_reservations_no_overlap,

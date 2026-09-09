@@ -29,6 +29,7 @@ from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, logi
 # suite happens to run is a test that only tests something two days in seven.
 MONDAY = datetime.date(2026, 1, 5)
 TUESDAY = datetime.date(2026, 1, 6)
+WEDNESDAY = datetime.date(2026, 1, 7)
 SUNDAY = datetime.date(2026, 1, 11)
 
 UNIT_ADMIN_PASSWORD = "UnitAdminPass123!"
@@ -222,6 +223,65 @@ def test_a_closed_cycle_does_not_block_a_booking(client, db, seed_users):
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
 
     assert _book(client, headers, room.id, on=MONDAY, start="09:00", end="10:00").status_code == 201
+
+
+def test_a_night_class_blocks_the_morning_it_runs_into(client, db, seed_users):
+    """A weekly slot that crosses midnight, refusing a booking on the far side.
+
+    Every overnight case before this had the booking doing the crossing,
+    because a slot could not. Now the timetable can hold a night shift, and a
+    room staffed until six on Tuesday morning is not free at five just
+    because the row that says so is dated Monday.
+
+    The conflict carries both dates. date is the day the class opened on and
+    end_date is the day it finishes, and a client that reads only date will
+    file this under a day the caller never asked about.
+    """
+    room = _room(db)
+    _slot(db, room, day=1, start="22:00", end="06:00")
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+
+    clash = _book(client, headers, room.id, on=TUESDAY, start="05:00", end="06:00")
+    assert clash.status_code == 409, clash.text
+
+    conflict = clash.json()["detail"]["conflicts"][0]
+    assert conflict["activity_code"] == "CS101"
+    assert conflict["date"] == str(MONDAY)
+    assert conflict["end_date"] == str(TUESDAY)
+    assert conflict["reservation_id"] is None
+
+
+def test_a_booking_may_begin_where_a_night_class_ends(client, db, seed_users):
+    """Half open against a slot as well as against a hold. The morning after
+    a night shift is bookable from the minute the shift stops."""
+    room = _room(db)
+    _slot(db, room, day=1, start="22:00", end="06:00")
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+
+    assert (
+        _book(client, headers, room.id, on=TUESDAY, start="06:00", end="08:00").status_code == 201
+    )
+
+
+def test_an_overnight_booking_is_checked_against_the_next_days_classes(client, db, seed_users):
+    """The half of a booking that lands on the following date is still checked.
+
+    A booking from 23:00 Tuesday to 06:30 Wednesday spends most of itself on
+    Wednesday, and the class it runs into is a Wednesday one. Expanding only
+    the date the booking is dated would compare it against Tuesday's
+    timetable and let it through, and there is no constraint behind this in
+    the database the way there is for two holds.
+    """
+    room = _room(db)
+    _slot(db, room, day=3, start="06:00", end="07:00")
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+
+    clash = _book(client, headers, room.id, on=TUESDAY, start="23:00", end="06:30")
+    assert clash.status_code == 409, clash.text
+
+    conflict = clash.json()["detail"]["conflicts"][0]
+    assert conflict["activity_code"] == "CS101"
+    assert conflict["date"] == str(WEDNESDAY)
 
 
 def test_booking_refuses_exactly_what_availability_calls_busy(client, db, seed_users):

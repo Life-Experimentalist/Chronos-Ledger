@@ -731,7 +731,12 @@ components:
         time_window_end:
           type: string
           format: time
-          description: Must be after the start. Windows crossing midnight are not supported.
+          description: >
+            Earlier than the start means the window runs past midnight and
+            finishes on the day after the one the slot lands on: 22:00 to
+            06:00 is an eight hour night shift. Equal to the start is
+            refused, because 09:00 to 09:00 is either nothing at all or a
+            full day and there is no way to tell which was meant.
           example: "10:00:00"
         activity_id:
           type: integer
@@ -1729,8 +1734,9 @@ paths:
         or a full day and there is no way to tell which was meant.
 
 
-        A weekly slot cannot cross midnight yet, so an overnight booking is
-        checked against a timetable that cannot answer in kind.
+        A weekly slot reads its two times by the same rule, so an overnight
+        booking is checked against night shifts on the timetable as well as
+        against day ones.
       parameters:
         - name: resource_id
           in: path

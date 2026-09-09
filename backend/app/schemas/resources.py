@@ -122,9 +122,9 @@ class ReservationCreate(BaseModel):
         # a window that clashes with nothing, the other one that clashes with
         # everything.
         #
-        # A weekly slot still cannot cross midnight. Until it can, a booking
-        # that does is compared against slots that do not, which is correct
-        # as far as it goes and is not the whole timetable.
+        # A weekly slot reads its two times by the same rule, so a booking
+        # that runs past midnight is checked against the whole timetable and
+        # not only against the part of it that stays inside one day.
         if self.end == self.start:
             raise ValueError("end must not equal start")
         return self

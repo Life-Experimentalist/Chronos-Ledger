@@ -74,8 +74,31 @@ def test_a_moved_time_needs_no_propagation(client, db, seed_users):
     assert r.json()["ledger_rows_removed"] == 0
 
 
-def test_a_window_cannot_be_inverted_by_patching_one_end(client, db, seed_users):
-    """The check has to see both ends, and only one of them is in the payload."""
+def test_a_window_cannot_be_collapsed_by_patching_one_end(client, db, seed_users):
+    """The check has to see both ends, and only one of them is in the payload.
+
+    The imported slot runs 09:00 to 10:00, so moving the start onto ten
+    leaves a pair that says nothing: a window of no length, or of a whole
+    day, with nothing in the row to tell them apart. The schema cannot catch
+    it because the end it would collide with is not in the payload.
+    """
+    headers, slot = _timetable(client, db, seed_users)
+
+    r = client.patch(
+        f"/api/v1/schedule/slots/{slot.id}",
+        headers=headers,
+        json={"time_window_start": "10:00:00"},
+    )
+    assert r.status_code == 422
+
+    db.expire_all()
+    assert _slots(db)[0].time_window_start == datetime.time(9, 0)
+
+
+def test_a_slot_can_be_moved_onto_a_night_shift(client, db, seed_users):
+    """The other side of the same merge. 16:00 against the existing end of
+    10:00 is a window that runs past midnight, which is a night shift and is
+    allowed, so only the pair that reads as nothing is refused."""
     headers, slot = _timetable(client, db, seed_users)
 
     r = client.patch(
@@ -83,10 +106,14 @@ def test_a_window_cannot_be_inverted_by_patching_one_end(client, db, seed_users)
         headers=headers,
         json={"time_window_start": "16:00:00"},
     )
-    assert r.status_code == 422
+    assert r.status_code == 200, r.text
 
     db.expire_all()
-    assert _slots(db)[0].time_window_start == datetime.time(9, 0)
+    moved = _slots(db)[0]
+    assert (moved.time_window_start, moved.time_window_end) == (
+        datetime.time(16, 0),
+        datetime.time(10, 0),
+    )
 
 
 def test_a_new_room_reaches_the_days_that_are_only_plans(client, db, seed_users):

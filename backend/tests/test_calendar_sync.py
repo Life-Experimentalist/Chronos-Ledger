@@ -183,6 +183,25 @@ def test_an_early_class_belongs_to_the_previous_date_in_utc(client, db, seed_use
     assert f"DTSTART:{yesterday.strftime('%Y%m%d')}T213000Z" in body
 
 
+def test_a_night_shift_ends_on_the_day_after_it_starts(client, db, seed_users, org_zone):
+    """The end takes the next date, not the date the entry is filed under.
+
+    A ledger row is dated the day its window opened on, and a window from
+    22:00 to 06:00 finishes on the day after that. Handing the row's own date
+    to both ends writes an event that stops sixteen hours before it starts,
+    which a strict client rejects outright and a lenient one draws backwards.
+    """
+    org_zone(IST)
+    _seed_schedule(db, start=datetime.time(22, 0), end=datetime.time(6, 0))
+    tomorrow = TODAY + datetime.timedelta(days=1)
+    body = client.get(_feed_url(db, "FAC001")).text
+    # Ten at night in Kolkata is 16:30 UTC, and six the next morning is 00:30
+    # UTC on the morning after that in local terms, which is the same date in
+    # UTC either way. The date on DTEND is the point.
+    assert f"DTSTART:{TODAY.strftime('%Y%m%d')}T163000Z" in body
+    assert f"DTEND:{tomorrow.strftime('%Y%m%d')}T003000Z" in body
+
+
 def test_the_same_wall_clock_is_a_different_instant_either_side_of_a_dst_move(org_zone):
     """Why the conversion goes through a real zone instead of adding a fixed
     number of hours. Nine in the morning in New York is 14:00 UTC in January

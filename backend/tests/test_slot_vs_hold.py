@@ -242,6 +242,48 @@ def test_a_class_after_an_overnight_hold_has_ended_is_allowed(client, db, seed_u
     assert r.status_code == 200, r.text
 
 
+def test_a_night_class_is_refused_where_a_hold_sits_on_the_morning_after(client, db, seed_users):
+    """The same clash from the other end, which is only reachable now.
+
+    Until a slot could run past midnight, every overnight case was a hold
+    against a daytime class. Now the class is the thing that crosses, and the
+    hold it lands on is dated the day after the one the class opens on. That
+    is the offset the check reaches backwards for: the hold's own date minus
+    one is the date the slot has, and no comparison of the two weekdays would
+    ever have brought them together.
+    """
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    room = _room(db)
+    activity = _activity(db)
+    morning = _hold(client, headers, room.id, DAY_AFTER, start="05:00", end="07:00")
+
+    r = _new_slot(
+        client, headers, activity.id, day=TOMORROW.isoweekday(), start="22:00", end="06:00"
+    )
+    assert r.status_code == 409, r.text
+
+    body = r.json()["detail"]
+    assert body["message"] == HELD
+    assert [c["reservation_id"] for c in body["conflicts"]] == [morning["id"]]
+    assert body["conflicts"][0]["date"] == str(DAY_AFTER)
+    assert db.query(StructuralMasterSlot).count() == 0
+
+
+def test_a_night_class_ending_where_a_morning_hold_begins_is_allowed(client, db, seed_users):
+    """Half open on this side too. A shift handing over at six to something
+    booked from six is the ordinary case on a ward, and refusing it would
+    make the two ends of a handover unschedulable together."""
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    room = _room(db)
+    activity = _activity(db)
+    _hold(client, headers, room.id, DAY_AFTER, start="06:00", end="07:00")
+
+    r = _new_slot(
+        client, headers, activity.id, day=TOMORROW.isoweekday(), start="22:00", end="06:00"
+    )
+    assert r.status_code == 200, r.text
+
+
 # ── Moving a slot ────────────────────────────────────────────────────────────
 
 

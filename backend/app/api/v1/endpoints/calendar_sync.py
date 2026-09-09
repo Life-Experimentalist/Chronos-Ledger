@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.core.time import org_timezone, org_today
+from app.core.time import org_timezone, org_today, window_span
 from app.models.db import (
     Activity,
     ActivityEnrollment,
@@ -133,8 +133,8 @@ def _utc_stamp(day: datetime.date, wall: datetime.time) -> str:
     forward is a mistake in the timetable, not something a calendar feed can
     resolve.
 
-    When a window is allowed to run past midnight (I-07), its end falls on the
-    following date, and the caller passes that date rather than the slot's.
+    A window that runs past midnight ends on the following date, and the
+    caller passes that date rather than the slot's.
     """
     local = datetime.datetime.combine(day, wall, tzinfo=org_timezone())
     return local.astimezone(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -208,8 +208,13 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
             continue
 
         if slot:
+            # target_date is the day the slot opens on, so a night shift ends
+            # on the day after it. Handing the same date to both would write an
+            # event that finishes sixteen hours before it starts, which a strict
+            # calendar client rejects and a lenient one draws backwards.
+            _, ends = window_span(entry.target_date, slot.time_window_start, slot.time_window_end)
             dtstart_line = f"DTSTART:{_utc_stamp(entry.target_date, slot.time_window_start)}"
-            dtend_line = f"DTEND:{_utc_stamp(entry.target_date, slot.time_window_end)}"
+            dtend_line = f"DTEND:{_utc_stamp(ends.date(), slot.time_window_end)}"
             # The wall clock reading, not the UTC one. A UID has to name the
             # same event for the life of the event, and a UTC time would move
             # under it the first time the zone changed offset.

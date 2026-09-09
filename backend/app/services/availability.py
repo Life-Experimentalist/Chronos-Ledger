@@ -25,7 +25,7 @@ import datetime
 
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.time import org_today
+from app.core.time import org_today, window_span
 from app.models.db import (
     Activity,
     PlanningCycle,
@@ -39,31 +39,6 @@ from app.models.db import (
 # on the answer, not the question: a ten year range is a mistake being made
 # quickly, not a query anybody wants to wait for.
 MAX_RANGE_DAYS = 366
-
-
-def _span(
-    day: datetime.date, start: datetime.time, end: datetime.time
-) -> tuple[datetime.datetime, datetime.datetime]:
-    """The two instants a window opened on this date actually runs between.
-
-    A window whose end is earlier than its start runs past midnight and
-    finishes on the following date. 22:00 to 06:00 is eight hours on a night
-    shift, not a negative sixteen, and a ward or a factory line that runs one
-    is ordinary rather than exotic.
-
-    That encoding is the whole of it: there is no column saying which day the
-    end falls on, only the two times and the rule that a backwards pair means
-    the next day. Every comparison in this module goes through here so the
-    rule is stated once, and migration 010 writes the same rule in SQL for the
-    exclusion constraint on reservations.
-
-    Equal times are not a window this can describe and are refused at the
-    edge, in the schema validators and in a check constraint, because 09:00 to
-    09:00 would be either nothing at all or a full day and there is no way to
-    tell which was meant.
-    """
-    ends_on = day + datetime.timedelta(days=1) if end < start else day
-    return datetime.datetime.combine(day, start), datetime.datetime.combine(ends_on, end)
 
 
 def _bounds(entry: dict) -> tuple[datetime.datetime, datetime.datetime]:
@@ -137,7 +112,7 @@ def held_reservations(
 
 def _held_interval(held: Reservation) -> dict:
     """One booking, in the shape every busy interval takes."""
-    _, ends = _span(held.reserved_date, held.time_window_start, held.time_window_end)
+    _, ends = window_span(held.reserved_date, held.time_window_start, held.time_window_end)
     return {
         "date": held.reserved_date,
         "start": held.time_window_start,
@@ -195,8 +170,8 @@ def held_against_slot(
             slot_date = held.reserved_date + datetime.timedelta(days=offset)
             if slot_date.isoweekday() != weekday:
                 continue
-            taken = _span(held.reserved_date, held.time_window_start, held.time_window_end)
-            if _overlaps(_span(slot_date, start, end), taken):
+            taken = window_span(held.reserved_date, held.time_window_start, held.time_window_end)
+            if _overlaps(window_span(slot_date, start, end), taken):
                 clashes.append(_held_interval(held))
     return clashes
 
@@ -227,10 +202,12 @@ def occupied(
 
     An interval is reported when the hours it covers reach into the range,
     not when its date falls inside it. Those were the same test until a
-    window could run past midnight, and they are not the same now: a booking
-    dated Monday from 22:00 to 06:00 is on the calendar for a caller asking
-    about Tuesday, and its date is the Monday it opened on. So an entry's
-    date can be one day before the range that returned it.
+    window could run past midnight, and they are not the same now: a slot or
+    a booking dated Monday from 22:00 to 06:00 is on the calendar for a
+    caller asking about Tuesday, and its date is the Monday it opened on. So
+    an entry's date can be one day before the range that returned it, and the
+    weekly expansion starts a day early for the same reason the reservation
+    query fetches a day early.
     """
     range_from = datetime.datetime.combine(from_date, datetime.time.min)
     range_to = datetime.datetime.combine(to_date + datetime.timedelta(days=1), datetime.time.min)
@@ -241,22 +218,23 @@ def occupied(
         by_weekday.setdefault(slot.day_of_week_index, []).append(slot)
 
     busy = []
-    day = from_date
+    day = from_date - datetime.timedelta(days=1)
     while day <= to_date:
         for slot in by_weekday.get(day.isoweekday(), ()):
             activity = slot.activity
-            busy.append(
-                {
-                    "date": day,
-                    "start": slot.time_window_start,
-                    "end_date": day,
-                    "end": slot.time_window_end,
-                    "activity_id": slot.activity_id,
-                    "activity_code": activity.activity_code if activity else None,
-                    "master_slot_id": slot.id,
-                    "reservation_id": None,
-                }
-            )
+            _, ends = window_span(day, slot.time_window_start, slot.time_window_end)
+            entry = {
+                "date": day,
+                "start": slot.time_window_start,
+                "end_date": ends.date(),
+                "end": slot.time_window_end,
+                "activity_id": slot.activity_id,
+                "activity_code": activity.activity_code if activity else None,
+                "master_slot_id": slot.id,
+                "reservation_id": None,
+            }
+            if _overlaps(_bounds(entry), asked):
+                busy.append(entry)
         day += datetime.timedelta(days=1)
 
     for held in reservations:
@@ -276,7 +254,7 @@ def clashing(
     Takes the date as well as the two times, because the times alone no
     longer say when the window is. 23:00 to 01:00 and 01:00 to 23:00 are the
     same pair of times and are almost disjoint, and which one is meant is
-    decided by _span from the order they come in.
+    decided by window_span from the order they come in.
     """
-    window = _span(day, start, end)
+    window = window_span(day, start, end)
     return [entry for entry in busy if _overlaps(_bounds(entry), window)]

@@ -7,6 +7,7 @@ import { motion } from 'framer-motion'
 import { BookOpen, Video, Clock, MapPin, ExternalLink, RefreshCw } from 'lucide-react'
 import { DynamicStateBadge } from '@/components/ui/Badge'
 import { calendarApi } from '@/lib/api'
+import { windowState } from '@/lib/schedule'
 import type { LedgerEntry } from '@/types'
 
 interface LiveTimelineProps {
@@ -30,7 +31,6 @@ export function LiveTimeline({ entries }: LiveTimelineProps) {
       .catch(() => undefined)
   }
   const now = new Date()
-  const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
 
   const sorted = useMemo(
     () => [...entries].sort((a, b) => (a.time_window_start || '').localeCompare(b.time_window_start || '')),
@@ -49,12 +49,7 @@ export function LiveTimeline({ entries }: LiveTimelineProps) {
   return (
     <div className="space-y-3">
       {sorted.map((entry, idx) => {
-        const isActive =
-          entry.time_window_start &&
-          entry.time_window_end &&
-          entry.time_window_start <= currentTime &&
-          entry.time_window_end >= currentTime
-        const isPast = entry.time_window_end && entry.time_window_end < currentTime
+        const { active: isActive, past: isPast } = windowState(entry, now)
 
         return (
           <motion.div

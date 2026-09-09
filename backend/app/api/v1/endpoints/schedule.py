@@ -202,10 +202,10 @@ def update_master_slot(
     fields = payload.model_dump(exclude_unset=True)
     start = fields.get("time_window_start", slot.time_window_start)
     end = fields.get("time_window_end", slot.time_window_end)
-    if end <= start:
+    if end == start:
         raise HTTPException(
             status_code=422,
-            detail="time_window_end must be after time_window_start",
+            detail="time_window_end must not equal time_window_start",
         )
 
     weekday = fields.get("day_of_week_index", slot.day_of_week_index)

@@ -425,9 +425,9 @@ that rule. `end` equal to `start` is `422`, because `09:00` to `09:00` is
 either nothing at all or a full day and there is no way to tell which was
 meant.
 
-A weekly slot cannot cross midnight yet, so an overnight booking is checked
-against a timetable that cannot answer in kind. Until that changes, a night
-shift is a hold and not a slot.
+A weekly slot reads its two times by the same rule, so a night shift can be a
+recurring slot and not only a one off hold, and an overnight booking is
+checked against night shifts on the timetable as well as against day ones.
 
 What this refuses is exactly what `GET availability` calls busy: the same two
 queries, through the same expansion. The rule runs both ways. A class cannot

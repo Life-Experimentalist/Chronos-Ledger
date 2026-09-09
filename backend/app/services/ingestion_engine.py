@@ -174,11 +174,11 @@ class ChronosIngestionEngine:
                 # 4. Upsert master slot (deduplicate by activity + day + start time)
                 t_start = _parse_time(row["time_window_start"])
                 t_end = _parse_time(row["time_window_end"])
-                if t_end <= t_start:
+                if t_end == t_start:
                     raise ValueError(
-                        f"member '{row['member_id']}': time_window_end {t_end} is not "
-                        f"after time_window_start {t_start} "
-                        "(windows crossing midnight are not supported yet)"
+                        f"member '{row['member_id']}': time_window_end {t_end} is the "
+                        f"same as time_window_start {t_start}, which is either no window "
+                        "at all or a whole day and the row does not say which"
                     )
 
                 slot = (
