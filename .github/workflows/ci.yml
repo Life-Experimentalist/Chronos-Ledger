@@ -13,7 +13,11 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A superseded pull request run is wasted compute and worth cancelling. A run
+  # on main is not: it ends by publishing, and cancelling it halfway can leave
+  # the backend image and the web image on the registry from two different
+  # commits until the next run finishes. Pushes to main queue instead.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # ── Backend: lint ──────────────────────────────────────────────────────────
@@ -159,3 +163,16 @@ jobs:
             NEXT_PUBLIC_WS_URL=/ws
             NEXT_PUBLIC_TELEMETRY_ENABLED=false
             NEXT_PUBLIC_TELEMETRY_ENDPOINT=
+
+  # ── Publish: only reachable once every gate above is green ────────────────
+  publish:
+    name: Publish images to GHCR
+    # This is the CI gate the registry never had. The build workflow used to
+    # carry its own push-to-main trigger, so it raced this one and a commit
+    # that failed its tests still shipped :latest to a public registry.
+    needs: [backend-lint, backend-test, frontend-check, security-scan, docker-build-check]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/cd.yml

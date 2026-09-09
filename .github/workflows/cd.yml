@@ -2,12 +2,12 @@ name: CD (Build & Push to GHCR)
 
 # Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
 #
-# Triggered automatically on every push to main (after CI passes).
-# Also callable from the release workflow with an explicit version tag.
+# Called by the CI workflow once every gate on main has passed, and by the
+# release workflow with an explicit version tag. It has no trigger of its own
+# on purpose: a workflow that publishes to a public registry should never be
+# reachable by a push that nothing has checked.
 
 on:
-  push:
-    branches: [main]
   workflow_call:
     inputs:
       version:
