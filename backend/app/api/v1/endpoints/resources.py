@@ -208,11 +208,10 @@ def create_reservation(
     being counted twice. Neither is the real answer: that is a database level
     exclusion constraint over the window, and it is the next migration.
 
-    This does not stop the timetable from being edited on top of a booking.
-    Slots are not checked against reservations yet, so Chronos will refuse an
-    external booking that clashes with a class and will not refuse a class
-    that clashes with an external booking. Until that lands, the timetable is
-    still the authority and a hold is a hold against other holds.
+    The rule runs both ways. A class cannot be put on top of a hold either:
+    creating a slot, moving one, and uploading a timetable are all refused
+    where a booking already stands, so a hold taken here holds against the
+    timetable and not only against other holds.
     """
     # with_for_update compiles to nothing on SQLite, which is what the suite
     # runs on, so this serialises two callers on Postgres and is a no-op in

@@ -1676,11 +1676,11 @@ paths:
         caller cannot read an hour as free and then be refused it.
 
 
-        The reverse does not hold yet. A booking will not be accepted on top
-        of a class, but a class can still be scheduled on top of a booking,
-        because POST /schedule/slots does not check reservations. Until that
-        lands the timetable is the authority and a hold is a hold against
-        other holds.
+        The rule runs both ways. A class cannot be put on top of a hold
+        either, so POST /schedule/slots, PATCH /schedule/slots/{slot_id} and
+        a CSV upload are each refused where a booking already stands. A hold
+        taken here holds against the timetable and not only against other
+        holds.
 
 
         Windows are half open, so an interval ending at ten and one starting
@@ -1820,7 +1820,15 @@ paths:
     post:
       tags: [Schedule]
       summary: Add a master slot
-      description: Admin only. A UNIT_ADMIN may only add slots inside their own unit.
+      description: >
+        Admin only. A UNIT_ADMIN may only add slots inside their own unit.
+
+
+        Refused with 409 where the room is already held for part of that
+        window. Only holds from today forward count, because a slot lays
+        down days from now onwards and never backwards, and a slot in a
+        closed cycle is not checked at all, because such a slot does not
+        occupy the room and a booking is already accepted on top of one.
       requestBody:
         required: true
         content:
@@ -1841,6 +1849,15 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            The room is held for part of that window. The body is the one a
+            refused booking sends, so a clash reads the same way whichever
+            end it came from.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationConflict"
         "422":
           $ref: "#/components/responses/UnprocessableEntity"
 
@@ -1859,6 +1876,12 @@ paths:
         copied across, because the days already generated sit on the old
         weekday. Those are withdrawn for the generator to lay down again, and
         the request is refused with 409 if any of them has been marked.
+
+
+        Also refused with 409 where the room it would move to is already held
+        for part of the window it would move to. A refusal changes nothing:
+        the room is resolved and the holds are checked before any day is
+        withdrawn or any field is written.
       parameters:
         - name: slot_id
           in: path
@@ -1883,7 +1906,16 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: >
+            Either a day the slot has already produced has been marked, and
+            the detail names those dates, or the room is held for part of the
+            window, and the body is the one a refused booking sends.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ErrorResponse"
+                  - $ref: "#/components/schemas/ReservationConflict"
         "422":
           $ref: "#/components/responses/UnprocessableEntity"
 
@@ -2421,6 +2453,14 @@ paths:
         Never removes. Slots and enrollments the cycle holds that the file
         does not mention come back in `not_in_file` for somebody to act on,
         which is what makes a partial upload safe.
+
+
+        A row that would put a class in a room already held for that window
+        is refused with 422 and the whole file is rolled back, which is what
+        every other bad row in an import does. The check only looks where a
+        row would actually move a class, so re-uploading a file that
+        describes the timetable as it already stands is not refused by a hold
+        sitting on it.
 
         Each new member costs a bcrypt hash on the request thread, about
         half a second, so a file creating more than roughly 100 new

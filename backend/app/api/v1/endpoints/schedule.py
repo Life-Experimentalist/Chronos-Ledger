@@ -4,12 +4,14 @@
 import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.redis_client import get_redis
 from app.core.security import ensure_unit_scope, get_current_user, require_roles
 from app.models.db import Activity, DailyLedger, PlanningCycle, StructuralMasterSlot, User
+from app.schemas.resources import ReservationConflict
 from app.schemas.schedule import (
     DailyLedgerUpdate,
     MasterSlotCreate,
@@ -18,11 +20,41 @@ from app.schemas.schedule import (
     PlanningCycleResponse,
     StaffLocationResponse,
 )
+from app.services.availability import held_against_slot
 from app.services.location_resolver import determine_staff_current_state
 from app.services.master_slot import propagate_slot_corrections, rows_in_use
 from app.services.resource import get_or_create_room
 
 router = APIRouter()
+
+ROOM_IS_HELD = "the resource is held for part of that window"
+
+
+def _refuse_if_held(db, cycle, resource_id, weekday, start, end) -> None:
+    """Refuse a slot that would be laid on top of a booking.
+
+    Chronos refused an external booking that clashed with a class and did
+    not refuse a class that clashed with an external booking, so a timetable
+    edit could take a room out from under the system holding it, silently.
+    Both directions are the same rule now.
+
+    A slot in a closed cycle is not checked, because it does not occupy the
+    room: booked_slots counts open cycles only, and a booking is already
+    accepted on top of a closed cycle's slot. Checking here would make the
+    two directions disagree the other way round.
+
+    The body is the one POST /resources/{id}/reservations sends when it
+    refuses, so an integrator reads a clash the same way whichever end it
+    came from.
+    """
+    if cycle is None or not cycle.operational_status:
+        return
+    conflicts = held_against_slot(db, resource_id, weekday, start, end)
+    if conflicts:
+        raise HTTPException(
+            status_code=409,
+            detail=jsonable_encoder({"message": ROOM_IS_HELD, "conflicts": conflicts}),
+        )
 
 
 # ── Planning Cycles ──────────────────────────────────────────────────────────
@@ -105,7 +137,7 @@ def list_master_slots(
     ]
 
 
-@router.post("/slots")
+@router.post("/slots", responses={409: {"model": ReservationConflict}})
 def create_master_slot(
     payload: MasterSlotCreate,
     db: Session = Depends(get_db),
@@ -116,6 +148,14 @@ def create_master_slot(
         raise HTTPException(status_code=404, detail="Activity offering not found")
     ensure_unit_scope(current_user, offering.unit_code)
     room = get_or_create_room(payload.target_room_identifier, db)
+    _refuse_if_held(
+        db,
+        offering.cycle,
+        room.id,
+        payload.day_of_week_index,
+        payload.time_window_start,
+        payload.time_window_end,
+    )
     # room.code, not the payload: get_or_create_room strips the name, and a
     # slot whose mirror is spelled differently from its resource is exactly
     # the drift the resource table exists to end.
@@ -130,7 +170,7 @@ def create_master_slot(
     return {"id": slot.id}
 
 
-@router.patch("/slots/{slot_id}")
+@router.patch("/slots/{slot_id}", responses={409: {"model": ReservationConflict}})
 def update_master_slot(
     slot_id: int,
     payload: MasterSlotUpdate,
@@ -168,15 +208,31 @@ def update_master_slot(
             detail="time_window_end must be after time_window_start",
         )
 
-    day_moved = fields.get("day_of_week_index", slot.day_of_week_index) != slot.day_of_week_index
+    weekday = fields.get("day_of_week_index", slot.day_of_week_index)
+
+    # The room is resolved and the holds are checked before anything is
+    # withdrawn or written, so a refusal leaves the slot and the days it has
+    # already produced exactly as they were. Nothing is committed on this
+    # path, so a room created on the way to a refusal never lands.
+    moving_to = None
+    if "target_room_identifier" in fields:
+        moving_to = get_or_create_room(fields.pop("target_room_identifier"), db)
+    _refuse_if_held(
+        db,
+        slot.activity.cycle,
+        moving_to.id if moving_to else slot.resource_id,
+        weekday,
+        start,
+        end,
+    )
+
     removed = 0
-    if day_moved:
+    if weekday != slot.day_of_week_index:
         removed = _withdraw_planned_days(slot, db, "moved to another weekday")
 
-    if "target_room_identifier" in fields:
-        room = get_or_create_room(fields.pop("target_room_identifier"), db)
-        slot.resource_id = room.id
-        slot.target_room_identifier = room.code
+    if moving_to is not None:
+        slot.resource_id = moving_to.id
+        slot.target_room_identifier = moving_to.code
     for field, value in fields.items():
         setattr(slot, field, value)
 

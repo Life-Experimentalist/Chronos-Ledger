@@ -83,6 +83,55 @@ def held_reservations(
     )
 
 
+def _held_interval(held: Reservation) -> dict:
+    """One booking, in the shape every busy interval takes."""
+    return {
+        "date": held.reserved_date,
+        "start": held.time_window_start,
+        "end": held.time_window_end,
+        "activity_id": None,
+        "activity_code": None,
+        "master_slot_id": None,
+        "reservation_id": held.id,
+    }
+
+
+def held_against_slot(
+    db: Session, resource_id: int, weekday: int, start: datetime.time, end: datetime.time
+) -> list[dict]:
+    """The still standing bookings a weekly slot at this window would sit on.
+
+    This is the same question the other way round. Availability and booking
+    ask what occupies a resource over a range of dates; a slot has no range,
+    so what it needs to know is which of a resource's holds fall on its
+    weekday, and which of those overlap its window.
+
+    The weekday match is done here in Python rather than in SQL. Postgres
+    numbers isodow Monday 1 to Sunday 7 and SQLite numbers strftime('%w')
+    Sunday 0 to Saturday 6, and the suite runs on SQLite while a deployment
+    runs on Postgres, so a comparison written in SQL would be a day out in
+    production and correct in every test. day_of_week_index is 1 for Monday,
+    which is what isoweekday() returns.
+
+    Only holds from today forward count. A slot produces days from now
+    onwards, never backwards, so a hold that has already passed cannot be
+    sat on by a class created after it. Counting those would mean a Monday
+    class could not be created because the room was held one Monday in March.
+    """
+    on_this_weekday = [
+        _held_interval(held)
+        for held in db.query(Reservation)
+        .filter(
+            Reservation.resource_id == resource_id,
+            Reservation.status == ReservationStatus.HELD,
+            Reservation.reserved_date >= datetime.date.today(),
+        )
+        .all()
+        if held.reserved_date.isoweekday() == weekday
+    ]
+    return clashing(on_this_weekday, start, end)
+
+
 def occupied(
     slots,
     reservations,
@@ -131,17 +180,7 @@ def occupied(
 
     for held in reservations:
         if from_date <= held.reserved_date <= to_date:
-            busy.append(
-                {
-                    "date": held.reserved_date,
-                    "start": held.time_window_start,
-                    "end": held.time_window_end,
-                    "activity_id": None,
-                    "activity_code": None,
-                    "master_slot_id": None,
-                    "reservation_id": held.id,
-                }
-            )
+            busy.append(_held_interval(held))
 
     busy.sort(key=lambda entry: (entry["date"], entry["start"], entry["end"]))
     return busy

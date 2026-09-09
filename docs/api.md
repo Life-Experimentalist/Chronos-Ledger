@@ -399,11 +399,11 @@ after `start`, and a window may not cross midnight, which is the same limit a
 slot has.
 
 What this refuses is exactly what `GET availability` calls busy: the same two
-queries, through the same expansion. The reverse does not hold yet. A booking
-will not be accepted on top of a class, but a class can still be scheduled on
-top of a booking, because `POST /schedule/slots` does not check reservations.
-Until that lands the timetable is the authority, and a hold is a hold against
-other holds.
+queries, through the same expansion. The rule runs both ways. A class cannot
+be put on top of a hold either, so `POST /schedule/slots`, `PATCH
+/schedule/slots/{id}` and a CSV upload are each refused where a booking
+already stands. A hold taken here holds against the timetable and not only
+against other holds.
 
 Two callers racing for the same window are serialised by a row lock on the
 resource, and two copies of one request collide on the unique key index.
@@ -485,6 +485,41 @@ Snapshot of all staff locations. Polled by the Member Locator panel.
 ### POST /schedule/cycles `[ADMIN]`
 ### PATCH /schedule/cycles/{id}/close `[ADMIN]`
 ### POST /schedule/cycles/{old}/clone-to/{new} `[ADMIN]`
+
+### POST /schedule/slots `[ADMIN]`
+### PATCH /schedule/slots/{id} `[ADMIN]`
+
+Create a weekly slot, or move an existing one. Both are refused with `409`
+where the room is already held for part of that window:
+
+```json
+{
+  "detail": {
+    "message": "the resource is held for part of that window",
+    "conflicts": [
+      {
+        "date": "2026-03-04",
+        "start": "09:00:00",
+        "end": "10:00:00",
+        "activity_id": null,
+        "activity_code": null,
+        "master_slot_id": null,
+        "reservation_id": 41
+      }
+    ]
+  }
+}
+```
+
+The same body `POST /resources/{id}/reservations` sends when it refuses, so a
+clash reads the same way whichever end it came from. Two limits on what
+counts: only holds from today forward, because a slot lays down days from now
+onwards and never backwards, and nothing at all if the slot belongs to a
+closed cycle, because such a slot does not occupy the room and a booking is
+already accepted on top of one.
+
+A refused `PATCH` changes nothing. The room is resolved and the holds are
+checked before any day the slot has already produced is withdrawn.
 
 ---
 
@@ -626,6 +661,13 @@ disagreeing with the timetable on purpose, because they record what
 happened rather than what was planned. A member who already exists keeps
 their password, and somebody promoted to STAFF since the last import stays
 STAFF.
+
+A row that would put a class in a room already held for that window is
+refused with `422`, and the whole file is rolled back rather than the row
+skipped, which is what every other bad row in an import does. The message
+names the room and the hold it ran into. The check only looks where a row
+would actually move a class, so re-uploading a file that describes the
+timetable as it already stands is not refused by a hold sitting on it.
 
 Every member the file creates gets an individual random password, returned
 once in the response and never stored:
