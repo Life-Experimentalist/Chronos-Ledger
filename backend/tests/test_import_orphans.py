@@ -119,7 +119,16 @@ def test_another_unit_is_not_reported_as_missing(client, db, seed_users):
         client,
         db,
         _line(code="MA201", unit="CSE"),
-        _line(member="STU902", name="Cy Alderton", code="EC201", title="Circuits", unit="ECE"),
+        # Its own room: two units cannot hold one room at one hour, and the
+        # subject here is the report, not the clash.
+        _line(
+            member="STU902",
+            name="Cy Alderton",
+            code="EC201",
+            title="Circuits",
+            unit="ECE",
+            room="LH-301",
+        ),
     )
     body = _import(client, db, _line(code="MA201", unit="CSE"))
 

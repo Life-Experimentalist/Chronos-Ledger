@@ -523,7 +523,8 @@ Snapshot of all staff locations. Polled by the Member Locator panel.
 ### PATCH /schedule/slots/{id} `[ADMIN]`
 
 Create a weekly slot, or move an existing one. Both are refused with `409`
-where the room is already held for part of that window:
+where the room is already taken for part of that window, either by a booking
+or by another class already on the timetable:
 
 ```json
 {
@@ -552,14 +553,52 @@ onwards and never backwards, and nothing at all if the slot belongs to a
 closed cycle, because such a slot does not occupy the room and a booking is
 already accepted on top of one.
 
+A class already on the timetable is refused the same way, with a different
+message and the same shape:
+
+```json
+{
+  "detail": {
+    "message": "the resource is already on the timetable for part of that window",
+    "conflicts": [
+      {
+        "date": "2026-03-04",
+        "start": "09:00:00",
+        "end_date": "2026-03-04",
+        "end": "10:00:00",
+        "activity_id": 12,
+        "activity_code": "CS101",
+        "master_slot_id": 88,
+        "reservation_id": null
+      }
+    ]
+  }
+}
+```
+
+Which kind of thing an entry is can be read off the fields that are set: a
+class names the activity and leaves `reservation_id` null, a booking does the
+reverse. That is the same convention `GET /resources/{id}/availability` uses.
+
+A weekly slot has no date of its own, so the one reported is the next time
+the clash actually happens. It repeats every week until one of the two moves.
+
+Every open cycle counts, including a second one covering a different part of
+the year. The nightly generator lays every open cycle onto today whatever the
+cycles say their date bounds are, so all of them hold the room today, and a
+free-looking hour that the generator is going to fill would be worse than a
+refusal.
+
 A `PATCH` is only checked when it would actually move the class. Changing the
 lead on a slot, or anything else that leaves the room, weekday and window
-alone, is allowed even where a hold is sitting on that slot already: such a
-hold predates this rule or was written straight into the database, and
-refusing would leave the lead unfixable short of cancelling somebody else's
-booking.
+alone, is allowed even where a hold or another class is sitting on that slot
+already: such an overlap predates this rule or was written straight into the
+database, and refusing would leave the lead unfixable short of cancelling
+somebody else's booking. A slot is never counted against itself either, so
+widening a window from 09:00 to 11:00 is not refused by the 09:00 to 10:00 it
+replaces.
 
-A refused `PATCH` changes nothing. The room is resolved and the holds are
+A refused `PATCH` changes nothing. The room is resolved and the clashes are
 checked before any day the slot has already produced is withdrawn.
 
 ---
@@ -703,12 +742,14 @@ happened rather than what was planned. A member who already exists keeps
 their password, and somebody promoted to STAFF since the last import stays
 STAFF.
 
-A row that would put a class in a room already held for that window is
-refused with `422`, and the whole file is rolled back rather than the row
-skipped, which is what every other bad row in an import does. The message
-names the room and the hold it ran into. The check only looks where a row
-would actually move a class, so re-uploading a file that describes the
-timetable as it already stands is not refused by a hold sitting on it.
+A row that would put a class in a room already taken for that window, by a
+booking or by another class, is refused with `422`, and the whole file is
+rolled back rather than the row skipped, which is what every other bad row in
+an import does. The message names the room and what it ran into. Rows are
+checked against each other as well, so one file cannot put two classes in one
+room at one hour. The check only looks where a row would actually move a
+class, so re-uploading a file that describes the timetable as it already
+stands is not refused by what is sitting on it.
 
 Every member the file creates gets an individual random password, returned
 once in the response and never stored:

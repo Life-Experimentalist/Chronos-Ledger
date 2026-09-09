@@ -16,7 +16,7 @@ from app.models.db import (
     StructuralMasterSlot,
     User,
 )
-from app.services.availability import held_against_slot
+from app.services.availability import held_against_slot, slots_against_slot
 from app.services.master_slot import propagate_slot_corrections
 from app.services.resource import get_or_create_room
 
@@ -214,6 +214,28 @@ class ChronosIngestionEngine:
                             f"{room.code} is already held on {taken['date']} "
                             f"from {taken['start']} to {taken['end']}, "
                             "so the class cannot be put there"
+                        )
+                    # The same question against the timetable rather than
+                    # against the bookings. A file is the bulk version of the
+                    # mistake, and the one most likely to make it: two rows
+                    # naming one room at one hour read as two ordinary rows.
+                    # Slots added earlier in this same file count, because the
+                    # query flushes them before it runs.
+                    booked = slots_against_slot(
+                        self.db,
+                        room.id,
+                        int(row["day_of_week_index"]),
+                        t_start,
+                        t_end,
+                        slot.id if slot else None,
+                    )
+                    if booked:
+                        taken = booked[0]
+                        raise ValueError(
+                            f"activity '{row['activity_code']}': room "
+                            f"{room.code} is already on the timetable for "
+                            f"{taken['activity_code']} from {taken['start']} "
+                            f"to {taken['end']}, so the class cannot be put there"
                         )
                 if not slot:
                     slot = StructuralMasterSlot(

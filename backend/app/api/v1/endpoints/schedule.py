@@ -20,7 +20,7 @@ from app.schemas.schedule import (
     PlanningCycleResponse,
     StaffLocationResponse,
 )
-from app.services.availability import held_against_slot
+from app.services.availability import held_against_slot, slots_against_slot
 from app.services.location_resolver import determine_staff_current_state
 from app.services.master_slot import propagate_slot_corrections, rows_in_use
 from app.services.resource import get_or_create_room
@@ -28,6 +28,7 @@ from app.services.resource import get_or_create_room
 router = APIRouter()
 
 ROOM_IS_HELD = "the resource is held for part of that window"
+ROOM_IS_SCHEDULED = "the resource is already on the timetable for part of that window"
 
 
 def _refuse_if_held(db, cycle, resource_id, weekday, start, end) -> None:
@@ -54,6 +55,34 @@ def _refuse_if_held(db, cycle, resource_id, weekday, start, end) -> None:
         raise HTTPException(
             status_code=409,
             detail=jsonable_encoder({"message": ROOM_IS_HELD, "conflicts": conflicts}),
+        )
+
+
+def _refuse_if_scheduled(db, cycle, resource_id, weekday, start, end, exclude_slot_id=None) -> None:
+    """Refuse a slot that would be laid on top of another slot.
+
+    Chronos refused a booking that clashed with a class and a class that
+    clashed with a booking, and let one class be put straight on top of
+    another. A room could hold two timetables at once and nothing said so:
+    both slots generated a ledger row every week, both rows named the same
+    room, and the first anyone knew was two groups at one door.
+
+    Gated exactly as the hold check is, on the slot's own cycle being open,
+    so the two checks agree on which slots occupy a room. A slot in a closed
+    cycle does not occupy anything: booked_slots counts open cycles only.
+
+    Raised separately from the hold check rather than merged with it, so the
+    message and the contract of each stay what they were. A window that
+    clashes with both a booking and a class is refused twice, once for each,
+    which is the rarer case and costs a second attempt.
+    """
+    if cycle is None or not cycle.operational_status:
+        return
+    conflicts = slots_against_slot(db, resource_id, weekday, start, end, exclude_slot_id)
+    if conflicts:
+        raise HTTPException(
+            status_code=409,
+            detail=jsonable_encoder({"message": ROOM_IS_SCHEDULED, "conflicts": conflicts}),
         )
 
 
@@ -156,6 +185,14 @@ def create_master_slot(
         payload.time_window_start,
         payload.time_window_end,
     )
+    _refuse_if_scheduled(
+        db,
+        offering.cycle,
+        room.id,
+        payload.day_of_week_index,
+        payload.time_window_start,
+        payload.time_window_end,
+    )
     # room.code, not the payload: get_or_create_room strips the name, and a
     # slot whose mirror is spelled differently from its resource is exactly
     # the drift the resource table exists to end.
@@ -231,6 +268,7 @@ def update_master_slot(
         # short of cancelling somebody else's booking. The same guard the
         # CSV importer uses, for the same reason.
         _refuse_if_held(db, slot.activity.cycle, resource_id, weekday, start, end)
+        _refuse_if_scheduled(db, slot.activity.cycle, resource_id, weekday, start, end, slot.id)
 
     removed = 0
     if weekday != slot.day_of_week_index:

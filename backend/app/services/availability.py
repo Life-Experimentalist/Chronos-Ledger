@@ -176,6 +176,74 @@ def held_against_slot(
     return clashes
 
 
+def slots_against_slot(
+    db: Session,
+    resource_id: int,
+    weekday: int,
+    start: datetime.time,
+    end: datetime.time,
+    exclude_slot_id: int | None = None,
+) -> list[dict]:
+    """The weekly slots a slot at this window on this resource would sit on.
+
+    held_against_slot answers this for bookings. Nothing answered it for the
+    timetable itself, so two classes could be put in one room at one time and
+    the only sign of it was two rows in the ledger every day from then on.
+
+    Both sides are weekly repeats with no date, so the comparison is made on
+    a date picked to stand for every week: the next occurrence of the new
+    slot's weekday. The clash repeats until one of the two moves, and the
+    date returned is the first time it happens rather than a date the caller
+    asked about. Tomorrow is the earliest one considered, so an adjacent
+    weekday is never reported as yesterday.
+
+    The weekday either side is checked as well, for the same reason
+    held_against_slot checks the dates either side: once a window may run
+    past midnight, sharing a weekday and overlapping in time have come
+    apart. A Monday 22:00 to 06:00 class occupies Tuesday morning. Only one
+    of the three candidate dates falls on any given weekday, so a slot can
+    be named at most once.
+
+    exclude_slot_id keeps a slot being edited from finding itself. Widening
+    a window from 09:00 to 10:00 into 09:00 to 11:00 overlaps the window it
+    is replacing, and without this the slot would refuse its own change.
+
+    Which slots count is booked_slots' decision, not this function's, so
+    this and the availability endpoint cannot disagree about whether a room
+    is free. That means every open cycle counts, including a second one
+    covering a different part of the year: the generator lays both onto the
+    same date today, so both occupy the room today. Whether two cycles
+    should be open at once is a separate question and is not decided here.
+    """
+    probe = org_today() + datetime.timedelta(days=1)
+    while probe.isoweekday() != weekday:
+        probe += datetime.timedelta(days=1)
+    window = window_span(probe, start, end)
+
+    clashes = []
+    for slot in booked_slots(db, resource_id):
+        if slot.id == exclude_slot_id:
+            continue
+        for offset in (-1, 0, 1):
+            day = probe + datetime.timedelta(days=offset)
+            if day.isoweekday() != slot.day_of_week_index:
+                continue
+            _, ends = window_span(day, slot.time_window_start, slot.time_window_end)
+            entry = {
+                "date": day,
+                "start": slot.time_window_start,
+                "end_date": ends.date(),
+                "end": slot.time_window_end,
+                "activity_id": slot.activity_id,
+                "activity_code": slot.activity.activity_code if slot.activity else None,
+                "master_slot_id": slot.id,
+                "reservation_id": None,
+            }
+            if _overlaps(_bounds(entry), window):
+                clashes.append(entry)
+    return clashes
+
+
 def occupied(
     slots,
     reservations,

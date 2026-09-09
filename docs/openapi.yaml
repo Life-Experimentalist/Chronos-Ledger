@@ -1876,11 +1876,15 @@ paths:
         Admin only. A UNIT_ADMIN may only add slots inside their own unit.
 
 
-        Refused with 409 where the room is already held for part of that
-        window. Only holds from today forward count, because a slot lays
-        down days from now onwards and never backwards, and a slot in a
-        closed cycle is not checked at all, because such a slot does not
-        occupy the room and a booking is already accepted on top of one.
+        Refused with 409 where the room is already taken for part of that
+        window, whether by a booking or by another class. Only holds from
+        today forward count, because a slot lays down days from now onwards
+        and never backwards, and a slot in a closed cycle is neither checked
+        nor counted against, because such a slot does not occupy the room and
+        a booking is already accepted on top of one. Every open cycle counts,
+        including a second one covering a different part of the year: the
+        nightly generator lays every open cycle onto today, so all of them
+        hold the room today.
       requestBody:
         required: true
         content:
@@ -1903,9 +1907,13 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: >
-            The room is held for part of that window. The body is the one a
-            refused booking sends, so a clash reads the same way whichever
-            end it came from.
+            The room is taken for part of that window, either by a booking or
+            by another class already on the timetable. The message says which.
+            The body is the one a refused booking sends, so a clash reads the
+            same way whichever end it came from; a conflict caused by a class
+            names the activity and carries a null reservation_id, and one
+            caused by a booking does the reverse. Slots in a closed cycle
+            occupy nothing and are not counted.
           content:
             application/json:
               schema:
@@ -1930,10 +1938,12 @@ paths:
         the request is refused with 409 if any of them has been marked.
 
 
-        Also refused with 409 where the room it would move to is already held
-        for part of the window it would move to. A refusal changes nothing:
-        the room is resolved and the holds are checked before any day is
-        withdrawn or any field is written.
+        Also refused with 409 where the room it would move to is already
+        taken for part of the window it would move to, by a booking or by
+        another class. The slot's own window is not counted against it, so
+        widening one is not refused by the window it replaces. A refusal
+        changes nothing: the room is resolved and the clashes are checked
+        before any day is withdrawn or any field is written.
 
 
         A change that leaves the room, weekday and window alone is not
@@ -1967,8 +1977,10 @@ paths:
         "409":
           description: >
             Either a day the slot has already produced has been marked, and
-            the detail names those dates, or the room is held for part of the
-            window, and the body is the one a refused booking sends.
+            the detail names those dates, or the room is taken for part of the
+            window by a booking or by another class, and the body is the one a
+            refused booking sends. A change that does not move the class, a new
+            lead for instance, is not checked against either.
           content:
             application/json:
               schema:
@@ -2514,12 +2526,14 @@ paths:
         which is what makes a partial upload safe.
 
 
-        A row that would put a class in a room already held for that window
-        is refused with 422 and the whole file is rolled back, which is what
-        every other bad row in an import does. The check only looks where a
-        row would actually move a class, so re-uploading a file that
-        describes the timetable as it already stands is not refused by a hold
-        sitting on it.
+        A row that would put a class in a room already taken for that window,
+        by a booking or by another class, is refused with 422 and the whole
+        file is rolled back, which is what every other bad row in an import
+        does. Rows are checked against each other as well as against what is
+        already stored, so one file cannot put two classes in one room at one
+        hour. The check only looks where a row would actually move a class,
+        so re-uploading a file that describes the timetable as it already
+        stands is not refused by what is sitting on it.
 
         Each new member costs a bcrypt hash on the request thread, about
         half a second, so a file creating more than roughly 100 new
