@@ -11,14 +11,17 @@ booking is checked against is the set availability reports.
 
 import datetime
 
+from app.core.security import hash_password
 from app.models.db import (
     Activity,
+    InstitutionalRole,
     PlanningCycle,
     Reservation,
     ReservationStatus,
     Resource,
     ResourceType,
     StructuralMasterSlot,
+    User,
 )
 from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, login
 
@@ -27,6 +30,8 @@ from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, logi
 MONDAY = datetime.date(2026, 1, 5)
 TUESDAY = datetime.date(2026, 1, 6)
 SUNDAY = datetime.date(2026, 1, 11)
+
+UNIT_ADMIN_PASSWORD = "UnitAdminPass123!"
 
 
 def _room(db, code="LH-201", resource_type=ResourceType.ROOM, **extra):
@@ -462,3 +467,125 @@ def test_a_member_may_not_cancel(client, db, seed_users):
     member = login(client, "member@test.internal", MEMBER_PASSWORD)
     res = client.delete(f"/api/v1/resources/{room.id}/reservations/{held['id']}", headers=member)
     assert res.status_code == 403
+
+
+# -- Whose hold it is ---------------------------------------------------------
+
+
+def _unit_admin(db, client, id_="DAD001", email="unitadmin@test.internal"):
+    db.add(
+        User(
+            id=id_,
+            full_name="A Unit Admin",
+            email_address=email,
+            credential_secure_hash=hash_password(UNIT_ADMIN_PASSWORD),
+            role_type=InstitutionalRole.UNIT_ADMIN,
+            unit_code="CSE",
+            initial_login_state=False,
+        )
+    )
+    db.commit()
+    return login(client, email, UNIT_ADMIN_PASSWORD)
+
+
+def test_a_unit_admin_cancels_the_hold_it_took(client, db, seed_users):
+    room = _room(db)
+    headers = _unit_admin(db, client)
+
+    held = _book(client, headers, room.id).json()
+    res = client.delete(f"/api/v1/resources/{room.id}/reservations/{held['id']}", headers=headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "CANCELLED"
+
+
+def test_a_unit_admin_may_not_cancel_a_hold_it_did_not_take(client, db, seed_users):
+    """One integration must not be able to drop another integration's room.
+
+    Both hold rooms through the same route with the same role. Without this
+    the loser finds out its room is free when somebody else walks into it.
+    """
+    room = _room(db)
+    admin = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    held = _book(client, admin, room.id).json()
+
+    headers = _unit_admin(db, client)
+    res = client.delete(f"/api/v1/resources/{room.id}/reservations/{held['id']}", headers=headers)
+    assert res.status_code == 403
+    assert res.json()["detail"] == "only the caller that took a hold may cancel it"
+
+    # And the room is still held, which is the point of refusing.
+    assert len(_busy(client, admin, room.id)) == 1
+
+
+def test_an_admin_can_cancel_a_hold_it_did_not_take(client, db, seed_users):
+    """Somebody has to be able to clear a hold whose owner is gone."""
+    room = _room(db)
+    theirs = _unit_admin(db, client)
+    held = _book(client, theirs, room.id).json()
+
+    admin = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    res = client.delete(f"/api/v1/resources/{room.id}/reservations/{held['id']}", headers=admin)
+    assert res.status_code == 200
+    assert _busy(client, admin, room.id) == []
+
+
+# -- Through an API key -------------------------------------------------------
+
+
+def _issue_key(client, headers, **extra):
+    """A key bound to the seeded admin, which is how an integration arrives."""
+    payload = {"label": "PulseWard", "user_id": "ADM001", **extra}
+    res = client.post("/api/v1/api-keys/", json=payload, headers=headers)
+    assert res.status_code == 201, res.text
+    return {"X-API-Key": res.json()["api_key"]}
+
+
+def test_an_integration_books_with_a_key_and_no_password(client, db, seed_users):
+    """The path PulseWard actually uses, start to finish.
+
+    Every other test here signs in with a password. An integration never
+    does: it holds a scoped key, and the scope for this route is derived
+    from the method and the path rather than declared on the endpoint, so
+    nothing in the booking code says resources:write out loud. This is what
+    checks that it composes.
+    """
+    room = _room(db)
+    admin = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    key = _issue_key(client, admin, scopes=["resources:read", "resources:write"])
+
+    res = _book(client, key, room.id)
+    assert res.status_code == 201, res.text
+    # A key acts as the user it is bound to, so the hold is the admin's.
+    assert res.json()["requested_by_id"] == "ADM001"
+
+    # And the same key can read the calendar it just filled in.
+    assert len(_busy(client, key, room.id)) == 1
+
+
+def test_a_read_only_key_cannot_book(client, db, seed_users):
+    room = _room(db)
+    admin = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    key = _issue_key(client, admin, scopes=["resources:read"])
+
+    assert _book(client, key, room.id).status_code == 403
+    assert _busy(client, admin, room.id) == []
+
+
+def test_a_key_scoped_to_another_area_cannot_book(client, db, seed_users):
+    """schedule:write is not resources:write, however adjacent they sound."""
+    room = _room(db)
+    admin = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    key = _issue_key(client, admin, scopes=["schedule:write"])
+
+    assert _book(client, key, room.id).status_code == 403
+
+
+def test_an_integration_cancels_its_own_hold_with_its_key(client, db, seed_users):
+    room = _room(db)
+    admin = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    key = _issue_key(client, admin, scopes=["resources:read", "resources:write"])
+
+    held = _book(client, key, room.id).json()
+    res = client.delete(f"/api/v1/resources/{room.id}/reservations/{held['id']}", headers=key)
+    assert res.status_code == 200, res.text
+    assert _busy(client, admin, room.id) == []

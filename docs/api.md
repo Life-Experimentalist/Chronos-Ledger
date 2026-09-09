@@ -423,6 +423,14 @@ availability. Cancelling twice is not an error and returns the same timestamp,
 because the caller wanted the room free and the room is free. Cancelling
 through the wrong resource id is `404`.
 
+A hold is let go by whoever took it. A `UNIT_ADMIN` that did not make a
+reservation gets `403` with `"only the caller that took a hold may cancel it"`,
+which matters because more than one integration books through this route with
+the same role, and one dropping another's hold is how a room goes quietly free
+under a system that still believes it has it. A `SUPER_ADMIN` overrides: a hold
+taken by an account that has since been deleted has a null `requested_by_id`
+and nobody left to cancel it.
+
 ---
 
 ## Schedule

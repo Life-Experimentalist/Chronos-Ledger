@@ -34,6 +34,7 @@ RANGE_BACKWARDS = "from must not be after to"
 RANGE_TOO_LONG = f"the range must not exceed {MAX_RANGE_DAYS} days"
 ALREADY_TAKEN = "the resource is already taken for part of that window"
 KEY_REUSED = "that Idempotency-Key was used for a different request"
+NOT_YOUR_HOLD = "only the caller that took a hold may cancel it"
 
 
 @router.get("/", response_model=list[ResourceResponse])
@@ -284,7 +285,7 @@ def cancel_reservation(
     resource_id: int,
     reservation_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+    current_user=Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
 ):
     """Let a hold go. The row stays.
 
@@ -295,6 +296,12 @@ def cancel_reservation(
 
     Cancelling twice is not an error. The caller wanted the room free and the
     room is free.
+
+    A hold is let go by whoever took it. More than one system books through
+    here, and one integration dropping another's hold is how a room goes
+    quietly free under something that still believes it has it. A SUPER_ADMIN
+    is the exception, because a hold taken by an account that no longer
+    exists has nobody left to cancel it.
     """
     reservation = (
         db.query(Reservation)
@@ -303,6 +310,12 @@ def cancel_reservation(
     )
     if not reservation:
         raise HTTPException(status_code=404, detail="Reservation not found")
+
+    if (
+        current_user.role_type.value != "SUPER_ADMIN"
+        and reservation.requested_by_id != current_user.id
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=NOT_YOUR_HOLD)
 
     if reservation.status is not ReservationStatus.CANCELLED:
         reservation.status = ReservationStatus.CANCELLED

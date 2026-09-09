@@ -1760,6 +1760,12 @@ paths:
         The freed window is bookable again immediately and stops appearing in
         availability. Cancelling twice is not an error and returns the same
         timestamp. Cancelling through the wrong resource id is a 404.
+
+
+        A hold is let go by whoever took it. A `UNIT_ADMIN` that did not make
+        the reservation gets a 403; a `SUPER_ADMIN` overrides, because a hold
+        taken by an account that no longer exists has nobody left to cancel
+        it.
       parameters:
         - name: resource_id
           in: path
