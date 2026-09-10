@@ -16,7 +16,7 @@ Answers to the most common questions and error scenarios for Chronos Ledger.
 - [Notifications & Web Push](#notifications--web-push)
 - [WebSocket / Live Updates](#websocket--live-updates)
 - [Docker & Deployment](#docker--deployment)
-- [CI/CD & GHCR](#cicd--ghcr)
+- [CI/CD & container registries](#cicd--container-registries)
 - [New Cycle Rollover](#new-cycle-rollover)
 - [Data & Privacy](#data--privacy)
 
@@ -455,11 +455,25 @@ docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Chronos Ledger images are built with SBOM and provenance attestation, verify with:
+Chronos Ledger images are built with an SBOM and build provenance. Those ride
+inside the image index, so they are there whichever registry you pulled from:
 
 ```bash
 docker buildx imagetools inspect ghcr.io/Life-Experimentalist/chronos-ledger-backend:v1.2.0
+docker buildx imagetools inspect vkrishna04/chronos-ledger-backend:v1.2.0
 ```
+
+There is also a Sigstore-signed SLSA provenance attestation, which says which
+workflow run built the image and from which commit:
+
+```bash
+gh attestation verify oci://ghcr.io/Life-Experimentalist/chronos-ledger-backend:v1.2.0 \
+  --owner Life-Experimentalist
+```
+
+The Docker Hub copy verifies the same way (`oci://docker.io/vkrishna04/...`). `gh`
+resolves the digest from the registry and then asks GitHub for the attestation,
+so it does not matter that only the GHCR copy carries it as a registry referrer.
 
 ---
 
@@ -478,7 +492,7 @@ nothing to do about it except turn the check off.
 
 ---
 
-## CI/CD & GHCR
+## CI/CD & container registries
 
 ### CI fails with "Process completed with exit code 1" on the frontend build
 
@@ -508,6 +522,50 @@ permissions:
 ```
 
 If it still fails, check that the repository is in the `Life-Experimentalist` organization (not a personal fork). Personal forks cannot push to org packages.
+
+---
+
+### Nothing is appearing on Docker Hub
+
+Docker Hub publishing turns itself off when it is not configured, and says so in
+the run summary rather than failing the run. It needs both halves:
+
+- repository **variable** `DOCKERHUB_NAMESPACE`, the account the images live
+  under, which is what appears in `docker pull <namespace>/chronos-ledger-backend`
+- repository **secret** `DOCKERHUB_TOKEN`, a Docker Hub personal access token
+  with Read & Write scope. Not the account password.
+
+`DOCKERHUB_USERNAME` is optional. Without it the login uses the namespace, which
+is the same string for a personal account and differs only when pushing into an
+organization.
+
+```bash
+gh variable set DOCKERHUB_NAMESPACE --body "your-account"
+gh secret set DOCKERHUB_TOKEN        # paste the PAT when prompted
+```
+
+Set one and not the other and the run writes a notice saying so, then pushes to
+GHCR only. Docker Hub creates both repositories on the first push with whatever
+default visibility the account has, so check they came out public if that is what
+you wanted.
+
+---
+
+### `gh attestation verify` says no attestations were found
+
+Three things it could be:
+
+1. The image predates the signed attestations, which start from the first build
+   after they were added. The SBOM and provenance that buildkit attaches are
+   older and are read with `docker buildx imagetools inspect` instead.
+2. `--owner` is wrong. It is the GitHub account that owns the *repository*, not
+   the Docker Hub namespace, so it stays `Life-Experimentalist` even when
+   verifying a `docker.io/` image.
+3. The workflow could not mint one. `attest-build-provenance` needs both
+   `id-token: write` and `attestations: write`, and a called workflow's token
+   is capped by the job that calls it, so all four of `cd.yml`, `release.yml`
+   and the two calling jobs in `ci.yml` declare them. Drop one and the step
+   fails loudly.
 
 ---
 

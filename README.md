@@ -10,7 +10,7 @@
 
 
   [![CI](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml)  [![License](https://img.shields.io/badge/License-Apache_2.0-14b8a6.svg)](LICENSE)
-  [![Docker: Backend](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-backend/size?label=backend)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-backend)  [![Docker: Web](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-web/size?label=web)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-web)
+  [![Docker: Backend](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-backend/size?label=backend)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-backend)  [![Docker: Web](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-web/size?label=web)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-web)  [![Docker Hub](https://img.shields.io/docker/pulls/vkrishna04/chronos-ledger-backend?label=docker%20hub&color=2496ed)](https://hub.docker.com/r/vkrishna04/chronos-ledger-backend)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-10b981.svg)](https://github.com/Life-Experimentalist/chronos-ledger/pulls)  [![Views](https://counter.vkrishna04.me/api/views/chronos-ledger-landing/badge)](https://github.com/Life-Experimentalist/chronos-ledger)
 
 </div>
@@ -56,7 +56,7 @@ chmod +x setup.sh && ./setup.sh
 
 Want to demo it to someone? `./setup.sh --build --demo` boots it with sample data; [docs/demo.md](docs/demo.md) has the five-minute walkthrough.
 
-### Or pull from GHCR (no build required)
+### Or pull a published image (no build required)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Life-Experimentalist/chronos-ledger/main/docker-compose.prod.yml \
@@ -70,6 +70,15 @@ docker compose -f docker-compose.prod.yml up -d
 ```
 
 Pin any release: `VERSION=v1.2.0 docker compose -f docker-compose.prod.yml up -d`
+
+The compose file pulls from GHCR, which does not rate-limit anonymous pulls of a
+public image. The same two images go to Docker Hub as well, for anyone who would
+rather not type a registry prefix:
+
+```bash
+docker pull vkrishna04/chronos-ledger-backend
+docker pull vkrishna04/chronos-ledger-web
+```
 
 ---
 
@@ -149,7 +158,7 @@ Drop a member-centric CSV on the Admin dashboard. One upload creates/updates use
 | Reverse proxy  | Nginx 1.27                                                          |
 | Packaging      | uv (Python) · npm (Node.js)                                         |
 | Container      | Docker 24 · Docker Compose 2.20                                     |
-| CI/CD          | GitHub Actions · GHCR                                               |
+| CI/CD          | GitHub Actions · GHCR · Docker Hub                                  |
 | Releases       | Release Please (semver, CHANGELOG)                                  |
 
 ---
@@ -161,7 +170,7 @@ chronos-ledger/
 ├── .github/
 │   ├── workflows/
 │   │   ├── ci.yml          # Lint, tests, type-check, build, Trivy, publish, release
-│   │   ├── cd.yml          # Build & push to GHCR (main + releases)
+│   │   ├── cd.yml          # Build & push to GHCR + Docker Hub (main + releases)
 │   │   └── release.yml     # Release Please semver releases (called by ci.yml)
 │   └── dependabot.yml      # Automated dep updates (pip, npm, Docker, Actions)
 ├── assets/
@@ -248,7 +257,7 @@ Pull Request ──▶ ci.yml ──▶ ruff format + ruff check
 
 Push to main ──▶ ci.yml (all of the above)
                        ├──▶ every gate green ──▶ cd.yml
-                       │                         └──▶ Push to GHCR
+                       │                         └──▶ Push to GHCR + Docker Hub
                        │                               (sha tag + latest)
                        └──▶ every gate green ──▶ release.yml
                                                  └──▶ Release Please opens
@@ -257,12 +266,31 @@ Push to main ──▶ ci.yml (all of the above)
 Merge release PR ──▶ ci.yml ──▶ release.yml ──▶ GitHub Release created
                                             ├──▶ CHANGELOG.md updated
                                             ├──▶ version.txt bumped
-                                            └──▶ cd.yml (version tag) ──▶ GHCR vX.Y.Z
+                                            └──▶ cd.yml (version tag) ──▶ GHCR + Docker Hub, vX.Y.Z
 ```
 
-GHCR images:
-- `ghcr.io/Life-Experimentalist/chronos-ledger-backend:latest`
-- `ghcr.io/Life-Experimentalist/chronos-ledger-web:latest`
+Published images, one build pushed to both:
+
+| Registry | Backend | Web |
+| -------- | ------- | --- |
+| GHCR (canonical, what `docker-compose.prod.yml` pulls) | `ghcr.io/Life-Experimentalist/chronos-ledger-backend` | `ghcr.io/Life-Experimentalist/chronos-ledger-web` |
+| Docker Hub | `vkrishna04/chronos-ledger-backend` | `vkrishna04/chronos-ledger-web` |
+
+Both carry the same tags: `latest`, `main`, a short commit sha, and `vX.Y.Z` on a
+release. GHCR is the one the compose file points at because it does not
+rate-limit anonymous pulls of a public image; Docker Hub does. A fork that sets
+neither `DOCKERHUB_NAMESPACE` nor `DOCKERHUB_TOKEN` publishes to GHCR alone.
+
+Every image carries an SBOM and build provenance, plus a Sigstore-signed SLSA
+attestation naming the workflow and commit it was built from:
+
+```bash
+gh attestation verify oci://ghcr.io/Life-Experimentalist/chronos-ledger-backend:latest \
+  --owner Life-Experimentalist
+```
+
+[docs/faq.md](docs/faq.md#cicd--container-registries) has the Docker Hub form and
+the buildkit attestations that ride along inside the image itself.
 
 ---
 

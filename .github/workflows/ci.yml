@@ -190,7 +190,7 @@ jobs:
 
   # ── Publish: only reachable once every gate above is green ────────────────
   publish:
-    name: Publish images to GHCR
+    name: Publish images to GHCR and Docker Hub
     # This is the CI gate the registry never had. The build workflow used to
     # carry its own push-to-main trigger, so it raced this one and a commit
     # that failed its tests still shipped :latest to a public registry.
@@ -199,7 +199,12 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
     uses: ./.github/workflows/cd.yml
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   # ── Release: the same gate, for the release PR and its images ─────────────
   release:
@@ -214,6 +219,10 @@ jobs:
       contents: write
       pull-requests: write
       packages: write
+      id-token: write
+      attestations: write
     uses: ./.github/workflows/release.yml
     secrets:
       RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}

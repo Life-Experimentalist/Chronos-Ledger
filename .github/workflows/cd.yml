@@ -1,4 +1,4 @@
-name: CD (Build & Push to GHCR)
+name: CD (Build & Push to Registries)
 
 # Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
 #
@@ -6,6 +6,14 @@ name: CD (Build & Push to GHCR)
 # release workflow with an explicit version tag. It has no trigger of its own
 # on purpose: a workflow that publishes to a public registry should never be
 # reachable by a push that nothing has checked.
+#
+# Two registries, one build. GHCR is the canonical one: it needs no account
+# beyond the repository's own token, and it does not rate-limit anonymous pulls
+# of a public image, which is why both compose files point at it. Docker Hub is
+# the front door, because `docker pull <namespace>/chronos-ledger-backend` with
+# no registry prefix is what someone reaches for first. A fork with neither
+# DOCKERHUB_NAMESPACE nor DOCKERHUB_TOKEN set still builds and still pushes to
+# GHCR; the Docker Hub half turns itself off.
 
 on:
   workflow_call:
@@ -15,9 +23,25 @@ on:
         type: string
         required: false
         default: latest
+    secrets:
+      DOCKERHUB_USERNAME:
+        description: >-
+          Optional. The account `docker login` authenticates as. Falls back to
+          the DOCKERHUB_NAMESPACE variable, which is the same string for a
+          personal account and differs only when pushing into an organization.
+        required: false
+      DOCKERHUB_TOKEN:
+        description: >-
+          Optional. A Docker Hub personal access token with Read & Write scope,
+          not the account password. Without it Docker Hub is skipped and GHCR
+          still receives everything. Declared here because a called workflow
+          cannot read a repository secret the caller did not pass it.
+        required: false
 
 env:
   REGISTRY: ghcr.io
+  # The GHCR names are fixed by the repository owner. The Docker Hub names
+  # depend on a secret, so they are resolved in a step rather than here.
   BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/chronos-ledger-backend
   WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/chronos-ledger-web
 
@@ -28,9 +52,45 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # attest-build-provenance mints a short-lived Sigstore certificate from
+      # the OIDC token and files the attestation against this repository, so it
+      # needs these two on top of the push scope. A job that declares any
+      # permissions gets none of the ones it leaves out, and a called workflow
+      # is capped by its caller, so this same set appears at every call site.
+      id-token: write
+      attestations: write
 
     steps:
       - uses: actions/checkout@v6
+
+      # ── Docker Hub, when this deployment has an account ────────────────────
+      # The variable names the namespace, the secret proves the namespace is
+      # ours. One without the other is a typo rather than a decision, so it
+      # says so out loud: a silent skip on an otherwise green run is how a
+      # missed secret stays missed for a month.
+      - name: Resolve Docker Hub targets
+        id: hub
+        env:
+          NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+          TOKEN_SET: ${{ secrets.DOCKERHUB_TOKEN != '' }}
+        run: |
+          if [ -n "$NAMESPACE" ] && [ "$TOKEN_SET" = "true" ]; then
+            {
+              echo "enabled=true"
+              echo "backend=docker.io/$NAMESPACE/chronos-ledger-backend"
+              echo "web=docker.io/$NAMESPACE/chronos-ledger-web"
+            } >> "$GITHUB_OUTPUT"
+            echo "::notice::Docker Hub publishing is on, namespace $NAMESPACE"
+          else
+            {
+              echo "enabled=false"
+              echo "backend=docker.io/unset/chronos-ledger-backend"
+              echo "web=docker.io/unset/chronos-ledger-web"
+            } >> "$GITHUB_OUTPUT"
+            if [ -n "$NAMESPACE" ] || [ "$TOKEN_SET" = "true" ]; then
+              echo "::notice::Docker Hub is half configured. DOCKERHUB_NAMESPACE and DOCKERHUB_TOKEN must both be set. Pushing to GHCR only."
+            fi
+          fi
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -39,6 +99,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Log in to Docker Hub
+        if: steps.hub.outputs.enabled == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME || vars.DOCKERHUB_NAMESPACE }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - uses: docker/setup-buildx-action@v3
 
       # ── Backend image ──────────────────────────────────────────────────────
@@ -46,7 +114,9 @@ jobs:
         id: meta-backend
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.BACKEND_IMAGE }}
+          images: |
+            ${{ env.BACKEND_IMAGE }}
+            name=${{ steps.hub.outputs.backend }},enable=${{ steps.hub.outputs.enabled }}
           tags: |
             type=sha,prefix=sha-,format=short
             type=raw,value=${{ inputs.version || 'latest' }}
@@ -57,6 +127,7 @@ jobs:
             org.opencontainers.image.licenses=Apache-2.0
 
       - name: Build & push backend
+        id: backend
         uses: docker/build-push-action@v6
         with:
           context: ./backend
@@ -65,15 +136,40 @@ jobs:
           labels: ${{ steps.meta-backend.outputs.labels }}
           cache-from: type=gha,scope=backend
           cache-to: type=gha,scope=backend,mode=max
-          provenance: true
+          # mode=max records the build arguments and the source revision, not
+          # just the materials. The arguments here are the public NEXT_PUBLIC_*
+          # values, so there is nothing to keep out of it.
+          provenance: mode=max
           sbom: true
+
+      # Two attestations, one build. The image is the same object in both
+      # registries, so one digest covers both. It is pushed as a referrer
+      # alongside the GHCR image and only filed with GitHub for Docker Hub:
+      # the referrers API is what carries an attestation next to an image, and
+      # not every registry answers it. `gh attestation verify` finds it either
+      # way, because it asks GitHub rather than the registry.
+      - name: Attest backend provenance, GHCR
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ env.BACKEND_IMAGE }}
+          subject-digest: ${{ steps.backend.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest backend provenance, Docker Hub
+        if: steps.hub.outputs.enabled == 'true'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ steps.hub.outputs.backend }}
+          subject-digest: ${{ steps.backend.outputs.digest }}
 
       # ── Web image (nginx + pre-built Next.js static files) ────────────────
       - name: Extract metadata, web
         id: meta-web
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.WEB_IMAGE }}
+          images: |
+            ${{ env.WEB_IMAGE }}
+            name=${{ steps.hub.outputs.web }},enable=${{ steps.hub.outputs.enabled }}
           tags: |
             type=sha,prefix=sha-,format=short
             type=raw,value=${{ inputs.version || 'latest' }}
@@ -84,6 +180,7 @@ jobs:
             org.opencontainers.image.licenses=Apache-2.0
 
       - name: Build & push web
+        id: web
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -93,9 +190,24 @@ jobs:
           labels: ${{ steps.meta-web.outputs.labels }}
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max
-          provenance: true
+          provenance: mode=max
           sbom: true
           build-args: |
             NEXT_PUBLIC_API_URL=/api/v1
             NEXT_PUBLIC_WS_URL=/ws
             NEXT_PUBLIC_VAPID_PUBLIC_KEY=
+
+      # Same two attestations as the backend, same reasoning.
+      - name: Attest web provenance, GHCR
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ env.WEB_IMAGE }}
+          subject-digest: ${{ steps.web.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest web provenance, Docker Hub
+        if: steps.hub.outputs.enabled == 'true'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ steps.hub.outputs.web }}
+          subject-digest: ${{ steps.web.outputs.digest }}

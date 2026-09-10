@@ -150,7 +150,7 @@ Releases are fully automated. Merging the Release Please PR, once every CI gate 
 
 1. Creates a GitHub Release tagged `vX.Y.Z`
 2. Updates `CHANGELOG.md` and `version.txt`
-3. Triggers CD to build and push `chronos-ledger-backend:vX.Y.Z` and `chronos-ledger-web:vX.Y.Z` to GHCR
+3. Triggers CD to build and push `chronos-ledger-backend:vX.Y.Z` and `chronos-ledger-web:vX.Y.Z` to GHCR, and to Docker Hub when that half is configured
 4. Attaches a versioned `docker-compose.prod.yml` to the release
 
 You do not need to manually tag, push, or bump versions.

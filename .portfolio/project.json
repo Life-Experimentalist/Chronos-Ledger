@@ -25,7 +25,7 @@
 		"Runs wholly on the organization intranet, no cloud subscription and no data leaving the network.",
 		"Stays usable when the organization network drops: reads continue and writes are queued rather than lost.",
 		"Deploys with Docker and Docker Compose as the only runtime dependencies, via a setup script that detects the LAN IP and generates its own secrets.",
-		"Publishes container images to GHCR with SLSA build provenance and SBOM attestations, so a deployment can pin a release instead of building from source."
+		"Publishes container images to GHCR and Docker Hub with SLSA build provenance and SBOM attestations, so a deployment can pin a release instead of building from source."
 	],
 	"metrics": [
 		{
