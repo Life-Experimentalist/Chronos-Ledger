@@ -191,9 +191,21 @@ def get_current_user(
     return user
 
 
+def in_unit_scope(current_user, unit_code) -> bool:
+    """Whether this user may act on something belonging to that unit.
+
+    The same rule ensure_unit_scope enforces, as an answer rather than a
+    refusal, for a caller that has to fold it into a larger decision and
+    should not have to catch an exception of its own making to do it.
+    """
+    return not (
+        current_user.role_type.value == "UNIT_ADMIN" and unit_code != current_user.unit_code
+    )
+
+
 def ensure_unit_scope(current_user, unit_code) -> None:
     """A UNIT_ADMIN may only act inside their own unit; other roles pass."""
-    if current_user.role_type.value == "UNIT_ADMIN" and unit_code != current_user.unit_code:
+    if not in_unit_scope(current_user, unit_code):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Outside your unit",

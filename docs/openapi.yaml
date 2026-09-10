@@ -1094,9 +1094,16 @@ components:
           type: integer
         classification_tag:
           type: string
+          minLength: 1
+          maxLength: 30
+          description: >
+            Free text, not a fixed vocabulary. Bounded because the column is
+            a VARCHAR(30).
           example: LATE_START
         annotation_payload:
           type: string
+          minLength: 1
+          maxLength: 4000
           example: Class started 10 minutes late due to lab setup.
 
     AnnotationResponse:
@@ -2451,7 +2458,12 @@ paths:
   /attendance/ledger/{ledger_id}:
     get:
       tags: [Attendance]
-      summary: Get all attendance records for a ledger entry
+      summary: Get the roster for a ledger entry
+      description: >
+        Whoever runs the session gets every row: the assigned lead, the
+        substitute, a super admin, or a unit admin inside that unit. A member
+        gets their own row and nothing else. Anyone else is refused rather
+        than handed an empty list.
       parameters:
         - name: ledger_id
           in: path
@@ -2467,6 +2479,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/AttendanceResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -2542,7 +2556,10 @@ paths:
     post:
       tags: [Attendance]
       summary: Create a ledger annotation
-      description: Staff/Admin only. Attach freeform notes (e.g. lab issues, late starts).
+      description: >
+        Freeform notes about a session: lab issues, late starts, a handover.
+        Restricted to whoever runs it, meaning the assigned lead, the
+        substitute, a super admin, or a unit admin inside that unit.
       requestBody:
         required: true
         content:
@@ -2550,17 +2567,25 @@ paths:
             schema:
               $ref: "#/components/schemas/AnnotationCreate"
       responses:
-        "201":
+        "200":
           description: Annotation created.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/AnnotationResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /attendance/annotations/{ledger_id}:
     get:
       tags: [Attendance]
       summary: Get all annotations for a ledger entry
+      description: >
+        The same gate as writing one. Unlike the roster there is no
+        per-member fallback, because a note is about the session rather than
+        about one person in it.
       parameters:
         - name: ledger_id
           in: path
@@ -2576,6 +2601,10 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/AnnotationResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   # ── Guest Gate ────────────────────────────
   /guest/register-checkin:

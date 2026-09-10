@@ -780,7 +780,14 @@ Members may only mark themselves; staff/admins can mark any member.
 
 ### GET /attendance/ledger/{ledger_id}
 
-All attendance records for a session.
+The roster for one session. Whoever runs it gets every row: the assigned lead,
+the substitute, a super admin, or a unit admin inside that unit. A member gets
+their own row and nothing else. Anyone else gets `403` rather than an empty
+list, because an empty list reads as "nobody came". A session id that matches
+nothing gets `404`.
+
+An API key carries the role of the account it was issued to, so an integration
+that needs whole rosters wants a key issued on an admin account.
 
 ### POST /attendance/absence `[STAFF]`
 
@@ -804,10 +811,18 @@ Returns absence requests pending your approval.
 { "decision": "VERIFIED_DENIED" }
 ```
 
-### POST /attendance/annotations `[STAFF, ADMIN]`
-### GET /attendance/annotations/{ledger_id}
+### POST /attendance/annotations `[LEAD, ADMIN]`
+### GET /attendance/annotations/{ledger_id} `[LEAD, ADMIN]`
 
-Attach freeform notes to a session (lab issues, late starts, etc.).
+Freeform notes about a session: lab issues, late starts, a handover. Both
+directions are restricted to whoever runs the session, on the same rule as the
+roster above, and unlike the roster there is no per-member fallback, because a
+note is about the session rather than about one person in it. A session id that
+matches nothing gets `404`.
+
+`classification_tag` is free text of up to 30 characters. There is no fixed
+vocabulary for it, so pick one and use it consistently.
+`annotation_payload` is capped at 4000 characters.
 
 ```json
 { "ledger_instance_id": 1042, "classification_tag": "LATE_START", "annotation_payload": "Lab setup delayed." }
