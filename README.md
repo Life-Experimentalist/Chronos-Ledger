@@ -9,7 +9,7 @@
   **Organization Schedule & Attendance Management, self-hosted, offline-first, production-ready.**
 
 
-  [![CI](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml)  [![Release](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/release.yml/badge.svg)](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/release.yml)  [![License](https://img.shields.io/badge/License-Apache_2.0-14b8a6.svg)](LICENSE)
+  [![CI](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml)  [![License](https://img.shields.io/badge/License-Apache_2.0-14b8a6.svg)](LICENSE)
   [![Docker: Backend](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-backend/size?label=backend)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-backend)  [![Docker: Web](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-web/size?label=web)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-web)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-10b981.svg)](https://github.com/Life-Experimentalist/chronos-ledger/pulls)  [![Views](https://counter.vkrishna04.me/api/views/chronos-ledger-landing/badge)](https://github.com/Life-Experimentalist/chronos-ledger)
 
@@ -160,9 +160,9 @@ Drop a member-centric CSV on the Admin dashboard. One upload creates/updates use
 chronos-ledger/
 ├── .github/
 │   ├── workflows/
-│   │   ├── ci.yml          # Lint, tests, type-check, build, Trivy, publish
+│   │   ├── ci.yml          # Lint, tests, type-check, build, Trivy, publish, release
 │   │   ├── cd.yml          # Build & push to GHCR (main + releases)
-│   │   └── release.yml     # Release Please automated semver releases
+│   │   └── release.yml     # Release Please semver releases (called by ci.yml)
 │   └── dependabot.yml      # Automated dep updates (pip, npm, Docker, Actions)
 ├── assets/
 │   ├── logo.svg            # Vector wordmark
@@ -247,14 +247,17 @@ Pull Request ──▶ ci.yml ──▶ ruff format + ruff check
                        └──▶ Docker build check (no push)
 
 Push to main ──▶ ci.yml (all of the above)
-                       └──▶ every gate green ──▶ cd.yml
-                                                 └──▶ Push to GHCR
-                                                       (sha tag + latest)
+                       ├──▶ every gate green ──▶ cd.yml
+                       │                         └──▶ Push to GHCR
+                       │                               (sha tag + latest)
+                       └──▶ every gate green ──▶ release.yml
+                                                 └──▶ Release Please opens
+                                                      or updates a release PR
 
-Merge release PR ──▶ release.yml ──▶ GitHub Release created
-                                 ├──▶ CHANGELOG.md updated
-                                 ├──▶ version.txt bumped
-                                 └──▶ cd.yml (version tag) ──▶ GHCR vX.Y.Z
+Merge release PR ──▶ ci.yml ──▶ release.yml ──▶ GitHub Release created
+                                            ├──▶ CHANGELOG.md updated
+                                            ├──▶ version.txt bumped
+                                            └──▶ cd.yml (version tag) ──▶ GHCR vX.Y.Z
 ```
 
 GHCR images:

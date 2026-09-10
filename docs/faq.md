@@ -514,11 +514,12 @@ If it still fails, check that the repository is in the `Life-Experimentalist` or
 ### Release Please is not creating a release PR
 
 Likely causes:
-1. Commits are not following [Conventional Commits](https://www.conventionalcommits.org/), only `feat:`, `fix:`, `perf:`, and `security:` prefixes create release PRs.
-2. `release-please-config.json` or `.release-please-manifest.json` is missing or malformed.
-3. The `GITHUB_TOKEN` permissions do not include `pull-requests: write`.
+1. CI failed on `main`. Release Please runs from `ci.yml` once every gate has passed, so a red `main` leaves the release PR where it is until the failure is fixed.
+2. Commits are not following [Conventional Commits](https://www.conventionalcommits.org/), only `feat:`, `fix:`, `perf:`, and `security:` prefixes create release PRs.
+3. `release-please-config.json` or `.release-please-manifest.json` is missing or malformed.
+4. The `GITHUB_TOKEN` permissions do not include `pull-requests: write`.
 
-Check `release.yml`, it declares `permissions: { contents: write, pull-requests: write, packages: write }`.
+Permissions are granted by the `release` job in `ci.yml`: a called workflow's token is capped by the calling job, so that is the one place to change them. Inside `release.yml` the `release-please` job declares `contents: write` and `pull-requests: write`.
 
 ---
 

@@ -146,7 +146,7 @@ All endpoint changes must be reflected in `docs/openapi.yaml`. The OpenAPI contr
 
 ## Releasing
 
-Releases are fully automated. Merging the Release Please PR:
+Releases are fully automated. Merging the Release Please PR, once every CI gate on `main` has passed:
 
 1. Creates a GitHub Release tagged `vX.Y.Z`
 2. Updates `CHANGELOG.md` and `version.txt`
