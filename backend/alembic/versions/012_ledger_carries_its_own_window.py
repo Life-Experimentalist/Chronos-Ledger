@@ -41,6 +41,7 @@ still have a slot lose nothing, since the slot still holds the same times.
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "012"

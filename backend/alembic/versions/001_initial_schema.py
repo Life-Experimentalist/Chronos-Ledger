@@ -316,9 +316,9 @@ def upgrade() -> None:
     # INITIAL_ADMIN_PASSWORD, which app/core/bootstrap.py applies while
     # initial_login_state is still true. Migration 014 rotates the databases
     # that were seeded before this changed.
-    hashed = bcrypt.hashpw(
-        secrets.token_urlsafe(32).encode("utf-8"), bcrypt.gensalt()
-    ).decode("utf-8")
+    hashed = bcrypt.hashpw(secrets.token_urlsafe(32).encode("utf-8"), bcrypt.gensalt()).decode(
+        "utf-8"
+    )
     op.execute(
         text(
             "INSERT INTO users (id, full_name, email_address, credential_secure_hash, role_type, initial_login_state) "
