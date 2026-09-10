@@ -53,7 +53,7 @@ jobs:
       upload_url: ${{ steps.rp.outputs.upload_url }}
 
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v5
         id: rp
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
