@@ -3,7 +3,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -19,6 +19,26 @@ engine = create_engine(
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
+
+
+# The driver opens and closes transactions on its own schedule, and one of the
+# things it does is turn the RELEASE at the end of a SAVEPOINT into a commit.
+# Code that inserts a row inside begin_nested() and expects the row to vanish
+# when the outer transaction rolls back gets the row anyway, so a test would
+# pass here and the same code would behave differently against Postgres.
+#
+# Taking the driver out of the business of starting transactions and starting
+# them here instead is the workaround SQLAlchemy documents for this driver.
+@event.listens_for(engine, "connect")
+def _driver_does_not_begin(dbapi_connection, connection_record):
+    dbapi_connection.isolation_level = None
+
+
+@event.listens_for(engine, "begin")
+def _we_begin(conn):
+    conn.exec_driver_sql("BEGIN")
+
+
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 ADMIN_PASSWORD = "AdminPass123!"

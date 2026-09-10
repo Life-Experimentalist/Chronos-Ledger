@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.time import org_today, window_span
 from app.models.db import (
     Activity,
+    DailyLedger,
     PlanningCycle,
     Reservation,
     ReservationStatus,
@@ -240,6 +241,129 @@ def slots_against_slot(
                 "reservation_id": None,
             }
             if _overlaps(_bounds(entry), window):
+                clashes.append(entry)
+    return clashes
+
+
+def _day_interval(day: DailyLedger) -> dict:
+    """One generated day, in the shape every busy interval takes.
+
+    The same keys a slot produces, because a generated day is what a slot
+    turns into and a caller reading a conflict should not have to learn a
+    second shape to find out a room is taken. master_slot_id is the slot it
+    came from, or nothing if that slot has since been deleted or the day was
+    never produced by one.
+    """
+    _, ends = window_span(day.target_date, day.time_window_start, day.time_window_end)
+    activity = day.activity
+    return {
+        "date": day.target_date,
+        "start": day.time_window_start,
+        "end_date": ends.date(),
+        "end": day.time_window_end,
+        "activity_id": day.activity_id,
+        "activity_code": activity.activity_code if activity else None,
+        "master_slot_id": day.master_slot_id,
+        "reservation_id": None,
+    }
+
+
+def _dated_days(db: Session, resource_id: int, since: datetime.date):
+    """Generated days on a resource from a date onwards, windows only.
+
+    A day with no window is an ad-hoc entry that never claimed an hour, and a
+    day with no resource is not on this room. Neither occupies anything, and
+    both are dropped here rather than in each caller, because the database
+    constraint drops exactly the same rows and the two must not disagree.
+    """
+    return (
+        db.query(DailyLedger)
+        .filter(
+            DailyLedger.resource_id == resource_id,
+            DailyLedger.target_date >= since,
+            DailyLedger.time_window_start.isnot(None),
+            DailyLedger.time_window_end.isnot(None),
+        )
+        .order_by(DailyLedger.target_date, DailyLedger.time_window_start)
+        .all()
+    )
+
+
+def days_against_window(
+    db: Session,
+    resource_id: int,
+    day: datetime.date,
+    start: datetime.time,
+    end: datetime.time,
+    exclude_slot_id: int | None = None,
+) -> list[dict]:
+    """The generated days a window opened on this date would sit on.
+
+    One date, not a weekday, because the caller is the nightly generator and
+    it is writing one dated row. The day either side is fetched as well: a day
+    dated yesterday running 22:00 to 06:00 occupies this morning, and a day
+    dated tomorrow starting at five is occupied by a window opened tonight.
+    """
+    window = window_span(day, start, end)
+    clashes = []
+    for row in _dated_days(db, resource_id, day - datetime.timedelta(days=1)):
+        if row.target_date > day + datetime.timedelta(days=1):
+            continue
+        if exclude_slot_id is not None and row.master_slot_id == exclude_slot_id:
+            continue
+        entry = _day_interval(row)
+        if _overlaps(_bounds(entry), window):
+            clashes.append(entry)
+    return clashes
+
+
+def days_against_slot(
+    db: Session,
+    resource_id: int,
+    weekday: int,
+    start: datetime.time,
+    end: datetime.time,
+    exclude_slot_id: int | None = None,
+) -> list[dict]:
+    """The generated days a weekly slot at this window would sit on.
+
+    slots_against_slot asks this of the timetable and held_against_slot asks
+    it of the bookings. Neither sees the rows that actually put somebody at a
+    door, and two of them can be on one room at one time without either of
+    those checks noticing.
+
+    A slot in a closed cycle occupies nothing as far as those two are
+    concerned, and that is deliberate: booked_slots counts open cycles only,
+    so a booking may be accepted on top of a closed cycle's slot. The days it
+    already produced are a different matter. They are still in the table, they
+    still name a room and an hour, and the database will refuse a second row
+    on top of them whatever their cycle says. So there is no cycle gate here,
+    on either side.
+
+    Every future day of the resource is scanned rather than one probe date,
+    because a correction is copied onto every day this slot has still to run
+    and the clash can be on any of them. The three date offsets are the same
+    ones held_against_slot uses and for the same reason: sharing a weekday and
+    overlapping in time came apart the moment a window could pass midnight.
+    Only one of three consecutive dates falls on a given weekday, so a day is
+    named at most once.
+
+    This is stricter than the availability endpoint, which reads slots and
+    bookings and never the ledger. The gap between them is exactly the days no
+    slot speaks for any more: a closed cycle's leftovers, and the days of a
+    deleted slot that had attendance on them. Those read as free there and are
+    refused here, and being refused is the correct half of that.
+    """
+    clashes = []
+    for row in _dated_days(db, resource_id, org_today()):
+        if exclude_slot_id is not None and row.master_slot_id == exclude_slot_id:
+            continue
+        for offset in (-1, 0, 1):
+            slot_date = row.target_date + datetime.timedelta(days=offset)
+            if slot_date.isoweekday() != weekday:
+                continue
+            entry = _day_interval(row)
+            if _overlaps(_bounds(entry), window_span(slot_date, start, end)):
                 clashes.append(entry)
     return clashes
 

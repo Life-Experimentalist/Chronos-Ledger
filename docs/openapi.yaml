@@ -521,6 +521,14 @@ components:
         then the date can fall before the range that returned the
         interval: a booking dated Monday from 22:00 to 06:00 is on
         Tuesday's calendar.
+
+
+        A generated day is a third kind and reads as a slot: it carries the
+        activity fields and a null reservation_id, and its master_slot_id is
+        the slot it came from, or null if that slot has since been deleted.
+        Telling a day apart from the weekly slot that produced it is not
+        possible from these fields alone and is not meant to be. What refused
+        the request is in the message beside the list.
       properties:
         date:
           type: string
@@ -906,10 +914,21 @@ components:
           type: string
           format: time
           nullable: true
+          description: >
+            The day's own window, copied off the slot when the day was
+            generated rather than read back through it. Editing a slot moves
+            the days it has still to run and leaves the ones that already
+            happened saying the hour they happened at; deleting a slot leaves
+            them saying it too. Null on an ad-hoc day, which never claimed an
+            hour, and on a day generated before the ledger carried a window.
         time_window_end:
           type: string
           format: time
           nullable: true
+          description: >
+            Earlier than time_window_start means the day finishes on the date
+            after target_date. A reader that ignores that computes minus
+            sixteen hours for a night shift running 22:00 to 06:00.
 
     StaffLocationResponse:
       type: object
@@ -1885,6 +1904,15 @@ paths:
         including a second one covering a different part of the year: the
         nightly generator lays every open cycle onto today, so all of them
         hold the room today.
+
+
+        Refused with 409 as well where a day has already been generated on
+        that room in part of that window. Such a day may have no slot
+        speaking for it any more: closing a cycle leaves behind the days it
+        has already produced, and deleting a slot leaves behind the days that
+        carry attendance. Both of those read as free to the two checks above
+        while somebody is still due at the door, so this one has no cycle
+        gate on either side.
       requestBody:
         required: true
         content:
@@ -1913,7 +1941,9 @@ paths:
             same way whichever end it came from; a conflict caused by a class
             names the activity and carries a null reservation_id, and one
             caused by a booking does the reverse. Slots in a closed cycle
-            occupy nothing and are not counted.
+            occupy nothing and are not counted, but the days such a slot has
+            already generated do, and a clash with one of those is refused
+            here too.
           content:
             application/json:
               schema:
@@ -1952,6 +1982,15 @@ paths:
         on. Such a hold predates this rule or was written straight into the
         database, and refusing would leave the lead unfixable short of
         cancelling somebody else's booking.
+
+
+        A day already generated on that room in part of the window refuses
+        the change as well, with no cycle gate on either side, because such a
+        day still puts somebody at a door whatever its cycle now says. The
+        check is made before anything is written and again if the database
+        refuses the write anyway: two admins moving two classes onto one room
+        at the same moment both pass the first ask, and the loser is told
+        what beat it rather than handed a 500.
       parameters:
         - name: slot_id
           in: path
@@ -1980,8 +2019,10 @@ paths:
             Either a day the slot has already produced has been marked, and
             the detail names those dates, or the room is taken for part of the
             window by a booking or by another class, and the body is the one a
-            refused booking sends. A change that does not move the class, a new
-            lead for instance, is not checked against either.
+            refused booking sends. A day already generated on that room is a
+            third reason, and reads as a class in the body. A change that does
+            not move the class, a new lead for instance, is checked against
+            none of them.
           content:
             application/json:
               schema:
@@ -2580,18 +2621,26 @@ paths:
       tags: [Ingestion]
       summary: Trigger daily ledger generation
       description: >
-        Requires admin. Generates `DailyLedger` rows from `StructuralMasterSlot`
-        for a given date (defaults to tomorrow). Safe to re-run, existing rows are skipped.
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                target_date:
-                  type: string
-                  format: date
-                  description: Date to generate. Defaults to tomorrow.
+        Requires admin. Generates `DailyLedger` rows from
+        `StructuralMasterSlot` for a given date, tomorrow by default. The
+        same job the nightly cron runs. Safe to re-run: a day already written
+        for a slot is skipped.
+
+
+        A day is skipped as well where the room is already taken for part of
+        that window by another day. Two slots on one room at one hour is a
+        state the API refuses to create, and a database holding one anyway
+        materializes the slot that was put on the timetable first and drops
+        the other. The dropped day is written to the server log naming the
+        slot, the date and the room. It is not in this response.
+      parameters:
+        - name: target_date
+          in: query
+          required: false
+          description: Date to generate. Defaults to tomorrow.
+          schema:
+            type: string
+            format: date
       responses:
         "200":
           description: Generation complete.
@@ -2600,11 +2649,10 @@ paths:
               schema:
                 type: object
                 properties:
-                  generated:
-                    type: integer
-                  skipped:
-                    type: integer
-                  target_date:
+                  status:
+                    type: string
+                    example: generated
+                  date:
                     type: string
                     format: date
         "403":

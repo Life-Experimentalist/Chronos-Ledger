@@ -204,6 +204,10 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
         if not offering:
             continue
 
+        # The day's own window, not the slot's. Reading it back through the
+        # slot meant a class removed from the timetable turned every day it
+        # had already run into an all-day event, and moving a class to another
+        # hour moved the days it had already run with it.
         starts_at = entry.time_window_start
         ends_at = entry.time_window_end
         if starts_at and ends_at:
@@ -219,11 +223,6 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
             # under it the first time the zone changed offset.
             uid_time = starts_at.strftime("%H%M%S")
         else:
-            # The day's own window, not the slot's. Reading it back through the
-            # slot meant a class removed from the timetable turned every day it
-            # had already run into an all-day event, and moving a class to
-            # another hour moved the days it had already run with it.
-            #
             # Ad-hoc entry with no window: an all-day event. RFC 5545 makes
             # DTSTART default to DATE-TIME, so a date-only value must declare
             # VALUE=DATE, and the all-day DTEND is non-inclusive (the next day).

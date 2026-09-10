@@ -4,6 +4,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -20,7 +21,11 @@ from app.schemas.schedule import (
     PlanningCycleResponse,
     StaffLocationResponse,
 )
-from app.services.availability import held_against_slot, slots_against_slot
+from app.services.availability import (
+    days_against_slot,
+    held_against_slot,
+    slots_against_slot,
+)
 from app.services.location_resolver import determine_staff_current_state
 from app.services.master_slot import propagate_slot_corrections, rows_in_use
 from app.services.resource import get_or_create_room
@@ -29,6 +34,7 @@ router = APIRouter()
 
 ROOM_IS_HELD = "the resource is held for part of that window"
 ROOM_IS_SCHEDULED = "the resource is already on the timetable for part of that window"
+ROOM_HAS_A_DAY = "the resource already has a generated day in part of that window"
 
 
 def _refuse_if_held(db, cycle, resource_id, weekday, start, end) -> None:
@@ -83,6 +89,37 @@ def _refuse_if_scheduled(db, cycle, resource_id, weekday, start, end, exclude_sl
         raise HTTPException(
             status_code=409,
             detail=jsonable_encoder({"message": ROOM_IS_SCHEDULED, "conflicts": conflicts}),
+        )
+
+
+def _refuse_if_a_day_is_there(db, resource_id, weekday, start, end, exclude_slot_id=None) -> None:
+    """Refuse a slot that would be laid on top of a day already generated.
+
+    The two checks above read the timetable and the bookings. A generated day
+    is neither, and it is the row that puts somebody at a door, so a day left
+    behind by a slot nobody can see any more holds a room that both of those
+    checks report as free.
+
+    There are two ways to get one. Closing a cycle does not withdraw the days
+    it has already produced, and the checks above skip a closed cycle on
+    purpose. Deleting a slot withdraws its future days unless attendance has
+    been marked on them, and a day that has been marked stays.
+
+    No cycle gate here, on either side, for the same reason: the day is in the
+    table whatever its cycle now says, and migration 013 will refuse a second
+    row on top of it whatever anybody thinks about the cycle. A check that
+    disagreed with the constraint would turn a refusal into a 500.
+
+    Asked twice on the edit path, once before writing and once if the database
+    refuses the write anyway. Two admins moving two classes onto one room at
+    the same moment both pass the first ask, and the loser has to be told what
+    beat it rather than handed a stack trace.
+    """
+    conflicts = days_against_slot(db, resource_id, weekday, start, end, exclude_slot_id)
+    if conflicts:
+        raise HTTPException(
+            status_code=409,
+            detail=jsonable_encoder({"message": ROOM_HAS_A_DAY, "conflicts": conflicts}),
         )
 
 
@@ -193,6 +230,13 @@ def create_master_slot(
         payload.time_window_start,
         payload.time_window_end,
     )
+    _refuse_if_a_day_is_there(
+        db,
+        room.id,
+        payload.day_of_week_index,
+        payload.time_window_start,
+        payload.time_window_end,
+    )
     # room.code, not the payload: get_or_create_room strips the name, and a
     # slot whose mirror is spelled differently from its resource is exactly
     # the drift the resource table exists to end.
@@ -270,6 +314,7 @@ def update_master_slot(
         # CSV importer uses, for the same reason.
         _refuse_if_held(db, slot.activity.cycle, resource_id, weekday, start, end)
         _refuse_if_scheduled(db, slot.activity.cycle, resource_id, weekday, start, end, slot.id)
+        _refuse_if_a_day_is_there(db, resource_id, weekday, start, end, slot.id)
 
     removed = 0
     if weekday != slot.day_of_week_index:
@@ -282,7 +327,17 @@ def update_master_slot(
         setattr(slot, field, value)
 
     result = propagate_slot_corrections([slot], db)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # The correction is copied onto every day this slot has still to run,
+        # and the database holds one room to one window per day. Somebody
+        # else's edit landing between the check above and this commit is how
+        # that gets refused here, and the rollback is what makes the second
+        # ask possible: the session is unusable until it happens.
+        db.rollback()
+        _refuse_if_a_day_is_there(db, resource_id, weekday, start, end, slot_id)
+        raise
     return {**result, "ledger_rows_removed": removed}
 
 
