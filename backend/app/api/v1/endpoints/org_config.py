@@ -3,7 +3,7 @@
 
 from fastapi import APIRouter
 
-from app.core.config import get_settings
+from app.core.config import get_settings, label_overrides
 from app.core.vocabulary import labels_for
 
 router = APIRouter()
@@ -24,6 +24,6 @@ def read_org_config():
     settings = get_settings()
     return {
         "org_profile": settings.org_profile,
-        "labels": labels_for(settings.org_profile),
+        "labels": labels_for(settings.org_profile, label_overrides(settings)),
         "password_min_length": settings.password_min_length,
     }

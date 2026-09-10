@@ -1276,6 +1276,12 @@ paths:
         neutral roles (staff, member, activity, unit, lead, cycle), and the
         shortest password this deployment accepts. The client needs all three
         before anyone has logged in.
+
+        A profile is a starting value. Any of the six labels can be set on its
+        own with `LABEL_STAFF`, `LABEL_MEMBER`, `LABEL_ACTIVITY`,
+        `LABEL_UNIT`, `LABEL_LEAD` or `LABEL_CYCLE`, and the response reflects
+        whatever the deployment resolved. Labels are display only: no field
+        name in this document changes with them.
       security: []
       responses:
         "200":

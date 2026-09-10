@@ -94,6 +94,15 @@ services:
       # hospital; labels only, never the schema and never the API. Served
       # to the client by GET /api/v1/config.
       - ORG_PROFILE=${ORG_PROFILE:-generic}
+      # The same six labels one at a time, each winning over ORG_PROFILE for
+      # its own noun. Blank means "use the profile's word". See
+      # docs/vocabulary.md.
+      - LABEL_STAFF=${LABEL_STAFF:-}
+      - LABEL_MEMBER=${LABEL_MEMBER:-}
+      - LABEL_ACTIVITY=${LABEL_ACTIVITY:-}
+      - LABEL_UNIT=${LABEL_UNIT:-}
+      - LABEL_LEAD=${LABEL_LEAD:-}
+      - LABEL_CYCLE=${LABEL_CYCLE:-}
       - ORG_DOMAIN_MASK=${ORG_DOMAIN_MASK:-org.internal}
       - APP_CORS_ORIGINS=${APP_CORS_ORIGINS:-http://localhost}
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}

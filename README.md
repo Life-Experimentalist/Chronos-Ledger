@@ -304,6 +304,8 @@ the buildkit attestations that ride along inside the image itself.
 | `JWT_SECRET_SIGNING_KEY` | **yes**     | 64-char hex: `openssl rand -hex 32`. Production refuses to start on the placeholder or on anything under 32 characters. |
 | `DB_PASSWORD`            | **yes**     | PostgreSQL password                                         |
 | `ORG_TIMEZONE`           | recommended | IANA name of where the organization is, such as `Asia/Kolkata`. Decides what "today" means. Defaults to `UTC`, which is what a container runs. An offset is refused. |
+| `ORG_PROFILE`            | optional    | Starting set of display labels: `generic`, `campus` or `hospital`. Labels only, never the schema and never the API, so it is safe to change on a running instance. |
+| `LABEL_STAFF` and five more | optional | Per-label overrides for the six nouns the interface renders: `LABEL_STAFF`, `LABEL_MEMBER`, `LABEL_ACTIVITY`, `LABEL_UNIT`, `LABEL_LEAD`, `LABEL_CYCLE`. Each wins over `ORG_PROFILE` for its own noun and leaves the rest alone. A profile is a starting value rather than an answer, so expect to set one or two. [docs/vocabulary.md](docs/vocabulary.md) explains why, and what labels deliberately do not change. |
 | `PASSWORD_MIN_LENGTH`    | optional    | Shortest password a person may choose, default 12. Applies to the first-login change and to any account an admin creates with a typed password. Generated passwords are random and not measured against it. Refused below 8. |
 | `RATE_LIMIT_ENABLED`     | optional    | A budget per caller on sign-in, the visitor kiosk and the calendar feed. On by default. Counted in Redis, and if Redis is unreachable the limits stop applying rather than the requests failing. |
 | `RATE_LIMIT_LOGIN_PER_IP` | optional   | Failed sign-ins per calling address per 15 minutes, default 10. A correct password costs nothing. `0` turns it off. |
@@ -356,6 +358,7 @@ the first login is the only thing it can do: use Admin Portal → Profile
 | [`docs/flows.md`](docs/flows.md)               | Sequence diagrams: attendance, RSVP, guest handshake, ledger cron      |
 | [`docs/api.md`](docs/api.md)                   | Human-readable API reference with examples                             |
 | [`docs/deployment.md`](docs/deployment.md)     | Deployment guide, cycle rollover, TLS, scaling                         |
+| [`docs/vocabulary.md`](docs/vocabulary.md)     | What an instance calls things, and which value sets are closed         |
 | [`docs/faq.md`](docs/faq.md)                   | FAQ & troubleshooting, setup, auth, CSV import, geofencing, CI/CD     |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md)           | Development setup, commit conventions, PR checklist                    |
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)     | Community standards and enforcement                                    |

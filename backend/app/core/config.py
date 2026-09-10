@@ -8,6 +8,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.vocabulary import LABEL_KEYS
+
 # Values that are published in this repository. A deployment running on any of
 # them has no secret at all, so production refuses to start rather than serving
 # forgeable tokens quietly.
@@ -76,6 +78,18 @@ class Settings(BaseSettings):
     # Organization
     org_domain_mask: str = "org.internal"
     org_profile: Literal["generic", "campus", "hospital"] = "generic"
+    # Per-label overrides, one per noun the interface renders. Each falls back
+    # to org_profile and then to generic, so an operator sets as few or as many
+    # as their words need. The profiles are starting values rather than
+    # answers: a domain does not agree with itself, and two universities in one
+    # city will disagree on Course against Module. docs/vocabulary.md has the
+    # reasoning and what labels deliberately do not change.
+    label_staff: str = ""
+    label_member: str = ""
+    label_activity: str = ""
+    label_unit: str = ""
+    label_lead: str = ""
+    label_cycle: str = ""
     # An IANA name, not an offset. "Asia/Kolkata", not "+05:30": an offset
     # cannot know when daylight saving moves, and a schedule that runs across
     # a spring forward would drift by an hour for half the year.
@@ -162,6 +176,16 @@ class Settings(BaseSettings):
                 "not an offset like '+05:30'."
             ) from bad
         return name
+
+
+def label_overrides(settings: Settings) -> dict[str, str]:
+    """The LABEL_* values an operator set, shaped for vocabulary.labels_for.
+
+    Here rather than in vocabulary.py so that module keeps knowing nothing
+    about settings, the same reason docs_are_published sits here rather than
+    in main. Empty values are passed through and dropped there.
+    """
+    return {key: getattr(settings, f"label_{key}") for key in LABEL_KEYS}
 
 
 def docs_are_published(settings: Settings) -> bool:

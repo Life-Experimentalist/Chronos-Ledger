@@ -31,14 +31,25 @@ and how short a password this deployment will accept.
     "activity": "Course",
     "unit": "Department",
     "lead": "Instructor",
-    "cycle": "Semester"
+    "cycle": "Academic Year"
   },
   "password_min_length": 12
 }
 ```
 
 `org_profile` follows `ORG_PROFILE` and is one of `generic`, `campus` or
-`hospital`; the label keys are the same six whichever profile is set.
+`hospital`; the label keys are the same six whichever profile is set. Each
+label can also be set on its own with `LABEL_STAFF`, `LABEL_MEMBER`,
+`LABEL_ACTIVITY`, `LABEL_UNIT`, `LABEL_LEAD` or `LABEL_CYCLE`, which is what a
+deployment whose words do not match a profile should reach for. A profile is a
+starting value: expect to override one or two of them.
+
+Labels change nothing else. The field names in this reference, the database
+columns and the CSV headers stay as they are whatever the interface calls them,
+so an integration reads `member_id` on a campus and `member_id` in a hospital.
+[docs/vocabulary.md](vocabulary.md) is the whole subject, including which value
+sets are closed and why.
+
 `password_min_length` follows `PASSWORD_MIN_LENGTH`. Nothing here is a secret:
 a caller learns the password floor from a single rejected change anyway.
 
