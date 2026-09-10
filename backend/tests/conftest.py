@@ -1,12 +1,15 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.config import get_settings
 from app.core.database import Base, get_db
 from app.core.security import hash_api_key, hash_password
 from app.main import app
@@ -53,6 +56,25 @@ _HASHES = {
     "staff": hash_password(STAFF_PASSWORD),
     "member": hash_password(MEMBER_PASSWORD),
 }
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _rate_limiter_off():
+    """The suite signs in hundreds of times, which is what a limiter is for.
+
+    Off by default here so the tests measure the code under test rather than
+    the budget, and so a developer machine that happens to be running Redis on
+    localhost does not start handing out 429s partway through a run. The tests
+    that exercise the limiter switch it back on for themselves.
+
+    os.environ rather than monkeypatch because monkeypatch is function-scoped
+    and this has to stand for the session.
+    """
+    os.environ["RATE_LIMIT_ENABLED"] = "false"
+    get_settings.cache_clear()
+    yield
+    os.environ.pop("RATE_LIMIT_ENABLED", None)
+    get_settings.cache_clear()
 
 
 @pytest.fixture()

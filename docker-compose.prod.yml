@@ -70,6 +70,21 @@ services:
       # this repository.
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
       PASSWORD_MIN_LENGTH: ${PASSWORD_MIN_LENGTH:-12}
+      # A budget per caller on sign-in, the visitor kiosk and the calendar
+      # feed, counted in Redis. Any count at 0 turns that one off, and
+      # RATE_LIMIT_ENABLED=false turns off all three.
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      RATE_LIMIT_LOGIN_PER_IP: ${RATE_LIMIT_LOGIN_PER_IP:-10}
+      RATE_LIMIT_LOGIN_PER_EMAIL: ${RATE_LIMIT_LOGIN_PER_EMAIL:-5}
+      RATE_LIMIT_GUEST_CHECKIN: ${RATE_LIMIT_GUEST_CHECKIN:-300}
+      RATE_LIMIT_CALENDAR_FEED: ${RATE_LIMIT_CALENDAR_FEED:-60}
+      # Which upstream addresses uvicorn believes X-Forwarded-For from. This
+      # service publishes no ports, so nginx is the only way in. Without it
+      # every request looks like it came from the proxy and the sign-in
+      # limit counts the whole organization as one caller. Safe because
+      # nginx overwrites that header rather than appending to it, so a
+      # caller cannot put its own address on the front of it.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
       APP_ENV: production
       # Decides what "today" means. A container runs UTC, so an
       # organization that is not in UTC needs this or the dashboard is a

@@ -1231,6 +1231,21 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    TooManyRequests:
+      description: >
+        The caller is past its budget for this route. Sized by the
+        RATE_LIMIT_* settings; the counters live in Redis, and an instance
+        that cannot reach Redis stops applying the limits rather than
+        refusing the requests.
+      headers:
+        Retry-After:
+          description: Seconds until the budget refills.
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
 
 # Either credential is accepted on every endpoint below.
 security:
@@ -1306,6 +1321,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "422":
           $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /auth/me:
     get:
@@ -2588,6 +2605,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /guest/directory:
     get:
@@ -2814,6 +2833,8 @@ paths:
                 example: "BEGIN:VCALENDAR\nVERSION:2.0\n..."
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   # ── Health ────────────────────────────────
   /health:

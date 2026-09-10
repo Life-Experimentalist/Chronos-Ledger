@@ -41,8 +41,8 @@ a caller learns the password floor from a single rejected change anyway.
 
 ## Authentication
 
-All endpoints except `/auth/login`, `/guest/register-checkin`, and `/guest/directory`
-require a Bearer token:
+All endpoints except `/auth/login`, `/auth/refresh`, `/auth/logout`, the
+`/config` document above and the calendar feed require a Bearer token:
 
 ```
 Authorization: Bearer <access_token>
@@ -55,6 +55,28 @@ new pair; refresh tokens are single use and last
 
 An API key in `X-API-Key` is accepted anywhere a Bearer token is. See
 [API keys](#api-keys).
+
+### Rate limits
+
+Three routes carry a budget per caller, counted over a fixed window:
+
+| Route                              | Counted per                                  | Default                          |
+| ---------------------------------- | -------------------------------------------- | -------------------------------- |
+| `POST /auth/login`                 | calling address, and separately the account  | 10 and 5 failures per 15 minutes |
+| `POST /guest/register-checkin`     | the account the kiosk's API key belongs to   | 300 per hour                     |
+| `GET /sync/user-feed/{token}.ics`  | the feed token                               | 60 per hour                      |
+
+Only failed sign-ins are counted; a correct password costs nothing. Past the
+budget the answer is a `429` carrying `Retry-After` in seconds:
+
+```json
+{ "detail": "Too many sign-in attempts from this address. Try again in 840 seconds." }
+```
+
+Every number is a setting, `RATE_LIMIT_*` in [`.env.example`](../.env.example).
+A count of `0` turns that one limiter off and `RATE_LIMIT_ENABLED=false` turns
+off all three. The counters live in Redis; an instance that cannot reach Redis
+stops applying the limits rather than refusing the requests.
 
 ### Role hierarchy
 

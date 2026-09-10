@@ -3,12 +3,14 @@
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from app.core import rate_limit
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import (
+    ABSENT_ACCOUNT_HASH,
     create_access_token,
     generate_refresh_token,
     get_current_user,
@@ -43,9 +45,35 @@ def _mint_refresh_token(db: Session, user_id: str) -> str:
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
+    # Read at call time rather than off the module-level binding above, so
+    # that changing a limit does not need a restart to take effect anywhere
+    # the settings cache is cleared.
+    limits = get_settings()
+    address = rate_limit.caller_address(request)
+    account = payload.email.lower()
+    window = rate_limit.LOGIN_WINDOW_SECONDS
+    per_address = limits.rate_limit_login_per_ip
+    per_account = limits.rate_limit_login_per_email
+    # Checked before the lookup and the bcrypt, so a flood costs the server
+    # a Redis round trip rather than three hundred milliseconds of hashing.
+    rate_limit.guard("login-ip", address, per_address, window, "sign-in attempts from this address")
+    rate_limit.guard(
+        "login-email", account, per_account, window, "sign-in attempts for this account"
+    )
+
     user = db.query(User).filter(User.email_address == payload.email).first()
-    if not user or not verify_password(payload.password, user.credential_secure_hash):
+    # An address that matches no account still pays for a bcrypt comparison,
+    # against a hash of a string nobody holds. `not user` comes second so the
+    # comparison actually runs; short-circuiting past it is the leak.
+    stored = user.credential_secure_hash if user else ABSENT_ACCOUNT_HASH
+    if not verify_password(payload.password, stored) or not user:
+        # Counted on the way out, so that getting your own password right
+        # never costs you a slice of your own budget. The account budget is
+        # spent whether or not the account exists, because a 429 that only
+        # ever arrives for real addresses is the same oracle by a slower route.
+        rate_limit.spend("login-ip", address, per_address, window)
+        rate_limit.spend("login-email", account, per_account, window)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     refresh_token = _mint_refresh_token(db, user.id)

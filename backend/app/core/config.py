@@ -85,6 +85,28 @@ class Settings(BaseSettings):
     telemetry_enabled: bool = False
     telemetry_endpoint: str = ""
 
+    # Rate limits, counted in Redis over a fixed window. Three routes are
+    # covered and app/core/rate_limit.py says which and why. A count of 0
+    # turns that one limiter off; rate_limit_enabled false turns off all
+    # three. The windows are not settings: they are the shape of the
+    # limiter, and six variables to describe three limits is a worse deal
+    # than three variables and a documented window.
+    rate_limit_enabled: bool = True
+    # Sign-in, per 15 minutes, two budgets at once. The address budget stops
+    # one machine working through a list of accounts; the account budget
+    # stops a spread of addresses working on one account.
+    rate_limit_login_per_ip: int = 10
+    rate_limit_login_per_email: int = 5
+    # Visitor check-ins per kiosk account per hour. Deliberately loose: a
+    # hospital front desk at visiting hours is genuinely fast, and a limit
+    # that interrupts real work gets switched off, which is worse than a
+    # loose one.
+    rate_limit_guest_checkin: int = 300
+    # Calendar feed fetches per feed token per hour. Apple Calendar's
+    # fastest refresh is five-minutely, which is twelve an hour on its own,
+    # and somebody with a phone and a laptop is two of those.
+    rate_limit_calendar_feed: int = 60
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.app_cors_origins.split(",") if o.strip()]

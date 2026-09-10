@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from app.core import rate_limit
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.time import org_timezone, org_today, window_span
@@ -143,6 +145,16 @@ def _utc_stamp(day: datetime.date, wall: datetime.time) -> str:
 def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
     # The feed stays unauthenticated so calendar apps can subscribe, but the key
     # is an unguessable per-user token, never the user id.
+    #
+    # Counted per token, and counted before the token is resolved: this is a
+    # budget against one subscriber polling in a loop, and a 404 costs a query
+    # like any other request. Guessing a token is not the threat here, since it
+    # is 256 bits out of `secrets`.
+    budget = get_settings().rate_limit_calendar_feed
+    window = rate_limit.FEED_WINDOW_SECONDS
+    rate_limit.guard("calendar-feed", feed_token, budget, window, "calendar feed requests")
+    rate_limit.spend("calendar-feed", feed_token, budget, window)
+
     user = db.query(User).filter(User.calendar_feed_token == feed_token).first()
     if not user:
         raise HTTPException(status_code=404, detail="Feed not found")

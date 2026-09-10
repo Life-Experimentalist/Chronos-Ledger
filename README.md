@@ -302,6 +302,12 @@ the buildkit attestations that ride along inside the image itself.
 | `DB_PASSWORD`            | **yes**     | PostgreSQL password                                         |
 | `ORG_TIMEZONE`           | recommended | IANA name of where the organization is, such as `Asia/Kolkata`. Decides what "today" means. Defaults to `UTC`, which is what a container runs. An offset is refused. |
 | `PASSWORD_MIN_LENGTH`    | optional    | Shortest password a person may choose, default 12. Applies to the first-login change and to any account an admin creates with a typed password. Generated passwords are random and not measured against it. Refused below 8. |
+| `RATE_LIMIT_ENABLED`     | optional    | A budget per caller on sign-in, the visitor kiosk and the calendar feed. On by default. Counted in Redis, and if Redis is unreachable the limits stop applying rather than the requests failing. |
+| `RATE_LIMIT_LOGIN_PER_IP` | optional   | Failed sign-ins per calling address per 15 minutes, default 10. A correct password costs nothing. `0` turns it off. |
+| `RATE_LIMIT_LOGIN_PER_EMAIL` | optional | Failed sign-ins per account per 15 minutes, default 5. `0` turns it off. |
+| `RATE_LIMIT_GUEST_CHECKIN` | optional  | Visitor check-ins per kiosk account per hour, default 300. `0` turns it off. |
+| `RATE_LIMIT_CALENDAR_FEED` | optional  | Calendar feed fetches per feed token per hour, default 60. `0` turns it off. |
+| `FORWARDED_ALLOW_IPS`    | optional    | Which upstream addresses uvicorn believes `X-Forwarded-For` from, default `*`. The app container publishes no ports, so nginx is the only way in. The sign-in limit needs it to tell callers apart from the proxy, and the proxy overwrites that header rather than appending to it, so a caller cannot forge an address. |
 | `VAPID_PUBLIC_KEY`       | recommended | Web Push: `npx web-push generate-vapid-keys`               |
 | `VAPID_PRIVATE_KEY`      | recommended | Web Push                                                    |
 | `VAPID_CONTACT_EMAIL`    | recommended | Admin contact for push service                              |

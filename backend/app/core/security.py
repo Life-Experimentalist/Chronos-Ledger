@@ -29,6 +29,14 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
+# A bcrypt hash of a random string nobody holds, built once at import. Sign-in
+# verifies against it when the address matches no account, so that a sign-in
+# for an account that does not exist costs the same as one for an account with
+# the wrong password. Without it the difference in response times answers "does
+# this person have an account here" to anyone willing to measure.
+ABSENT_ACCOUNT_HASH = hash_password(secrets.token_urlsafe(32))
+
+
 # Long enough that a generated password is not worth guessing, short enough
 # that an admin can read one off a screen and hand it to somebody.
 GENERATED_PASSWORD_BYTES = 12
