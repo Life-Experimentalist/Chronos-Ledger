@@ -6,6 +6,7 @@ import pytest
 
 from app.core.config import (
     MINIMUM_SIGNING_KEY_LENGTH,
+    PUBLISHED_ADMIN_PASSWORDS,
     PUBLISHED_DATABASE_URL,
     PUBLISHED_SIGNING_KEYS,
     Settings,
@@ -49,6 +50,29 @@ def test_production_refuses_the_published_database_password():
     with pytest.raises(RuntimeError) as exc:
         assert_production_secrets_are_set(_settings(database_url=PUBLISHED_DATABASE_URL))
     assert "DATABASE_URL" in str(exc.value)
+
+
+@pytest.mark.parametrize("published", sorted(PUBLISHED_ADMIN_PASSWORDS))
+def test_production_refuses_a_published_admin_password(published):
+    """The literal migration 001 used to seed, and the .env.example placeholder.
+
+    Either one hands a SUPER_ADMIN account to whoever reaches the instance
+    first, which is the same exposure as a signing key anybody can read.
+    """
+    with pytest.raises(RuntimeError) as exc:
+        assert_production_secrets_are_set(_settings(initial_admin_password=published))
+    assert "INITIAL_ADMIN_PASSWORD" in str(exc.value)
+
+
+def test_production_accepts_no_admin_password_at_all():
+    """An instance whose administrator chose a password long ago.
+
+    The variable is only read while the seeded account is still waiting for a
+    password, so a deployment years past its first login has nothing to set
+    here and has to keep booting. Empty is the default, and refusing on it
+    would strand every install that upgrades into this check.
+    """
+    assert_production_secrets_are_set(_settings(initial_admin_password=""))
 
 
 def test_the_refusal_never_prints_the_secret():

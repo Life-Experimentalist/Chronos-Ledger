@@ -1,6 +1,7 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
+import logging
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -9,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.v1.router import api_router
+from app.core.bootstrap import apply_initial_admin_password
 from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.core.time import org_timezone, org_tomorrow
@@ -24,6 +26,7 @@ scheduler = AsyncIOScheduler(timezone=org_timezone())
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    _open_the_admin_account()
     # Schedule nightly ledger generation at 23:00
     scheduler.add_job(
         _run_ledger_generator,
@@ -36,6 +39,30 @@ async def lifespan(_app: FastAPI):
     scheduler.start()
     yield
     scheduler.shutdown(wait=False)
+
+
+def _open_the_admin_account():
+    """Apply INITIAL_ADMIN_PASSWORD before the first request arrives.
+
+    Here rather than in the migration because a migration cannot read the
+    application's settings, and the container runs alembic before uvicorn
+    binds, so by the time this runs the seeded row exists.
+
+    Failures are logged and swallowed on purpose. Nothing here is load
+    bearing for a running instance: the consequence of skipping it is that
+    the administrator account keeps the password nobody knows, which the
+    log then says. Refusing to boot instead would take out an app that
+    could otherwise serve /health and tell somebody what is wrong.
+    """
+    db = SessionLocal()
+    try:
+        apply_initial_admin_password(db, settings.initial_admin_password)
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "Could not apply INITIAL_ADMIN_PASSWORD. The administrator account is unchanged."
+        )
+    finally:
+        db.close()
 
 
 def _run_ledger_generator():

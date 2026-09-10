@@ -21,6 +21,17 @@ PUBLISHED_SIGNING_KEYS = frozenset(
     }
 )
 PUBLISHED_DATABASE_URL = "postgresql://chronos_admin:SecureCloud2026@localhost:5432/chronos_ledger"
+# The password migration 001 used to seed for the administrator account,
+# and the placeholder .env.example carries in its place. Either one lets
+# whoever reaches the instance first take a SUPER_ADMIN account, so this is
+# the same exposure as a published signing key and gets the same refusal.
+# Migration 014 rotates a database that still holds the first of them.
+PUBLISHED_ADMIN_PASSWORDS = frozenset(
+    {
+        "ChronosAdmin2026!",
+        "replace_with_the_first_admin_password",
+    }
+)
 MINIMUM_SIGNING_KEY_LENGTH = 32
 
 
@@ -42,6 +53,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 30
+
+    # The first password for the seeded administrator account, applied on
+    # boot while that account is still waiting for one of its own. Empty
+    # leaves it unreachable, which is the safe default: this repository
+    # publishes no password for anybody to find. See app/core/bootstrap.py.
+    initial_admin_password: str = ""
 
     # Organization
     org_domain_mask: str = "org.internal"
@@ -112,6 +129,12 @@ def describe_production_secret_problems(settings: Settings) -> list[str]:
         )
     if settings.database_url == PUBLISHED_DATABASE_URL:
         problems.append("DATABASE_URL still carries the password published in this repository")
+    if settings.initial_admin_password in PUBLISHED_ADMIN_PASSWORDS:
+        problems.append(
+            "INITIAL_ADMIN_PASSWORD is a value published in this repository, "
+            "so whoever reaches this instance first can take the administrator "
+            "account"
+        )
     return problems
 
 
@@ -132,7 +155,7 @@ def assert_production_secrets_are_set(settings: Settings) -> None:
     raise RuntimeError(
         "Refusing to start with APP_ENV=production:\n  - "
         + "\n  - ".join(problems)
-        + "\n\nRun ./setup.sh, which generates both, or set them yourself:\n"
+        + "\n\nRun ./setup.sh, which generates them, or set them yourself:\n"
         "  JWT_SECRET_SIGNING_KEY=$(openssl rand -hex 32)"
     )
 

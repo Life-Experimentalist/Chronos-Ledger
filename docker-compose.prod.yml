@@ -64,6 +64,11 @@ services:
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-15}
       JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-30}
+      # The first password for the seeded administrator account, applied at
+      # boot while that account is still unused. Empty leaves it
+      # unreachable, which is deliberate: there is no default to find in
+      # this repository.
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
       APP_ENV: production
       # Decides what "today" means. A container runs UTC, so an
       # organization that is not in UTC needs this or the dashboard is a

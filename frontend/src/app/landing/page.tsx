@@ -116,7 +116,8 @@ export default function LandingPage() {
               { text: ' ✔ chronos-frontend   Built → static files ready', color: 'text-chronos-teal' },
               { text: ' ✔ chronos-proxy      Listening on :80', color: 'text-chronos-teal' },
               { text: '', color: '' },
-              { text: '  Admin login: admin@org.internal / ChronosAdmin2026!', color: 'text-chronos-warning' },
+              { text: '  Admin login: admin@org.internal', color: 'text-chronos-warning' },
+              { text: '  Password:    (generated, printed once)', color: 'text-chronos-warning' },
               { text: '  Swagger UI:  http://localhost/docs', color: 'text-chronos-muted' },
             ].map((line, i) => (
               <p key={i} className={`${line.color} leading-relaxed`}>{line.text || ' '}</p>
@@ -569,9 +570,9 @@ const INSTALL_STEPS = [
     note: 'Skip this step if you do not need browser push notifications.',
   },
   {
-    title: 'Open the app and change the default password',
-    code: '# App:     http://<your-server-ip>\n# API docs: http://<your-server-ip>/docs\n# Login:    admin@org.internal / ChronosAdmin2026!',
-    note: 'The setup script prints the exact URL when it finishes.',
+    title: 'Open the app and choose your own password',
+    code: '# App:     http://<your-server-ip>\n# API docs: http://<your-server-ip>/docs\n# Login:    admin@org.internal\n# Password: the one setup.sh printed',
+    note: 'The setup script prints the exact URL and the first password when it finishes.',
   },
 ]
 

@@ -112,20 +112,26 @@ Also ensure `APP_CORS_ORIGINS` in `.env` includes `http://192.168.1.10`.
 
 ## Authentication & Accounts
 
-### Default credentials
+### First login credentials
 
 | Field | Value |
 |---|---|
 | Email | `admin@org.internal` |
-| Password | `ChronosAdmin2026!` |
+| Password | `INITIAL_ADMIN_PASSWORD` from your `.env` |
 
-**Change this immediately**, the admin is prompted to do so on first login via the Onboarding Wizard.
+`setup.sh` generates that password and prints it once, in its summary. Nothing can log in as the administrator until the variable is set, and the admin is prompted to choose their own password on first login via the Onboarding Wizard.
 
 ---
 
 ### Login fails with "Invalid credentials" after setup.sh
 
-The seed migration creates the admin account during `alembic upgrade head`. If migrations did not run (check `docker compose logs chronos-app`), the account does not exist.
+Usually `INITIAL_ADMIN_PASSWORD` is empty or missing from `.env`. The seed migration stores a hash of a random string it throws away, so the administrator is deliberately unreachable until that variable gives it a password, and `docker compose logs chronos-app` says `INITIAL_ADMIN_PASSWORD is not set` on boot. Set it and restart:
+
+```bash
+docker compose up -d --force-recreate chronos-app
+```
+
+Otherwise the account may not exist at all. The seed migration creates it during `alembic upgrade head`; if migrations did not run (check `docker compose logs chronos-app`), there is nothing to log into.
 
 Force migrations:
 

@@ -98,6 +98,33 @@ if grep -q "change_me_password" .env 2>/dev/null; then
   ok "Generated DB_PASSWORD"
 fi
 
+# Generate the administrator's first password if the placeholder is present
+if grep -q "replace_with_the_first_admin_password" .env 2>/dev/null; then
+  ADMIN_PASS=$(openssl rand -base64 18 | tr -d '/+=' | head -c 20)
+  if [[ "$(uname)" == "Darwin" ]]; then
+    sed -i '' "s|replace_with_the_first_admin_password|${ADMIN_PASS}|g" .env
+  else
+    sed -i "s|replace_with_the_first_admin_password|${ADMIN_PASS}|g" .env
+  fi
+  # Held back for the summary: it is generated here and printed nowhere
+  # else, and nothing can log in as the administrator without it.
+  ok "Generated INITIAL_ADMIN_PASSWORD"
+elif ! grep -q "INITIAL_ADMIN_PASSWORD" .env 2>/dev/null; then
+  # An .env written before this variable existed. Leave it empty rather
+  # than generating something: the variable is only read while that
+  # account is still waiting for a first password, and on an install this
+  # old it chose one long ago.
+  {
+    echo ""
+    echo "# The first password for the built-in administrator account,"
+    echo "# applied on boot while that account is still waiting for one."
+    echo "# Empty because this .env predates the variable, so that account"
+    echo "# has had a password of its own for a while. See .env.example."
+    echo "INITIAL_ADMIN_PASSWORD="
+  } >> .env
+  ok "Added INITIAL_ADMIN_PASSWORD to your existing .env, left empty"
+fi
+
 # Stamp LAN IP into frontend URLs
 if [[ "$(uname)" == "Darwin" ]]; then
   sed -i '' "s|NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=http://${LAN_IP}/api/v1|g" .env
@@ -202,6 +229,12 @@ echo ""
 ok "App:       http://${LAN_IP}"
 ok "API docs:  http://${LAN_IP}/docs"
 ok "Login:     admin@org.internal"
+if [[ -n "${ADMIN_PASS:-}" ]]; then
+  ok "Password:  ${ADMIN_PASS}"
+  echo -e "${YELLOW}  Printed once, here. It is also in .env as INITIAL_ADMIN_PASSWORD.${NC}"
+else
+  ok "Password:  whatever INITIAL_ADMIN_PASSWORD says in your .env"
+fi
 echo -e "${YELLOW}  IMPORTANT: You will be prompted to set a new password on first login.${NC}"
 echo ""
 if [[ -n "${DEMO_KIOSK_KEY:-}" ]]; then

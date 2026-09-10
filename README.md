@@ -52,7 +52,7 @@ chmod +x setup.sh && ./setup.sh
 
 - **App** → `http://<your-server-ip>`
 - **API docs** → `http://<your-server-ip>/docs`
-- **Default login** → `admin@org.internal` / `ChronosAdmin2026!` *(change immediately)*
+- **Login** → `admin@org.internal`, with the password `setup.sh` printed *(also in `.env` as `INITIAL_ADMIN_PASSWORD`)*
 
 Want to demo it to someone? `./setup.sh --build --demo` boots it with sample data; [docs/demo.md](docs/demo.md) has the five-minute walkthrough.
 
@@ -283,16 +283,24 @@ See [`.env.example`](.env.example) for the full template.
 
 ---
 
-## Default Credentials (First Boot)
+## First Boot Credentials
 
-The Alembic seed migration creates one super-admin:
+The Alembic seed migration creates one super-admin. It seeds a hash of a
+random string it throws away, so the account exists, nothing can log into
+it, and this repository publishes no password for anyone to find. What the
+first password is comes from your `.env`:
 
-| Field    | Value                    |
-| -------- | ------------------------ |
-| Email    | `admin@org.internal` |
-| Password | `ChronosAdmin2026!`      |
+| Field    | Value                                     |
+| -------- | ----------------------------------------- |
+| Email    | `admin@org.internal`                      |
+| Password | `INITIAL_ADMIN_PASSWORD` from your `.env` |
 
-**Change this password immediately** via Admin Portal → Profile → Change Password.
+`setup.sh` generates that password and prints it once, in its summary. It is
+applied on boot while the account is still waiting for a password of its own,
+and does nothing once you have logged in and chosen one. Until you have, the
+account is refused by every endpoint except the password change itself, so
+the first login is the only thing it can do: use Admin Portal → Profile
+→ Change Password, or the Onboarding Wizard, which opens on its own.
 
 ---
 

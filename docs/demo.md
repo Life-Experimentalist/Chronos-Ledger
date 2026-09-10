@@ -26,13 +26,15 @@ When it finishes, the script prints the address to open on its `App:` line
 
 | Who | Email | Password |
 | --- | --- | --- |
-| Admin | `admin@org.internal` | `ChronosAdmin2026!` |
+| Admin | `admin@org.internal` | the one `setup.sh` printed |
 | Staff | `staff@demo.internal` | `StaffDemo2026!` |
 | Staff | `staff2@demo.internal` | `StaffDemo2026!` |
 | Member | `member@demo.internal` | `MemberDemo2026!` |
 
-The admin account asks you to set a new password on first login. That is
-deliberate (seeded credentials are never left active); pick one and note it.
+There is no published admin password to look up: `setup.sh` generates the
+first one and prints it once, in its summary, and it is in `.env` as
+`INITIAL_ADMIN_PASSWORD`. The admin account then asks you to set your own on
+first login; pick one and note it.
 
 ## The walkthrough
 

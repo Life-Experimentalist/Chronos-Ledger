@@ -108,17 +108,19 @@ nothing inside the stack changes.
 
 ### 4. First login
 
-Navigate to `http://<server-ip>` and log in with the seed credentials:
+Navigate to `http://<server-ip>` and log in as the administrator:
 
 - Email: `admin@org.internal`
-- Password: `ChronosAdmin2026!`
+- Password: whatever `INITIAL_ADMIN_PASSWORD` says in your `.env`.
+  `setup.sh` generates one and prints it once, in its summary.
 
-**Change this password before the server is reachable from any network.**
-It is the same on every Chronos install and it is written above, in a
-public repository. Until it is changed, the account is refused by every
-endpoint except the password change itself, so the first login is the only
-thing it can do: use Admin Portal → Profile, or the Onboarding Wizard,
-which opens on its own.
+Nothing can log in as the administrator until that variable is set: the
+seed migration stores a hash of a random string it throws away, so there
+is no install-wide password to find. **Choose your own before the server
+is reachable from any network.** Until you have, the account is refused by
+every endpoint except the password change itself, so the first login is
+the only thing it can do: use Admin Portal → Profile, or the Onboarding
+Wizard, which opens on its own.
 
 ---
 

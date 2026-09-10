@@ -216,17 +216,17 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
               <div>
                 <h2 className="text-xl font-bold text-chronos-text">Secure your account</h2>
                 <p className="text-sm text-chronos-muted mt-1">
-                  The default password must be changed before you can proceed.
+                  Choose your own password before you go any further.
                 </p>
               </div>
               <div className="bg-chronos-warning/10 border border-chronos-warning/30 rounded-lg p-3 flex gap-2 text-chronos-warning text-sm">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                Default credentials are publicly known. Change the password now.
+                You are still on the first password this account was given. Replace it now.
               </div>
               <form onSubmit={submitPassword} className="space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-chronos-text-dim mb-1.5 uppercase tracking-wider">Current Password</label>
-                  <input {...pwForm.register('current_password')} type="password" className="input-field" placeholder="ChronosAdmin2026!" />
+                  <input {...pwForm.register('current_password')} type="password" className="input-field" placeholder="The password you signed in with" />
                   {pwForm.formState.errors.current_password && (
                     <p className="text-chronos-danger text-xs mt-1">{pwForm.formState.errors.current_password.message}</p>
                   )}
