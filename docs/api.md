@@ -539,8 +539,9 @@ Snapshot of all staff locations. Polled by the Member Locator panel.
 ### PATCH /schedule/slots/{id} `[ADMIN]`
 
 Create a weekly slot, or move an existing one. Both are refused with `409`
-where the room is already taken for part of that window, either by a booking
-or by another class already on the timetable:
+where the room is already taken for part of that window, by a booking, by
+another class already on the timetable, or by a day already generated onto
+that room:
 
 ```json
 {
@@ -595,6 +596,13 @@ message and the same shape:
 Which kind of thing an entry is can be read off the fields that are set: a
 class names the activity and leaves `reservation_id` null, a booking does the
 reverse. That is the same convention `GET /resources/{id}/availability` uses.
+
+A day already generated is the third, with the message `the resource already
+has a generated day in part of that window`. It reads as a class, because a
+class is what it came from, and its `master_slot_id` is null where that slot
+has since been deleted. Unlike the other two it counts whatever its cycle now
+says: closing a cycle does not withdraw the days it has already produced, and
+the database refuses a second row on top of one either way.
 
 A weekly slot has no date of its own, so the one reported is the next time
 the clash actually happens. It repeats every week until one of the two moves.
@@ -759,13 +767,21 @@ their password, and somebody promoted to STAFF since the last import stays
 STAFF.
 
 A row that would put a class in a room already taken for that window, by a
-booking or by another class, is refused with `422`, and the whole file is
-rolled back rather than the row skipped, which is what every other bad row in
-an import does. The message names the room and what it ran into. Rows are
-checked against each other as well, so one file cannot put two classes in one
-room at one hour. The check only looks where a row would actually move a
-class, so re-uploading a file that describes the timetable as it already
-stands is not refused by what is sitting on it.
+booking, by another class, or by a day already generated onto it, is refused
+with `422`, and the whole file is rolled back rather than the row skipped,
+which is what every other bad row in an import does. The message names the
+room and what it ran into. Rows are checked against each other as well, so
+one file cannot put two classes in one room at one hour. The check only looks
+where a row would actually move a class, so re-uploading a file that
+describes the timetable as it already stands is not refused by what is
+sitting on it.
+
+A closed cycle changes two of the three. Its slots occupy nothing, so an
+upload into one is not checked against the bookings or against the rest of
+the timetable, the same way a slot in a closed cycle does not block a
+booking. The days already generated are checked either way, because a
+correction is copied onto them whatever the cycle says and the database
+refuses to move one onto a room something else is holding.
 
 Every member the file creates gets an individual random password, returned
 once in the response and never stored:

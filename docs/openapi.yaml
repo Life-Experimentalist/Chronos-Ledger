@@ -2578,13 +2578,23 @@ paths:
 
 
         A row that would put a class in a room already taken for that window,
-        by a booking or by another class, is refused with 422 and the whole
-        file is rolled back, which is what every other bad row in an import
-        does. Rows are checked against each other as well as against what is
-        already stored, so one file cannot put two classes in one room at one
-        hour. The check only looks where a row would actually move a class,
-        so re-uploading a file that describes the timetable as it already
-        stands is not refused by what is sitting on it.
+        by a booking, by another class, or by a day already generated onto
+        it, is refused with 422 and the whole file is rolled back, which is
+        what every other bad row in an import does. Rows are checked against
+        each other as well as against what is already stored, so one file
+        cannot put two classes in one room at one hour. The check only looks
+        where a row would actually move a class, so re-uploading a file that
+        describes the timetable as it already stands is not refused by what
+        is sitting on it.
+
+
+        A closed cycle changes two of those three. Its slots occupy nothing,
+        so an upload into one is not checked against the bookings or against
+        the rest of the timetable, the same way a slot in a closed cycle does
+        not block a booking. The days already generated are checked either
+        way, because a correction is copied onto them whatever the cycle says
+        and the database refuses to move one onto a room something else is
+        holding.
 
         Each new member costs a bcrypt hash on the request thread, about
         half a second, so a file creating more than roughly 100 new

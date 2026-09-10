@@ -21,6 +21,12 @@ the refusal true rather than merely polite, and test_ledger_overlap_pg
 covers that end. Everything here is a query and some Python, so it runs on
 SQLite, which is the suite CI actually runs.
 
+A CSV upload is the third way a slot reaches the database, and the one
+carrying the mistake in bulk. It is checked here too, and unlike the two
+verbs it is checked whatever the cycle says: correcting a slot rewrites
+the future days it has already produced, and it does that in a closed
+cycle as readily as an open one.
+
 Dates are computed rather than written down, for the reason given in both
 siblings: the comparison runs from today forward, so a date typed into this
 file would eventually fall into the past and the tests would pass for the
@@ -33,7 +39,8 @@ from app.core.time import org_today
 from app.models.db import DailyLedger, StructuralMasterSlot
 from app.services.availability import days_against_slot
 from tests.conftest import ADMIN_PASSWORD, login
-from tests.test_import_corrections import TOMORROW
+from tests.test_import_corrections import TOMORROW, _csv, _row
+from tests.test_ingestion import _make_cycle, _upload
 from tests.test_slot_vs_hold import DAY_AFTER, _activity, _new_slot, _room
 from tests.test_slot_vs_slot import _sibling, _slot_in_db
 
@@ -345,3 +352,90 @@ def test_today_is_searched_and_not_only_tomorrow(db, seed_users):
         db, room.id, today.isoweekday(), datetime.time(15, 30), datetime.time(16, 30)
     )
     assert [c["date"] for c in found] == [today]
+
+
+# ── Uploading a timetable ────────────────────────────────────────────────────
+
+
+def test_an_upload_is_refused_where_a_day_has_already_been_generated(client, db, seed_users):
+    """The whole file, not the row, the same as every other bad row in an
+    import. A CSV that half applied would leave an admin diffing the file
+    against the database to find out what landed."""
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    cycle = _make_cycle(db)
+    room = _room(db)
+    gone = _activity(db)
+    _day(db, gone.id, room.id, TOMORROW)
+
+    r = _upload(client, headers, cycle.id, _csv(_row()))
+    assert r.status_code == 422, r.text
+    # Which room and which day. An admin fixing a timetable needs to know what
+    # it collided with, not that something did.
+    assert "LH-201" in r.json()["detail"]
+    assert str(TOMORROW) in r.json()["detail"]
+    assert db.query(StructuralMasterSlot).count() == 0
+
+
+def test_a_re_upload_into_a_closed_cycle_is_refused_by_a_day(client, db, seed_users):
+    """The one check here that runs whatever the cycle says.
+
+    The hold and timetable checks skip a closed cycle, because a slot in one
+    is not going to be generated and so is not competing for the room. A day
+    already generated is a different matter, and a re-upload reaches it:
+    moving a slot rewrites the future days it has already produced, closed
+    cycle or not, and the row that gets rewritten is a row the database is
+    holding a room for. Gating this check on the cycle would let the import
+    write the clash and then hand back the driver's error as an upload
+    failure nobody could read.
+    """
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    cycle = _make_cycle(db)
+    assert _upload(client, headers, cycle.id, _csv(_row())).status_code == 200
+    cycle.operational_status = False
+    db.commit()
+
+    theatre = _room(db, code="LH-999")
+    gone = _activity(db)
+    _day(db, gone.id, theatre.id, TOMORROW)
+
+    r = _upload(client, headers, cycle.id, _csv(_row(room="LH-999")))
+    assert r.status_code == 422, r.text
+    assert "LH-999" in r.json()["detail"]
+
+    db.expire_all()
+    assert db.query(StructuralMasterSlot).one().target_room_identifier == "LH-201"
+
+
+def test_a_re_upload_is_not_refused_by_its_own_days(client, db, seed_users):
+    """A class's own days sit on its own window, so without excluding them no
+    timetable could ever be corrected by re-uploading the file."""
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    cycle = _make_cycle(db)
+    assert _upload(client, headers, cycle.id, _csv(_row())).status_code == 200
+
+    db.expire_all()
+    slot = db.query(StructuralMasterSlot).one()
+    _day(db, slot.activity_id, slot.resource_id, TOMORROW, slot_id=slot.id)
+
+    r = _upload(client, headers, cycle.id, _csv(_row(end="10:30")))
+    assert r.json()["status"] == "SUCCESS", r.text
+    db.expire_all()
+    assert db.query(StructuralMasterSlot).one().time_window_end == datetime.time(10, 30)
+
+
+def test_a_re_upload_that_changes_nothing_is_not_refused_by_a_day(client, db, seed_users):
+    """The check runs only when a row would put a class somewhere it is not
+    already. A day sitting on a class predates this rule, or was written
+    straight into the database, and either way re-uploading the file that
+    describes the timetable as it stands must not start failing over it."""
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    cycle = _make_cycle(db)
+    assert _upload(client, headers, cycle.id, _csv(_row())).status_code == 200
+
+    db.expire_all()
+    room_id = db.query(StructuralMasterSlot).one().resource_id
+    gone = _activity(db)
+    _day(db, gone.id, room_id, TOMORROW)
+
+    r = _upload(client, headers, cycle.id, _csv(_row()))
+    assert r.json()["status"] == "SUCCESS", r.text

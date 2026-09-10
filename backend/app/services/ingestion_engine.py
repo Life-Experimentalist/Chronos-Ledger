@@ -16,7 +16,11 @@ from app.models.db import (
     StructuralMasterSlot,
     User,
 )
-from app.services.availability import held_against_slot, slots_against_slot
+from app.services.availability import (
+    days_against_slot,
+    held_against_slot,
+    slots_against_slot,
+)
 from app.services.master_slot import propagate_slot_corrections
 from app.services.resource import get_or_create_room
 
@@ -79,8 +83,10 @@ class ChronosIngestionEngine:
         seen_enrollments: set[tuple[int, str]] = set()
         units: set[str] = set()
         # A slot only occupies its room while its cycle is open, so an upload
-        # into a closed cycle is checked against nothing, the same way a
-        # booking is not blocked by a closed cycle's slot.
+        # into a closed cycle is not checked against the bookings or against
+        # the rest of the timetable, the same way a booking is not blocked by
+        # a closed cycle's slot. The days already generated are checked either
+        # way, for the reason given where that check runs.
         cycle = self.db.query(PlanningCycle).filter(PlanningCycle.id == cycle_id).first()
         cycle_is_open = bool(cycle and cycle.operational_status)
 
@@ -191,37 +197,64 @@ class ChronosIngestionEngine:
                     .first()
                 )
                 room = get_or_create_room(str(row["room"]), self.db)
-                if cycle_is_open and (
+                # Only when the row would put this class somewhere it is not
+                # already: a re-upload of an unchanged file must not start
+                # failing because something was put on a room the timetable
+                # has had all along. The API refuses the same clashes on POST
+                # and PATCH; a CSV is the third way in and would otherwise be
+                # the way around them.
+                moves_the_class = (
                     slot is None or slot.resource_id != room.id or slot.time_window_end != t_end
-                ):
-                    # Only when the row would put this class somewhere it is
-                    # not already: a re-upload of an unchanged file must not
-                    # start failing because a hold was placed on a room the
-                    # timetable has had all along. The API refuses the same
-                    # clash on POST and PATCH; a CSV is the third way in and
-                    # would otherwise be the way around it.
-                    held = held_against_slot(
-                        self.db,
-                        room.id,
-                        int(row["day_of_week_index"]),
-                        t_start,
-                        t_end,
-                    )
-                    if held:
-                        taken = held[0]
-                        raise ValueError(
-                            f"activity '{row['activity_code']}': room "
-                            f"{room.code} is already held on {taken['date']} "
-                            f"from {taken['start']} to {taken['end']}, "
-                            "so the class cannot be put there"
+                )
+                if moves_the_class:
+                    if cycle_is_open:
+                        held = held_against_slot(
+                            self.db,
+                            room.id,
+                            int(row["day_of_week_index"]),
+                            t_start,
+                            t_end,
                         )
-                    # The same question against the timetable rather than
-                    # against the bookings. A file is the bulk version of the
-                    # mistake, and the one most likely to make it: two rows
-                    # naming one room at one hour read as two ordinary rows.
-                    # Slots added earlier in this same file count, because the
-                    # query flushes them before it runs.
-                    booked = slots_against_slot(
+                        if held:
+                            taken = held[0]
+                            raise ValueError(
+                                f"activity '{row['activity_code']}': room "
+                                f"{room.code} is already held on {taken['date']} "
+                                f"from {taken['start']} to {taken['end']}, "
+                                "so the class cannot be put there"
+                            )
+                        # The same question against the timetable rather than
+                        # against the bookings. A file is the bulk version of
+                        # the mistake, and the one most likely to make it: two
+                        # rows naming one room at one hour read as two ordinary
+                        # rows. Slots added earlier in this same file count,
+                        # because the query flushes them before it runs.
+                        booked = slots_against_slot(
+                            self.db,
+                            room.id,
+                            int(row["day_of_week_index"]),
+                            t_start,
+                            t_end,
+                            slot.id if slot else None,
+                        )
+                        if booked:
+                            taken = booked[0]
+                            raise ValueError(
+                                f"activity '{row['activity_code']}': room "
+                                f"{room.code} is already on the timetable for "
+                                f"{taken['activity_code']} from {taken['start']} "
+                                f"to {taken['end']}, so the class cannot be put there"
+                            )
+                    # And the rows that actually put somebody at a door, which
+                    # are neither a booking nor a slot. This one is asked
+                    # whatever the cycle says, unlike the two above: a
+                    # correction is copied onto every future day the slot has
+                    # already produced, and propagation has no cycle gate, so a
+                    # re-upload into a closed cycle can move a live row onto a
+                    # room another row is holding. The database refuses that,
+                    # and the refusal would arrive here as a driver error
+                    # rendered as an upload failure nobody could read.
+                    days = days_against_slot(
                         self.db,
                         room.id,
                         int(row["day_of_week_index"]),
@@ -229,13 +262,14 @@ class ChronosIngestionEngine:
                         t_end,
                         slot.id if slot else None,
                     )
-                    if booked:
-                        taken = booked[0]
+                    if days:
+                        taken = days[0]
                         raise ValueError(
                             f"activity '{row['activity_code']}': room "
-                            f"{room.code} is already on the timetable for "
-                            f"{taken['activity_code']} from {taken['start']} "
-                            f"to {taken['end']}, so the class cannot be put there"
+                            f"{room.code} already has a generated day for "
+                            f"{taken['activity_code']} on {taken['date']} "
+                            f"from {taken['start']} to {taken['end']}, "
+                            "so the class cannot be put there"
                         )
                 if not slot:
                     slot = StructuralMasterSlot(
