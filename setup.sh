@@ -203,10 +203,14 @@ $DOCKER_COMPOSE_CMD -f "${COMPOSE_FILE}" up --build -d
 log "Waiting for services to be healthy..."
 ATTEMPTS=0
 MAX=30
-until docker inspect --format='{{.State.Health.Status}}' chronos_core_engine 2>/dev/null | grep -q "healthy"; do
+# Resolve the container through compose rather than by a fixed name: the prod
+# stack no longer pins container_name, and the name differs per compose project.
+until CID=$($DOCKER_COMPOSE_CMD -f "${COMPOSE_FILE}" ps -q chronos-app 2>/dev/null) &&
+      [[ -n "$CID" ]] &&
+      docker inspect --format='{{.State.Health.Status}}' "$CID" 2>/dev/null | grep -q "healthy"; do
   ATTEMPTS=$((ATTEMPTS + 1))
   if [[ $ATTEMPTS -ge $MAX ]]; then
-    warn "Backend healthcheck timed out. Check logs: docker logs chronos_core_engine"
+    warn "Backend healthcheck timed out. Check logs: $DOCKER_COMPOSE_CMD -f ${COMPOSE_FILE} logs chronos-app"
     break
   fi
   sleep 3

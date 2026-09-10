@@ -92,17 +92,22 @@ This script:
 ### 3. Verify containers
 
 ```bash
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+docker compose -f docker-compose.prod.yml ps
 ```
 
 Expected output:
 ```
-NAMES                          STATUS          PORTS
-chronos_edge_proxy             Up              0.0.0.0:80->80/tcp
-chronos_core_engine            Up (healthy)
-chronos_postgres_persistence   Up (healthy)
-chronos_redis_state            Up
+NAME                             SERVICE         STATUS          PORTS
+chronos-ledger-chronos-proxy-1   chronos-proxy   Up              0.0.0.0:80->80/tcp
+chronos-ledger-chronos-app-1     chronos-app     Up (healthy)
+chronos-ledger-chronos-db-1      chronos-db      Up (healthy)
+chronos-ledger-chronos-cache-1   chronos-cache   Up
 ```
+
+The container names are compose's own, derived from the directory the stack
+runs from, so yours differ if the directory is named something else. Address a
+container by its service name through compose rather than by container name;
+nothing in the stack pins one.
 
 The proxy's host ports come from `EDGE_HTTP_PORT` and `EDGE_HTTPS_PORT`,
 which default to 80 and 443. Set them in `.env` when something else on the
@@ -247,7 +252,7 @@ docker compose start chronos-proxy
 The proxy logs confirm which mode it started in:
 
 ```bash
-docker logs chronos_edge_proxy | grep 40-tls
+docker compose -f docker-compose.prod.yml logs chronos-proxy | grep 40-tls
 ```
 
 ### Renewal

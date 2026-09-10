@@ -27,12 +27,18 @@ x-chronos-net: &chronos-net
   networks:
     - chronos_net
 
+# Nothing here pins a container_name on purpose. A fixed name is global to the
+# Docker daemon, so pinning one stops this stack starting on a host that is
+# already running the dev stack, and it blocks the horizontal scaling that
+# docs/deployment.md describes. Address a container through compose instead:
+#   docker compose -f docker-compose.prod.yml ps chronos-app
+#   docker compose -f docker-compose.prod.yml logs chronos-proxy
+
 services:
   # ── Web (nginx + pre-built Next.js static export) ─────────────────────────
   chronos-proxy:
     <<: [*restart, *chronos-net]
     image: ghcr.io/${GHCR_OWNER:-life-experimentalist}/chronos-ledger-web:${VERSION:-latest}
-    container_name: chronos_edge_proxy
     ports:
       # Host side only. The container still listens on 80 and 443; these say
       # where they surface. Another compose file that wants the host's own 80
@@ -56,7 +62,6 @@ services:
   chronos-app:
     <<: [*restart, *chronos-net]
     image: ghcr.io/${GHCR_OWNER:-life-experimentalist}/chronos-ledger-backend:${VERSION:-latest}
-    container_name: chronos_core_engine
     environment:
       DATABASE_URL: postgresql://chronos_admin:${DB_PASSWORD:-SecureCloud2026}@chronos-db:5432/chronos_ledger
       REDIS_URL: redis://chronos-cache:6379/0
@@ -133,7 +138,6 @@ services:
   chronos-db:
     <<: [*restart, *chronos-net]
     image: postgres:17-alpine
-    container_name: chronos_postgres_persistence
     environment:
       POSTGRES_USER: chronos_admin
       POSTGRES_PASSWORD: ${DB_PASSWORD:-SecureCloud2026}
@@ -155,7 +159,6 @@ services:
   chronos-cache:
     <<: [*restart, *chronos-net]
     image: redis:7.4-alpine
-    container_name: chronos_redis_state
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - chronos_cache_store:/data
