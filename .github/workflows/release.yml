@@ -98,7 +98,16 @@ jobs:
       - name: Stamp release version into docker-compose.prod.yml
         run: |
           VERSION="${{ needs.release-please.outputs.tag_name }}"
-          sed "s|:latest|:${VERSION}|g" docker-compose.prod.yml > docker-compose.prod.release.yml
+          # The image lines read ${VERSION:-latest}, so only the default is
+          # replaced: somebody who downloads this asset and runs it with no
+          # environment set gets this release, and VERSION still overrides.
+          # It used to substitute ":latest", which never appears in the file,
+          # so v0.10.0 shipped an asset identical to the one on main.
+          sed "s|\${VERSION:-latest}|\${VERSION:-${VERSION}}|g" \
+            docker-compose.prod.yml > docker-compose.prod.release.yml
+          # A silent no-op is the whole failure mode here, so fail loudly.
+          grep -q "${VERSION}" docker-compose.prod.release.yml
+          grep -n 'chronos-ledger-.*:' docker-compose.prod.release.yml
 
       - name: Upload to release
         uses: svenstaro/upload-release-action@2.9.0
