@@ -206,3 +206,59 @@ def test_a_reimport_does_not_reset_an_existing_password(client, db, seed_users):
         json={"email": original["email_address"], "password": original["initial_password"]},
     )
     assert res.status_code == 200, res.text
+
+
+def test_an_unknown_cycle_is_404_not_a_driver_error(client, db, seed_users):
+    """A mistyped cycle id used to reach the foreign key and come back as SQL."""
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    csv_text = (
+        HEADER + "\n"
+        "STU906,Nowhere Near,nowhere@test.internal,PH101,Physics,CSE,3,09:00,10:00,FAC001,LH-401\n"
+    )
+    r = _upload(client, headers, 4242, csv_text)
+    assert r.status_code == 404, r.text
+    assert r.json()["detail"] == "Cycle not found"
+
+
+def test_a_bad_target_date_is_422_not_500(client, db, seed_users):
+    """The date was parsed inside the handler, so a typo raised out of it."""
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    r = client.post("/api/v1/ingestion/generate-ledger?target_date=nine-am", headers=headers)
+    assert r.status_code == 422, r.text
+
+    ok = client.post("/api/v1/ingestion/generate-ledger?target_date=2026-03-04", headers=headers)
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["date"] == "2026-03-04"
+
+
+def test_an_internal_failure_does_not_hand_back_the_sql(client, db, seed_users, monkeypatch):
+    """The catch-all returned str(e), which on a database error is the statement.
+
+    Whoever uploaded the spreadsheet is told the import failed and which line
+    it stopped on. The rest goes to the log.
+    """
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+
+    leak = "INSERT INTO users (credential_secure_hash) VALUES ($2b$12$donotshowthis)"
+
+    def _boom(_password):
+        raise RuntimeError(leak)
+
+    monkeypatch.setattr("app.services.ingestion_engine.hash_password", _boom)
+
+    csv_text = (
+        HEADER + "\n"
+        "STU907,Leaky Row,leaky@test.internal,PH102,Optics,CSE,3,09:00,10:00,FAC001,LH-402\n"
+    )
+    r = _upload(client, headers, cycle.id, csv_text)
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert leak not in detail
+    assert "INSERT INTO" not in detail
+    assert "server log" in detail
+    # The row it stopped on is still named, because that much is the uploader's.
+    assert detail.startswith("line 2: ")
+
+    db.expire_all()
+    assert db.query(User).filter(User.id == "STU907").first() is None

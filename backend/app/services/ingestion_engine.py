@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 
 import datetime
+import logging
 from typing import Any
 
 import pandas as pd
@@ -23,6 +24,8 @@ from app.services.availability import (
 )
 from app.services.master_slot import propagate_slot_corrections
 from app.services.resource import get_or_create_room
+
+logger = logging.getLogger(__name__)
 
 REQUIRED_COLUMNS = {
     "member_id",
@@ -50,6 +53,11 @@ def _parse_time(raw: str) -> datetime.time:
     raise ValueError(f"Cannot parse time value '{raw}', expected HH:MM or HH:MM:SS")
 
 
+def _where(line: int) -> str:
+    """Name the file line a failure came from, when it came from one at all."""
+    return f"line {line}: " if line else ""
+
+
 class ChronosIngestionEngine:
     def __init__(self, db: Session):
         self.db = db
@@ -58,7 +66,13 @@ class ChronosIngestionEngine:
         try:
             df = pd.read_csv(file_path)
         except Exception as e:
-            return {"status": "FAILED", "error_log": f"CSV parse error: {e}"}
+            # What pandas says names the line it choked on, which is worth
+            # passing back, but it can also name the server-side temp file the
+            # upload was written to. That path is nobody's business outside the
+            # host, so it is replaced by the word it stands for.
+            logger.exception("CSV parse failed, cycle %s", cycle_id)
+            detail = str(e).replace(file_path, "the file")
+            return {"status": "FAILED", "error_log": f"CSV parse error: {detail}"}
 
         missing = REQUIRED_COLUMNS - set(df.columns)
         if missing:
@@ -90,8 +104,12 @@ class ChronosIngestionEngine:
         cycle = self.db.query(PlanningCycle).filter(PlanningCycle.id == cycle_id).first()
         cycle_is_open = bool(cycle and cycle.operational_status)
 
+        # Which line of the file the loop has reached, so a failure can name it.
+        # Plus two because pandas counts from zero and line one is the header.
+        line = 0
         try:
-            for _, row in df.iterrows():
+            for index, row in df.iterrows():
+                line = int(index) + 2
                 # 1. Upsert member user
                 member = self.db.query(User).filter(User.id == str(row["member_id"])).first()
                 if not member:
@@ -314,6 +332,9 @@ class ChronosIngestionEngine:
                 # After the flush, so a slot this row created has an id.
                 seen_slots.add(slot.id)
 
+            # Past the rows. What fails from here is not any one row's fault and
+            # must not be reported against whichever one the loop stopped on.
+            line = 0
             propagation = propagate_slot_corrections(list(corrected.values()), self.db)
             orphans = self._orphans(cycle_id, units, seen_slots, seen_enrollments)
 
@@ -327,9 +348,31 @@ class ChronosIngestionEngine:
                 **propagation,
             }
 
-        except Exception as e:
+        except ValueError as e:
+            # Everything this engine refuses on purpose is a ValueError, and
+            # every one of those messages is written to be read by whoever
+            # typed the file. Those go back as they are.
             self.db.rollback()
-            return {"status": "FAILED", "error_log": str(e)}
+            return {"status": "FAILED", "error_log": f"{_where(line)}{e}"}
+
+        except Exception:
+            # Anything else is the engine failing rather than the file being
+            # wrong, and str() on a database error carries the statement, the
+            # bound parameters and the column names with it. That belongs in
+            # the log, not in a reply to somebody who uploaded a spreadsheet.
+            self.db.rollback()
+            logger.exception(
+                "CSV ingestion failed, cycle %s, %s",
+                cycle_id,
+                _where(line) or "before the rows",
+            )
+            return {
+                "status": "FAILED",
+                "error_log": (
+                    f"{_where(line)}the import failed and nothing was saved. "
+                    "The reason is in the server log."
+                ),
+            }
 
     def _orphans(
         self,
