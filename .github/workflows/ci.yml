@@ -150,6 +150,10 @@ jobs:
         with:
           scan-type: fs
           scan-ref: .
+          # Only this step reads the suppressions, so anything listed in that
+          # file still reaches the Security tab through the pass above. Every
+          # entry carries its reasoning and a date it expires on.
+          trivyignores: .trivy-release-gate.yaml
           severity: CRITICAL
           exit-code: 1
           ignore-unfixed: true

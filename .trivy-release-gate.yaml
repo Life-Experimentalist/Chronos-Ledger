@@ -1,0 +1,47 @@
+# Suppressions for the blocking Trivy step only.
+#
+# This file is passed with `trivyignores:` on the "fail the build on anything
+# critical" step in .github/workflows/ci.yml and nowhere else. The reporting
+# pass that writes SARIF to the Security tab does not read it, so everything
+# listed here is still visible under Security > Code scanning. The name is
+# deliberately not .trivyignore.yaml, which Trivy would pick up automatically
+# and apply to both passes.
+#
+# Nothing goes in here because it is inconvenient. Each entry carries the
+# reason it does not reach this deployment, the file it is scoped to, and a
+# date after which Trivy starts failing on it again.
+
+vulnerabilities:
+  # Next.js image optimization passes AVIF files to libheif through sharp.
+  # This frontend sets `images: { unoptimized: true }` alongside
+  # `output: 'export'` (frontend/next.config.js), so no /_next/image route is
+  # emitted and sharp is not in frontend/package-lock.json at all. There is no
+  # code path in the built artifact that reaches the affected library.
+  - id: GHSA-2xp9-vwfh-vxw4
+    paths:
+      - "frontend/package-lock.json"
+    statement: >-
+      Static export with image optimization disabled. No /_next/image route is
+      emitted and sharp is absent from the lockfile, so the vulnerable code is
+      not present in the shipped artifact. Cleared by the Next 16 upgrade
+      tracked in issue #12.
+    expired_at: 2026-12-01
+
+  # Remote code execution against a Next.js server hosted on a Windows
+  # filesystem. frontend/Dockerfile builds with node and then copies /app/out
+  # into a plain alpine stage, so the published image carries static HTML and
+  # no Next server at any point. The proxy serves those files. The advisory
+  # says there is no workaround for affected Windows-hosted applications; this
+  # deployment is not one, because it hosts no Next.js server.
+  #
+  # `next dev` on a Windows development machine is affected and is not covered
+  # by this suppression. It binds localhost unless started with -H 0.0.0.0.
+  - id: CVE-2026-75604
+    paths:
+      - "frontend/package-lock.json"
+    statement: >-
+      Affects a running Next.js server on a Windows filesystem. The published
+      image is a static export served by the proxy and runs no Next server, so
+      the shipped artifact is not affected. Local `next dev` on Windows is, and
+      is tracked with the Next 16 upgrade in issue #12.
+    expired_at: 2026-12-01
