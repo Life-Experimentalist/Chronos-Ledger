@@ -5,10 +5,12 @@
 //
 // Opt-out: Admin → Settings → Privacy → disable telemetry.
 // The opt-out preference is stored in localStorage under `chronos_telemetry_opted_out`.
-// Set NEXT_PUBLIC_TELEMETRY_ENABLED=false at build time to disable permanently.
+// Off unless switched on: telemetry needs both NEXT_PUBLIC_TELEMETRY_ENABLED=true and
+// a non-empty NEXT_PUBLIC_TELEMETRY_ENDPOINT at build time. Either one missing,
+// including simply unset, sends nothing.
 
 const ENDPOINT = process.env.NEXT_PUBLIC_TELEMETRY_ENDPOINT ?? ''
-const GLOBALLY_ENABLED = process.env.NEXT_PUBLIC_TELEMETRY_ENABLED !== 'false'
+const GLOBALLY_ENABLED = process.env.NEXT_PUBLIC_TELEMETRY_ENABLED === 'true'
 
 const OPT_OUT_KEY = 'chronos_telemetry_opted_out'
 
