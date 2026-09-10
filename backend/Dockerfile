@@ -11,6 +11,16 @@ COPY pyproject.toml uv.lock* ./
 # Install dependencies (no editable install, no dev deps)
 RUN uv sync --frozen --no-dev
 
+EXPOSE 8000
+
+# Baked in rather than left to compose, so anyone who pulls this image gets
+# a working probe without copying our compose file. /health is on the app
+# root, outside /api/v1, so it needs no token and no API key. start-period
+# covers `alembic upgrade head`, which runs before uvicorn binds and takes
+# longest on a database that has never been migrated.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+
 # Copy application source
 COPY . .
 

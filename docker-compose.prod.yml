@@ -34,8 +34,13 @@ services:
     image: ghcr.io/${GHCR_OWNER:-Life-Experimentalist}/chronos-ledger-web:${VERSION:-latest}
     container_name: chronos_edge_proxy
     ports:
-      - "80:80"
-      - "443:443"
+      # Host side only. The container still listens on 80 and 443; these say
+      # where they surface. Another compose file that wants the host's own 80
+      # and 443 (an outer proxy fronting several stacks) can move Chronos aside
+      # with EDGE_HTTP_PORT and EDGE_HTTPS_PORT instead of editing this file.
+      # The defaults are the ports that were hardcoded here before.
+      - "${EDGE_HTTP_PORT:-80}:80"
+      - "${EDGE_HTTPS_PORT:-443}:443"
     volumes:
       - ./certs:/etc/nginx/certs:ro
     depends_on:
@@ -58,15 +63,25 @@ services:
       JWT_SECRET_SIGNING_KEY: ${JWT_SECRET_SIGNING_KEY:?JWT_SECRET_SIGNING_KEY is required}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-30}
       APP_ENV: production
       # Decides what "today" means. A container runs UTC, so an
       # organization that is not in UTC needs this or the dashboard is a
       # whole offset out. IANA name, not an offset.
       ORG_TIMEZONE: ${ORG_TIMEZONE:-UTC}
+      # What the interface calls people and bookings. generic, campus or
+      # hospital; labels only, never the schema and never the API. Served
+      # to the client by GET /api/v1/config.
+      ORG_PROFILE: ${ORG_PROFILE:-generic}
+      ORG_DOMAIN_MASK: ${ORG_DOMAIN_MASK:-org.internal}
       APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-http://localhost}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_CONTACT_EMAIL: ${VAPID_CONTACT_EMAIL:-admin@org.internal}
+      # Opt in, and only to a counter you run yourself. Both have to be
+      # set: an empty endpoint leaves it off.
+      TELEMETRY_ENABLED: ${TELEMETRY_ENABLED:-false}
+      TELEMETRY_ENDPOINT: ${TELEMETRY_ENDPOINT:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
