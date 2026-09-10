@@ -291,10 +291,24 @@ Times are naive wall clock in the organisation's own timezone, the same as the
 slot stores. They carry no offset and no `Z`.
 
 What counts as taken: a weekly slot pointing at this resource whose cycle is
-flagged open, and any reservation on it that has not been cancelled. Cycle
-date bounds are **not** consulted, because nightly ledger generation does not
+flagged open, any reservation on it that has not been cancelled, and any day
+the nightly generator has already written for it. Cycle date bounds are
+**not** consulted for slots, because nightly ledger generation does not
 consult them either. Answering otherwise would report a room free on a date
 the generator is going to fill.
+
+A generated day counts whatever its cycle now says. Closing a cycle stops the
+generator producing more days but does not withdraw the ones it produced, and
+deleting a slot leaves behind the days attendance was marked on. Those rows
+still hold a room and an hour, and the database refuses a second booking on
+top of them either way, so they are reported here too.
+
+Where a generated day and the slot it came from both cover a date, you get the
+day, once. The day is the row that holds the hour. It keeps the window it was
+generated with when the slot is corrected later, so a moved class reads at its
+old time until the days already in use have run. Dates the generator has not
+reached yet still come from the slot, which is what answers for the rest of
+the year.
 
 Which kind an interval is can be read off the fields that are filled in. A
 slot carries `activity_id`, `activity_code` and `master_slot_id` with a null
@@ -312,10 +326,9 @@ returned it. Grouping by `date` alone files that hold under a day nobody asked
 about, and discarding anything outside the range shows a ward as free while it
 is staffed.
 
-Two things this does not see. A day-level change made through
-`PATCH /schedule/ledger/{id}` lives on the day, not on the slot, so it is not
-reflected. And an inactive resource still answers: retiring a room does not
-clear its calendar.
+`PATCH /schedule/ledger/{id}` cannot move a day's date, hour or resource, so
+nothing it changes shows up here. An inactive resource still answers:
+retiring a room does not clear its calendar.
 
 `from` after `to` is `422` (`from must not be after to`). A range longer than
 366 days inclusive is `422` (`the range must not exceed 366 days`), which
@@ -432,8 +445,8 @@ A weekly slot reads its two times by the same rule, so a night shift can be a
 recurring slot and not only a one off hold, and an overnight booking is
 checked against night shifts on the timetable as well as against day ones.
 
-What this refuses is exactly what `GET availability` calls busy: the same two
-queries, through the same expansion. The rule runs both ways. A class cannot
+What this refuses is exactly what `GET availability` calls busy: the same
+three queries, through the same expansion. The rule runs both ways. A class cannot
 be put on top of a hold either, so `POST /schedule/slots`, `PATCH
 /schedule/slots/{id}` and a CSV upload are each refused where a booking
 already stands. A hold taken here holds against the timetable and not only

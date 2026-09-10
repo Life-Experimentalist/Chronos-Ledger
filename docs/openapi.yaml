@@ -1666,17 +1666,23 @@ paths:
       summary: When a resource is already taken
       description: >
         Expands the weekly slots pointing at this resource over the range,
-        inclusive of both ends. A slot counts when its cycle is flagged open;
-        cycle date bounds are not consulted, because nightly ledger generation
-        does not consult them either, and answering otherwise would report a
-        room free on a date the generator is going to fill.
+        inclusive of both ends, and unions in the reservations and the days
+        the nightly generator has already written. A slot counts when its
+        cycle is flagged open; cycle date bounds are not consulted, because
+        nightly ledger generation does not consult them either, and answering
+        otherwise would report a room free on a date the generator is going to
+        fill.
 
 
-        The daily ledger is not read. It only ever holds tomorrow, so a
-        resource would come back free on every date past it. That also means a
-        day-level change made through PATCH /schedule/ledger/{ledger_id} is not
-        reflected here. An inactive resource still answers: retiring a room
-        does not clear its calendar.
+        A generated day counts whatever its cycle now says: closing a cycle
+        does not withdraw the days it has already produced, deleting a slot
+        leaves behind the days attendance was marked on, and the database
+        refuses a second booking on top of either. Where a day and the slot it
+        came from both cover a date you get the day, once, because the day is
+        the row that holds the hour and keeps its window when the slot is
+        corrected later. Dates the generator has not reached yet come from the
+        slot. An inactive resource still answers: retiring a room does not
+        clear its calendar.
 
 
         A busy interval's date can be the day before `from`. A booking

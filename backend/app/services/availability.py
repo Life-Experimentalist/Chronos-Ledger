@@ -3,12 +3,14 @@
 
 """When a resource is already spoken for, over a range of dates.
 
-Two things occupy a resource: a weekly slot from the timetable, and a
-reservation somebody placed by hand or through the API. Both are gathered
-here so that the endpoint that answers "when is this free" and the endpoint
-that refuses a clashing booking are looking at the same set. If they were not,
-availability could report an hour free that booking then refused, or worse,
-booking could accept an hour availability had already given away.
+Three things occupy a resource: a weekly slot from the timetable, a
+reservation somebody placed by hand or through the API, and a generated day,
+which is what a slot turns into once the nightly job has written it and is
+the row attendance is marked against. All three are gathered here so that the
+endpoint that answers "when is this free" and the endpoint that refuses a
+clashing booking are looking at the same set. If they were not, availability
+could report an hour free that booking then refused, or worse, booking could
+accept an hour availability had already given away.
 
 Expansion is kept in one function that touches neither the database nor
 FastAPI, because it is the piece that changes next. A weekly repeat is the
@@ -268,25 +270,58 @@ def _day_interval(day: DailyLedger) -> dict:
     }
 
 
-def _dated_days(db: Session, resource_id: int, since: datetime.date):
+def _dated_days(
+    db: Session, resource_id: int, since: datetime.date, until: datetime.date | None = None
+):
     """Generated days on a resource from a date onwards, windows only.
 
     A day with no window is an ad-hoc entry that never claimed an hour, and a
     day with no resource is not on this room. Neither occupies anything, and
     both are dropped here rather than in each caller, because the database
     constraint drops exactly the same rows and the two must not disagree.
+
+    until is open by default because the two slot-side callers want every
+    future day of the resource: a correction is copied onto every day the
+    slot has still to run and the clash can be on any of them. A caller
+    asking about a range closes it.
+
+    The activity is loaded with the day. _day_interval reads it for the
+    activity code, and this runs on the path GET availability takes, where a
+    query per row would be a query per booked hour of the range.
     """
+    query = db.query(DailyLedger).filter(
+        DailyLedger.resource_id == resource_id,
+        DailyLedger.target_date >= since,
+        DailyLedger.time_window_start.isnot(None),
+        DailyLedger.time_window_end.isnot(None),
+    )
+    if until is not None:
+        query = query.filter(DailyLedger.target_date <= until)
     return (
-        db.query(DailyLedger)
-        .filter(
-            DailyLedger.resource_id == resource_id,
-            DailyLedger.target_date >= since,
-            DailyLedger.time_window_start.isnot(None),
-            DailyLedger.time_window_end.isnot(None),
-        )
+        query.options(joinedload(DailyLedger.activity))
         .order_by(DailyLedger.target_date, DailyLedger.time_window_start)
         .all()
     )
+
+
+def booked_days(
+    db: Session, resource_id: int, from_date: datetime.date, to_date: datetime.date
+) -> list[DailyLedger]:
+    """The generated days sitting on this resource, in the range.
+
+    No cycle gate, and that is the point of the function. booked_slots counts
+    open cycles only, because closing a cycle stops the generator producing
+    any more days and reporting its slots would claim dates nothing is going
+    to fill. The days it already produced are still in the table, still name
+    a room and an hour, and the database refuses a second row on top of them
+    whatever their cycle says. days_against_slot has no cycle gate on either
+    side for the same reason, and these two must not disagree.
+
+    The day before the range is fetched too, exactly as held_reservations
+    fetches it: a day dated Monday running 22:00 to 06:00 occupies Tuesday
+    morning. occupied() drops whatever turns out not to reach the range.
+    """
+    return _dated_days(db, resource_id, from_date - datetime.timedelta(days=1), to_date)
 
 
 def days_against_window(
@@ -347,12 +382,6 @@ def days_against_slot(
     overlapping in time came apart the moment a window could pass midnight.
     Only one of three consecutive dates falls on a given weekday, so a day is
     named at most once.
-
-    This is stricter than the availability endpoint, which reads slots and
-    bookings and never the ledger. The gap between them is exactly the days no
-    slot speaks for any more: a closed cycle's leftovers, and the days of a
-    deleted slot that had attendance on them. Those read as free there and are
-    refused here, and being refused is the correct half of that.
     """
     clashes = []
     for row in _dated_days(db, resource_id, org_today()):
@@ -371,21 +400,29 @@ def days_against_slot(
 def occupied(
     slots,
     reservations,
+    days,
     from_date: datetime.date,
     to_date: datetime.date,
 ) -> list[dict]:
-    """Expand weekly slots and dated bookings into the intervals they take.
+    """Expand weekly slots, generated days and dated bookings into intervals.
 
     Returns the busy intervals rather than the free ones. Free time is the
     complement of this against whatever hours the caller considers open, and
     only the caller knows those: a hospital theatre and a lecture hall
     disagree about what an empty Tuesday night means.
 
-    The caller decides what comes in. Nothing here reads the ledger: the
-    ledger only ever holds tomorrow, so a resource would read as free on
-    every date past it. That also means a day-level change made through
-    PATCH /ledger/{id} is not reflected, since that change lives on the day
-    and not on the slot it came from.
+    The caller decides what comes in. Nothing here touches the database.
+
+    The generated days are unioned in rather than read on their own. The
+    ledger reaches a day or two ahead at most, so a calendar built from it
+    alone would report a resource free on every date past that; the weekly
+    expansion is what answers for the rest of the year. But where a day
+    exists it is the row that holds the hour, so where the two disagree the
+    day wins and the slot it came from is dropped for that date only. That is
+    the timetable being corrected while days already in use keep the window
+    they were generated with, and it is a closed cycle's leftovers and a
+    deleted slot's days staying booked: those carry no live slot to drop and
+    are simply added.
 
     A reservation carries no activity and a slot carries no reservation id,
     so which kind an interval is can be read off the fields that are set.
@@ -409,10 +446,20 @@ def occupied(
     for slot in slots:
         by_weekday.setdefault(slot.day_of_week_index, []).append(slot)
 
+    # Both halves of the key, never the slot alone. A slot recurs weekly and
+    # the generator has usually reached one of its dates, so suppressing on
+    # the slot would hide the fifty-one dates it has not reached yet and the
+    # room would read free for the rest of the year.
+    settled = {
+        (row.target_date, row.master_slot_id) for row in days if row.master_slot_id is not None
+    }
+
     busy = []
     day = from_date - datetime.timedelta(days=1)
     while day <= to_date:
         for slot in by_weekday.get(day.isoweekday(), ()):
+            if (day, slot.id) in settled:
+                continue
             activity = slot.activity
             _, ends = window_span(day, slot.time_window_start, slot.time_window_end)
             entry = {
@@ -428,6 +475,11 @@ def occupied(
             if _overlaps(_bounds(entry), asked):
                 busy.append(entry)
         day += datetime.timedelta(days=1)
+
+    for row in days:
+        entry = _day_interval(row)
+        if _overlaps(_bounds(entry), asked):
+            busy.append(entry)
 
     for held in reservations:
         entry = _held_interval(held)

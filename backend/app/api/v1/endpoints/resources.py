@@ -22,6 +22,7 @@ from app.schemas.resources import (
 )
 from app.services.availability import (
     MAX_RANGE_DAYS,
+    booked_days,
     booked_slots,
     clashing,
     held_reservations,
@@ -75,15 +76,23 @@ def resource_availability(
 ):
     """When this resource is already taken, between two dates inclusive.
 
-    Both the timetable and the bookings, in one answer. Anything less would
-    let a caller read a room as free and then be refused when it tried to
-    take the hour, or take an hour the timetable had already claimed.
+    The timetable, the bookings and the days already generated, in one
+    answer. Anything less would let a caller read a room as free and then be
+    refused when it tried to take the hour, or take an hour something had
+    already claimed.
 
     A slot counts when its cycle is open. Cycle date bounds are not
     consulted, because the nightly ledger generation does not consult them
     either: it books a day whenever the cycle flag is on. Answering anything
     else here would tell a caller a room was free on a date the ledger is
     going to fill, which is the direction that ends in two bookings.
+
+    A generated day counts whatever its cycle says, because closing a cycle
+    does not withdraw the days it has already produced and the database
+    refuses a second row on top of them either way. Where a day and the slot
+    it came from both cover a date, the day is what is reported: it is the
+    row that holds the hour, and it keeps the window it was generated with
+    when the slot is later corrected.
 
     An inactive resource still answers. What is on its calendar is a fact
     about the past and about slots nobody has moved yet, and hiding it would
@@ -113,6 +122,7 @@ def resource_availability(
         "busy": occupied(
             booked_slots(db, resource_id),
             held_reservations(db, resource_id, from_, to),
+            booked_days(db, resource_id, from_, to),
             from_,
             to,
         ),
@@ -169,10 +179,10 @@ def _fingerprint(resource_id: int, payload: ReservationCreate) -> str:
 def _conflicts_for(db: Session, resource_id: int, payload: ReservationCreate) -> list[dict]:
     """What already holds any part of the asked-for window.
 
-    Exactly the two queries GET availability runs, through the same expansion.
-    A booking accepted for an hour availability calls busy is the double
-    booking this endpoint exists to prevent, so the two cannot be allowed to
-    answer differently.
+    Exactly the three queries GET availability runs, through the same
+    expansion. A booking accepted for an hour availability calls busy is the
+    double booking this endpoint exists to prevent, so the two cannot be
+    allowed to answer differently.
 
     Asked twice: once before inserting, and again if the database refuses the
     insert, because by then somebody else's row is in the table and is the
@@ -190,6 +200,7 @@ def _conflicts_for(db: Session, resource_id: int, payload: ReservationCreate) ->
         occupied(
             booked_slots(db, resource_id),
             held_reservations(db, resource_id, payload.date, last),
+            booked_days(db, resource_id, payload.date, last),
             payload.date,
             last,
         ),
@@ -253,7 +264,7 @@ def create_reservation(
     worse than one that fails, so the key is required rather than optional.
 
     What it checks against is exactly what GET availability reports: the same
-    two queries, through the same expansion. A booking accepted for an hour
+    three queries, through the same expansion. A booking accepted for an hour
     availability calls busy is the double booking this endpoint exists to
     prevent, so the two cannot be allowed to answer differently.
 
