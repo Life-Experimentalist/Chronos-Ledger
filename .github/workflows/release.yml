@@ -57,9 +57,12 @@ jobs:
         id: rp
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
-          release-type: simple
-          # Bumps version.txt at the repo root.
-          # The release PR title follows "chore(release): vX.Y.Z"
+          # No release-type here on purpose. Setting it puts the action in
+          # standalone mode, where it builds its own config and never reads
+          # the manifest, so it cannot see that the current version is 0.9.0.
+          # The first run with it set proposed 1.0.0 as an initial release.
+          # release-type, bump-minor-pre-major and the files that carry the
+          # version number all live in release-please-config.json.
           manifest-file: .release-please-manifest.json
           config-file: release-please-config.json
 
