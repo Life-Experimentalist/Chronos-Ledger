@@ -86,6 +86,9 @@ services:
       # caller cannot put its own address on the front of it.
       FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
       APP_ENV: production
+      # /docs, /redoc and /openapi.json. Blank follows APP_ENV, which is
+      # pinned to production here, so they are off unless you set true.
+      DOCS_ENABLED: ${DOCS_ENABLED:-}
       # Decides what "today" means. A container runs UTC, so an
       # organization that is not in UTC needs this or the dashboard is a
       # whole offset out. IANA name, not an offset.

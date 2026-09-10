@@ -118,7 +118,7 @@ export default function LandingPage() {
               { text: '', color: '' },
               { text: '  Admin login: admin@org.internal', color: 'text-chronos-warning' },
               { text: '  Password:    (generated, printed once)', color: 'text-chronos-warning' },
-              { text: '  Swagger UI:  http://localhost/docs', color: 'text-chronos-muted' },
+              { text: '  Swagger UI:  off (DOCS_ENABLED=true to publish)', color: 'text-chronos-muted' },
             ].map((line, i) => (
               <p key={i} className={`${line.color} leading-relaxed`}>{line.text || ' '}</p>
             ))}
@@ -305,7 +305,7 @@ export default function LandingPage() {
                 'Change JWT_SECRET_SIGNING_KEY to a random 64-char string',
                 'Change the seed admin password immediately after first login',
                 'Generate VAPID keys for push notifications: npx web-push generate-vapid-keys',
-                'Restrict /docs and /redoc to internal IPs in nginx.conf for production',
+                'Set ORG_TIMEZONE to where the organization actually is, or a container running UTC puts every day an offset out',
               ].map((item) => (
                 <li key={item} className="flex items-start gap-2 text-xs text-chronos-text-dim">
                   <span className="text-chronos-warning shrink-0 mt-0.5">→</span>
@@ -322,7 +322,7 @@ export default function LandingPage() {
         <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">First-class REST API</h2>
           <p className="text-chronos-muted max-w-xl mx-auto">
-            Full OpenAPI 3.0 spec. Every endpoint is documented and testable via Swagger UI at <code className="text-chronos-teal">/docs</code>.
+            Full OpenAPI 3.0 spec. Every endpoint is documented and testable via Swagger UI at <code className="text-chronos-teal">/docs</code>, which stays off in production until you turn it on.
           </p>
         </div>
 

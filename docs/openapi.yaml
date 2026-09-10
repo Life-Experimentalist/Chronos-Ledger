@@ -4,7 +4,8 @@ openapi: "3.1.0"
 # Licensed under the Apache License, Version 2.0
 #
 # This is the authoritative static OpenAPI contract for Chronos Ledger.
-# FastAPI also generates a live version at runtime: GET /openapi.json
+# FastAPI also generates a live version at runtime: GET /openapi.json, but
+# only where DOCS_ENABLED allows it, which it does not under APP_ENV=production.
 # The two should remain in sync. Update this file when adding or changing endpoints.
 
 info:

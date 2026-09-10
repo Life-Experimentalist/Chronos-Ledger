@@ -816,7 +816,7 @@
   <div class="section-inner">
     <div class="section-header">
       <h2>First-class REST API</h2>
-      <p>Full OpenAPI 3.0 spec. Every endpoint documented and testable via Swagger UI at <code class="teal">/docs</code>.</p>
+      <p>Full OpenAPI 3.0 spec. Every endpoint documented and testable via Swagger UI at <code class="teal">/docs</code>, which stays off in production until you turn it on.</p>
     </div>
     <div class="api-grid" id="api-grid"></div>
     <p class="api-note">
@@ -933,7 +933,7 @@ const TERMINAL_LINES = [
   { text:' ✔ chronos-proxy      Listening on :80', cls:'t-green' },
   { text:' ', cls:'' },
   { text:'  Login:      admin@org.internal', cls:'t-warn' },
-  { text:'  Swagger UI: http://localhost/docs', cls:'t-dim' },
+  { text:'  Swagger UI: off (DOCS_ENABLED=true to publish)', cls:'t-dim' },
 ];
 
 // ── Render functions ──────────────────────────────────────────────────────────
@@ -1004,7 +1004,7 @@ function renderInstall() {
         <li>Change JWT_SECRET_SIGNING_KEY to a random 64-char string</li>
         <li>Change the seed admin password immediately after first login</li>
         <li>Generate VAPID keys: <code class="mono" style="font-size:.75rem;color:var(--teal);">npx web-push generate-vapid-keys</code></li>
-        <li>Restrict /docs and /redoc to internal IPs in nginx.conf for production</li>
+        <li>Set ORG_TIMEZONE to where the organization actually is, or a container running UTC puts every day an offset out</li>
       </ul>
     </div>`;
 }

@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     # App
     app_env: str = "development"
     app_cors_origins: str = "http://localhost:3000,http://localhost"
+    # Whether /docs, /redoc and /openapi.json are served. Unset means off in
+    # production and on everywhere else, which is the useful default: the
+    # interactive docs are how somebody learns this API, and publishing the
+    # whole surface of a live instance is how somebody finds the parts of it
+    # they were not meant to reach. Set it either way to override.
+    docs_enabled: bool | None = None
 
     # Database
     database_url: str = "postgresql://chronos_admin:SecureCloud2026@localhost:5432/chronos_ledger"
@@ -111,6 +117,18 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.app_cors_origins.split(",") if o.strip()]
 
+    @field_validator("docs_enabled", mode="before")
+    @classmethod
+    def _blank_means_default(cls, value):
+        """DOCS_ENABLED= is "leave it to APP_ENV", not a parse error.
+
+        Both compose files pass ${DOCS_ENABLED:-}, so an operator who never
+        sets it hands pydantic an empty string, and bool("") is a
+        ValidationError rather than None. That would stop the container
+        booting over a variable nobody touched.
+        """
+        return None if value == "" else value
+
     @field_validator("password_min_length")
     @classmethod
     def _minimum_is_worth_having(cls, length: int) -> int:
@@ -144,6 +162,18 @@ class Settings(BaseSettings):
                 "not an offset like '+05:30'."
             ) from bad
         return name
+
+
+def docs_are_published(settings: Settings) -> bool:
+    """Whether this instance serves /docs, /redoc and /openapi.json.
+
+    DOCS_ENABLED decides it when set either way; unset falls back to "anything
+    but production". A separate function rather than a method so it can be
+    tested without standing up an app, whose app_env is fixed at import time.
+    """
+    if settings.docs_enabled is not None:
+        return settings.docs_enabled
+    return settings.app_env != "production"
 
 
 def describe_production_secret_problems(settings: Settings) -> list[str]:

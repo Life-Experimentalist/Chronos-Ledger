@@ -11,7 +11,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.v1.router import api_router
 from app.core.bootstrap import apply_initial_admin_password
-from app.core.config import get_settings
+from app.core.config import docs_are_published, get_settings
 from app.core.database import SessionLocal
 from app.core.time import org_timezone, org_tomorrow
 from app.cron.ledger_generator import generate_daily_ledger_entries
@@ -74,12 +74,19 @@ def _run_ledger_generator():
         db.close()
 
 
+# Off in production unless DOCS_ENABLED says otherwise. All three go
+# together: turning off the two viewers while leaving openapi_url up still
+# publishes the entire surface as a document, which is the thing worth not
+# publishing.
+_docs_published = docs_are_published(settings)
+
 app = FastAPI(
     title="Chronos Ledger API",
     description="Organization Schedule & Attendance Management System",
     version="0.9.0",  # x-release-please-version
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if _docs_published else None,
+    redoc_url="/redoc" if _docs_published else None,
+    openapi_url="/openapi.json" if _docs_published else None,
     lifespan=lifespan,
 )
 

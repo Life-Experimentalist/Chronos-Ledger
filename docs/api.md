@@ -6,6 +6,11 @@
 
 **Interactive UI** (live server): `http://<server>/docs` (Swagger UI) · `http://<server>/redoc` (ReDoc)
 
+Both, and `/openapi.json` with them, follow `DOCS_ENABLED`: off under
+`APP_ENV=production` unless you set it, on everywhere else. A production
+instance that publishes them hands its whole surface to anybody who finds
+the host, so the file above is the contract to work from.
+
 Base URL: `http://<server>/api/v1`
 
 ---
