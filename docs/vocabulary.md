@@ -48,63 +48,65 @@ LABEL_LEAD=Attending
 LABEL_CYCLE=Roster Period
 ```
 
-Each one is resolved independently, in this order:
+Each one is resolved on its own: the environment variable if it is set to
+something that is not empty, otherwise the engine's own word for that key.
 
-1. The environment variable, if it is set to something that is not empty.
-2. The `ORG_PROFILE` preset's value for that key.
-3. The `generic` value for that key.
+| Key        | Unset reads as |
+| ---------- | -------------- |
+| `staff`    | Staff          |
+| `member`   | Member         |
+| `activity` | Activity       |
+| `unit`     | Unit           |
+| `lead`     | Lead           |
+| `cycle`    | Cycle          |
 
-So you can set one, or all six, or none. Anything you do not set falls through
-to the preset, and the preset falls through to generic. There is no partial
-state to get wrong.
+So you can set one, or all six, or none, and there is no partial state to get
+wrong. Expect to set all six: an unset label is correct rather than right.
 
 The labels are served by `GET /api/v1/config`, which is unauthenticated because
 the login page needs them before anybody has signed in. The frontend merges the
-response over its own built-in `generic` copy, so an older backend that returns
-fewer keys still renders.
+response over its own built-in copy of the same six defaults, so an older
+backend that returns fewer keys still renders.
 
 Changing a label is safe on a running instance: it touches no schema, no data
 and no API field name. Settings are read once at boot, so restart the `app`
 container for a change to take effect.
 
-### The presets, and what they are actually for
+### Why there are no presets
 
-`ORG_PROFILE` picks one of three starting sets:
+An earlier version of this shipped `ORG_PROFILE`, which picked a whole set of
+words at once: `campus` for Faculty, Student and Course, `hospital` for Doctor,
+Resident and Rotation. It is gone, and it is not coming back.
 
-| Key        | `generic` | `campus`      | `hospital`    |
-| ---------- | --------- | ------------- | ------------- |
-| `staff`    | Staff     | Faculty       | Doctor        |
-| `member`   | Member    | Student       | Resident      |
-| `activity` | Activity  | Course        | Rotation      |
-| `unit`     | Unit      | Department    | Department    |
-| `lead`     | Lead      | Instructor    | Attending     |
-| `cycle`    | Cycle     | Academic Year | Roster Period |
+A preset is a guess about words, and a domain does not agree with itself. Two
+universities in the same city will disagree on whether the thing is a Course or
+a Module or a Paper, on whether the period is a Semester or a Term or a
+Trimester, and on whether the grouping is a Department or a School or a
+Faculty. That last one is worse than a disagreement: at some institutions
+"Faculty" is the unit and at others it is the person, so one preset's `unit` is
+another preset's `staff`.
 
-A preset is a starting value. It is not the truth, and it was never going to
-be, because a domain does not agree with itself. Two universities in the same
-city will disagree on whether the thing is a Course or a Module or a Paper, on
-whether the period is a Semester or a Term or a Trimester, and on whether the
-grouping is a Department or a School or a Faculty. That last one is worse than
-a disagreement: at some institutions "Faculty" is the unit and at others it is
-the person, so one preset's `unit` is another preset's `staff`.
+The `hospital` set had the same problem inside a single row. It called `staff`
+"Doctor" and `member` "Resident", and a resident is a doctor, so the two labels
+overlapped in a way that read oddly to anyone who works there. That was not
+fixable by choosing better words. It is what happens when one set of words has
+to serve every hospital.
 
-The `hospital` set above shows the same problem inside a single row. It calls
-`staff` "Doctor" and `member` "Resident", and a resident is a doctor, so the
-two labels overlap in a way that reads oddly to anyone who works there. That is
-not a bug to be fixed by choosing better words. It is what happens when one set
-of words has to serve every hospital.
+Being wrong is the smaller half of it. A preset bakes a domain word into the
+engine, and the engine then carries an opinion about what a Course is to every
+deployment that is not a campus. Chronos schedules resources against time; it
+has no such opinion and should not ship one. Every domain word inside it is one
+more thing an integrator has to work around, so the neutral default is the one
+that composes with the most systems.
 
-So the presets are demoted rather than removed. They exist because a fresh
-instance needs labels on the first screen, before anyone has configured
-anything, and shipping no labels at all is not an option: `generic` is itself a
-preset, and the one that has to be right. `LABEL_*` is where the truth lives.
-If a preset is wrong for you, that is expected. Override it and move on.
+What replaced it is smaller: six variables, defaulting to the engine's own
+nouns, and nothing else. If you want words, you bring them.
 
 Two things follow from this that are worth being explicit about:
 
-- Do not file an issue asking for a preset to be changed to the words your
-  organization uses, and do not add a fourth preset for a domain. The next
-  deployment in that domain will disagree with it. Override the six.
+- Do not file an issue asking for a preset, and do not send a pull request
+  adding one for your domain. The next deployment in that domain will disagree
+  with it. Set the six.
 - Do not fork the repository to rename things. Everything a rename could
   achieve is already a configuration value, and a fork inherits none of the
   fixes.
@@ -112,28 +114,33 @@ Two things follow from this that are worth being explicit about:
 ### Worked example: a university
 
 ```bash
-ORG_PROFILE=campus
+LABEL_STAFF=Faculty
+LABEL_MEMBER=Student
 LABEL_ACTIVITY=Module
-LABEL_CYCLE=Trimester
 LABEL_UNIT=School
+LABEL_LEAD=Instructor
+LABEL_CYCLE=Trimester
 ```
 
-The preset supplies Faculty, Student and Instructor, which this institution is
-happy with. Three overrides carry the rest. Nothing in the database changes:
-the table is still `activities`, the column is still `unit_code`, and the CSV
-import still expects the same headers.
+All six, because all six differ from the engine's words, and because the
+institution down the road would write a different six. Nothing in the database
+changes: the table is still `activities`, the column is still `unit_code`, and
+the CSV import still expects the same headers.
 
 ### Worked example: a hospital
 
 ```bash
-ORG_PROFILE=hospital
 LABEL_STAFF=Clinician
+LABEL_MEMBER=Resident
+LABEL_ACTIVITY=Rotation
 LABEL_UNIT=Service
+LABEL_LEAD=Attending
+LABEL_CYCLE=Roster Period
 ```
 
-Two overrides fix the Doctor/Resident overlap described above and swap
-Department for Service. `member`, `activity`, `lead` and `cycle` come from the
-preset unchanged.
+Six again. `Clinician` rather than `Doctor` because the member is a resident
+and a resident is a doctor, which is exactly the overlap a preset could not
+avoid and a deployment can.
 
 ---
 
@@ -207,7 +214,9 @@ the words on the screen change.
 If you are writing a system that uses Chronos as its scheduling authority
 rather than deploying Chronos on its own:
 
-1. **Set the six labels for your instance.** Do not rely on a preset matching.
+1. **Set all six labels for your instance.** Nothing is set for you. An unset
+   label renders the engine's own word, which is accurate and tells a user
+   nothing about where they are.
 2. **Read `GET /api/v1/config` at startup** rather than hardcoding label
    strings in your own client. It is public, it does not change while a tab is
    open, and it is one request.

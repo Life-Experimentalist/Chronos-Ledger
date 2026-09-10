@@ -3,25 +3,32 @@
 
 from app.api.v1.endpoints import org_config
 from app.core.config import Settings
-from app.core.vocabulary import VOCABULARY_PROFILES
+from app.core.vocabulary import DEFAULT_LABELS
 
 
-def test_config_is_public_and_returns_generic_labels(client):
+def test_config_is_public_and_returns_the_engines_own_words(client):
     res = client.get("/api/v1/config")
     assert res.status_code == 200
-    body = res.json()
-    assert body["org_profile"] == "generic"
-    assert body["labels"] == VOCABULARY_PROFILES["generic"]
+    assert res.json()["labels"] == DEFAULT_LABELS
 
 
-def test_each_profile_returns_its_own_labels(client, monkeypatch):
-    for profile in ("generic", "campus", "hospital"):
-        monkeypatch.setattr(org_config, "get_settings", lambda p=profile: Settings(org_profile=p))
-        res = client.get("/api/v1/config")
-        assert res.status_code == 200
-        body = res.json()
-        assert body["org_profile"] == profile
-        assert body["labels"] == VOCABULARY_PROFILES[profile]
+def test_the_response_names_no_domain(client):
+    """A client reading this before anybody has signed in should not be handed
+    somebody else's guess about what the deployment is."""
+    res = client.get("/api/v1/config")
+    assert "org_profile" not in res.json()
+
+
+def test_overrides_reach_the_response(client, monkeypatch):
+    monkeypatch.setattr(
+        org_config,
+        "get_settings",
+        lambda: Settings(label_staff="Faculty", label_member="Student"),
+    )
+    labels = client.get("/api/v1/config").json()["labels"]
+    assert labels["staff"] == "Faculty"
+    assert labels["member"] == "Student"
+    assert labels["activity"] == "Activity"
 
 
 def test_the_password_floor_is_published(client):
@@ -35,9 +42,3 @@ def test_the_published_floor_follows_the_setting(client, monkeypatch):
     monkeypatch.setattr(org_config, "get_settings", lambda: Settings(password_min_length=20))
     res = client.get("/api/v1/config")
     assert res.json()["password_min_length"] == 20
-
-
-def test_profiles_share_the_same_label_keys():
-    keys = set(VOCABULARY_PROFILES["generic"])
-    for labels in VOCABULARY_PROFILES.values():
-        assert set(labels) == keys

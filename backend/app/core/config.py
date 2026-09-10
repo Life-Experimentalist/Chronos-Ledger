@@ -2,7 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 
 from functools import lru_cache
-from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import field_validator
@@ -77,13 +76,12 @@ class Settings(BaseSettings):
 
     # Organization
     org_domain_mask: str = "org.internal"
-    org_profile: Literal["generic", "campus", "hospital"] = "generic"
-    # Per-label overrides, one per noun the interface renders. Each falls back
-    # to org_profile and then to generic, so an operator sets as few or as many
-    # as their words need. The profiles are starting values rather than
-    # answers: a domain does not agree with itself, and two universities in one
-    # city will disagree on Course against Module. docs/vocabulary.md has the
-    # reasoning and what labels deliberately do not change.
+    # What the interface calls the engine's six nouns, one variable each. Blank
+    # means the engine's own neutral word, so an operator sets as few or as
+    # many as their words need. There is no preset behind these on purpose: a
+    # domain does not agree with itself, and a domain word baked into the
+    # engine is one more thing every other deployment has to work around.
+    # docs/vocabulary.md has the reasoning and what labels never change.
     label_staff: str = ""
     label_member: str = ""
     label_activity: str = ""

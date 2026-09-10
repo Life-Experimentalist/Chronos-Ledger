@@ -24,7 +24,6 @@ and how short a password this deployment will accept.
 
 ```json
 {
-  "org_profile": "campus",
   "labels": {
     "staff": "Faculty",
     "member": "Student",
@@ -37,12 +36,13 @@ and how short a password this deployment will accept.
 }
 ```
 
-`org_profile` follows `ORG_PROFILE` and is one of `generic`, `campus` or
-`hospital`; the label keys are the same six whichever profile is set. Each
-label can also be set on its own with `LABEL_STAFF`, `LABEL_MEMBER`,
-`LABEL_ACTIVITY`, `LABEL_UNIT`, `LABEL_LEAD` or `LABEL_CYCLE`, which is what a
-deployment whose words do not match a profile should reach for. A profile is a
-starting value: expect to override one or two of them.
+The label keys are always the same six. Each is set on its own with
+`LABEL_STAFF`, `LABEL_MEMBER`, `LABEL_ACTIVITY`, `LABEL_UNIT`, `LABEL_LEAD` or
+`LABEL_CYCLE`, and anything left blank comes back as the engine's own neutral
+word: `Staff`, `Member`, `Activity`, `Unit`, `Lead`, `Cycle`. There is no
+domain preset behind them, so the words above are one deployment's choices and
+not a mode you can select. Labels are display only: no field name in this
+document changes with them.
 
 Labels change nothing else. The field names in this reference, the database
 columns and the CSV headers stay as they are whatever the interface calls them,

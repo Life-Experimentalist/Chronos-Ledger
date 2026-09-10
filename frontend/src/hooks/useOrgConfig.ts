@@ -15,7 +15,6 @@ export interface Vocabulary {
 }
 
 export interface OrgConfig {
-  org_profile: string
   labels: Vocabulary
   password_min_length: number
 }
@@ -25,7 +24,6 @@ export interface OrgConfig {
 // backend's own default rather than its absolute minimum: guessing low would
 // let the form accept what the API then refuses.
 export const FALLBACK_CONFIG: OrgConfig = {
-  org_profile: 'generic',
   labels: {
     staff: 'Staff',
     member: 'Member',

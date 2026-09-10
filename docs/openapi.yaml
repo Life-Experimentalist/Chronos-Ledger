@@ -1269,31 +1269,28 @@ paths:
   /config:
     get:
       tags: [Configuration]
-      summary: Deployment profile and display vocabulary
+      summary: Display vocabulary and password floor
       description: |
-        Public. Returns the deployment's `org_profile` (`generic`, `campus`,
-        or `hospital`), the display labels the UI should render for the
-        neutral roles (staff, member, activity, unit, lead, cycle), and the
-        shortest password this deployment accepts. The client needs all three
-        before anyone has logged in.
+        Public. Returns the display labels the UI should render for the
+        engine's six neutral nouns (staff, member, activity, unit, lead,
+        cycle) and the shortest password this deployment accepts. The client
+        needs both before anyone has logged in.
 
-        A profile is a starting value. Any of the six labels can be set on its
-        own with `LABEL_STAFF`, `LABEL_MEMBER`, `LABEL_ACTIVITY`,
-        `LABEL_UNIT`, `LABEL_LEAD` or `LABEL_CYCLE`, and the response reflects
-        whatever the deployment resolved. Labels are display only: no field
-        name in this document changes with them.
+        Each label is set on its own with `LABEL_STAFF`, `LABEL_MEMBER`,
+        `LABEL_ACTIVITY`, `LABEL_UNIT`, `LABEL_LEAD` or `LABEL_CYCLE`, and
+        anything left blank comes back as the engine's own word: `Staff`,
+        `Member`, `Activity`, `Unit`, `Lead`, `Cycle`. There is no domain
+        preset behind them. Labels are display only: no field name in this
+        document changes with them.
       security: []
       responses:
         "200":
-          description: Deployment profile and labels.
+          description: Display labels and the password floor.
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  org_profile:
-                    type: string
-                    enum: [generic, campus, hospital]
                   labels:
                     type: object
                     properties:

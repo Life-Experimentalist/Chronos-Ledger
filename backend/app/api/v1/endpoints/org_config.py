@@ -11,7 +11,7 @@ router = APIRouter()
 
 @router.get("")
 def read_org_config():
-    """Public deployment profile: what the UI needs before anyone has logged in.
+    """Public display config: what the UI needs before anyone has logged in.
 
     Unauthenticated on purpose; the login page already needs it.
 
@@ -23,7 +23,6 @@ def read_org_config():
     """
     settings = get_settings()
     return {
-        "org_profile": settings.org_profile,
-        "labels": labels_for(settings.org_profile, label_overrides(settings)),
+        "labels": labels_for(label_overrides(settings)),
         "password_min_length": settings.password_min_length,
     }

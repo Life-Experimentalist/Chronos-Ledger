@@ -90,13 +90,10 @@ services:
       # organization that is not in UTC needs this or the dashboard is a
       # whole offset out. IANA name, not an offset.
       - ORG_TIMEZONE=${ORG_TIMEZONE:-UTC}
-      # What the interface calls people and bookings. generic, campus or
-      # hospital; labels only, never the schema and never the API. Served
-      # to the client by GET /api/v1/config.
-      - ORG_PROFILE=${ORG_PROFILE:-generic}
-      # The same six labels one at a time, each winning over ORG_PROFILE for
-      # its own noun. Blank means "use the profile's word". See
-      # docs/vocabulary.md.
+      # What the interface calls the engine's six nouns, one variable each.
+      # Blank means the engine's own neutral word. Labels only, never the
+      # schema and never the API. Served to the client by GET /api/v1/config.
+      # There are no presets: see docs/vocabulary.md.
       - LABEL_STAFF=${LABEL_STAFF:-}
       - LABEL_MEMBER=${LABEL_MEMBER:-}
       - LABEL_ACTIVITY=${LABEL_ACTIVITY:-}
