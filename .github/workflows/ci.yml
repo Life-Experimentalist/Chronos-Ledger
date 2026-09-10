@@ -200,3 +200,20 @@ jobs:
       contents: read
       packages: write
     uses: ./.github/workflows/cd.yml
+
+  # ── Release: the same gate, for the release PR and its images ─────────────
+  release:
+    name: Release
+    # The same hole as publish had, one workflow over: release.yml carried its
+    # own push-to-main trigger and reached the build workflow without waiting
+    # for anything here. Smaller, since a release commit is a version file and
+    # a changelog over code this has already seen, but the same shape.
+    needs: [backend-lint, backend-test, frontend-check, security-scan, docker-build-check]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pull-requests: write
+      packages: write
+    uses: ./.github/workflows/release.yml
+    secrets:
+      RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}

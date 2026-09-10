@@ -3,8 +3,14 @@ name: Release
 # Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
 #
 # Automated releases using Release Please (google-github-actions/release-please-action).
+#
+# Called by the CI workflow once every gate on main has passed. It has no
+# trigger of its own on purpose: what this builds is a changelog, and a commit
+# that failed its tests does not belong on one.
+#
 # How it works:
-#   1. Every push to main is inspected for conventional commits (feat, fix, chore, etc).
+#   1. Every commit that passes CI on main is inspected for conventional
+#      commits (feat, fix, chore, etc).
 #   2. Release Please maintains an open "Release PR" that accumulates the changelog.
 #   3. When you merge that PR, a GitHub Release is created and this workflow builds
 #      + pushes versioned Docker images to GHCR.
@@ -16,19 +22,25 @@ name: Release
 #   chore/docs/refactor → no version bump (skipped in release PR)
 
 on:
-  push:
-    branches: [main]
-
-permissions:
-  contents: write
-  pull-requests: write
-  packages: write
+  workflow_call:
+    secrets:
+      RELEASE_PLEASE_TOKEN:
+        description: >-
+          Optional. Handed straight to release-please, which falls back to
+          GITHUB_TOKEN when it is empty. Declared here because a called
+          workflow cannot read a repository secret the caller did not pass it.
+        required: false
 
 jobs:
   # ── Step 1: Let Release Please manage the release PR ─────────────────────
   release-please:
     name: Release Please
     runs-on: ubuntu-latest
+    # Job-level, because a called workflow's token is capped by the calling
+    # job's permissions anyway and one place to read is better than two.
+    permissions:
+      contents: write
+      pull-requests: write
     outputs:
       release_created: ${{ steps.rp.outputs.release_created }}
       tag_name: ${{ steps.rp.outputs.tag_name }}
