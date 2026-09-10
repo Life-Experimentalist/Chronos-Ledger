@@ -100,6 +100,12 @@ chronos_postgres_persistence   Up (healthy)
 chronos_redis_state            Up
 ```
 
+The proxy's host ports come from `EDGE_HTTP_PORT` and `EDGE_HTTPS_PORT`,
+which default to 80 and 443. Set them in `.env` when something else on the
+host already owns those ports, or when Chronos is going behind an outer
+reverse proxy. The container itself always listens on 80 and 443, so
+nothing inside the stack changes.
+
 ### 4. First login
 
 Navigate to `http://<server-ip>` and log in with the seed credentials:
@@ -107,7 +113,12 @@ Navigate to `http://<server-ip>` and log in with the seed credentials:
 - Email: `admin@org.internal`
 - Password: `ChronosAdmin2026!`
 
-**Change this password immediately** via Admin Portal → Profile.
+**Change this password before the server is reachable from any network.**
+It is the same on every Chronos install and it is written above, in a
+public repository. Until it is changed, the account is refused by every
+endpoint except the password change itself, so the first login is the only
+thing it can do: use Admin Portal → Profile, or the Onboarding Wizard,
+which opens on its own.
 
 ---
 

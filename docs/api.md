@@ -19,7 +19,10 @@ require a Bearer token:
 Authorization: Bearer <access_token>
 ```
 
-Tokens expire after `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` (default: 480 min / 8 hours).
+Access tokens expire after `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` (default: 15).
+`POST /auth/refresh` exchanges the refresh token returned by `/auth/login` for a
+new pair; refresh tokens are single use and last
+`JWT_REFRESH_TOKEN_EXPIRE_DAYS` (default: 30).
 
 An API key in `X-API-Key` is accepted anywhere a Bearer token is. See
 [API keys](#api-keys).

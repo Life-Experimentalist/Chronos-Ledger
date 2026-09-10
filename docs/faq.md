@@ -42,7 +42,7 @@ On some distributions `sh` is `dash`, which does not support the `local` keyword
 The backend container is still starting. Wait 10–15 seconds and refresh. You can watch readiness:
 
 ```bash
-docker compose logs -f backend
+docker compose logs -f chronos-app
 ```
 
 The backend prints `Application startup complete.` when it is ready. If it never prints this, check for a database connection error (see below).
@@ -55,7 +55,7 @@ PostgreSQL is not ready yet, or the `DATABASE_URL` is misconfigured.
 
 1. Verify the postgres container is running: `docker compose ps`
 2. Check `.env`: `DB_PASSWORD` must match the password embedded in `DATABASE_URL` (or use the flat variable substitution in `docker-compose.yml`).
-3. If postgres crashed, inspect its logs: `docker compose logs db`
+3. If postgres crashed, inspect its logs: `docker compose logs chronos-db`
 
 The most common cause is a password mismatch. Run `docker compose down -v` to wipe volumes, fix `.env`, and run `docker compose up` again.
 
@@ -125,34 +125,51 @@ Also ensure `APP_CORS_ORIGINS` in `.env` includes `http://192.168.1.10`.
 
 ### Login fails with "Invalid credentials" after setup.sh
 
-The seed migration creates the admin account during `alembic upgrade head`. If migrations did not run (check `docker compose logs backend`), the account does not exist.
+The seed migration creates the admin account during `alembic upgrade head`. If migrations did not run (check `docker compose logs chronos-app`), the account does not exist.
 
 Force migrations:
 
 ```bash
-docker compose exec backend uv run alembic upgrade head
+docker compose exec chronos-app uv run --no-sync alembic upgrade head
 ```
 
 ---
 
 ### A user is locked out and cannot reset their password
 
-Super Admins can reset any user's password via the Admin dashboard. If the Super Admin account itself is locked, reset directly in the database:
+Super Admins can reset any user's password via the Admin dashboard. If the Super Admin account itself is locked, reset directly in the database. It takes two steps, because the stored hash is bcrypt written by the application: Postgres has no function that produces one this app will accept.
+
+First generate the hash inside the backend container:
 
 ```bash
-docker compose exec db psql -U chronos_admin -d chronos_ledger -c \
-  "UPDATE users SET hashed_password = crypt('NewTempPassword!', gen_salt('bf')) WHERE email = 'admin@org.internal';"
+docker compose exec chronos-app uv run --no-sync python -c \
+  "from app.core.security import hash_password; print(hash_password('NewTempPassword!'))"
 ```
 
-Requires the `pgcrypto` extension, which is enabled by the seed migration.
+Then open psql and write it, setting the first-login flag so the temporary password has to be replaced at the next login:
+
+```bash
+docker compose exec chronos-db psql -U chronos_admin -d chronos_ledger
+```
+
+```sql
+UPDATE users
+   SET credential_secure_hash = '<paste the hash>',
+       initial_login_state = true
+ WHERE email_address = 'admin@org.internal';
+```
+
+Run the UPDATE at the psql prompt rather than through `psql -c` from your shell. A bcrypt hash contains `$` characters and a shell will eat them.
+
+While `initial_login_state` is true, a Super Admin token is refused everywhere except the password-change endpoints, so the temporary password cannot be used for anything else.
 
 ---
 
 ### JWT token expired errors after a system clock change
 
-Chronos Ledger uses HS256 JWTs with 8-hour expiry. If the server clock jumped forward, existing tokens become invalid immediately. Users must log in again.
+Chronos Ledger uses HS256 access tokens with a 15-minute expiry, refreshed against a 30-day refresh token. If the server clock jumped forward, existing access tokens become invalid immediately. The web client refreshes on its own; anything holding a token directly has to call `POST /api/v1/auth/refresh` or log in again.
 
-To change the expiry window, set `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` in `.env`.
+To change the windows, set `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` and `JWT_REFRESH_TOKEN_EXPIRE_DAYS` in `.env`.
 
 ---
 
@@ -163,8 +180,8 @@ The banner is driven by `initial_login_state` on the user record. If the Onboard
 Fix: complete the password step in the Onboarding Wizard (Admin Dashboard → Setup Guide), or clear it directly:
 
 ```bash
-docker compose exec db psql -U chronos_admin -d chronos_ledger -c \
-  "UPDATE users SET initial_login_state = false WHERE email = 'admin@org.internal';"
+docker compose exec chronos-db psql -U chronos_admin -d chronos_ledger -c \
+  "UPDATE users SET initial_login_state = false WHERE email_address = 'admin@org.internal';"
 ```
 
 ---
@@ -377,7 +394,7 @@ Also check nginx is proxying `/ws` correctly, see `nginx/nginx.conf`.
 Nginx has a default proxy read timeout of 60 seconds. The Chronos Ledger nginx config sets `proxy_read_timeout 3600s` on the `/ws` location. If you see 60-second drops, nginx.conf may not have been updated, verify:
 
 ```bash
-docker compose exec nginx cat /etc/nginx/nginx.conf | grep proxy_read_timeout
+docker compose exec chronos-proxy cat /etc/nginx/nginx.conf | grep proxy_read_timeout
 ```
 
 ---
@@ -386,18 +403,20 @@ docker compose exec nginx cat /etc/nginx/nginx.conf | grep proxy_read_timeout
 
 ### `docker compose up` fails with "port is already allocated"
 
-Another service on the host is using port 80. Either stop it (`sudo systemctl stop apache2` / `nginx`) or change the host port in `docker-compose.yml`:
+Another service on the host owns port 80 or 443. Either stop it (`sudo systemctl stop apache2` / `nginx`), or move the Chronos edge proxy aside in `.env`, without editing any compose file:
 
-```yaml
-ports:
-  - "8080:80"   # map host 8080 → container 80
+```bash
+EDGE_HTTP_PORT=8080
+EDGE_HTTPS_PORT=8443
 ```
+
+Only the host side moves. The proxy container still listens on 80 and 443, so nothing inside the stack changes. This is also how you put Chronos behind an outer reverse proxy that owns the host's 80 and 443.
 
 ---
 
 ### Container exits with OOM (out of memory) on low-RAM servers
 
-Redis is configured with `--maxmemory 256mb`. PostgreSQL can spike higher during bulk import. Minimum recommended RAM: **1 GB free** after OS. On 512 MB machines, reduce Redis:
+`docker-compose.prod.yml` runs Redis with `--maxmemory 256mb`; the development compose file sets no limit. PostgreSQL can spike higher during bulk import. Minimum recommended RAM: **1 GB free** after OS. On 512 MB machines, reduce Redis:
 
 ```yaml
 command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
@@ -408,7 +427,7 @@ command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
 ### How do I back up the database?
 
 ```bash
-docker compose exec db pg_dump -U chronos_admin chronos_ledger \
+docker compose exec chronos-db pg_dump -U chronos_admin chronos_ledger \
   | gzip > chronos-backup-$(date +%Y%m%d).sql.gz
 ```
 
@@ -416,7 +435,7 @@ To restore:
 
 ```bash
 gunzip -c chronos-backup-20260519.sql.gz \
-  | docker compose exec -T db psql -U chronos_admin chronos_ledger
+  | docker compose exec -T chronos-db psql -U chronos_admin chronos_ledger
 ```
 
 ---
