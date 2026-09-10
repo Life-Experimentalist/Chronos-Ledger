@@ -13,6 +13,7 @@ import {
   Info, ExternalLink, SkipForward,
 } from 'lucide-react'
 import { authApi, scheduleApi, ingestionApi } from '@/lib/api'
+import { apiErrorMessage } from '@/lib/errors'
 import { ProvisionedCredentials } from './ProvisionedCredentials'
 import type { CsvImportResult, PlanningCycle, ProvisionedCredential } from '@/types'
 
@@ -97,8 +98,7 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
       setSuccess('Password updated successfully.')
       setTimeout(next, 800)
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setError(msg ?? 'Current password is incorrect.')
+      setError(apiErrorMessage(e, 'Current password is incorrect.'))
     } finally {
       setLoading(false)
     }
@@ -116,8 +116,7 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
       setSuccess(`Cycle "${data.cycle_label}" created.`)
       setTimeout(next, 800)
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setError(msg ?? 'Failed to create cycle.')
+      setError(apiErrorMessage(e, 'Failed to create cycle.'))
     } finally {
       setLoading(false)
     }
@@ -149,8 +148,7 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
       // admin decides when to leave them behind.
       if (credentials.length === 0) setTimeout(next, 1000)
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setError(msg ?? 'CSV import failed. Check the file format.')
+      setError(apiErrorMessage(e, 'CSV import failed. Check the file format.'))
     } finally {
       setLoading(false)
     }
@@ -166,8 +164,7 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
       setSuccess(`Generated ${d.generated} ledger entries for ${d.target_date}.`)
       setTimeout(next, 800)
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setError(msg ?? 'Ledger generation failed.')
+      setError(apiErrorMessage(e, 'Ledger generation failed.'))
     } finally {
       setLoading(false)
     }

@@ -5,6 +5,7 @@ import { create } from 'zustand'
 import type { AuthUser } from '@/types'
 import { saveSession, clearSession, getStoredUser, getRefreshToken } from '@/lib/auth'
 import { authApi } from '@/lib/api'
+import { apiErrorMessage } from '@/lib/errors'
 
 interface AuthState {
   user: AuthUser | null
@@ -41,7 +42,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ user, isLoading: false })
       return user
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Login failed'
+      const msg = apiErrorMessage(err, 'Login failed')
       set({ isLoading: false, error: msg })
       throw err
     }
