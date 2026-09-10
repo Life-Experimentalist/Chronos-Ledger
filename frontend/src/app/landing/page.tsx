@@ -599,6 +599,6 @@ const API_GROUPS = [
   },
   {
     group: 'Sync',
-    endpoints: ['GET /sync/user-feed/{feed_token}.ics', 'WS /ws?token={jwt}', 'GET /ws/stats'],
+    endpoints: ['GET /sync/user-feed/{feed_token}.ics', 'WS /ws', 'GET /ws/stats'],
   },
 ]

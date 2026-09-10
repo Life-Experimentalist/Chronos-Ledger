@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 
 import os
+from contextlib import contextmanager
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.config import get_settings
-from app.core.database import Base, get_db
+from app.core.database import Base, get_db, get_session_opener
 from app.core.security import hash_api_key, hash_password
 from app.main import app
 from app.models.db import ApiKey, InstitutionalRole, User
@@ -157,7 +158,15 @@ def client(db):
     def override_get_db():
         yield db
 
+    @contextmanager
+    def override_open_session():
+        # The websocket handler opens its own session rather than taking one
+        # as a dependency, and StaticPool has exactly one connection to give.
+        # Hand it the fixture's session and leave the closing to the fixture.
+        yield db
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_session_opener] = lambda: override_open_session
     # No context manager on purpose: entering it runs the lifespan, which
     # starts the APScheduler cron. Tests exercise routes, not the scheduler.
     yield TestClient(app)

@@ -31,7 +31,11 @@ export function useWebSocket() {
     const token = getToken()
     if (!token || !mountedRef.current) return
 
-    const ws = new WebSocket(`${resolveWsUrl()}?token=${token}`)
+    // The token goes in the first frame, not the query string: a query string
+    // lands in the proxy's access log and the browser's history, and gets sent
+    // on as a Referer. The server accepts the socket, waits a few seconds for
+    // this frame, and closes if it does not arrive or does not check out.
+    const ws = new WebSocket(resolveWsUrl())
     wsRef.current = ws
 
     ws.onopen = () => {
@@ -39,6 +43,7 @@ export function useWebSocket() {
         clearTimeout(reconnectTimerRef.current)
         reconnectTimerRef.current = null
       }
+      ws.send(JSON.stringify({ event: 'AUTH', payload: { token } }))
     }
 
     ws.onmessage = (event) => {

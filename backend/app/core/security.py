@@ -169,6 +169,16 @@ def get_current_user_id(
 _FIRST_LOGIN_EXEMPT_SUFFIXES = ("/auth/me", "/auth/change-password")
 
 
+def first_login_blocks(user) -> bool:
+    """Whether this account has to choose a password before doing anything else.
+
+    True for an admin account still holding the password it was seeded with.
+    get_current_user lets two paths through regardless so the change can be
+    made; a websocket has no equivalent exemption, so it asks this directly.
+    """
+    return user.initial_login_state and user.role_type.value in ("SUPER_ADMIN", "UNIT_ADMIN")
+
+
 def get_current_user(
     request: Request,
     user_id: str = Depends(get_current_user_id),
@@ -179,11 +189,7 @@ def get_current_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    if (
-        user.initial_login_state
-        and user.role_type.value in ("SUPER_ADMIN", "UNIT_ADMIN")
-        and not request.url.path.endswith(_FIRST_LOGIN_EXEMPT_SUFFIXES)
-    ):
+    if first_login_blocks(user) and not request.url.path.endswith(_FIRST_LOGIN_EXEMPT_SUFFIXES):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Change the initial password before using other endpoints",

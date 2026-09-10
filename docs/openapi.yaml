@@ -2887,10 +2887,21 @@ paths:
 # ─────────────────────────────────────────────
 # WebSocket (informational, not an HTTP path)
 # ─────────────────────────────────────────────
-# WebSocket endpoint: ws://<server>/ws?token=<jwt>
+# WebSocket endpoint: ws://<server>/ws
 #
-# Connect with the JWT as a query parameter. After the handshake the server
-# registers the connection and begins routing domain events to this client.
+# The server accepts the socket, then waits five seconds for one frame naming
+# the token:
+#
+#   { "event": "AUTH", "payload": { "token": "<jwt>" } }
+#
+# It answers { "event": "AUTHENTICATED", "payload": {} } and begins routing
+# domain events to this client. A refused token closes with 4003; silence past
+# the five seconds closes with 4008. The token is checked the way an HTTP
+# request's is, so one naming an account that is gone, or an admin who has not
+# chosen a password yet, is refused here too.
+#
+# Not a query parameter on purpose: a query string lands in the proxy's access
+# log and the browser's history, and is sent onward as a Referer.
 #
 # Inbound frames (server → client):
 #
@@ -2907,4 +2918,7 @@ paths:
 #   { "event": "LEDGER_STATE_CHANGE",
 #     "payload": { "ledger_id": 1042, "new_state": "ON_LEAVE" } }
 #
-# The client sends no frames upstream (receive-only subscription model).
+# The AUTH frame is the only thing a client sends upstream.
+#
+# GET /ws/stats reports { "online_connections": <n> } and needs
+# SUPER_ADMIN: it is an organization-wide headcount.

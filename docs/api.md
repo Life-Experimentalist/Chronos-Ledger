@@ -1008,10 +1008,28 @@ Member feed includes all registered activities.
 ## WebSocket
 
 ```
-ws://<server>/ws?token=<jwt>
+ws://<server>/ws
 ```
 
-Persistent receive-only connection. Events delivered as JSON frames:
+The server accepts the socket, then waits five seconds for one frame naming
+the token:
+
+```json
+{ "event": "AUTH", "payload": { "token": "<jwt>" } }
+```
+
+It answers `{"event": "AUTHENTICATED", "payload": {}}` and starts routing
+events. A token that does not check out, a first frame of any other shape, or
+silence past the five seconds closes the socket: `4003` for a refused token,
+`4008` for the silence. The token is checked the way an HTTP request's is, so
+one belonging to an account that no longer exists, or to an admin who has not
+yet chosen a password, is refused here too.
+
+The token is deliberately not a query parameter. A query string lands in the
+proxy's access log and the browser's history, and gets sent onward as a
+Referer; a frame does none of that.
+
+Events are delivered as JSON frames:
 
 | Event | Who receives | Payload |
 |---|---|---|
@@ -1020,4 +1038,11 @@ Persistent receive-only connection. Events delivered as JSON frames:
 | `GUEST_HANDSHAKE_REQ` | Target staff | `{transaction_id, guest_name, originating_body, intent}` |
 | `LEDGER_STATE_CHANGE` | All connected users | `{ledger_id, new_state}` |
 
-The client sends no upstream frames, the connection is subscribe-only.
+The `AUTH` frame is the only thing a client sends. Everything after it
+travels server to client.
+
+### GET /ws/stats `[SUPER_ADMIN]`
+
+How many sockets are open right now: `{"online_connections": 4}`. Super admin
+only, because it is an organization-wide headcount and there is no unit-sized
+share of it to hand a unit admin.
