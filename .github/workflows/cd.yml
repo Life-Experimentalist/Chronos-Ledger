@@ -40,10 +40,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # The GHCR names are fixed by the repository owner. The Docker Hub names
-  # depend on a secret, so they are resolved in a step rather than here.
-  BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/chronos-ledger-backend
-  WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/chronos-ledger-web
 
 jobs:
   build-and-push:
@@ -63,31 +59,45 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # ── Docker Hub, when this deployment has an account ────────────────────
-      # The variable names the namespace, the secret proves the namespace is
-      # ours. One without the other is a typo rather than a decision, so it
-      # says so out loud: a silent skip on an otherwise green run is how a
-      # missed secret stays missed for a month.
-      - name: Resolve Docker Hub targets
-        id: hub
+      # ── Registry targets ───────────────────────────────────────────────────
+      # Both the owner and the namespace are lowercased here rather than left
+      # to metadata-action. It lowercases whatever it is handed, but
+      # attest-build-provenance takes `subject-name` verbatim and pushes it to
+      # the registry as a referrer, where a repository path with a capital in
+      # it is refused. `Life-Experimentalist` would have failed there, after
+      # the image itself had already gone up.
+      #
+      # Docker Hub needs both halves: the variable names the namespace, the
+      # secret proves the namespace is ours. One without the other is a typo
+      # rather than a decision, so it says so out loud. A silent skip on an
+      # otherwise green run is how a missed secret stays missed for a month.
+      - name: Resolve registry targets
+        id: images
         env:
+          OWNER: ${{ github.repository_owner }}
           NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
           TOKEN_SET: ${{ secrets.DOCKERHUB_TOKEN != '' }}
         run: |
-          if [ -n "$NAMESPACE" ] && [ "$TOKEN_SET" = "true" ]; then
+          owner="${OWNER,,}"
+          namespace="${NAMESPACE,,}"
+          {
+            echo "ghcr_backend=ghcr.io/$owner/chronos-ledger-backend"
+            echo "ghcr_web=ghcr.io/$owner/chronos-ledger-web"
+          } >> "$GITHUB_OUTPUT"
+          if [ -n "$namespace" ] && [ "$TOKEN_SET" = "true" ]; then
             {
-              echo "enabled=true"
-              echo "backend=docker.io/$NAMESPACE/chronos-ledger-backend"
-              echo "web=docker.io/$NAMESPACE/chronos-ledger-web"
+              echo "hub_enabled=true"
+              echo "hub_backend=docker.io/$namespace/chronos-ledger-backend"
+              echo "hub_web=docker.io/$namespace/chronos-ledger-web"
             } >> "$GITHUB_OUTPUT"
-            echo "::notice::Docker Hub publishing is on, namespace $NAMESPACE"
+            echo "::notice::Docker Hub publishing is on, namespace $namespace"
           else
             {
-              echo "enabled=false"
-              echo "backend=docker.io/unset/chronos-ledger-backend"
-              echo "web=docker.io/unset/chronos-ledger-web"
+              echo "hub_enabled=false"
+              echo "hub_backend=docker.io/unset/chronos-ledger-backend"
+              echo "hub_web=docker.io/unset/chronos-ledger-web"
             } >> "$GITHUB_OUTPUT"
-            if [ -n "$NAMESPACE" ] || [ "$TOKEN_SET" = "true" ]; then
+            if [ -n "$namespace" ] || [ "$TOKEN_SET" = "true" ]; then
               echo "::notice::Docker Hub is half configured. DOCKERHUB_NAMESPACE and DOCKERHUB_TOKEN must both be set. Pushing to GHCR only."
             fi
           fi
@@ -100,7 +110,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
-        if: steps.hub.outputs.enabled == 'true'
+        if: steps.images.outputs.hub_enabled == 'true'
         uses: docker/login-action@v3
         with:
           registry: docker.io
@@ -115,8 +125,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ${{ env.BACKEND_IMAGE }}
-            name=${{ steps.hub.outputs.backend }},enable=${{ steps.hub.outputs.enabled }}
+            ${{ steps.images.outputs.ghcr_backend }}
+            name=${{ steps.images.outputs.hub_backend }},enable=${{ steps.images.outputs.hub_enabled }}
           tags: |
             type=sha,prefix=sha-,format=short
             type=raw,value=${{ inputs.version || 'latest' }}
@@ -151,15 +161,15 @@ jobs:
       - name: Attest backend provenance, GHCR
         uses: actions/attest-build-provenance@v4
         with:
-          subject-name: ${{ env.BACKEND_IMAGE }}
+          subject-name: ${{ steps.images.outputs.ghcr_backend }}
           subject-digest: ${{ steps.backend.outputs.digest }}
           push-to-registry: true
 
       - name: Attest backend provenance, Docker Hub
-        if: steps.hub.outputs.enabled == 'true'
+        if: steps.images.outputs.hub_enabled == 'true'
         uses: actions/attest-build-provenance@v4
         with:
-          subject-name: ${{ steps.hub.outputs.backend }}
+          subject-name: ${{ steps.images.outputs.hub_backend }}
           subject-digest: ${{ steps.backend.outputs.digest }}
 
       # ── Web image (nginx + pre-built Next.js static files) ────────────────
@@ -168,8 +178,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ${{ env.WEB_IMAGE }}
-            name=${{ steps.hub.outputs.web }},enable=${{ steps.hub.outputs.enabled }}
+            ${{ steps.images.outputs.ghcr_web }}
+            name=${{ steps.images.outputs.hub_web }},enable=${{ steps.images.outputs.hub_enabled }}
           tags: |
             type=sha,prefix=sha-,format=short
             type=raw,value=${{ inputs.version || 'latest' }}
@@ -201,13 +211,13 @@ jobs:
       - name: Attest web provenance, GHCR
         uses: actions/attest-build-provenance@v4
         with:
-          subject-name: ${{ env.WEB_IMAGE }}
+          subject-name: ${{ steps.images.outputs.ghcr_web }}
           subject-digest: ${{ steps.web.outputs.digest }}
           push-to-registry: true
 
       - name: Attest web provenance, Docker Hub
-        if: steps.hub.outputs.enabled == 'true'
+        if: steps.images.outputs.hub_enabled == 'true'
         uses: actions/attest-build-provenance@v4
         with:
-          subject-name: ${{ steps.hub.outputs.web }}
+          subject-name: ${{ steps.images.outputs.hub_web }}
           subject-digest: ${{ steps.web.outputs.digest }}

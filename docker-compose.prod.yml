@@ -17,7 +17,7 @@
 #   VAPID_PUBLIC_KEY       , npx web-push generate-vapid-keys
 #   VAPID_PRIVATE_KEY      , (same command)
 #   VAPID_CONTACT_EMAIL    , admin reachable email
-#   GHCR_OWNER             , your GitHub org/username (default: Life-Experimentalist)
+#   GHCR_OWNER             , your GitHub org/username, lowercase (default: life-experimentalist)
 #   VERSION                , image tag to deploy  (default: latest)
 
 x-restart: &restart
@@ -31,7 +31,7 @@ services:
   # ── Web (nginx + pre-built Next.js static export) ─────────────────────────
   chronos-proxy:
     <<: [*restart, *chronos-net]
-    image: ghcr.io/${GHCR_OWNER:-Life-Experimentalist}/chronos-ledger-web:${VERSION:-latest}
+    image: ghcr.io/${GHCR_OWNER:-life-experimentalist}/chronos-ledger-web:${VERSION:-latest}
     container_name: chronos_edge_proxy
     ports:
       # Host side only. The container still listens on 80 and 443; these say
@@ -55,7 +55,7 @@ services:
   # ── FastAPI backend ────────────────────────────────────────────────────────
   chronos-app:
     <<: [*restart, *chronos-net]
-    image: ghcr.io/${GHCR_OWNER:-Life-Experimentalist}/chronos-ledger-backend:${VERSION:-latest}
+    image: ghcr.io/${GHCR_OWNER:-life-experimentalist}/chronos-ledger-backend:${VERSION:-latest}
     container_name: chronos_core_engine
     environment:
       DATABASE_URL: postgresql://chronos_admin:${DB_PASSWORD:-SecureCloud2026}@chronos-db:5432/chronos_ledger

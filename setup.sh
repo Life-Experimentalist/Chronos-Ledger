@@ -190,7 +190,8 @@ if [[ "${MODE}" == "2" ]]; then
   COMPOSE_FILE="docker-compose.prod.yml"
   if ! grep -q "GHCR_OWNER" .env 2>/dev/null; then
     read -rp "  GitHub org/username for GHCR images: " GHCR_OWNER
-    echo "GHCR_OWNER=${GHCR_OWNER}" >> .env
+    # A registry path is lowercase only, and a GitHub account need not be.
+    echo "GHCR_OWNER=$(echo "${GHCR_OWNER}" | tr '[:upper:]' '[:lower:]')" >> .env
   fi
 fi
 

@@ -273,7 +273,7 @@ Published images, one build pushed to both:
 
 | Registry | Backend | Web |
 | -------- | ------- | --- |
-| GHCR (canonical, what `docker-compose.prod.yml` pulls) | `ghcr.io/Life-Experimentalist/chronos-ledger-backend` | `ghcr.io/Life-Experimentalist/chronos-ledger-web` |
+| GHCR (canonical, what `docker-compose.prod.yml` pulls) | `ghcr.io/life-experimentalist/chronos-ledger-backend` | `ghcr.io/life-experimentalist/chronos-ledger-web` |
 | Docker Hub | `vkrishna04/chronos-ledger-backend` | `vkrishna04/chronos-ledger-web` |
 
 Both carry the same tags: `latest`, `main`, a short commit sha, and `vX.Y.Z` on a
@@ -285,7 +285,7 @@ Every image carries an SBOM and build provenance, plus a Sigstore-signed SLSA
 attestation naming the workflow and commit it was built from:
 
 ```bash
-gh attestation verify oci://ghcr.io/Life-Experimentalist/chronos-ledger-backend:latest \
+gh attestation verify oci://ghcr.io/life-experimentalist/chronos-ledger-backend:latest \
   --owner Life-Experimentalist
 ```
 

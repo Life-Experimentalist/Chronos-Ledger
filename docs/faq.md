@@ -459,7 +459,7 @@ Chronos Ledger images are built with an SBOM and build provenance. Those ride
 inside the image index, so they are there whichever registry you pulled from:
 
 ```bash
-docker buildx imagetools inspect ghcr.io/Life-Experimentalist/chronos-ledger-backend:v1.2.0
+docker buildx imagetools inspect ghcr.io/life-experimentalist/chronos-ledger-backend:v1.2.0
 docker buildx imagetools inspect vkrishna04/chronos-ledger-backend:v1.2.0
 ```
 
@@ -467,7 +467,7 @@ There is also a Sigstore-signed SLSA provenance attestation, which says which
 workflow run built the image and from which commit:
 
 ```bash
-gh attestation verify oci://ghcr.io/Life-Experimentalist/chronos-ledger-backend:v1.2.0 \
+gh attestation verify oci://ghcr.io/life-experimentalist/chronos-ledger-backend:v1.2.0 \
   --owner Life-Experimentalist
 ```
 
@@ -560,7 +560,9 @@ Three things it could be:
    older and are read with `docker buildx imagetools inspect` instead.
 2. `--owner` is wrong. It is the GitHub account that owns the *repository*, not
    the Docker Hub namespace, so it stays `Life-Experimentalist` even when
-   verifying a `docker.io/` image.
+   verifying a `docker.io/` image. It also keeps its capitals, unlike the
+   `ghcr.io/` path beside it: a registry refuses a repository path with a
+   capital in it, a GitHub account name is free to have one.
 3. The workflow could not mint one. `attest-build-provenance` needs both
    `id-token: write` and `attestations: write`, and a called workflow's token
    is capped by the job that calls it, so all four of `cd.yml`, `release.yml`
