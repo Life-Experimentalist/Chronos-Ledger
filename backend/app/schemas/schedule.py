@@ -6,6 +6,7 @@ from datetime import date, time
 from pydantic import BaseModel, Field, model_validator
 
 from app.models.db import DynamicState, ExecutionMode
+from app.schemas.resources import BusyInterval
 
 
 class PlanningCycleCreate(BaseModel):
@@ -23,6 +24,40 @@ class PlanningCycleResponse(BaseModel):
     operational_status: bool
 
     model_config = {"from_attributes": True}
+
+
+class ActivationConflict(BusyInterval):
+    """A busy interval, and which of the opening cycle's slots stands under it.
+
+    The eight fields a conflict carries everywhere else name the other side
+    of the clash: the booking, the slot or the generated day that was there
+    first. On a single write that is enough, because the caller knows what
+    it just tried to put down. Opening a cycle puts every slot in it down at
+    once, so without this an admin is told a room is taken and not which of
+    their slots wanted it.
+
+    A subclass rather than a ninth field on BusyInterval, which is what the
+    availability endpoint returns and what an integrator already reads. The
+    eight are unchanged here, so a reader that parses those keeps working
+    and can ignore this one.
+    """
+
+    blocked_slot_id: int
+
+
+class CycleActivationConflictDetail(BaseModel):
+    message: str
+    conflicts: list[ActivationConflict]
+
+
+class CycleActivationConflict(BaseModel):
+    """The body of the 409 that refuses to open a cycle.
+
+    Nested under detail for the reason ReservationConflict gives: that is
+    where every other error in this API puts its body.
+    """
+
+    detail: CycleActivationConflictDetail
 
 
 class MasterSlotCreate(BaseModel):

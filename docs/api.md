@@ -533,7 +533,59 @@ Snapshot of all staff locations. Polled by the Member Locator panel.
 ### GET /schedule/cycles
 ### POST /schedule/cycles `[ADMIN]`
 ### PATCH /schedule/cycles/{id}/close `[ADMIN]`
+### PATCH /schedule/cycles/{id}/open `[ADMIN]`
 ### POST /schedule/cycles/{old}/clone-to/{new} `[ADMIN]`
+
+A cycle can be created closed, filled in over as long as that takes, and put
+into service once it is ready, which is what `open` is for. It is the only
+thing that sets `operational_status` back to true.
+
+It is not a flag flip. A slot entered into a closed cycle is never checked
+against the bookings or against the rest of the timetable, because a closed
+cycle's slots occupy nothing, and every one of them starts occupying its room
+the moment the flag goes true. So the checks `POST /schedule/slots` would have
+run are run here instead, over every slot in the cycle at once, and the whole
+open is refused where any of them lands on a room that is taken. The cycle's
+own slots count against each other: two of them drafted into one room at one
+hour were never refused when they were entered, and this is where they are
+caught.
+
+The body is the one a slot clash sends, with one field added:
+
+```json
+{
+  "detail": {
+    "message": "opening this cycle would put its slots on rooms already taken",
+    "conflicts": [
+      {
+        "date": "2026-03-04",
+        "start": "09:00:00",
+        "end_date": "2026-03-04",
+        "end": "10:00:00",
+        "activity_id": null,
+        "activity_code": null,
+        "master_slot_id": null,
+        "reservation_id": 41,
+        "blocked_slot_id": 88
+      }
+    ]
+  }
+}
+```
+
+The eight standard keys name what was already there, read exactly as they are
+read anywhere else, and `blocked_slot_id` names which of the cycle's own slots
+wanted it. Every clash across every slot is listed at once rather than one per
+attempt. A pair of the cycle's own slots is listed twice, once from each side,
+because neither of the two is the one at fault and one of them has to move.
+
+A refused open writes nothing: the cycle stays closed. Opening a cycle that is
+already open changes nothing and returns `200`.
+
+Date bounds are not consulted, and whether two cycles may be open at once is
+not decided here. The nightly generator lays every open cycle onto today
+whatever the bounds say, which is the same thing
+`GET /resources/{id}/availability` reports.
 
 ### POST /schedule/slots `[ADMIN]`
 ### PATCH /schedule/slots/{id} `[ADMIN]`

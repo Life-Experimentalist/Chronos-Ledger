@@ -681,6 +681,41 @@ components:
                 $ref: "#/components/schemas/BusyInterval"
 
     # ── Schedule ──────────────────────────────
+    CycleActivationConflict:
+      type: object
+      description: >
+        The body of the 409 that refuses to open a planning cycle. Every clash
+        across every slot in the cycle, listed at once rather than one per
+        attempt, because an admin opening a hundred slots should not have to
+        make a hundred attempts to see the list.
+
+
+        Each entry is a BusyInterval naming what was already there, plus
+        blocked_slot_id naming which of the cycle's own slots wanted it. A
+        pair of the cycle's own slots is listed twice, once from each side,
+        because neither of the two is the one at fault.
+      properties:
+        detail:
+          type: object
+          properties:
+            message:
+              type: string
+              example: opening this cycle would put its slots on rooms already taken
+            conflicts:
+              type: array
+              items:
+                allOf:
+                  - $ref: "#/components/schemas/BusyInterval"
+                  - type: object
+                    required: [blocked_slot_id]
+                    properties:
+                      blocked_slot_id:
+                        type: integer
+                        description: >
+                          The slot in the cycle being opened that this
+                          interval stands against.
+                        example: 88
+
     PlanningCycleCreate:
       type: object
       required: [cycle_label, date_bounds_start, date_bounds_end]
@@ -2229,6 +2264,53 @@ paths:
                 $ref: "#/components/schemas/PlanningCycleResponse"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /schedule/cycles/{cycle_id}/open:
+    patch:
+      tags: [Schedule]
+      summary: Put a drafted planning cycle into service
+      description: >
+        Sets `operational_status = true`, and it is the only thing that does.
+        A cycle can be created closed, filled in over as long as that takes,
+        and opened once it is ready.
+
+
+        Not a flag flip. A slot entered into a closed cycle is never checked
+        against the bookings or against the rest of the timetable, because a
+        closed cycle's slots occupy nothing, and every one of them starts
+        occupying its room the moment the flag goes true. The checks
+        `POST /schedule/slots` would have run are run here over every slot in
+        the cycle at once, the cycle's own slots counting against each other,
+        and the whole open is refused where any of them lands on a room that
+        is taken. A refused open writes nothing.
+
+
+        Opening a cycle that is already open changes nothing. Requires admin.
+      parameters:
+        - name: cycle_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Cycle opened, or already open.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Cycle 3 opened
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: A slot in the cycle would land on a room already taken.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CycleActivationConflict"
 
   /schedule/cycles/{source_cycle_id}/clone-to/{target_cycle_id}:
     post:

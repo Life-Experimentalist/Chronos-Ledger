@@ -14,6 +14,7 @@ from app.core.time import org_today
 from app.models.db import Activity, DailyLedger, PlanningCycle, StructuralMasterSlot, User
 from app.schemas.resources import ReservationConflict
 from app.schemas.schedule import (
+    CycleActivationConflict,
     DailyLedgerUpdate,
     MasterSlotCreate,
     MasterSlotUpdate,
@@ -35,6 +36,7 @@ router = APIRouter()
 ROOM_IS_HELD = "the resource is held for part of that window"
 ROOM_IS_SCHEDULED = "the resource is already on the timetable for part of that window"
 ROOM_HAS_A_DAY = "the resource already has a generated day in part of that window"
+CYCLE_IS_BLOCKED = "opening this cycle would put its slots on rooms already taken"
 
 
 def _refuse_if_held(db, cycle, resource_id, weekday, start, end) -> None:
@@ -154,6 +156,89 @@ def close_cycle(
     cycle.operational_status = False
     db.commit()
     return {"message": f"Cycle {cycle_id} closed"}
+
+
+@router.patch("/cycles/{cycle_id}/open", responses={409: {"model": CycleActivationConflict}})
+def open_cycle(
+    cycle_id: int, db: Session = Depends(get_db), _=Depends(require_roles("SUPER_ADMIN"))
+):
+    """Put a drafted cycle into service, with its slots checked first.
+
+    Nothing set this flag back to true. A cycle could be closed and never
+    reopened, and a cycle created closed could never be opened at all, so a
+    schedule had to be right at the moment it was typed in. That is fine for
+    a term that is planned once and runs, and wrong for a ward that fills up
+    a rota over a fortnight: draft it closed, correct it as often as you
+    like, commit it when it is ready.
+
+    Drafting closed is exactly why this cannot be a flag flip. A slot
+    entered into a closed cycle is not checked against the bookings or
+    against the rest of the timetable, because a closed cycle's slots
+    occupy nothing: booked_slots counts open cycles only. Every one of those
+    unchecked slots starts occupying its room the moment this flag goes
+    true, and from that night the generator lays days for all of them. So
+    the checks POST /slots would have run, had the cycle been open, run here
+    instead, over every slot at once.
+
+    The flag is written and flushed before the checks rather than after,
+    which is what lets the cycle's own slots be checked against each other.
+    Two slots drafted into one room at one hour are the likeliest mistake in
+    a cycle built up over a fortnight, and neither was ever refused. With
+    the flag flushed, booked_slots sees them, so they find each other
+    through the same query the write path uses and the two cannot disagree.
+    A clashing pair is named twice, once from each side, because there is no
+    honest way to pick which of the two is the one at fault.
+
+    Writing before checking means the refusal has to roll back, and it is
+    the only refusal in this file that does. Everything else asks before it
+    writes.
+
+    Every conflict across every slot is collected and raised once. The
+    per-slot refusals raise on the first thing they find, which costs a
+    second attempt in the rare case something clashes with two rules at
+    once; an admin opening a hundred slots should not have to make a hundred
+    attempts to see a list they could have been handed.
+    """
+    cycle = db.query(PlanningCycle).filter(PlanningCycle.id == cycle_id).first()
+    if not cycle:
+        raise HTTPException(status_code=404, detail="Cycle not found")
+    if cycle.operational_status:
+        # Its slots were checked as they landed, so there is nothing to ask.
+        return {"message": f"Cycle {cycle_id} was already open"}
+
+    slots = (
+        db.query(StructuralMasterSlot)
+        .join(Activity, StructuralMasterSlot.activity_id == Activity.id)
+        .filter(Activity.cycle_id == cycle_id)
+        .order_by(StructuralMasterSlot.id)
+        .all()
+    )
+    cycle.operational_status = True
+    db.flush()
+
+    conflicts: list[dict] = []
+    for slot in slots:
+        # A slot with no resource takes nothing from anybody. The importer
+        # can leave one that way when a room name does not resolve.
+        if slot.resource_id is None:
+            continue
+        window = (slot.day_of_week_index, slot.time_window_start, slot.time_window_end)
+        found = (
+            held_against_slot(db, slot.resource_id, *window)
+            + slots_against_slot(db, slot.resource_id, *window, exclude_slot_id=slot.id)
+            + days_against_slot(db, slot.resource_id, *window, exclude_slot_id=slot.id)
+        )
+        conflicts.extend({**clash, "blocked_slot_id": slot.id} for clash in found)
+
+    if conflicts:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=jsonable_encoder({"message": CYCLE_IS_BLOCKED, "conflicts": conflicts}),
+        )
+
+    db.commit()
+    return {"message": f"Cycle {cycle_id} opened"}
 
 
 @router.post("/cycles/{old_id}/clone-to/{new_id}")
