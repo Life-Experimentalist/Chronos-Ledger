@@ -10,6 +10,35 @@ Base URL: `http://<server>/api/v1`
 
 ---
 
+## Configuration
+
+### GET /config `[public]`
+
+What a client needs before anyone has logged in: which vocabulary to render,
+and how short a password this deployment will accept.
+
+```json
+{
+  "org_profile": "campus",
+  "labels": {
+    "staff": "Faculty",
+    "member": "Student",
+    "activity": "Course",
+    "unit": "Department",
+    "lead": "Instructor",
+    "cycle": "Semester"
+  },
+  "password_min_length": 12
+}
+```
+
+`org_profile` follows `ORG_PROFILE` and is one of `generic`, `campus` or
+`hospital`; the label keys are the same six whichever profile is set.
+`password_min_length` follows `PASSWORD_MIN_LENGTH`. Nothing here is a secret:
+a caller learns the password floor from a single rejected change anyway.
+
+---
+
 ## Authentication
 
 All endpoints except `/auth/login`, `/guest/register-checkin`, and `/guest/directory`
@@ -64,6 +93,13 @@ Higher roles inherit the permissions of all roles below them. Role is embedded i
 ```json
 { "current_password": "…", "new_password": "…" }
 ```
+
+`new_password` must be at least `PASSWORD_MIN_LENGTH` characters, 12 unless the
+deployment has raised it, and must not be one of the placeholder passwords
+published in this repository. Either refusal is a `422` naming the rule.
+Repeating the current password is a `400`: the first-login gate exists to move
+the account off the password it was handed, and setting it back to itself would
+satisfy the flag while changing nothing.
 
 ### GET /auth/me
 

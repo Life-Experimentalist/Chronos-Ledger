@@ -148,7 +148,10 @@ components:
         new_password:
           type: string
           format: password
-          minLength: 8
+          minLength: 12
+          description: >
+            At least PASSWORD_MIN_LENGTH characters, 12 unless the deployment
+            has raised it, and not a placeholder published in this repository.
 
     # ── Users ─────────────────────────────────
     UserCreate:
@@ -167,7 +170,10 @@ components:
         password:
           type: string
           format: password
-          minLength: 8
+          minLength: 12
+          description: >
+            Held to the same PASSWORD_MIN_LENGTH floor as a password the user
+            chooses for themselves.
         role_type:
           $ref: "#/components/schemas/InstitutionalRole"
         unit_code:
@@ -1243,8 +1249,10 @@ paths:
       summary: Deployment profile and display vocabulary
       description: |
         Public. Returns the deployment's `org_profile` (`generic`, `campus`,
-        or `hospital`) and the display labels the UI should render for the
-        neutral roles (staff, member, activity, unit, lead, cycle).
+        or `hospital`), the display labels the UI should render for the
+        neutral roles (staff, member, activity, unit, lead, cycle), and the
+        shortest password this deployment accepts. The client needs all three
+        before anyone has logged in.
       security: []
       responses:
         "200":
@@ -1266,6 +1274,14 @@ paths:
                       unit: { type: string }
                       lead: { type: string }
                       cycle: { type: string }
+                  password_min_length:
+                    type: integer
+                    minimum: 8
+                    example: 12
+                    description: >-
+                      PASSWORD_MIN_LENGTH on this deployment. The onboarding
+                      wizard states it in a placeholder and refuses a shorter
+                      password before sending it.
 
   # ── Authentication ────────────────────────
   /auth/login:
@@ -1327,7 +1343,10 @@ paths:
                     type: string
                     example: Password updated successfully.
         "400":
-          description: Current password incorrect or new password too short.
+          description: >
+            Current password incorrect, or the new password is the one the
+            account already has. A password that breaks the length or
+            placeholder rule is a 422 instead.
           content:
             application/json:
               schema:

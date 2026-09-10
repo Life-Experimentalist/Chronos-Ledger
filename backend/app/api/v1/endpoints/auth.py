@@ -119,6 +119,13 @@ def change_password(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect"
         )
+    # The first-login gate exists to get the account off the password it was
+    # handed. Setting it back to itself satisfies the flag and changes nothing.
+    if payload.new_password == payload.current_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The new password is the one you already have",
+        )
 
     current_user.credential_secure_hash = hash_password(payload.new_password)
     current_user.initial_login_state = False

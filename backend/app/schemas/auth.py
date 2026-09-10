@@ -3,6 +3,8 @@
 
 from pydantic import BaseModel, EmailStr
 
+from app.core.passwords import AcceptablePassword
+
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -21,7 +23,7 @@ class TokenResponse(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
-    new_password: str
+    new_password: AcceptablePassword
 
 
 class RefreshRequest(BaseModel):

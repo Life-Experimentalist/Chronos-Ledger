@@ -24,6 +24,19 @@ def test_each_profile_returns_its_own_labels(client, monkeypatch):
         assert body["labels"] == VOCABULARY_PROFILES[profile]
 
 
+def test_the_password_floor_is_published(client):
+    """The wizard refuses a short password in the browser, so it needs the number."""
+    res = client.get("/api/v1/config")
+    assert res.status_code == 200
+    assert res.json()["password_min_length"] == Settings().password_min_length
+
+
+def test_the_published_floor_follows_the_setting(client, monkeypatch):
+    monkeypatch.setattr(org_config, "get_settings", lambda: Settings(password_min_length=20))
+    res = client.get("/api/v1/config")
+    assert res.json()["password_min_length"] == 20
+
+
 def test_profiles_share_the_same_label_keys():
     keys = set(VOCABULARY_PROFILES["generic"])
     for labels in VOCABULARY_PROFILES.values():

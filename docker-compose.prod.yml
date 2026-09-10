@@ -69,6 +69,7 @@ services:
       # unreachable, which is deliberate: there is no default to find in
       # this repository.
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
+      PASSWORD_MIN_LENGTH: ${PASSWORD_MIN_LENGTH:-12}
       APP_ENV: production
       # Decides what "today" means. A container runs UTC, so an
       # organization that is not in UTC needs this or the dashboard is a

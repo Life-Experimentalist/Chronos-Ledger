@@ -1,7 +1,7 @@
 'use client'
 // Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { authApi, scheduleApi, ingestionApi } from '@/lib/api'
 import { apiErrorMessage } from '@/lib/errors'
+import { useOrgConfig } from '@/hooks/useOrgConfig'
 import { ProvisionedCredentials } from './ProvisionedCredentials'
 import type { CsvImportResult, PlanningCycle, ProvisionedCredential } from '@/types'
 
@@ -35,9 +36,12 @@ interface Props {
 }
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
-const passwordSchema = z.object({
+// Built per deployment: the floor is PASSWORD_MIN_LENGTH, which /config
+// publishes. Refusing here the same length the API refuses saves a round trip,
+// and naming the number saves the admin a guess.
+const passwordSchema = (min: number) => z.object({
   current_password: z.string().min(1, 'Required'),
-  new_password: z.string().min(8, 'At least 8 characters'),
+  new_password: z.string().min(min, `At least ${min} characters`),
   confirm_password: z.string(),
 }).refine((d) => d.new_password === d.confirm_password, {
   message: 'Passwords do not match',
@@ -50,7 +54,7 @@ const cycleSchema = z.object({
   date_bounds_end: z.string().min(1, 'Required'),
 })
 
-type PasswordForm = z.infer<typeof passwordSchema>
+type PasswordForm = z.infer<ReturnType<typeof passwordSchema>>
 type CycleForm = z.infer<typeof cycleSchema>
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -82,7 +86,9 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
   const finish = () => router.push('/admin/dashboard')
 
   // ── Password step ──────────────────────────────────────────────────────────
-  const pwForm = useForm<PasswordForm>({ resolver: zodResolver(passwordSchema) })
+  const passwordMin = useOrgConfig().password_min_length
+  const pwSchema = useMemo(() => passwordSchema(passwordMin), [passwordMin])
+  const pwForm = useForm<PasswordForm>({ resolver: zodResolver(pwSchema) })
 
   const submitPassword = pwForm.handleSubmit(async (data) => {
     setLoading(true)
@@ -230,7 +236,7 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-chronos-text-dim mb-1.5 uppercase tracking-wider">New Password</label>
-                  <input {...pwForm.register('new_password')} type="password" className="input-field" placeholder="Min. 8 characters" />
+                  <input {...pwForm.register('new_password')} type="password" className="input-field" placeholder={`Min. ${passwordMin} characters`} />
                   {pwForm.formState.errors.new_password && (
                     <p className="text-chronos-danger text-xs mt-1">{pwForm.formState.errors.new_password.message}</p>
                   )}

@@ -33,6 +33,8 @@ PUBLISHED_ADMIN_PASSWORDS = frozenset(
     }
 )
 MINIMUM_SIGNING_KEY_LENGTH = 32
+# PASSWORD_MIN_LENGTH may be raised but not lowered past this.
+ABSOLUTE_PASSWORD_FLOOR = 8
 
 
 class Settings(BaseSettings):
@@ -60,6 +62,11 @@ class Settings(BaseSettings):
     # publishes no password for anybody to find. See app/core/bootstrap.py.
     initial_admin_password: str = ""
 
+    # The floor on a password a person chooses. Generated passwords are well
+    # past it already. Refused below 8: a policy that can be turned down to
+    # one character is not a policy, and the first-login gate is built on it.
+    password_min_length: int = 12
+
     # Organization
     org_domain_mask: str = "org.internal"
     org_profile: Literal["generic", "campus", "hospital"] = "generic"
@@ -81,6 +88,16 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.app_cors_origins.split(",") if o.strip()]
+
+    @field_validator("password_min_length")
+    @classmethod
+    def _minimum_is_worth_having(cls, length: int) -> int:
+        if length < ABSOLUTE_PASSWORD_FLOOR:
+            raise ValueError(
+                f"PASSWORD_MIN_LENGTH={length} is below the {ABSOLUTE_PASSWORD_FLOOR} "
+                "this refuses to go under. Raise it, or leave it unset for 12."
+            )
+        return length
 
     @field_validator("org_timezone")
     @classmethod

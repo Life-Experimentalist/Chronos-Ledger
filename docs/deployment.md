@@ -72,6 +72,7 @@ Edit `.env` and set:
 - `VAPID_CONTACT_EMAIL`, a reachable admin email
 - `DB_PASSWORD`, change from the default before first launch
 - `ORG_TIMEZONE`, the IANA name of where the organization is, such as `Asia/Kolkata`. It decides which day the dashboard shows, which day the nightly generator lays down, and when 23:00 is. A container runs UTC, so leaving it unset puts an organization that is not in UTC a whole offset out. An offset like `+05:30` is refused, because it cannot know when daylight saving moves, and a name no zone database knows stops the server rather than falling back quietly.
+- `PASSWORD_MIN_LENGTH`, optional, default 12. The shortest password a person may choose, applied to the first-login change and to every account an admin or the CSV importer creates. Passwords the system generates are already longer. It refuses to go below 8, so the first-login gate cannot be reduced to a formality.
 
 ### 2. Launch with auto-discovery
 
