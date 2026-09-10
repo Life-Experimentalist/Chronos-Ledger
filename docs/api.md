@@ -101,6 +101,17 @@ Repeating the current password is a `400`: the first-login gate exists to move
 the account off the password it was handed, and setting it back to itself would
 satisfy the flag while changing nothing.
 
+A successful change ends every session the account had, rotates its calendar
+feed token (any subscribed calendar stops updating and needs the new URL from
+`GET /sync/feed-token`), and returns a replacement refresh token for the caller:
+
+```json
+{ "message": "Password updated successfully", "refresh_token": "..." }
+```
+
+Store it over the one you hold. Skip that and the browser that changed the
+password is signed out as soon as its access token expires.
+
 ### GET /auth/me
 
 Returns the current user's `UserResponse` (see Users section).

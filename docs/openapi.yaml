@@ -1333,7 +1333,11 @@ paths:
               $ref: "#/components/schemas/ChangePasswordRequest"
       responses:
         "200":
-          description: Password changed.
+          description: >
+            Password changed. Every existing session is revoked and the
+            calendar feed token is rotated. `refresh_token` replaces the one
+            the caller holds; without storing it the caller is signed out when
+            its access token expires.
           content:
             application/json:
               schema:
@@ -1342,6 +1346,8 @@ paths:
                   message:
                     type: string
                     example: Password updated successfully.
+                  refresh_token:
+                    type: string
         "400":
           description: >
             Current password incorrect, or the new password is the one the

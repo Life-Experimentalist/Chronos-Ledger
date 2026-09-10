@@ -66,8 +66,17 @@ export const authApi = {
   login: (email: string, password: string) =>
     api.post('/auth/login', { email, password }),
   me: () => api.get('/auth/me'),
-  changePassword: (current_password: string, new_password: string) =>
-    api.post('/auth/change-password', { current_password, new_password }),
+  changePassword: async (current_password: string, new_password: string) => {
+    const res = await api.post('/auth/change-password', { current_password, new_password })
+    // The change kills every refresh token the account had, this one included,
+    // and the response carries its replacement. Storing it here rather than at
+    // the call site means the next screen to offer a password change cannot
+    // forget to, and get itself signed out fifteen minutes later.
+    if (typeof window !== 'undefined' && res.data?.refresh_token) {
+      localStorage.setItem('chronos_refresh', res.data.refresh_token)
+    }
+    return res
+  },
   logout: (refresh_token: string) => api.post('/auth/logout', { refresh_token }),
 }
 

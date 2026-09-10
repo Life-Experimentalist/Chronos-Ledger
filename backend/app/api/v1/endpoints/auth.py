@@ -17,7 +17,13 @@ from app.core.security import (
     verify_password,
 )
 from app.models.db import RefreshToken, User, generate_feed_token
-from app.schemas.auth import ChangePasswordRequest, LoginRequest, RefreshRequest, TokenResponse
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    ChangePasswordResponse,
+    LoginRequest,
+    RefreshRequest,
+    TokenResponse,
+)
 
 settings = get_settings()
 router = APIRouter()
@@ -109,7 +115,7 @@ def logout(payload: RefreshRequest, db: Session = Depends(get_db)):
     return {"message": "Logged out"}
 
 
-@router.post("/change-password")
+@router.post("/change-password", response_model=ChangePasswordResponse)
 def change_password(
     payload: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
@@ -131,10 +137,16 @@ def change_password(
     current_user.initial_login_state = False
     # A password change also invalidates the shareable calendar feed URL.
     current_user.calendar_feed_token = generate_feed_token()
-    # A password change signs out every device: all refresh tokens die with it.
+    # A password change signs out every device. Including this one would be
+    # a fifteen-minute delayed bounce to the sign-in page for whoever just
+    # changed their password, so the calling session is handed a replacement
+    # in the response and every other session stops at its next refresh.
     db.query(RefreshToken).filter(RefreshToken.user_id == current_user.id).delete()
+    refresh_token = _mint_refresh_token(db, current_user.id)
     db.commit()
-    return {"message": "Password updated successfully"}
+    return ChangePasswordResponse(
+        message="Password updated successfully", refresh_token=refresh_token
+    )
 
 
 @router.get("/me")

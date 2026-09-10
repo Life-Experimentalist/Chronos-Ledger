@@ -78,7 +78,7 @@ def test_logout_revokes_refresh_token(client, seed_users):
     assert res.status_code == 401
 
 
-def test_password_change_revokes_all_sessions(client, db, seed_users):
+def test_password_change_revokes_every_session_including_its_own(client, db, seed_users):
     phone = _login(client)
     laptop = _login(client)
     assert db.query(RefreshToken).count() == 2
@@ -89,10 +89,34 @@ def test_password_change_revokes_all_sessions(client, db, seed_users):
         headers={"Authorization": f"Bearer {laptop['access_token']}"},
     )
     assert res.status_code == 200
-    assert db.query(RefreshToken).count() == 0
+    # Two died, one was issued: the replacement for the caller.
+    assert db.query(RefreshToken).count() == 1
 
     for session in (phone, laptop):
         replay = client.post(
             "/api/v1/auth/refresh", json={"refresh_token": session["refresh_token"]}
         )
         assert replay.status_code == 401
+
+
+def test_password_change_hands_the_caller_a_working_refresh_token(client, seed_users):
+    laptop = _login(client)
+    res = client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": MEMBER_PASSWORD, "new_password": "BrandNewPass456!"},
+        headers={"Authorization": f"Bearer {laptop['access_token']}"},
+    )
+    assert res.status_code == 200
+    issued = res.json()["refresh_token"]
+    assert issued != laptop["refresh_token"]
+
+    # Without this the browser that changed the password is signed out as soon
+    # as its access token expires, which is the whole point of the fix.
+    rotated = client.post("/api/v1/auth/refresh", json={"refresh_token": issued})
+    assert rotated.status_code == 200
+    me = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {rotated.json()['access_token']}"},
+    )
+    assert me.status_code == 200
+    assert me.json()["id"] == "STU001"

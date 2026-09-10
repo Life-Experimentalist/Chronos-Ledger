@@ -301,7 +301,7 @@ the buildkit attestations that ride along inside the image itself.
 | `JWT_SECRET_SIGNING_KEY` | **yes**     | 64-char hex: `openssl rand -hex 32`. Production refuses to start on the placeholder or on anything under 32 characters. |
 | `DB_PASSWORD`            | **yes**     | PostgreSQL password                                         |
 | `ORG_TIMEZONE`           | recommended | IANA name of where the organization is, such as `Asia/Kolkata`. Decides what "today" means. Defaults to `UTC`, which is what a container runs. An offset is refused. |
-| `PASSWORD_MIN_LENGTH`    | optional    | Shortest password a person may choose, default 12. Applies to the first-login change and to every account an admin or the importer creates. Refused below 8. |
+| `PASSWORD_MIN_LENGTH`    | optional    | Shortest password a person may choose, default 12. Applies to the first-login change and to any account an admin creates with a typed password. Generated passwords are random and not measured against it. Refused below 8. |
 | `VAPID_PUBLIC_KEY`       | recommended | Web Push: `npx web-push generate-vapid-keys`               |
 | `VAPID_PRIVATE_KEY`      | recommended | Web Push                                                    |
 | `VAPID_CONTACT_EMAIL`    | recommended | Admin contact for push service                              |
