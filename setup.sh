@@ -224,11 +224,23 @@ if [[ "${SEED_DEMO}" == "1" ]]; then
   DEMO_KIOSK_KEY="$(echo "${DEMO_OUTPUT}" | sed -n 's/^Kiosk key[^:]*: //p')"
 fi
 
+# The interactive docs follow DOCS_ENABLED, which .env.example leaves blank,
+# and blank means off wherever APP_ENV says production. Read it back rather
+# than closing a successful install with a link to a 404.
+DOCS_SETTING="$(sed -n 's/^DOCS_ENABLED=//p' .env | tail -1 | tr '[:upper:]' '[:lower:]')"
+APP_ENV_SETTING="$(sed -n 's/^APP_ENV=//p' .env | tail -1)"
+if [[ "${DOCS_SETTING}" =~ ^(true|1|yes|on)$ ]] ||
+   [[ -z "${DOCS_SETTING}" && "${APP_ENV_SETTING}" != "production" ]]; then
+  DOCS_LINE="http://${LAN_IP}/docs"
+else
+  DOCS_LINE="off (set DOCS_ENABLED=true in .env)"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 header "All done!"
 echo ""
 ok "App:       http://${LAN_IP}"
-ok "API docs:  http://${LAN_IP}/docs"
+ok "API docs:  ${DOCS_LINE}"
 ok "Login:     admin@org.internal"
 if [[ -n "${ADMIN_PASS:-}" ]]; then
   ok "Password:  ${ADMIN_PASS}"

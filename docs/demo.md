@@ -61,7 +61,9 @@ automatically. Sign out between steps to switch roles.
    notification to approve or decline. To retire a lost or stolen kiosk,
    revoke its key under Settings, API Keys.
 5. **API** (`/docs` on the same address): the whole API, interactive, if your
-   audience is technical.
+   audience is technical. Off by default, because the compose files pin
+   `APP_ENV=production`; set `DOCS_ENABLED=true` in `.env` and restart to
+   publish it.
 
 ## Reset and rerun
 

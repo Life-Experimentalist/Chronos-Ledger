@@ -571,7 +571,7 @@ const INSTALL_STEPS = [
   },
   {
     title: 'Open the app and choose your own password',
-    code: '# App:     http://<your-server-ip>\n# API docs: http://<your-server-ip>/docs\n# Login:    admin@org.internal\n# Password: the one setup.sh printed',
+    code: '# App:     http://<your-server-ip>\n# API docs: off (set DOCS_ENABLED=true in .env)\n# Login:    admin@org.internal\n# Password: the one setup.sh printed',
     note: 'The setup script prints the exact URL and the first password when it finishes.',
   },
 ]
