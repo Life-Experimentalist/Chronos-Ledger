@@ -110,7 +110,7 @@ export default function LandingLayout({ children }: { children: React.ReactNode 
             keywords:
               'organization management, attendance tracking, university software, self-hosted, PWA, geofence',
             featureList: [
-              'Geofenced attendance marking with 3D validation',
+              'Geofenced attendance marking over GPS',
               '4-tier real-time staff location resolver',
               'Reverse RSVP absence management',
               'Offline-first with service worker sync',

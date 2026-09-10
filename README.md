@@ -105,8 +105,8 @@ Full diagrams with Mermaid charts: [`docs/architecture.md`](docs/architecture.md
 
 ## Feature Highlights
 
-### 3D Geofenced Attendance
-Members mark attendance via GPS. The server runs a Haversine distance check **plus** an altitude delta (`|Δalt| < 4m`) to prevent members on floors above or below from registering. When GPS accuracy exceeds 30m, the client flags a BSSID Wi-Fi fallback.
+### Geofenced Attendance
+Members mark attendance via GPS. The server runs a Haversine distance check, plus an altitude delta (`|Δalt| <= 4m`) when both the device and the room report an altitude, so that somebody a floor above or below does not register. Altitude is optional on both sides: a fix without one is judged on the horizontal radius alone. The client refuses to mark at all when the reported accuracy is worse than 30m.
 
 ### 4-Tier Staff Location Resolution
 Always know where staff are, in priority order:

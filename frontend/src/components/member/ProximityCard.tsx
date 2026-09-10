@@ -121,13 +121,13 @@ export function ProximityCard({ currentEntry, userId }: ProximityCardProps) {
         {error ? (
           <div className="flex items-center gap-2 text-xs text-chronos-warning">
             <AlertCircle className="w-4 h-4 shrink-0" />
-            {error}: BSSID Wi-Fi fallback will be used
+            {error}
           </div>
         ) : position ? (
           <div className="space-y-1.5 text-xs text-chronos-text-dim">
             <div className="flex items-center gap-1.5">
               <span className={`w-1.5 h-1.5 rounded-full ${hasGoodAccuracy ? 'bg-chronos-emerald' : 'bg-chronos-warning'} animate-pulse`} />
-              Accuracy: {position.accuracy.toFixed(0)}m {hasGoodAccuracy ? '(Good)' : '(Poor: BSSID fallback active)'}
+              Accuracy: {position.accuracy.toFixed(0)}m {hasGoodAccuracy ? '(Good)' : '(Poor: too imprecise to mark)'}
             </div>
             <p className="font-mono text-[10px] text-chronos-muted">
               {position.lat.toFixed(6)}, {position.lon.toFixed(6)}

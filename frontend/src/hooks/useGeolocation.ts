@@ -17,7 +17,9 @@ interface GeolocationState {
   isWatching: boolean
 }
 
-const GPS_ACCURACY_THRESHOLD = 30 // metres, above this we try BSSID fallback
+// Above this the fix is too coarse to place somebody inside a room, and
+// attendance marking is refused rather than guessed at.
+const GPS_ACCURACY_THRESHOLD = 30 // metres
 
 // Raw GPS altitude carries two to three times the horizontal error, which is
 // several storeys. Only forward an altitude the device says is good to about
@@ -80,7 +82,6 @@ export function useGeolocation() {
   }, [])
 
   const hasGoodAccuracy = state.position && state.position.accuracy <= GPS_ACCURACY_THRESHOLD
-  const needsBssidFallback = state.position && state.position.accuracy > GPS_ACCURACY_THRESHOLD
 
-  return { ...state, startWatching, stopWatching, hasGoodAccuracy, needsBssidFallback }
+  return { ...state, startWatching, stopWatching, hasGoodAccuracy }
 }

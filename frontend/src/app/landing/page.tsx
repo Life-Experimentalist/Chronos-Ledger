@@ -441,8 +441,8 @@ const FEATURES = [
     iconColor: 'text-chronos-teal',
   },
   {
-    title: '3D Geofenced Attendance',
-    desc: 'Haversine surface distance + 4m altitude check prevents cross-floor spoofing. Falls back to Wi-Fi BSSID when GPS accuracy exceeds 30m.',
+    title: 'Geofenced Attendance',
+    desc: 'Haversine surface distance, plus a 4m altitude check when the device and the room both report one, so a floor above does not count. Marking is refused when GPS accuracy is worse than 30m.',
     icon: MapPin,
     iconBg: 'bg-chronos-emerald/10',
     iconColor: 'text-chronos-emerald',
@@ -533,7 +533,7 @@ const ROLES = [
     iconColor: 'text-chronos-accent',
     capabilities: [
       'Live timeline of today\'s classes with status indicators',
-      '3D geofenced attendance marking with GPS/BSSID',
+      'Geofenced attendance marking over GPS',
       'Staff locator with real-time availability',
       'Offline attendance queue with background sync',
     ],

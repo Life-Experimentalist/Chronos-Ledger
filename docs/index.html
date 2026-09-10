@@ -878,7 +878,7 @@
 <script>
 const FEATURES = [
   { icon:'navigation', title:'Live Staff Locator', desc:'4-tier resolution: Redis override → daily exception → master timetable → base station fallback. Always know where staff are.', bg:'rgba(20,184,166,.1)', color:'var(--teal)' },
-  { icon:'map-pin', title:'3D Geofenced Attendance', desc:'Haversine distance + 4 m altitude check prevents cross-floor spoofing. Falls back to Wi-Fi BSSID when GPS accuracy exceeds 30 m.', bg:'rgba(16,185,129,.1)', color:'var(--emerald)' },
+  { icon:'map-pin', title:'Geofenced Attendance', desc:'Haversine distance, plus a 4 m altitude check when the device and the room both report one, so a floor above does not count. Marking is refused when GPS accuracy is worse than 30 m.', bg:'rgba(16,185,129,.1)', color:'var(--emerald)' },
   { icon:'user-check', title:'Reverse RSVP Absences', desc:'Presence is the default. Staff file absence requests; their manager approves. Approved absences auto-cascade ON_LEAVE to the daily ledger.', bg:'rgba(129,140,248,.1)', color:'var(--accent)' },
   { icon:'zap', title:'Real-Time WebSocket', desc:'JWT-authenticated persistent connections. Instant guest handshake requests, absence approvals, and organization-wide broadcasts, no polling.', bg:'rgba(245,158,11,.1)', color:'var(--warning)' },
   { icon:'upload', title:'CSV Schedule Import', desc:'Bulk-import the term timetable from a single member-centric CSV. Upserts members, activities, registrations, and master slots atomically.', bg:'rgba(168,85,247,.1)', color:'#a855f7' },
@@ -894,7 +894,7 @@ const ROLES = [
   { icon:'book-open', name:'Staff', path:'/staff/dashboard', bg:'rgba(16,185,129,.1)', color:'var(--emerald)',
     caps:['Availability status switcher (4 states)','Attendance matrix: mark whole class in one tap','Submit and track absence requests','Guest interaction desk with real-time notifications'] },
   { icon:'user-check', name:'Member', path:'/member/dashboard', bg:'rgba(129,140,248,.1)', color:'var(--accent)',
-    caps:["Live timeline of today's classes with status indicators",'3D geofenced attendance marking with GPS/BSSID','Staff locator with real-time availability','Offline attendance queue with background sync'] },
+    caps:["Live timeline of today's classes with status indicators",'Geofenced attendance marking over GPS','Staff locator with real-time availability','Offline attendance queue with background sync'] },
   { icon:'users', name:'Guest (kiosk key)', path:'/guest/kiosk', bg:'rgba(245,158,11,.1)', color:'var(--warning)',
     caps:['Search staff directory by name','Submit check-in request with purpose','Real-time notification to target staff','Public availability status display'] },
 ];
