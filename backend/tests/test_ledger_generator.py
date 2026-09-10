@@ -59,6 +59,11 @@ def test_materializes_matching_slot(db, seed_users):
     assert entry.active_lead_id == "FAC001"
     assert entry.target_room_identifier == "LH-101"
     assert entry.operational_state == DynamicState.SCHEDULED
+    # Copied off the slot rather than pointed at. A day is an interval on a
+    # date and had no times of its own, so everything that needed to know
+    # when it ran read them back through a pointer that can go away.
+    assert entry.time_window_start == datetime.time(9, 0)
+    assert entry.time_window_end == datetime.time(10, 0)
 
 
 def test_rerun_is_idempotent(db, seed_users):

@@ -71,6 +71,34 @@ class LogVerificationState(enum.StrEnum):
     VERIFIED_DENIED = "VERIFIED_DENIED"
 
 
+class ResourceType(enum.StrEnum):
+    """What a bookable thing is.
+
+    Only these two exist because only these two are created. ROOM is what
+    the import and the backfill produce. PERSON exists because
+    Resource.user_id ships alongside it: a resource row carrying a user is a
+    person, and a column that says so with no value to say it with would be
+    incoherent. Adding a kind later is one ALTER TYPE, and the modes a kind
+    can be consumed in (exclusive, pooled, shared) are a separate axis that
+    is not stored yet.
+    """
+
+    ROOM = "ROOM"
+    PERSON = "PERSON"
+
+
+class ReservationStatus(enum.StrEnum):
+    """A hold either stands or it has been let go.
+
+    Cancelling keeps the row rather than deleting it. A cancellation is
+    something an outside system has to be told about, and there is nothing
+    left to tell it about once the row is gone.
+    """
+
+    HELD = "HELD"
+    CANCELLED = "CANCELLED"
+
+
 class PlanningCycle(Base):
     __tablename__ = "planning_cycles"
 
@@ -92,7 +120,7 @@ class User(Base):
     credential_secure_hash = Column(String(255), nullable=False)
     role_type = Column(Enum(InstitutionalRole, name="institutional_role"), nullable=False)
     unit_code = Column(String(50), nullable=True)
-    assigned_base_station = Column(String(100), default="Staff Room Main")
+    assigned_base_station = Column(String(100))
     current_occupancy_index = Column(
         Enum(AccessReadiness, name="access_readiness"), default=AccessReadiness.OPEN_AD_HOC
     )
@@ -143,6 +171,40 @@ class ActivityEnrollment(Base):
     member = relationship("User", back_populates="activity_enrollments")
 
 
+class Resource(Base):
+    """A thing a reservation consumes: a room today, a person or a machine later.
+
+    Rooms used to be a bare string repeated on every slot and every generated
+    day, which meant nothing could hold a room's capacity or its coordinates,
+    a rename had to be found and replaced everywhere, and two rows naming the
+    same room were the same room only by spelling.
+
+    code is unique, and one row per distinct string is exactly what the
+    backfill produces. It is deliberately not scoped by unit: two units both
+    calling a room "101" is a real fact about the data that the data cannot
+    resolve, so the import treats them as one room rather than inventing a
+    distinction it cannot verify.
+    """
+
+    __tablename__ = "resources"
+
+    id = Column(Integer, primary_key=True)
+    code = Column(String(30), nullable=False, unique=True, index=True)
+    label = Column(String(120), nullable=False)
+    resource_type = Column(
+        Enum(ResourceType, name="resource_type"), nullable=False, default=ResourceType.ROOM
+    )
+    unit_code = Column(String(50), nullable=True)
+    capacity = Column(Integer, nullable=True)
+    # A resource row with user_id set is a person. Without it, staff
+    # availability and room availability become two mechanisms that drift.
+    user_id = Column(String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    latitude = Column(Numeric(10, 8), nullable=True)
+    longitude = Column(Numeric(11, 8), nullable=True)
+    altitude_target = Column(Numeric(6, 2), nullable=True)
+    active = Column(Boolean, default=True, nullable=False)
+
+
 class StructuralMasterSlot(Base):
     __tablename__ = "structural_master_slots"
     __table_args__ = (CheckConstraint("day_of_week_index BETWEEN 1 AND 7"),)
@@ -153,13 +215,20 @@ class StructuralMasterSlot(Base):
     time_window_end = Column(Time, nullable=False)
     activity_id = Column(Integer, ForeignKey("activities.id", ondelete="CASCADE"), nullable=False)
     primary_lead_id = Column(String(50), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    target_room_identifier = Column(String(30), nullable=False)
+    resource_id = Column(Integer, ForeignKey("resources.id"), nullable=True, index=True)
+    # Kept in step with the resource by every write path, and read by the
+    # frontend and the calendar feed, until they move to resource_id.
+    target_room_identifier = Column(String(30), nullable=True)
 
     activity = relationship("Activity", back_populates="master_slots")
     primary_lead = relationship("User", foreign_keys=[primary_lead_id])
-    daily_ledger_entries = relationship(
-        "DailyLedger", back_populates="master_slot", cascade="all, delete-orphan"
-    )
+    resource = relationship("Resource", foreign_keys=[resource_id])
+    # No delete cascade on purpose. Deleting a slot used to delete every day
+    # it had ever produced, attendance and all, so removing a cancelled class
+    # from the timetable erased the record that it had ever run. Days that are
+    # still only plans are removed by the delete endpoint; days that became
+    # records are left behind with master_slot_id nulled.
+    daily_ledger_entries = relationship("DailyLedger", back_populates="master_slot")
 
 
 class DailyLedger(Base):
@@ -167,13 +236,28 @@ class DailyLedger(Base):
 
     id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
     target_date = Column(Date, nullable=False, index=True)
+    # Copied from the slot when the day is generated rather than read back
+    # through it. A day is a booking on a date and had no window of its own,
+    # so deleting a slot nulled master_slot_id and the days it had already
+    # produced forgot what time they happened at: the calendar feed demoted
+    # them to all-day events and the API returned null. Editing a slot's
+    # times rewrote history the same way, showing every day it had already
+    # run at the new time.
+    #
+    # Nullable, because an ad-hoc day has no window by design and because a
+    # day orphaned before this column existed has no slot left to copy from.
+    # An end earlier than a start means the day finishes on the following
+    # date, the same rule window_span keeps everywhere else.
+    time_window_start = Column(Time, nullable=True)
+    time_window_end = Column(Time, nullable=True)
     master_slot_id = Column(
-        Integer, ForeignKey("structural_master_slots.id", ondelete="CASCADE"), nullable=True
+        Integer, ForeignKey("structural_master_slots.id", ondelete="SET NULL"), nullable=True
     )
     activity_id = Column(Integer, ForeignKey("activities.id", ondelete="CASCADE"), nullable=False)
     active_lead_id = Column(String(50), ForeignKey("users.id"), nullable=True)
     substitute_lead_id = Column(String(50), ForeignKey("users.id"), nullable=True)
-    target_room_identifier = Column(String(30), nullable=False)
+    resource_id = Column(Integer, ForeignKey("resources.id"), nullable=True, index=True)
+    target_room_identifier = Column(String(30), nullable=True)
     delivery_format = Column(
         Enum(ExecutionMode, name="execution_mode"), default=ExecutionMode.PHYSICAL
     )
@@ -187,6 +271,7 @@ class DailyLedger(Base):
     )
 
     master_slot = relationship("StructuralMasterSlot", back_populates="daily_ledger_entries")
+    resource = relationship("Resource", foreign_keys=[resource_id])
     active_lead = relationship("User", foreign_keys=[active_lead_id])
     substitute_lead = relationship("User", foreign_keys=[substitute_lead_id])
     activity = relationship("Activity")
@@ -196,6 +281,82 @@ class DailyLedger(Base):
     annotations = relationship(
         "LedgerAnnotation", back_populates="ledger_instance", cascade="all, delete-orphan"
     )
+
+
+class Reservation(Base):
+    """A hold an outside system places on a resource, for one dated window.
+
+    Its own table rather than a slot or a ledger row, because it is neither.
+    A slot is a weekly repeat belonging to an activity inside a planning
+    cycle; a ledger row is one generated day that attendance gets marked
+    against. A reservation belongs to nobody's timetable and nobody takes
+    attendance at it. Expressing one as a slot would have meant inventing an
+    activity and a cycle for every booking, and expressing one as a ledger
+    row would have meant every attendance path learning to skip it.
+
+    Times are naive wall clock, the same as the slot stores, so a booking and
+    a timetable can be compared without a conversion that neither of them
+    carries the information to make.
+
+    A window may run past midnight, and an end earlier than a start is how it
+    says so: 22:00 to 06:00 is a night shift of eight hours, and reserved_date
+    is the day it opens on. There is no column holding the date it ends on,
+    only that rule, and app.core.time.window_span is where the rule is
+    applied. Equal times are refused, by ck_reservations_window since
+    migration 011, because 09:00 to 09:00 could mean nothing at all or a full
+    day and the row does not say which.
+
+    A weekly slot reads its two times by the same rule, so a night shift can
+    be a recurring slot and not only a one off booking, and a booking that
+    runs past midnight is compared against the whole timetable.
+
+    Two HELD rows on one resource may not overlap, and the database refuses
+    them: an EXCLUDE USING gist constraint named ex_reservations_no_overlap,
+    added by migration 010. It is not in __table_args__ and cannot be. An
+    exclusion constraint is a Postgres construct, the test suite builds its
+    schema with create_all on SQLite, and SQLite has no compiler for one, so
+    putting it here would stop the suite from starting. The cost of that is
+    real and worth naming: this class no longer describes the whole table, and
+    a reader who trusts it will not know the rule is there. Read migration 010
+    for the expression, and note that the tests which prove it only run
+    against a real PostgreSQL.
+    """
+
+    __tablename__ = "reservations"
+    __table_args__ = (
+        CheckConstraint("time_window_end <> time_window_start", name="ck_reservations_window"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    resource_id = Column(
+        Integer, ForeignKey("resources.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    reserved_date = Column(Date, nullable=False, index=True)
+    time_window_start = Column(Time, nullable=False)
+    time_window_end = Column(Time, nullable=False)
+    purpose = Column(String(200), nullable=False)
+    # The caller, resolved the way every other endpoint resolves one. An API
+    # key acts as the user it is bound to, so a machine booking a room is
+    # recorded as that service account and needs no identity of its own.
+    requested_by_id = Column(String(50), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # Unique across every resource, not per resource. A caller reusing one
+    # key for two different rooms has a bug, and a collision here says so
+    # rather than quietly booking both.
+    idempotency_key = Column(String(120), nullable=False, unique=True, index=True)
+    # sha256 of what was asked for, the resource included. The same key with
+    # the same request gets the original row back; the same key with a
+    # different request is refused, because at that point the caller has lost
+    # track of which of the two it meant.
+    request_fingerprint = Column(String(64), nullable=False)
+    status = Column(
+        Enum(ReservationStatus, name="reservation_status"),
+        nullable=False,
+        default=ReservationStatus.HELD,
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+
+    resource = relationship("Resource")
 
 
 class ReverseRsvpLog(Base):
@@ -290,6 +451,11 @@ class RefreshToken(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 
+# A key holding this instead of a scope list may do anything its bound user
+# may do. Every key issued before scopes existed is one of these.
+WILDCARD_SCOPE = "*"
+
+
 class ApiKey(Base):
     """A long-lived machine credential for external integrations, bound to a
     normal user row (a service account). Only the SHA-256 hash is stored; the
@@ -305,4 +471,16 @@ class ApiKey(Base):
     user_id = Column(
         String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    # Comma separated, one entry per allowed "<area>:<read|write>". The single
+    # entry "*" is every area, which is what a key without scopes has always
+    # been and what the migration backfills. Bound as a string rather than a
+    # table because a scope is never queried across keys: it is read once,
+    # with the key, on the request the key authenticates. Text rather than a
+    # width because a key naming every area twice is already 265 characters,
+    # and a width Postgres enforces is a width SQLite would let the tests
+    # sail past.
+    scopes = Column(Text, nullable=False, default=WILDCARD_SCOPE)
+    # Null means the key never expires, which is what every key issued before
+    # this column existed was.
+    expires_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))

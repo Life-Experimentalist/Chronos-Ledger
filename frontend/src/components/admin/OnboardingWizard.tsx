@@ -1,7 +1,7 @@
 'use client'
-// Copyright 2026 Chronos Ledger Contributors — Apache 2.0
+// Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -13,7 +13,10 @@ import {
   Info, ExternalLink, SkipForward,
 } from 'lucide-react'
 import { authApi, scheduleApi, ingestionApi } from '@/lib/api'
-import type { PlanningCycle } from '@/types'
+import { apiErrorMessage } from '@/lib/errors'
+import { useOrgConfig } from '@/hooks/useOrgConfig'
+import { ProvisionedCredentials } from './ProvisionedCredentials'
+import type { CsvImportResult, PlanningCycle, ProvisionedCredential } from '@/types'
 
 // ─── Step configs ────────────────────────────────────────────────────────────
 const STEPS = [
@@ -33,9 +36,12 @@ interface Props {
 }
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
-const passwordSchema = z.object({
+// Built per deployment: the floor is PASSWORD_MIN_LENGTH, which /config
+// publishes. Refusing here the same length the API refuses saves a round trip,
+// and naming the number saves the admin a guess.
+const passwordSchema = (min: number) => z.object({
   current_password: z.string().min(1, 'Required'),
-  new_password: z.string().min(8, 'At least 8 characters'),
+  new_password: z.string().min(min, `At least ${min} characters`),
   confirm_password: z.string(),
 }).refine((d) => d.new_password === d.confirm_password, {
   message: 'Passwords do not match',
@@ -48,7 +54,7 @@ const cycleSchema = z.object({
   date_bounds_end: z.string().min(1, 'Required'),
 })
 
-type PasswordForm = z.infer<typeof passwordSchema>
+type PasswordForm = z.infer<ReturnType<typeof passwordSchema>>
 type CycleForm = z.infer<typeof cycleSchema>
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -57,6 +63,7 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
   const [currentStep, setCurrentStep] = useState(initialStep)
   const [createdCycle, setCreatedCycle] = useState<PlanningCycle | null>(null)
   const [csvFile, setCsvFile] = useState<File | null>(null)
+  const [provisioned, setProvisioned] = useState<ProvisionedCredential[]>([])
   const [dragOver, setDragOver] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -79,7 +86,9 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
   const finish = () => router.push('/admin/dashboard')
 
   // ── Password step ──────────────────────────────────────────────────────────
-  const pwForm = useForm<PasswordForm>({ resolver: zodResolver(passwordSchema) })
+  const passwordMin = useOrgConfig().password_min_length
+  const pwSchema = useMemo(() => passwordSchema(passwordMin), [passwordMin])
+  const pwForm = useForm<PasswordForm>({ resolver: zodResolver(pwSchema) })
 
   const submitPassword = pwForm.handleSubmit(async (data) => {
     setLoading(true)
@@ -95,8 +104,7 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
       setSuccess('Password updated successfully.')
       setTimeout(next, 800)
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setError(msg ?? 'Current password is incorrect.')
+      setError(apiErrorMessage(e, 'Current password is incorrect.'))
     } finally {
       setLoading(false)
     }
@@ -114,8 +122,7 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
       setSuccess(`Cycle "${data.cycle_label}" created.`)
       setTimeout(next, 800)
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setError(msg ?? 'Failed to create cycle.')
+      setError(apiErrorMessage(e, 'Failed to create cycle.'))
     } finally {
       setLoading(false)
     }
@@ -136,12 +143,18 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
     setError(null)
     try {
       const res = await ingestionApi.uploadCsv(createdCycle.id, csvFile)
-      const d = res.data as { rows_processed: number; users_created: number }
-      setSuccess(`Imported ${d.rows_processed} rows, created ${d.users_created} users.`)
-      setTimeout(next, 1000)
+      const d = res.data as CsvImportResult
+      const credentials = d.provisioned_credentials ?? []
+      setProvisioned(credentials)
+      const created =
+        credentials.length === 1 ? '1 new member' : `${credentials.length} new members`
+      setSuccess(`Imported ${d.rows_ingested} rows, created ${created}.`)
+      // Only move on by itself when there is nothing to write down. The
+      // passwords below exist in this response and nowhere else, so the
+      // admin decides when to leave them behind.
+      if (credentials.length === 0) setTimeout(next, 1000)
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setError(msg ?? 'CSV import failed. Check the file format.')
+      setError(apiErrorMessage(e, 'CSV import failed. Check the file format.'))
     } finally {
       setLoading(false)
     }
@@ -157,8 +170,7 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
       setSuccess(`Generated ${d.generated} ledger entries for ${d.target_date}.`)
       setTimeout(next, 800)
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setError(msg ?? 'Ledger generation failed.')
+      setError(apiErrorMessage(e, 'Ledger generation failed.'))
     } finally {
       setLoading(false)
     }
@@ -207,24 +219,24 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
               <div>
                 <h2 className="text-xl font-bold text-chronos-text">Secure your account</h2>
                 <p className="text-sm text-chronos-muted mt-1">
-                  The default password must be changed before you can proceed.
+                  Choose your own password before you go any further.
                 </p>
               </div>
               <div className="bg-chronos-warning/10 border border-chronos-warning/30 rounded-lg p-3 flex gap-2 text-chronos-warning text-sm">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                Default credentials are publicly known. Change the password now.
+                You are still on the first password this account was given. Replace it now.
               </div>
               <form onSubmit={submitPassword} className="space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-chronos-text-dim mb-1.5 uppercase tracking-wider">Current Password</label>
-                  <input {...pwForm.register('current_password')} type="password" className="input-field" placeholder="ChronosAdmin2026!" />
+                  <input {...pwForm.register('current_password')} type="password" className="input-field" placeholder="The password you signed in with" />
                   {pwForm.formState.errors.current_password && (
                     <p className="text-chronos-danger text-xs mt-1">{pwForm.formState.errors.current_password.message}</p>
                   )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-chronos-text-dim mb-1.5 uppercase tracking-wider">New Password</label>
-                  <input {...pwForm.register('new_password')} type="password" className="input-field" placeholder="Min. 8 characters" />
+                  <input {...pwForm.register('new_password')} type="password" className="input-field" placeholder={`Min. ${passwordMin} characters`} />
                   {pwForm.formState.errors.new_password && (
                     <p className="text-chronos-danger text-xs mt-1">{pwForm.formState.errors.new_password.message}</p>
                   )}
@@ -339,6 +351,7 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
                 </label>
               </div>
               <FeedbackBanner error={error} success={success} />
+              <ProvisionedCredentials credentials={provisioned} />
               <div className="flex gap-3">
                 <button
                   onClick={submitCsv}
@@ -348,7 +361,8 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
                   {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Importing…</> : 'Import Schedule'}
                 </button>
                 <button onClick={next} className="btn-secondary flex items-center gap-1.5">
-                  <SkipForward className="w-4 h-4" /> Skip
+                  <SkipForward className="w-4 h-4" />
+                  {provisioned.length > 0 ? 'Continue' : 'Skip'}
                 </button>
               </div>
             </div>
@@ -361,13 +375,13 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
                 <h2 className="text-xl font-bold text-chronos-text">Generate today&apos;s ledger</h2>
                 <p className="text-sm text-chronos-muted mt-1">
                   The daily ledger materialises your timetable into session records that attendance, proxies, and notifications are built on.
-                  The nightly cron job does this automatically — this button generates it for today immediately.
+                  The nightly cron job does this automatically, this button generates it for today immediately.
                 </p>
               </div>
               <div className="bg-chronos-teal/5 border border-chronos-teal/20 rounded-lg p-4 flex gap-3">
                 <Info className="w-4 h-4 text-chronos-teal shrink-0 mt-0.5" />
                 <p className="text-sm text-chronos-text-dim">
-                  Safe to run multiple times — existing entries are skipped (idempotent).
+                  Safe to run multiple times, existing entries are skipped (idempotent).
                   The cron job runs automatically at 23:00 UTC each night.
                 </p>
               </div>

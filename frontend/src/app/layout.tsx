@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     default: 'Chronos Ledger',
     template: '%s | Chronos Ledger',
   },
-  description: 'Organization Schedule & Attendance Management System — real-time timetables, geofenced attendance, and staff tracking.',
+  description: 'Organization Schedule & Attendance Management System: real-time timetables, geofenced attendance, and staff tracking.',
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,

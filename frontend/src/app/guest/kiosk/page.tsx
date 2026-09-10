@@ -2,29 +2,46 @@
 // Copyright 2026 Chronos Ledger Contributors
 // Licensed under the Apache License, Version 2.0
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, User, Phone, Building2, MessageSquare, Loader2, CheckCircle2, ArrowLeft } from 'lucide-react'
-import { guestApi } from '@/lib/api'
+import { isAxiosError } from 'axios'
+import { Search, User, Phone, Building2, MessageSquare, Loader2, CheckCircle2, ArrowLeft, KeyRound } from 'lucide-react'
+import { guestApi, kioskKey } from '@/lib/api'
 import { useVocabulary } from '@/hooks/useVocabulary'
 import type { StaffAvailability } from '@/types'
 
-type KioskStep = 'search' | 'form' | 'pending' | 'done'
+type KioskStep = 'provision' | 'search' | 'form' | 'pending' | 'done'
 
+// Upper bounds mirror the server's, so a visitor is told what is wrong here
+// instead of meeting an opaque 422 after they press submit.
 const checkInSchema = z.object({
-  guest_name: z.string().min(2, 'Full name required'),
-  contact_phone: z.string().min(8, 'Valid phone number required'),
-  originating_body: z.string().min(2, 'Organization required'),
-  visitation_intent: z.string().min(10, 'Please describe your purpose (min 10 chars)'),
+  guest_name: z.string().min(2, 'Full name required').max(100, 'Name is too long'),
+  contact_phone: z
+    .string()
+    .min(8, 'Valid phone number required')
+    .max(20, 'Phone number is too long')
+    .regex(/^[-0-9+() ]+$/, 'Digits, spaces and + ( ) - only'),
+  originating_body: z
+    .string()
+    .min(2, 'Organization required')
+    .max(100, 'Organization name is too long'),
+  visitation_intent: z
+    .string()
+    .min(10, 'Please describe your purpose (min 10 chars)')
+    .max(500, 'Please keep this under 500 characters'),
 })
 type CheckInForm = z.infer<typeof checkInSchema>
 
 export default function GuestKioskPage() {
   const vocab = useVocabulary()
-  const [step, setStep] = useState<KioskStep>('search')
+  // null until the effect below has read localStorage: rendering 'provision'
+  // first would flash a key prompt at every visitor on an already-set-up kiosk.
+  const [step, setStep] = useState<KioskStep | null>(null)
+  const [keyInput, setKeyInput] = useState('')
+  const [searchError, setSearchError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<StaffAvailability[]>([])
   const [searching, setSearching] = useState(false)
@@ -36,12 +53,38 @@ export default function GuestKioskPage() {
     resolver: zodResolver(checkInSchema),
   })
 
+  useEffect(() => {
+    setStep(kioskKey.read() ? 'search' : 'provision')
+  }, [])
+
+  const provisionDevice = () => {
+    const key = keyInput.trim()
+    if (!key) return
+    kioskKey.save(key)
+    setKeyInput('')
+    setSearchError(null)
+    setStep('search')
+  }
+
+  // A revoked, expired or mistyped key: drop it and ask for a new one rather
+  // than leaving the desk staring at a search that silently returns nothing.
+  const handleUnauthorized = () => {
+    kioskKey.forget()
+    setSearchError('This kiosk key was rejected. Ask an administrator for a new one.')
+    setStep('provision')
+  }
+
   const handleSearch = async () => {
-    if (!searchQuery.trim()) return
+    if (searchQuery.trim().length < 2) return
     setSearching(true)
+    setSearchError(null)
     try {
       const res = await guestApi.searchStaff(searchQuery)
       setSearchResults(res.data)
+      if (res.data.length === 0) setSearchError('No match. Try a different spelling.')
+    } catch (err) {
+      if (isAxiosError(err) && err.response?.status === 401) handleUnauthorized()
+      else setSearchError('Search failed. Please try again.')
     } finally {
       setSearching(false)
     }
@@ -62,6 +105,9 @@ export default function GuestKioskPage() {
       })
       setReferenceToken(res.data.reference_token)
       setStep('pending')
+    } catch (err) {
+      if (isAxiosError(err) && err.response?.status === 401) handleUnauthorized()
+      else setSearchError('Could not send the request. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -94,6 +140,43 @@ export default function GuestKioskPage() {
       <div className="w-full max-w-xl relative">
         <AnimatePresence mode="wait">
 
+          {/* Step 0: Device setup, once per kiosk, by an administrator */}
+          {step === 'provision' && (
+            <motion.div key="provision" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} className="glass-card p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-chronos-teal/10 flex items-center justify-center shrink-0">
+                  <KeyRound className="w-5 h-5 text-chronos-teal" />
+                </div>
+                <div>
+                  <p className="font-semibold text-chronos-text">Set Up This Kiosk</p>
+                  <p className="text-sm text-chronos-text-dim">A one-time step for an administrator.</p>
+                </div>
+              </div>
+
+              {searchError && <p className="text-chronos-danger text-sm">{searchError}</p>}
+
+              <p className="text-sm text-chronos-text-dim">
+                Paste this device&apos;s kiosk key. An administrator creates one under Settings,
+                API Keys. It is stored on this device only, and can be revoked there at any time.
+              </p>
+
+              <input
+                value={keyInput}
+                onChange={(e) => setKeyInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && provisionDevice()}
+                placeholder="ck_..."
+                className="input-field font-mono text-base"
+                autoComplete="off"
+                spellCheck={false}
+                autoFocus
+              />
+
+              <button onClick={provisionDevice} disabled={!keyInput.trim()} className="btn-primary w-full justify-center py-3 text-base">
+                Activate Kiosk
+              </button>
+            </motion.div>
+          )}
+
           {/* Step 1: Search */}
           {step === 'search' && (
             <motion.div key="search" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} className="space-y-4">
@@ -114,7 +197,7 @@ export default function GuestKioskPage() {
                   </div>
                   <button
                     onClick={handleSearch}
-                    disabled={searching || !searchQuery.trim()}
+                    disabled={searching || searchQuery.trim().length < 2}
                     className="btn-primary px-5 py-3"
                   >
                     {searching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
@@ -122,10 +205,12 @@ export default function GuestKioskPage() {
                 </div>
               </div>
 
+              {searchError && <p className="text-chronos-danger text-sm px-1">{searchError}</p>}
+
               {searchResults.length > 0 && (
                 <div className="glass-card overflow-hidden">
                   <div className="p-4 border-b border-chronos-border/40">
-                    <p className="text-xs text-chronos-muted">{searchResults.length} result(s) — select to proceed</p>
+                    <p className="text-xs text-chronos-muted">{searchResults.length} result(s), select to proceed</p>
                   </div>
                   <div className="divide-y divide-chronos-border/20">
                     {searchResults.map((staff) => (

@@ -11,6 +11,7 @@ from app.api.v1.endpoints import (
     guest,
     ingestion,
     org_config,
+    resources,
     schedule,
     users,
     websocket,
@@ -22,6 +23,7 @@ api_router.include_router(org_config.router, prefix="/config", tags=["Configurat
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(api_keys.router, prefix="/api-keys", tags=["API Keys"])
 api_router.include_router(users.router, prefix="/users", tags=["Users"])
+api_router.include_router(resources.router, prefix="/resources", tags=["Resources"])
 api_router.include_router(schedule.router, prefix="/schedule", tags=["Schedule"])
 api_router.include_router(attendance.router, prefix="/attendance", tags=["Attendance"])
 api_router.include_router(guest.router, prefix="/guest", tags=["Guest Gate"])

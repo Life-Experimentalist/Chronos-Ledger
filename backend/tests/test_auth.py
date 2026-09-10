@@ -55,7 +55,7 @@ def test_change_password_rejects_wrong_current(client, seed_users):
     res = client.post(
         "/api/v1/auth/change-password",
         headers=headers,
-        json={"current_password": "wrong", "new_password": "NewPass456!"},
+        json={"current_password": "wrong", "new_password": "NewPassword456!"},
     )
     assert res.status_code == 400
 
@@ -65,7 +65,7 @@ def test_change_password_rotates_and_clears_first_login_flag(client, seed_users)
     res = client.post(
         "/api/v1/auth/change-password",
         headers=headers,
-        json={"current_password": STAFF_PASSWORD, "new_password": "NewPass456!"},
+        json={"current_password": STAFF_PASSWORD, "new_password": "NewPassword456!"},
     )
     assert res.status_code == 200
 
@@ -77,7 +77,7 @@ def test_change_password_rotates_and_clears_first_login_flag(client, seed_users)
     assert old.status_code == 401
     fresh = client.post(
         "/api/v1/auth/login",
-        json={"email": "staff@test.internal", "password": "NewPass456!"},
+        json={"email": "staff@test.internal", "password": "NewPassword456!"},
     )
     assert fresh.status_code == 200
     assert fresh.json()["initial_login_state"] is False

@@ -13,8 +13,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <!-- Dark Reader reads this and won't over-invert when theme=dark -->
   <meta name="color-scheme" content="dark light" />
-  <title>Chronos Ledger — Schedule &amp; Attendance</title>
-  <meta name="description" content="Production-ready PWA for campuses, hospitals, and other scheduled organizations. Live timetables, geofenced attendance, staff location resolution, and smart offline notifications — all self-hosted on your intranet." />
+  <title>Chronos Ledger: Schedule &amp; Attendance</title>
+  <meta name="description" content="Production-ready PWA for campuses, hospitals, and other scheduled organizations. Live timetables, geofenced attendance, staff location resolution, and smart offline notifications, all self-hosted on your intranet." />
   <meta name="theme-color" content="#14b8a6" />
   <link rel="icon" href="icon.png" />
   <link rel="apple-touch-icon" href="icon.png" />
@@ -692,7 +692,7 @@
 
   <p class="hero-sub reveal reveal-delay-2">
     Chronos Ledger is a production-ready PWA for campuses, hospitals, and any organization that runs on a timetable. Live timetables,
-    geofenced attendance, staff location resolution, and smart offline notifications —
+    geofenced attendance, staff location resolution, and smart offline notifications -
     all self-hosted on your own intranet.
   </p>
 
@@ -712,7 +712,7 @@
         <span class="terminal-dot" style="background:#ef4444;opacity:.7;"></span>
         <span class="terminal-dot" style="background:#f59e0b;opacity:.7;"></span>
         <span class="terminal-dot" style="background:#22c55e;opacity:.7;"></span>
-        <span class="terminal-title">chronos-ledger — docker compose up -d</span>
+        <span class="terminal-title">chronos-ledger, docker compose up -d</span>
       </div>
       <div class="terminal-body mono" id="terminal-output"></div>
     </div>
@@ -745,7 +745,7 @@
   <div class="section-inner">
     <div class="section-header">
       <h2>Four role-specific interfaces</h2>
-      <p>Each role sees exactly what they need — nothing more, nothing less.</p>
+      <p>Each role sees exactly what they need, nothing more, nothing less.</p>
     </div>
     <div class="roles-grid" id="roles-grid"></div>
   </div>
@@ -765,7 +765,7 @@
         Everything syncs automatically when the network returns.</p>
         <ul class="checklist">
           <li><i data-lucide="check" style="width:14px;height:14px;"></i>Attendance marks queue in IndexedDB and flush on reconnect</li>
-          <li><i data-lucide="check" style="width:14px;height:14px;"></i>Today's schedule cached for 12 hours — works fully offline</li>
+          <li><i data-lucide="check" style="width:14px;height:14px;"></i>Today's schedule cached for 12 hours, works fully offline</li>
           <li><i data-lucide="check" style="width:14px;height:14px;"></i>Class start notifications fire even when the app is closed</li>
           <li><i data-lucide="check" style="width:14px;height:14px;"></i>Workbox NetworkFirst for APIs · CacheFirst for static assets</li>
         </ul>
@@ -816,7 +816,7 @@
   <div class="section-inner">
     <div class="section-header">
       <h2>First-class REST API</h2>
-      <p>Full OpenAPI 3.0 spec. Every endpoint documented and testable via Swagger UI at <code class="teal">/docs</code>.</p>
+      <p>Full OpenAPI 3.0 spec. Every endpoint documented and testable via Swagger UI at <code class="teal">/docs</code>, which stays off in production until you turn it on.</p>
     </div>
     <div class="api-grid" id="api-grid"></div>
     <p class="api-note">
@@ -878,13 +878,13 @@
 <script>
 const FEATURES = [
   { icon:'navigation', title:'Live Staff Locator', desc:'4-tier resolution: Redis override → daily exception → master timetable → base station fallback. Always know where staff are.', bg:'rgba(20,184,166,.1)', color:'var(--teal)' },
-  { icon:'map-pin', title:'3D Geofenced Attendance', desc:'Haversine distance + 4 m altitude check prevents cross-floor spoofing. Falls back to Wi-Fi BSSID when GPS accuracy exceeds 30 m.', bg:'rgba(16,185,129,.1)', color:'var(--emerald)' },
+  { icon:'map-pin', title:'Geofenced Attendance', desc:'Haversine distance, plus a 4 m altitude check when the device and the room both report one, so a floor above does not count. Marking is refused when GPS accuracy is worse than 30 m.', bg:'rgba(16,185,129,.1)', color:'var(--emerald)' },
   { icon:'user-check', title:'Reverse RSVP Absences', desc:'Presence is the default. Staff file absence requests; their manager approves. Approved absences auto-cascade ON_LEAVE to the daily ledger.', bg:'rgba(129,140,248,.1)', color:'var(--accent)' },
-  { icon:'zap', title:'Real-Time WebSocket', desc:'JWT-authenticated persistent connections. Instant guest handshake requests, absence approvals, and organization-wide broadcasts — no polling.', bg:'rgba(245,158,11,.1)', color:'var(--warning)' },
+  { icon:'zap', title:'Real-Time WebSocket', desc:'JWT-authenticated persistent connections. Instant guest handshake requests, absence approvals, and organization-wide broadcasts, no polling.', bg:'rgba(245,158,11,.1)', color:'var(--warning)' },
   { icon:'upload', title:'CSV Schedule Import', desc:'Bulk-import the term timetable from a single member-centric CSV. Upserts members, activities, registrations, and master slots atomically.', bg:'rgba(168,85,247,.1)', color:'#a855f7' },
   { icon:'calendar', title:'iCalendar Sync', desc:'Live 37-day .ics feed per user. Subscribe directly in Google Calendar, Apple Calendar, or Outlook. Updates reflect approved leaves and proxy swaps.', bg:'rgba(56,189,248,.1)', color:'#38bdf8' },
-  { icon:'users', title:'Guest Kiosk', desc:'No login required. Visitors fill a check-in form; the target staff receives an instant WebSocket notification with Approve/Decline actions.', bg:'rgba(244,63,94,.1)', color:'#fb7185' },
-  { icon:'bell', title:'Offline Notifications', desc:'Class reminders fire 15 minutes before start — even offline. Scheduled via JS timers while active and Periodic Background Sync when the app is closed.', bg:'rgba(20,184,166,.1)', color:'var(--teal)' },
+  { icon:'users', title:'Guest Kiosk', desc:'No visitor login: the device holds an admin-issued kiosk key. Visitors fill a check-in form; the target staff receives an instant WebSocket notification with Approve/Decline actions.', bg:'rgba(244,63,94,.1)', color:'#fb7185' },
+  { icon:'bell', title:'Offline Notifications', desc:'Class reminders fire 15 minutes before start, even offline. Scheduled via JS timers while active and Periodic Background Sync when the app is closed.', bg:'rgba(20,184,166,.1)', color:'var(--teal)' },
   { icon:'shield', title:'Role-Based Access', desc:'SUPER_ADMIN, UNIT_ADMIN, STAFF, MEMBER. JWT RBAC enforced at every endpoint. Each role sees only their own data.', bg:'rgba(244,63,94,.1)', color:'var(--danger)' },
 ];
 
@@ -894,8 +894,8 @@ const ROLES = [
   { icon:'book-open', name:'Staff', path:'/staff/dashboard', bg:'rgba(16,185,129,.1)', color:'var(--emerald)',
     caps:['Availability status switcher (4 states)','Attendance matrix: mark whole class in one tap','Submit and track absence requests','Guest interaction desk with real-time notifications'] },
   { icon:'user-check', name:'Member', path:'/member/dashboard', bg:'rgba(129,140,248,.1)', color:'var(--accent)',
-    caps:["Live timeline of today's classes with status indicators",'3D geofenced attendance marking with GPS/BSSID','Staff locator with real-time availability','Offline attendance queue with background sync'] },
-  { icon:'users', name:'Guest (no login)', path:'/guest/kiosk', bg:'rgba(245,158,11,.1)', color:'var(--warning)',
+    caps:["Live timeline of today's classes with status indicators",'Geofenced attendance marking over GPS','Staff locator with real-time availability','Offline attendance queue with background sync'] },
+  { icon:'users', name:'Guest (kiosk key)', path:'/guest/kiosk', bg:'rgba(245,158,11,.1)', color:'var(--warning)',
     caps:['Search staff directory by name','Submit check-in request with purpose','Real-time notification to target staff','Public availability status display'] },
 ];
 
@@ -910,7 +910,7 @@ const INSTALL_STEPS = [
     code:'npx web-push generate-vapid-keys\n# Add output to .env: VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY',
     note:'Skip this step if you do not need browser push notifications.' },
   { title:'Open the app and change the default password',
-    code:'# App:      http://<your-server-ip>\n# API docs:  http://<your-server-ip>/docs\n# Login:     admin@org.internal',
+    code:'# App:      http://<your-server-ip>\n# API docs:  off (set DOCS_ENABLED=true in .env)\n# Login:     admin@org.internal',
     note:'The setup script prints the exact URL when it finishes.' },
 ];
 
@@ -933,7 +933,7 @@ const TERMINAL_LINES = [
   { text:' ✔ chronos-proxy      Listening on :80', cls:'t-green' },
   { text:' ', cls:'' },
   { text:'  Login:      admin@org.internal', cls:'t-warn' },
-  { text:'  Swagger UI: http://localhost/docs', cls:'t-dim' },
+  { text:'  Swagger UI: off (DOCS_ENABLED=true to publish)', cls:'t-dim' },
 ];
 
 // ── Render functions ──────────────────────────────────────────────────────────
@@ -1004,7 +1004,7 @@ function renderInstall() {
         <li>Change JWT_SECRET_SIGNING_KEY to a random 64-char string</li>
         <li>Change the seed admin password immediately after first login</li>
         <li>Generate VAPID keys: <code class="mono" style="font-size:.75rem;color:var(--teal);">npx web-push generate-vapid-keys</code></li>
-        <li>Restrict /docs and /redoc to internal IPs in nginx.conf for production</li>
+        <li>Set ORG_TIMEZONE to where the organization actually is, or a container running UTC puts every day an offset out</li>
       </ul>
     </div>`;
 }

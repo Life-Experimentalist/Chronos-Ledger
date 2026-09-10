@@ -4,19 +4,24 @@
 
 import datetime
 
+import pytest
+
+from app.core.time import org_today
 from app.models.db import (
     Activity,
     DailyLedger,
     PlanningCycle,
+    Resource,
+    ResourceType,
     ReverseRsvpLog,
     VerificationLedger,
 )
 from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, login
 
-TODAY = datetime.date.today()
+TODAY = org_today()
 
 
-def _make_ledger(db, lead_id=None, with_geo=False):
+def _make_ledger(db, lead_id=None, with_geo=False, alt_target=920.0):
     cycle = PlanningCycle(
         cycle_label="Odd 2026",
         date_bounds_start=TODAY - datetime.timedelta(days=30),
@@ -42,7 +47,7 @@ def _make_ledger(db, lead_id=None, with_geo=False):
     if with_geo:
         ledger.latitude_target = 12.9716
         ledger.longitude_target = 77.5946
-        ledger.altitude_target = 920.0
+        ledger.altitude_target = alt_target
         ledger.precision_radius_meters = 15
     db.add(ledger)
     db.commit()
@@ -134,6 +139,262 @@ def test_omitting_coordinates_is_rejected_on_geofenced_session(client, db, seed_
     )
     assert res.status_code == 400
     assert "geo-fenced" in res.json()["detail"]
+
+
+def test_geofence_accepts_member_without_altitude(client, db, seed_users):
+    """A device that reports no altitude must still be able to check in.
+
+    Laptops, and any phone on a network-based fix, return altitude: null. The
+    horizontal radius is the real fence; the floor check is a bonus when the
+    hardware can supply it, never a precondition for marking attendance.
+    """
+    ledger = _make_ledger(db, with_geo=True)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9716,
+            "user_lon": 77.5946,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_geofence_still_rejects_far_member_without_altitude(client, db, seed_users):
+    ledger = _make_ledger(db, with_geo=True)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9816,
+            "user_lon": 77.5946,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 400
+    assert "geofence" in res.json()["detail"].lower()
+
+
+def test_geofence_rejects_wrong_floor_when_altitude_is_supplied(client, db, seed_users):
+    ledger = _make_ledger(db, with_geo=True)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9716,
+            "user_lon": 77.5946,
+            "user_alt": 970.0,  # 50 m above target, several floors up
+        },
+        headers=headers,
+    )
+    assert res.status_code == 400
+    assert "geofence" in res.json()["detail"].lower()
+
+
+def test_geofence_engages_when_the_ledger_has_no_altitude_target(client, db, seed_users):
+    """lat/lon alone must fence.
+
+    Requiring all three targets meant an admin who left the optional altitude
+    blank silently got no fence at all.
+    """
+    ledger = _make_ledger(db, with_geo=True, alt_target=None)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9816,
+            "user_lon": 77.5946,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 400
+    assert "geofence" in res.json()["detail"].lower()
+
+
+def test_missing_longitude_is_rejected_on_geofenced_session(client, db, seed_users):
+    ledger = _make_ledger(db, with_geo=True)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9716,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 400
+    assert "geo-fenced" in res.json()["detail"]
+
+
+def _put_in_room(db, ledger, lat=12.9716, lon=77.5946, alt=920.0):
+    """Give the ledger a room that knows where it is."""
+    room = Resource(
+        code="LH-101",
+        label="LH-101",
+        resource_type=ResourceType.ROOM,
+        latitude=lat,
+        longitude=lon,
+        altitude_target=alt,
+    )
+    db.add(room)
+    db.flush()
+    ledger.resource_id = room.id
+    db.commit()
+    return room
+
+
+def test_the_room_fences_the_session_when_the_day_says_nothing(client, db, seed_users):
+    """The first way a fence can actually be switched on.
+
+    Nothing has ever written daily_ledger.latitude_target: the only writes in
+    the codebase set it to None. So until a room could carry coordinates and
+    the check could fall back to them, this branch was unreachable through
+    the API and every fenced session was in fact unfenced.
+    """
+    ledger = _make_ledger(db)
+    _put_in_room(db, ledger)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9816,  # about 1.1 km north of the room
+            "user_lon": 77.5946,
+            "user_alt": 920.0,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 400
+    assert "geofence" in res.json()["detail"].lower()
+
+
+def test_a_member_in_the_room_is_marked(client, db, seed_users):
+    ledger = _make_ledger(db)
+    _put_in_room(db, ledger)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9716,
+            "user_lon": 77.5946,
+            "user_alt": 921.0,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    assert db.query(VerificationLedger).filter_by(ledger_instance_id=ledger.id).count() == 1
+
+
+def test_the_day_overrides_the_room_it_is_normally_in(client, db, seed_users):
+    """One day held somewhere else is what the ledger's own copy is for.
+
+    The room here is a kilometre from where the day says it is. A member
+    standing at the day's coordinates is present; the room's must not be
+    consulted at all, or the override would fence people into both places.
+    """
+    ledger = _make_ledger(db, with_geo=True)
+    _put_in_room(db, ledger, lat=12.9816, lon=77.5946)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9716,
+            "user_lon": 77.5946,
+            "user_alt": 921.0,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_a_room_with_no_coordinates_leaves_the_session_unfenced(client, db, seed_users):
+    """A room nobody has placed yet must not start refusing marks."""
+    ledger = _make_ledger(db)
+    _put_in_room(db, ledger, lat=None, lon=None, alt=None)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={"ledger_instance_id": ledger.id, "member_id": "STU001", "marking_status": "PRESENT"},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_the_room_altitude_is_not_mixed_with_the_day_coordinates(client, db, seed_users):
+    """The triple comes from one source or the other, never half of each.
+
+    The day names lat/lon and no altitude. The room, several floors below,
+    names one. Reading the room's altitude against the day's position would
+    reject a member standing exactly where the day says to stand.
+    """
+    ledger = _make_ledger(db, with_geo=True, alt_target=None)
+    _put_in_room(db, ledger, alt=850.0)
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9716,
+            "user_lon": 77.5946,
+            "user_alt": 920.0,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_an_admin_can_place_a_room_and_the_fence_starts_working(client, db, seed_users):
+    """End to end: the route that switches geofencing on."""
+    ledger = _make_ledger(db)
+    room = _put_in_room(db, ledger, lat=None, lon=None, alt=None)
+    admin = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    placed = client.patch(
+        f"/api/v1/resources/{room.id}",
+        json={"latitude": 12.9716, "longitude": 77.5946, "altitude_target": 920.0},
+        headers=admin,
+    )
+    assert placed.status_code == 200, placed.text
+
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9816,
+            "user_lon": 77.5946,
+            "user_alt": 920.0,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 400
+    assert "geofence" in res.json()["detail"].lower()
 
 
 def test_batch_mark_requires_assigned_lead(client, db, seed_users):
@@ -240,10 +501,9 @@ _GUEST = {
 }
 
 
-def test_guest_checkin_needs_no_auth(client, db, seed_users):
-    # The kiosk endpoint is deliberately unauthenticated.
-    res = client.post("/api/v1/guest/register-checkin", json=_GUEST)
-    assert res.status_code == 200
+def test_guest_checkin_works_with_a_kiosk_credential(client, db, seed_users, kiosk_key):
+    res = client.post("/api/v1/guest/register-checkin", json=_GUEST, headers=kiosk_key)
+    assert res.status_code == 200, res.text
     assert res.json()["registration_state"] == "PENDING_STAFF_AUTH"
 
     fac = login(client, "staff@test.internal", STAFF_PASSWORD)
@@ -251,15 +511,61 @@ def test_guest_checkin_needs_no_auth(client, db, seed_users):
     assert [p["guest_name"] for p in pending] == ["Ravi Verma"]
 
 
-def test_guest_checkin_rejects_non_staff_target(client, seed_users):
+def test_guest_checkin_refuses_an_anonymous_caller(client, seed_users):
+    """Without this, anyone on the internet can fill the visitor log."""
+    res = client.post("/api/v1/guest/register-checkin", json=_GUEST)
+    assert res.status_code == 401
+
+
+def test_guest_directory_refuses_an_anonymous_caller(client, seed_users):
+    """The roster and every staff member's live presence used to be public."""
+    res = client.get("/api/v1/guest/directory")
+    assert res.status_code == 401
+
+
+def test_guest_directory_works_with_a_kiosk_credential(client, seed_users, kiosk_key):
+    res = client.get("/api/v1/guest/directory", headers=kiosk_key)
+    assert res.status_code == 200, res.text
+    names = [f["full_name"] for f in res.json()]
+    assert seed_users["staff"].full_name in names
+
+
+def test_guest_directory_refuses_a_one_character_search(client, seed_users, kiosk_key):
+    """A single letter walks the whole roster alphabetically."""
+    res = client.get("/api/v1/guest/directory", params={"name": "a"}, headers=kiosk_key)
+    assert res.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("guest_name", "R" * 101),
+        ("originating_body", "A" * 101),
+        ("visitation_intent", "P" * 501),
+        ("contact_phone", "9" * 21),
+        ("contact_phone", "not-a-phone-number"),
+    ],
+)
+def test_guest_checkin_bounds_every_field(client, seed_users, kiosk_key, field, value):
     res = client.post(
-        "/api/v1/guest/register-checkin", json={**_GUEST, "target_staff_id": "STU001"}
+        "/api/v1/guest/register-checkin", json={**_GUEST, field: value}, headers=kiosk_key
+    )
+    assert res.status_code == 422
+
+
+def test_guest_checkin_rejects_non_staff_target(client, seed_users, kiosk_key):
+    res = client.post(
+        "/api/v1/guest/register-checkin",
+        json={**_GUEST, "target_staff_id": "STU001"},
+        headers=kiosk_key,
     )
     assert res.status_code == 404
 
 
-def test_guest_decide_only_by_target_staff(client, db, seed_users):
-    entry_id = client.post("/api/v1/guest/register-checkin", json=_GUEST).json()["reference_token"]
+def test_guest_decide_only_by_target_staff(client, db, seed_users, kiosk_key):
+    entry_id = client.post("/api/v1/guest/register-checkin", json=_GUEST, headers=kiosk_key).json()[
+        "reference_token"
+    ]
 
     stu = login(client, "member@test.internal", MEMBER_PASSWORD)
     res = client.patch(
@@ -273,13 +579,6 @@ def test_guest_decide_only_by_target_staff(client, db, seed_users):
     )
     assert res.status_code == 200
     assert client.get("/api/v1/guest/pending", headers=fac).json() == []
-
-
-def test_guest_directory_is_public(client, seed_users):
-    res = client.get("/api/v1/guest/directory")
-    assert res.status_code == 200
-    names = [f["full_name"] for f in res.json()]
-    assert seed_users["staff"].full_name in names
 
 
 # -- Staff location (Redis-backed) -----------------------------------------
@@ -309,7 +608,7 @@ def test_staff_location_redis_override(client, seed_users, monkeypatch):
     res = client.get("/api/v1/schedule/staff/FAC001/location", headers=headers)
     assert res.status_code == 200
     assert res.json()["status"] == "In a meeting"
-    assert res.json()["resolved_location"] == "ISOLATED_CELL"
+    assert res.json()["resolved_location"] == "UNKNOWN"
 
 
 def test_all_staff_locations(client, seed_users, monkeypatch):
@@ -318,3 +617,55 @@ def test_all_staff_locations(client, seed_users, monkeypatch):
     res = client.get("/api/v1/schedule/staff/all/locations", headers=headers)
     assert res.status_code == 200
     assert [f["staff_id"] for f in res.json()] == ["FAC001"]
+
+
+def test_staff_cannot_single_mark_a_ledger_they_do_not_lead(client, db, seed_users):
+    """Every check on /mark sat inside `if role == MEMBER`.
+
+    The else branch was empty, so any authenticated non-member could mark any
+    member on any ledger. /batch has always required lead or in-scope admin.
+    """
+    ledger = _make_ledger(db, lead_id="FAC999")
+    headers = login(client, "staff@test.internal", STAFF_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={"ledger_instance_id": ledger.id, "member_id": "STU001", "marking_status": "PRESENT"},
+        headers=headers,
+    )
+    assert res.status_code == 403
+    assert db.query(VerificationLedger).filter_by(ledger_instance_id=ledger.id).count() == 0
+
+
+def test_staff_lead_can_single_mark_their_own_ledger(client, db, seed_users):
+    ledger = _make_ledger(db, lead_id="FAC001")
+    headers = login(client, "staff@test.internal", STAFF_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={"ledger_instance_id": ledger.id, "member_id": "STU001", "marking_status": "PRESENT"},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_substitute_lead_can_single_mark(client, db, seed_users):
+    ledger = _make_ledger(db, lead_id="FAC999")
+    ledger.substitute_lead_id = "FAC001"
+    db.commit()
+    headers = login(client, "staff@test.internal", STAFF_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={"ledger_instance_id": ledger.id, "member_id": "STU001", "marking_status": "PRESENT"},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_super_admin_can_single_mark_any_ledger(client, db, seed_users):
+    ledger = _make_ledger(db, lead_id="FAC999")
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={"ledger_instance_id": ledger.id, "member_id": "STU001", "marking_status": "PRESENT"},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text

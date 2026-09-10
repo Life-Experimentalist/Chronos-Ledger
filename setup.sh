@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2026 Chronos Ledger Contributors — Apache 2.0
+# Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
 #
 # One-command organization deployment script.
 # Detects the server's LAN IP, configures the environment, and launches
@@ -32,7 +32,7 @@ err()    { echo -e "${RED}  ✗${NC} $*" >&2; exit 1; }
 header() { echo -e "\n${BOLD}$*${NC}"; }
 
 # ── Preflight checks ──────────────────────────────────────────────────────────
-header "Chronos Ledger — Setup"
+header "Chronos Ledger: Setup"
 log "Checking prerequisites..."
 
 command -v docker  >/dev/null 2>&1 || err "Docker is not installed. Install from https://docs.docker.com/get-docker/"
@@ -72,7 +72,7 @@ if [[ ! -f .env ]]; then
   cp .env.example .env
   ok "Created .env from template"
 else
-  warn ".env already exists — skipping creation (using existing values)"
+  warn ".env already exists, skipping creation (using existing values)"
 fi
 
 # Generate JWT secret if placeholder is still present
@@ -96,6 +96,33 @@ if grep -q "change_me_password" .env 2>/dev/null; then
     sed -i "s|change_me_password|${DB_PASS}|g" .env
   fi
   ok "Generated DB_PASSWORD"
+fi
+
+# Generate the administrator's first password if the placeholder is present
+if grep -q "replace_with_the_first_admin_password" .env 2>/dev/null; then
+  ADMIN_PASS=$(openssl rand -base64 18 | tr -d '/+=' | head -c 20)
+  if [[ "$(uname)" == "Darwin" ]]; then
+    sed -i '' "s|replace_with_the_first_admin_password|${ADMIN_PASS}|g" .env
+  else
+    sed -i "s|replace_with_the_first_admin_password|${ADMIN_PASS}|g" .env
+  fi
+  # Held back for the summary: it is generated here and printed nowhere
+  # else, and nothing can log in as the administrator without it.
+  ok "Generated INITIAL_ADMIN_PASSWORD"
+elif ! grep -q "INITIAL_ADMIN_PASSWORD" .env 2>/dev/null; then
+  # An .env written before this variable existed. Leave it empty rather
+  # than generating something: the variable is only read while that
+  # account is still waiting for a first password, and on an install this
+  # old it chose one long ago.
+  {
+    echo ""
+    echo "# The first password for the built-in administrator account,"
+    echo "# applied on boot while that account is still waiting for one."
+    echo "# Empty because this .env predates the variable, so that account"
+    echo "# has had a password of its own for a while. See .env.example."
+    echo "INITIAL_ADMIN_PASSWORD="
+  } >> .env
+  ok "Added INITIAL_ADMIN_PASSWORD to your existing .env, left empty"
 fi
 
 # Stamp LAN IP into frontend URLs
@@ -132,7 +159,7 @@ if grep -q "your_vapid" .env 2>/dev/null; then
       fi
     fi
   else
-    warn "Node.js/npx not found — skipping VAPID key generation."
+    warn "Node.js/npx not found, skipping VAPID key generation."
     warn "Push notifications will not work. Run: npx web-push generate-vapid-keys"
   fi
 fi
@@ -151,8 +178,8 @@ done
 if [[ -z "${MODE}" ]]; then
 header "Deployment mode"
 echo ""
-echo "  [1] Build locally  — builds images from source (slower, always fresh)"
-echo "  [2] Pull from GHCR — pulls pre-built images (faster, requires login for private repos)"
+echo "  [1] Build locally , builds images from source (slower, always fresh)"
+echo "  [2] Pull from GHCR, pulls pre-built images (faster, requires login for private repos)"
 echo ""
 read -rp "  Choose [1]: " MODE
 MODE="${MODE:-1}"
@@ -163,7 +190,8 @@ if [[ "${MODE}" == "2" ]]; then
   COMPOSE_FILE="docker-compose.prod.yml"
   if ! grep -q "GHCR_OWNER" .env 2>/dev/null; then
     read -rp "  GitHub org/username for GHCR images: " GHCR_OWNER
-    echo "GHCR_OWNER=${GHCR_OWNER}" >> .env
+    # A registry path is lowercase only, and a GitHub account need not be.
+    echo "GHCR_OWNER=$(echo "${GHCR_OWNER}" | tr '[:upper:]' '[:lower:]')" >> .env
   fi
 fi
 
@@ -189,17 +217,44 @@ echo ""
 # Optional demo data (see docs/demo.md)
 if [[ "${SEED_DEMO}" == "1" ]]; then
   log "Loading demo data..."
-  $DOCKER_COMPOSE_CMD -f "${COMPOSE_FILE}" run --rm chronos-app uv run --no-sync python -m app.demo_seed
+  DEMO_OUTPUT="$($DOCKER_COMPOSE_CMD -f "${COMPOSE_FILE}" run --rm chronos-app uv run --no-sync python -m app.demo_seed)"
+  echo "${DEMO_OUTPUT}"
+  # Held back for the summary too: it scrolls past during the compose run, and
+  # the visitor kiosk cannot be set up without it.
+  DEMO_KIOSK_KEY="$(echo "${DEMO_OUTPUT}" | sed -n 's/^Kiosk key[^:]*: //p')"
+fi
+
+# The interactive docs follow DOCS_ENABLED, which .env.example leaves blank,
+# and blank means off wherever APP_ENV says production. Read it back rather
+# than closing a successful install with a link to a 404.
+DOCS_SETTING="$(sed -n 's/^DOCS_ENABLED=//p' .env | tail -1 | tr '[:upper:]' '[:lower:]')"
+APP_ENV_SETTING="$(sed -n 's/^APP_ENV=//p' .env | tail -1)"
+if [[ "${DOCS_SETTING}" =~ ^(true|1|yes|on)$ ]] ||
+   [[ -z "${DOCS_SETTING}" && "${APP_ENV_SETTING}" != "production" ]]; then
+  DOCS_LINE="http://${LAN_IP}/docs"
+else
+  DOCS_LINE="off (set DOCS_ENABLED=true in .env)"
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 header "All done!"
 echo ""
 ok "App:       http://${LAN_IP}"
-ok "API docs:  http://${LAN_IP}/docs"
+ok "API docs:  ${DOCS_LINE}"
 ok "Login:     admin@org.internal"
+if [[ -n "${ADMIN_PASS:-}" ]]; then
+  ok "Password:  ${ADMIN_PASS}"
+  echo -e "${YELLOW}  Printed once, here. It is also in .env as INITIAL_ADMIN_PASSWORD.${NC}"
+else
+  ok "Password:  whatever INITIAL_ADMIN_PASSWORD says in your .env"
+fi
 echo -e "${YELLOW}  IMPORTANT: You will be prompted to set a new password on first login.${NC}"
 echo ""
+if [[ -n "${DEMO_KIOSK_KEY:-}" ]]; then
+  ok "Kiosk key: ${DEMO_KIOSK_KEY}"
+  echo -e "${YELLOW}  Paste this once at http://${LAN_IP}/guest/kiosk/ to activate the visitor kiosk.${NC}"
+  echo ""
+fi
 echo "  Useful commands:"
 echo "    docker compose logs -f                  # Stream all logs"
 echo "    docker compose logs -f chronos-app      # FastAPI logs only"

@@ -1,7 +1,7 @@
 {
   "name": "chronos-ledger-frontend",
-  "version": "1.0.0",
-  "description": "Chronos Ledger — Organization Schedule & Attendance Management PWA",
+  "version": "0.9.0",
+  "description": "Chronos Ledger: Organization Schedule & Attendance Management PWA",
   "license": "Apache-2.0",
   "private": true,
   "scripts": {
@@ -12,33 +12,33 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "next": "14.2.22",
+    "@ducanh2912/next-pwa": "10.2.9",
+    "@hookform/resolvers": "3.10.0",
+    "axios": "1.20.0",
+    "clsx": "2.1.1",
+    "date-fns": "4.3.0",
+    "framer-motion": "11.15.0",
+    "idb": "8.0.3",
+    "lucide-react": "0.474.0",
+    "next": "14.2.35",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "@ducanh2912/next-pwa": "10.2.9",
-    "axios": "1.8.4",
-    "zustand": "4.5.5",
-    "react-hook-form": "7.54.2",
-    "zod": "3.24.2",
-    "@hookform/resolvers": "3.10.0",
-    "lucide-react": "0.474.0",
-    "recharts": "2.15.0",
     "react-dropzone": "14.3.5",
-    "framer-motion": "11.15.0",
-    "clsx": "2.1.1",
+    "react-hook-form": "7.76.1",
+    "recharts": "2.15.0",
     "tailwind-merge": "2.6.0",
-    "idb": "8.0.2",
-    "date-fns": "4.1.0"
+    "zod": "3.24.2",
+    "zustand": "4.5.5"
   },
   "devDependencies": {
     "@types/node": "20.17.12",
     "@types/react": "18.3.18",
     "@types/react-dom": "18.3.5",
-    "typescript": "5.7.3",
-    "tailwindcss": "3.4.17",
-    "autoprefixer": "10.4.20",
-    "postcss": "8.5.1",
+    "autoprefixer": "10.5.0",
     "eslint": "8.57.1",
-    "eslint-config-next": "14.2.22"
+    "eslint-config-next": "14.2.35",
+    "postcss": "8.5.28",
+    "tailwindcss": "3.4.17",
+    "typescript": "5.7.3"
   }
 }

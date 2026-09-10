@@ -16,7 +16,7 @@ Answers to the most common questions and error scenarios for Chronos Ledger.
 - [Notifications & Web Push](#notifications--web-push)
 - [WebSocket / Live Updates](#websocket--live-updates)
 - [Docker & Deployment](#docker--deployment)
-- [CI/CD & GHCR](#cicd--ghcr)
+- [CI/CD & container registries](#cicd--container-registries)
 - [New Cycle Rollover](#new-cycle-rollover)
 - [Data & Privacy](#data--privacy)
 
@@ -42,7 +42,7 @@ On some distributions `sh` is `dash`, which does not support the `local` keyword
 The backend container is still starting. Wait 10–15 seconds and refresh. You can watch readiness:
 
 ```bash
-docker compose logs -f backend
+docker compose logs -f chronos-app
 ```
 
 The backend prints `Application startup complete.` when it is ready. If it never prints this, check for a database connection error (see below).
@@ -54,8 +54,8 @@ The backend prints `Application startup complete.` when it is ready. If it never
 PostgreSQL is not ready yet, or the `DATABASE_URL` is misconfigured.
 
 1. Verify the postgres container is running: `docker compose ps`
-2. Check `.env` — `DB_PASSWORD` must match the password embedded in `DATABASE_URL` (or use the flat variable substitution in `docker-compose.yml`).
-3. If postgres crashed, inspect its logs: `docker compose logs db`
+2. Check `.env`: `DB_PASSWORD` must match the password embedded in `DATABASE_URL` (or use the flat variable substitution in `docker-compose.yml`).
+3. If postgres crashed, inspect its logs: `docker compose logs chronos-db`
 
 The most common cause is a password mismatch. Run `docker compose down -v` to wipe volumes, fix `.env`, and run `docker compose up` again.
 
@@ -112,47 +112,70 @@ Also ensure `APP_CORS_ORIGINS` in `.env` includes `http://192.168.1.10`.
 
 ## Authentication & Accounts
 
-### Default credentials
+### First login credentials
 
 | Field | Value |
 |---|---|
 | Email | `admin@org.internal` |
-| Password | `ChronosAdmin2026!` |
+| Password | `INITIAL_ADMIN_PASSWORD` from your `.env` |
 
-**Change this immediately** — the admin is prompted to do so on first login via the Onboarding Wizard.
+`setup.sh` generates that password and prints it once, in its summary. Nothing can log in as the administrator until the variable is set, and the admin is prompted to choose their own password on first login via the Onboarding Wizard.
 
 ---
 
 ### Login fails with "Invalid credentials" after setup.sh
 
-The seed migration creates the admin account during `alembic upgrade head`. If migrations did not run (check `docker compose logs backend`), the account does not exist.
+Usually `INITIAL_ADMIN_PASSWORD` is empty or missing from `.env`. The seed migration stores a hash of a random string it throws away, so the administrator is deliberately unreachable until that variable gives it a password, and `docker compose logs chronos-app` says `INITIAL_ADMIN_PASSWORD is not set` on boot. Set it and restart:
+
+```bash
+docker compose up -d --force-recreate chronos-app
+```
+
+Otherwise the account may not exist at all. The seed migration creates it during `alembic upgrade head`; if migrations did not run (check `docker compose logs chronos-app`), there is nothing to log into.
 
 Force migrations:
 
 ```bash
-docker compose exec backend uv run alembic upgrade head
+docker compose exec chronos-app uv run --no-sync alembic upgrade head
 ```
 
 ---
 
 ### A user is locked out and cannot reset their password
 
-Super Admins can reset any user's password via the Admin dashboard. If the Super Admin account itself is locked, reset directly in the database:
+Super Admins can reset any user's password via the Admin dashboard. If the Super Admin account itself is locked, reset directly in the database. It takes two steps, because the stored hash is bcrypt written by the application: Postgres has no function that produces one this app will accept.
+
+First generate the hash inside the backend container:
 
 ```bash
-docker compose exec db psql -U chronos_admin -d chronos_ledger -c \
-  "UPDATE users SET hashed_password = crypt('NewTempPassword!', gen_salt('bf')) WHERE email = 'admin@org.internal';"
+docker compose exec chronos-app uv run --no-sync python -c \
+  "from app.core.security import hash_password; print(hash_password('NewTempPassword!'))"
 ```
 
-Requires the `pgcrypto` extension, which is enabled by the seed migration.
+Then open psql and write it, setting the first-login flag so the temporary password has to be replaced at the next login:
+
+```bash
+docker compose exec chronos-db psql -U chronos_admin -d chronos_ledger
+```
+
+```sql
+UPDATE users
+   SET credential_secure_hash = '<paste the hash>',
+       initial_login_state = true
+ WHERE email_address = 'admin@org.internal';
+```
+
+Run the UPDATE at the psql prompt rather than through `psql -c` from your shell. A bcrypt hash contains `$` characters and a shell will eat them.
+
+While `initial_login_state` is true, a Super Admin token is refused everywhere except the password-change endpoints, so the temporary password cannot be used for anything else.
 
 ---
 
 ### JWT token expired errors after a system clock change
 
-Chronos Ledger uses HS256 JWTs with 8-hour expiry. If the server clock jumped forward, existing tokens become invalid immediately. Users must log in again.
+Chronos Ledger uses HS256 access tokens with a 15-minute expiry, refreshed against a 30-day refresh token. If the server clock jumped forward, existing access tokens become invalid immediately. The web client refreshes on its own; anything holding a token directly has to call `POST /api/v1/auth/refresh` or log in again.
 
-To change the expiry window, set `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` in `.env`.
+To change the windows, set `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` and `JWT_REFRESH_TOKEN_EXPIRE_DAYS` in `.env`.
 
 ---
 
@@ -163,8 +186,8 @@ The banner is driven by `initial_login_state` on the user record. If the Onboard
 Fix: complete the password step in the Onboarding Wizard (Admin Dashboard → Setup Guide), or clear it directly:
 
 ```bash
-docker compose exec db psql -U chronos_admin -d chronos_ledger -c \
-  "UPDATE users SET initial_login_state = false WHERE email = 'admin@org.internal';"
+docker compose exec chronos-db psql -U chronos_admin -d chronos_ledger -c \
+  "UPDATE users SET initial_login_state = false WHERE email_address = 'admin@org.internal';"
 ```
 
 ---
@@ -185,19 +208,19 @@ Automatically on first login when `initial_login_state` is `true` for a `SUPER_A
 | 2. Create planning cycle | Yes | No |
 | 3. Import CSV | Yes | No |
 | 4. Generate ledger | Recommended | Yes |
-| 5. Done | — | — |
+| 5. Done | - | - |
 
 ---
 
 ### CSV import succeeded but the timetable looks empty
 
-The ledger is not generated automatically after import. Go to **Step 4 — Generate Ledger** in the wizard (or Admin Dashboard → Import → Generate Daily Ledger). The nightly cron runs at midnight, but you can trigger it manually from the UI.
+The ledger is not generated automatically after import. Go to **Step 4: Generate Ledger** in the wizard (or Admin Dashboard → Import → Generate Daily Ledger). The nightly cron runs at midnight, but you can trigger it manually from the UI.
 
 ---
 
 ### I need to re-run the wizard for a new planning cycle
 
-Use the **Setup Guide** link from the Admin Dashboard. On Step 2, create a new planning cycle (leave the old one — historical data is preserved under the previous cycle). Then re-upload the new term's CSV.
+Use the **Setup Guide** link from the Admin Dashboard. On Step 2, create a new planning cycle (leave the old one, historical data is preserved under the previous cycle). Then re-upload the new term's CSV.
 
 The new cycle becomes active immediately for ledger generation.
 
@@ -229,7 +252,7 @@ Column names are case-sensitive. Extra columns are ignored. Times accept `HH:MM`
 
 ### Import returns "duplicate key" errors
 
-The import is idempotent — re-running it with the same data is safe. "Duplicate key" errors suggest the CSV has internal duplicates (the same member+activity+slot appears twice). Remove duplicates and re-upload.
+The import is idempotent, re-running it with the same data is safe. "Duplicate key" errors suggest the CSV has internal duplicates (the same member+activity+slot appears twice). Remove duplicates and re-upload.
 
 ---
 
@@ -247,7 +270,7 @@ Fix the offending rows and re-upload; re-running a corrected file is safe.
 
 ## Attendance & Geofencing
 
-### Members cannot mark attendance — "Location unavailable"
+### Members cannot mark attendance: "Location unavailable"
 
 The browser geolocation API requires HTTPS or localhost. If the app is served over plain HTTP, the location prompt will be blocked by the browser.
 
@@ -259,25 +282,34 @@ Options:
 
 ### Attendance is being rejected with "Outside geofence"
 
-The server-side check uses the room's configured lat/lon plus a 30-metre radius. If the room coordinates in the database are wrong, every mark attempt will fail.
+The server-side check uses the room's coordinates and a 15-metre radius. A room placed at the wrong point refuses every mark; a room never placed at all is not fenced, and every mark is accepted.
 
-Update room coordinates:
+Find the room and see where it thinks it is:
 
 ```bash
-docker compose exec db psql -U chronos_admin -d chronos_ledger -c \
-  "UPDATE master_slots SET room_lat = 12.9716, room_lon = 77.5946 WHERE target_room_identifier = 'LH-3';"
+curl -H "Authorization: Bearer $TOKEN" "https://chronos.example.org/api/v1/resources/?code=LH-3"
 ```
+
+Then move it, using the `id` that came back:
+
+```bash
+curl -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"latitude": 12.9716, "longitude": 77.5946, "altitude_target": 920.0}' "https://chronos.example.org/api/v1/resources/12"
+```
+
+`latitude` and `longitude` are set or cleared together: sending one without the other is refused, since half a location fences the room to a point on the equator. `altitude_target` is optional, and a room without one is fenced horizontally only.
+
+One day held somewhere else is a day-level override, `PATCH /schedule/ledger/{id}` with `latitude_target` and `longitude_target`. Where a day carries its own coordinates the room's are not consulted. The radius is the day's `precision_radius_meters`, defaulting to 15 metres.
 
 ---
 
 ### The altitude check is blocking members on the correct floor
 
-The altitude delta threshold is `|Δalt| < 4 metres`. GPS altitude accuracy is typically ±10–20m on mobile devices, making this check unreliable outdoors. The check only fires when the device reports altitude — if the device does not expose it, the check is skipped.
+The altitude delta threshold is `|Δalt| < 4 metres`. GPS altitude accuracy is typically ±10–20m on mobile devices, making this check unreliable outdoors. The check only fires when the device reports altitude, if the device does not expose it, the check is skipped.
 
 If you want to widen the threshold, it is a constant in `backend/app/services/geo_fence.py`:
 
 ```python
-ALT_DELTA_THRESHOLD_M = 4.0   # change to 10.0 for looser enforcement
+FLOOR_TOLERANCE_METERS = 4.0   # change to 10.0 for looser enforcement
 ```
 
 ---
@@ -324,13 +356,13 @@ The ledger is a materialized daily snapshot. Approved absences cascade `ON_LEAVE
 
 The staff member must be online with the app open. The notification arrives via WebSocket to `/staff/dashboard`. If they are offline, the request stays pending in the database and will appear when they next log in.
 
-Check that the staff member's email in the guest form exactly matches their account email — the lookup is case-insensitive but the email must exist in the system.
+Check that the staff member's email in the guest form exactly matches their account email, the lookup is case-insensitive but the email must exist in the system.
 
 ---
 
-### Guest check-in kiosk is accessible without a login — is this intentional?
+### Guest check-in kiosk is accessible without a login, is this intentional?
 
-Yes. The guest kiosk (`/guest/kiosk`) is explicitly public. It does not expose any internal data — it only allows submitting a visit request and viewing the staff notification status. The underlying API endpoints (`/api/v1/guest/*`) are similarly unauthenticated by design.
+Yes. The guest kiosk (`/guest/kiosk`) is explicitly public. It does not expose any internal data, it only allows submitting a visit request and viewing the staff notification status. The underlying API endpoints (`/api/v1/guest/*`) are similarly unauthenticated by design.
 
 ---
 
@@ -339,7 +371,7 @@ Yes. The guest kiosk (`/guest/kiosk`) is explicitly public. It does not expose a
 ### Push notifications are not appearing
 
 1. Confirm the user has granted notification permission (browser prompt when first logging in).
-2. Verify VAPID keys are set in `.env` — `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_CONTACT_EMAIL`.
+2. Verify VAPID keys are set in `.env`: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_CONTACT_EMAIL`.
 3. Check that the frontend was built with the matching `NEXT_PUBLIC_VAPID_PUBLIC_KEY`.
 4. VAPID public key must be the same value in both places. Regenerate with `npx web-push generate-vapid-keys` if unsure, then rebuild.
 
@@ -347,7 +379,7 @@ Yes. The guest kiosk (`/guest/kiosk`) is explicitly public. It does not expose a
 
 ### Class reminder push fires too early or too late
 
-Reminders fire 15 minutes before the slot's `time_window_start` via `periodicsync` in the service worker. The accuracy depends on when the browser chooses to fire the periodic sync — browsers enforce a minimum interval of ~1 hour for battery reasons.
+Reminders fire 15 minutes before the slot's `time_window_start` via `periodicsync` in the service worker. The accuracy depends on when the browser chooses to fire the periodic sync, browsers enforce a minimum interval of ~1 hour for battery reasons.
 
 For more reliable reminders, the user must keep the tab open (the service worker runs JavaScript timers when the tab is active).
 
@@ -359,16 +391,16 @@ For more reliable reminders, the user must keep the tab open (the service worker
 
 The WebSocket connects to `NEXT_PUBLIC_WS_URL`. In the GHCR image this defaults to `/ws` (same-origin). If you are running the frontend dev server and the backend separately, ensure `NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws`.
 
-Also check nginx is proxying `/ws` correctly — see `nginx/nginx.conf`.
+Also check nginx is proxying `/ws` correctly, see `nginx/nginx.conf`.
 
 ---
 
 ### WebSocket disconnects every few minutes
 
-Nginx has a default proxy read timeout of 60 seconds. The Chronos Ledger nginx config sets `proxy_read_timeout 3600s` on the `/ws` location. If you see 60-second drops, nginx.conf may not have been updated — verify:
+Nginx has a default proxy read timeout of 60 seconds. The Chronos Ledger nginx config sets `proxy_read_timeout 3600s` on the `/ws` location. If you see 60-second drops, nginx.conf may not have been updated, verify:
 
 ```bash
-docker compose exec nginx cat /etc/nginx/nginx.conf | grep proxy_read_timeout
+docker compose exec chronos-proxy cat /etc/nginx/nginx.conf | grep proxy_read_timeout
 ```
 
 ---
@@ -377,18 +409,20 @@ docker compose exec nginx cat /etc/nginx/nginx.conf | grep proxy_read_timeout
 
 ### `docker compose up` fails with "port is already allocated"
 
-Another service on the host is using port 80. Either stop it (`sudo systemctl stop apache2` / `nginx`) or change the host port in `docker-compose.yml`:
+Another service on the host owns port 80 or 443. Either stop it (`sudo systemctl stop apache2` / `nginx`), or move the Chronos edge proxy aside in `.env`, without editing any compose file:
 
-```yaml
-ports:
-  - "8080:80"   # map host 8080 → container 80
+```bash
+EDGE_HTTP_PORT=8080
+EDGE_HTTPS_PORT=8443
 ```
+
+Only the host side moves. The proxy container still listens on 80 and 443, so nothing inside the stack changes. This is also how you put Chronos behind an outer reverse proxy that owns the host's 80 and 443.
 
 ---
 
 ### Container exits with OOM (out of memory) on low-RAM servers
 
-Redis is configured with `--maxmemory 256mb`. PostgreSQL can spike higher during bulk import. Minimum recommended RAM: **1 GB free** after OS. On 512 MB machines, reduce Redis:
+`docker-compose.prod.yml` runs Redis with `--maxmemory 256mb`; the development compose file sets no limit. PostgreSQL can spike higher during bulk import. Minimum recommended RAM: **1 GB free** after OS. On 512 MB machines, reduce Redis:
 
 ```yaml
 command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
@@ -399,7 +433,7 @@ command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
 ### How do I back up the database?
 
 ```bash
-docker compose exec db pg_dump -U chronos_admin chronos_ledger \
+docker compose exec chronos-db pg_dump -U chronos_admin chronos_ledger \
   | gzip > chronos-backup-$(date +%Y%m%d).sql.gz
 ```
 
@@ -407,7 +441,7 @@ To restore:
 
 ```bash
 gunzip -c chronos-backup-20260519.sql.gz \
-  | docker compose exec -T db psql -U chronos_admin chronos_ledger
+  | docker compose exec -T chronos-db psql -U chronos_admin chronos_ledger
 ```
 
 ---
@@ -421,11 +455,25 @@ docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Chronos Ledger images are built with SBOM and provenance attestation — verify with:
+Chronos Ledger images are built with an SBOM and build provenance. Those ride
+inside the image index, so they are there whichever registry you pulled from:
 
 ```bash
-docker buildx imagetools inspect ghcr.io/Life-Experimentalist/chronos-ledger-backend:v1.2.0
+docker buildx imagetools inspect ghcr.io/life-experimentalist/chronos-ledger-backend:v1.2.0
+docker buildx imagetools inspect vkrishna04/chronos-ledger-backend:v1.2.0
 ```
+
+There is also a Sigstore-signed SLSA provenance attestation, which says which
+workflow run built the image and from which commit:
+
+```bash
+gh attestation verify oci://ghcr.io/life-experimentalist/chronos-ledger-backend:v1.2.0 \
+  --owner Life-Experimentalist
+```
+
+The Docker Hub copy verifies the same way (`oci://docker.io/vkrishna04/...`). `gh`
+resolves the digest from the registry and then asks GitHub for the attestation,
+so it does not matter that only the GHCR copy carries it as a registry referrer.
 
 ---
 
@@ -437,9 +485,14 @@ Check if the CVE affects Chronos Ledger's actual usage (many CVEs in base images
 2. If it's in the base image (`node:20-alpine`, `python:3.11-slim`, or `nginx:1.27-alpine`), we will update the `FROM` line once the upstream image is patched.
 3. If it's in a dependency, update via `uv add <package>@<fixed-version>` or `npm install <package>@<fixed-version>`.
 
+A HIGH is reported and does not stop the build. A CRITICAL with a published fix
+does stop it, and no image is pushed until it is dealt with. A CRITICAL with no
+fix available anywhere is reported but not blocking, because there would be
+nothing to do about it except turn the check off.
+
 ---
 
-## CI/CD & GHCR
+## CI/CD & container registries
 
 ### CI fails with "Process completed with exit code 1" on the frontend build
 
@@ -472,14 +525,61 @@ If it still fails, check that the repository is in the `Life-Experimentalist` or
 
 ---
 
+### Nothing is appearing on Docker Hub
+
+Docker Hub publishing turns itself off when it is not configured, and says so in
+the run summary rather than failing the run. It needs both halves:
+
+- repository **variable** `DOCKERHUB_NAMESPACE`, the account the images live
+  under, which is what appears in `docker pull <namespace>/chronos-ledger-backend`
+- repository **secret** `DOCKERHUB_TOKEN`, a Docker Hub personal access token
+  with Read & Write scope. Not the account password.
+
+`DOCKERHUB_USERNAME` is optional. Without it the login uses the namespace, which
+is the same string for a personal account and differs only when pushing into an
+organization.
+
+```bash
+gh variable set DOCKERHUB_NAMESPACE --body "your-account"
+gh secret set DOCKERHUB_TOKEN        # paste the PAT when prompted
+```
+
+Set one and not the other and the run writes a notice saying so, then pushes to
+GHCR only. Docker Hub creates both repositories on the first push with whatever
+default visibility the account has, so check they came out public if that is what
+you wanted.
+
+---
+
+### `gh attestation verify` says no attestations were found
+
+Three things it could be:
+
+1. The image predates the signed attestations, which start from the first build
+   after they were added. The SBOM and provenance that buildkit attaches are
+   older and are read with `docker buildx imagetools inspect` instead.
+2. `--owner` is wrong. It is the GitHub account that owns the *repository*, not
+   the Docker Hub namespace, so it stays `Life-Experimentalist` even when
+   verifying a `docker.io/` image. It also keeps its capitals, unlike the
+   `ghcr.io/` path beside it: a registry refuses a repository path with a
+   capital in it, a GitHub account name is free to have one.
+3. The workflow could not mint one. `attest-build-provenance` needs both
+   `id-token: write` and `attestations: write`, and a called workflow's token
+   is capped by the job that calls it, so all four of `cd.yml`, `release.yml`
+   and the two calling jobs in `ci.yml` declare them. Drop one and the step
+   fails loudly.
+
+---
+
 ### Release Please is not creating a release PR
 
 Likely causes:
-1. Commits are not following [Conventional Commits](https://www.conventionalcommits.org/) — only `feat:`, `fix:`, `perf:`, and `security:` prefixes create release PRs.
-2. `release-please-config.json` or `.release-please-manifest.json` is missing or malformed.
-3. The `GITHUB_TOKEN` permissions do not include `pull-requests: write`.
+1. CI failed on `main`. Release Please runs from `ci.yml` once every gate has passed, so a red `main` leaves the release PR where it is until the failure is fixed.
+2. Commits are not following [Conventional Commits](https://www.conventionalcommits.org/), only `feat:`, `fix:`, `perf:`, and `security:` prefixes create release PRs.
+3. `release-please-config.json` or `.release-please-manifest.json` is missing or malformed.
+4. The `GITHUB_TOKEN` permissions do not include `pull-requests: write`.
 
-Check `release.yml` — it declares `permissions: { contents: write, pull-requests: write, packages: write }`.
+Permissions are granted by the `release` job in `ci.yml`: a called workflow's token is capped by the calling job, so that is the one place to change them. Inside `release.yml` the `release-please` job declares `contents: write` and `pull-requests: write`.
 
 ---
 
@@ -488,11 +588,11 @@ Check `release.yml` — it declares `permissions: { contents: write, pull-reques
 ### How do I start a new planning cycle or term?
 
 1. Open the Onboarding Wizard: Admin Dashboard → **Setup Guide**
-2. Skip to **Step 2 — Create Cycle**. Fill in the new term's start and end dates.
-3. Move to **Step 3 — Import CSV**. Upload the new term's timetable CSV.
+2. Skip to **Step 2: Create Cycle**. Fill in the new term's start and end dates.
+3. Move to **Step 3: Import CSV**. Upload the new term's timetable CSV.
 4. Click **Generate Ledger** to populate the first day's entries.
 
-The old cycle is preserved in full — historical attendance records and ledger snapshots remain untouched. The new cycle is set as active.
+The old cycle is preserved in full, historical attendance records and ledger snapshots remain untouched. The new cycle is set as active.
 
 ---
 
@@ -506,7 +606,7 @@ No. The system maintains one active cycle at a time. Switching cycles makes the 
 
 1. Prepare a CSV with only the new unit's data.
 2. Import it via Admin Dashboard → Import Data → CSV Import Zone.
-3. The import is idempotent — existing records are not duplicated; new ones are created.
+3. The import is idempotent, existing records are not duplicated; new ones are created.
 4. Regenerate the ledger to include the new slots in today's schedule.
 
 ---
@@ -518,7 +618,7 @@ No. The system maintains one active cycle at a time. Switching cycles makes the 
 All data stays on your organization server. A default install sends nothing to any external service:
 
 - **Telemetry (opt-in, off by default):** Anonymous view counts sent to a [CFlair-Counter](https://github.com/Life-Experimentalist/CFlair-Counter) instance you point it at. No PII. Requires both `NEXT_PUBLIC_TELEMETRY_ENABLED=true` and a non-empty `NEXT_PUBLIC_TELEMETRY_ENDPOINT` at build time.
-- **Web Push:** Push payloads are routed through the browser vendor's push service (Google FCM for Chrome, Mozilla for Firefox). Payload content is a short status string — no member names or sensitive data.
+- **Web Push:** Push payloads are routed through the browser vendor's push service (Google FCM for Chrome, Mozilla for Firefox). Payload content is a short status string, no member names or sensitive data.
 
 ---
 
@@ -540,4 +640,4 @@ Then rebuild the frontend image. This removes all telemetry code paths at compil
 
 ### GDPR / data retention
 
-Chronos Ledger is designed for on-premises deployment — the deploying institution is the data controller. There is no built-in automated retention or purge schedule. Administrators are responsible for implementing any required retention policies directly on the PostgreSQL database.
+Chronos Ledger is designed for on-premises deployment, the deploying institution is the data controller. There is no built-in automated retention or purge schedule. Administrators are responsible for implementing any required retention policies directly on the PostgreSQL database.

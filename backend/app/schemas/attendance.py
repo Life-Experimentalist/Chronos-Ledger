@@ -3,7 +3,7 @@
 
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.db import LogVerificationState, VerificationMetric
 
@@ -55,8 +55,17 @@ class RsvpDecision(BaseModel):
 
 class AnnotationCreate(BaseModel):
     ledger_instance_id: int
-    classification_tag: str
-    annotation_payload: str
+    # Both were unbounded. The tag lands in a String(30), so a longer one was
+    # an error from the database on Postgres and a silent truncation on
+    # SQLite. The 4000 on the body is a policy figure rather than a column
+    # limit, since that column is Text; it is there so a note cannot be used
+    # to fill the disk.
+    #
+    # The tag is deliberately not an enumeration. Nothing in this repository
+    # defines a vocabulary for it and nothing in the interface writes one, so
+    # a guessed set would refuse whatever an operator actually types.
+    classification_tag: str = Field(min_length=1, max_length=30)
+    annotation_payload: str = Field(min_length=1, max_length=4000)
 
 
 class AnnotationResponse(BaseModel):

@@ -2,7 +2,7 @@
 	"$schema": "https://vkrishna04.me/schemas/project-manifest.schema.json",
 	"manifestVersion": 2,
 	"tagline": "A multi-dimensional timetable engine, self-hosted and offline-first.",
-	"summary": "A multi-dimensional timetable engine, built campus-first for organization scheduling and attendance and generalizing to anything that needs to slice and query such a timetable efficiently. It replaces paper registers and spreadsheet timetables, runs entirely on an organization intranet with Docker as its only runtime dependency, and keeps working read-only, queueing writes, when the network drops.",
+	"summary": "A multi-dimensional timetable engine for scheduling and attendance, generalizing to anything that needs to slice and query such a timetable efficiently. It replaces paper registers and spreadsheet timetables, runs entirely on an organization intranet with Docker as its only runtime dependency, and keeps working read-only, queueing writes, when the network drops.",
 	"status": "active",
 	"icon": "SiDocker",
 	"readme": true,
@@ -10,7 +10,8 @@
 		"FastAPI",
 		"Docker",
 		"PostgreSQL",
-		"React",
+		"Redis",
+		"Next.js",
 		"Nginx"
 	],
 	"tags": [
@@ -21,15 +22,15 @@
 		"organization"
 	],
 	"highlights": [
-		"Runs wholly on the organization intranet — no cloud subscription and no data leaving the network.",
+		"Runs wholly on the organization intranet, no cloud subscription and no data leaving the network.",
 		"Stays usable when the organization network drops: reads continue and writes are queued rather than lost.",
 		"Deploys with Docker and Docker Compose as the only runtime dependencies, via a setup script that detects the LAN IP and generates its own secrets.",
-		"Publishes signed container images to GHCR so a deployment can pin a release instead of building from source."
+		"Publishes container images to GHCR and Docker Hub with SLSA build provenance and SBOM attestations, so a deployment can pin a release instead of building from source."
 	],
 	"metrics": [
 		{
 			"label": "REST API endpoints",
-			"value": "30+"
+			"value": "44"
 		},
 		{
 			"label": "Role dashboards",
@@ -37,7 +38,7 @@
 		},
 		{
 			"label": "Database tables",
-			"value": "9"
+			"value": "12"
 		},
 		{
 			"label": "Setup time",

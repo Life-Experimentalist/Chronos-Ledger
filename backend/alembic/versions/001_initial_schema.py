@@ -7,6 +7,8 @@ Revises:
 Create Date: 2026-01-01 00:00:00.000000
 """
 
+import secrets
+
 import bcrypt
 import sqlalchemy as sa
 from sqlalchemy import text
@@ -306,8 +308,17 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
-    # Seed the default super-admin using parameterized query (avoids f-string injection)
-    hashed = bcrypt.hashpw(b"ChronosAdmin2026!", bcrypt.gensalt()).decode("utf-8")
+    # Seed the one administrator account. It has to exist, because an
+    # instance with no way in is not a deployment, but the password is a
+    # random string discarded on the next line: one written here would be a
+    # working credential for every install, published in this repository.
+    # The operator says what the first password is through
+    # INITIAL_ADMIN_PASSWORD, which app/core/bootstrap.py applies while
+    # initial_login_state is still true. Migration 014 rotates the databases
+    # that were seeded before this changed.
+    hashed = bcrypt.hashpw(secrets.token_urlsafe(32).encode("utf-8"), bcrypt.gensalt()).decode(
+        "utf-8"
+    )
     op.execute(
         text(
             "INSERT INTO users (id, full_name, email_address, credential_secure_hash, role_type, initial_login_state) "

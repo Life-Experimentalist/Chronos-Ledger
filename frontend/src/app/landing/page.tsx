@@ -76,7 +76,7 @@ export default function LandingPage() {
           className="text-lg text-chronos-muted max-w-2xl mx-auto mb-10"
         >
           Chronos Ledger is a production-ready PWA for universities and organizations. Live timetables,
-          geofenced attendance, staff location resolution, and smart offline notifications — all
+          geofenced attendance, staff location resolution, and smart offline notifications, all of it
           self-hosted on your organization intranet.
         </motion.p>
 
@@ -104,7 +104,7 @@ export default function LandingPage() {
             <span className="w-3 h-3 rounded-full bg-red-500/70" />
             <span className="w-3 h-3 rounded-full bg-yellow-500/70" />
             <span className="w-3 h-3 rounded-full bg-green-500/70" />
-            <span className="ml-3 text-xs text-chronos-muted font-mono">chronos-ledger — docker compose up</span>
+            <span className="ml-3 text-xs text-chronos-muted font-mono">chronos-ledger $ docker compose up</span>
           </div>
           <div className="p-6 font-mono text-sm space-y-1.5">
             {[
@@ -116,8 +116,9 @@ export default function LandingPage() {
               { text: ' ✔ chronos-frontend   Built → static files ready', color: 'text-chronos-teal' },
               { text: ' ✔ chronos-proxy      Listening on :80', color: 'text-chronos-teal' },
               { text: '', color: '' },
-              { text: '  Admin login: admin@org.internal / ChronosAdmin2026!', color: 'text-chronos-warning' },
-              { text: '  Swagger UI:  http://localhost/docs', color: 'text-chronos-muted' },
+              { text: '  Admin login: admin@org.internal', color: 'text-chronos-warning' },
+              { text: '  Password:    (generated, printed once)', color: 'text-chronos-warning' },
+              { text: '  Swagger UI:  off (DOCS_ENABLED=true to publish)', color: 'text-chronos-muted' },
             ].map((line, i) => (
               <p key={i} className={`${line.color} leading-relaxed`}>{line.text || ' '}</p>
             ))}
@@ -178,7 +179,7 @@ export default function LandingPage() {
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">Four role-specific interfaces</h2>
             <p className="text-chronos-muted max-w-xl mx-auto">
-              Each role sees exactly what they need — nothing more, nothing less.
+              Each role sees exactly what they need, nothing more, nothing less.
             </p>
           </div>
 
@@ -228,7 +229,7 @@ export default function LandingPage() {
             <ul className="space-y-3">
               {[
                 'Attendance marks queue in IndexedDB and flush on reconnect',
-                'Today\'s schedule cached for 12 hours — works fully offline',
+                'Today\'s schedule cached for 12 hours, works fully offline',
                 'Class start notifications fire even when the app is closed',
                 'Workbox NetworkFirst for APIs · CacheFirst for static assets',
               ].map((item) => (
@@ -304,7 +305,7 @@ export default function LandingPage() {
                 'Change JWT_SECRET_SIGNING_KEY to a random 64-char string',
                 'Change the seed admin password immediately after first login',
                 'Generate VAPID keys for push notifications: npx web-push generate-vapid-keys',
-                'Restrict /docs and /redoc to internal IPs in nginx.conf for production',
+                'Set ORG_TIMEZONE to where the organization actually is, or a container running UTC puts every day an offset out',
               ].map((item) => (
                 <li key={item} className="flex items-start gap-2 text-xs text-chronos-text-dim">
                   <span className="text-chronos-warning shrink-0 mt-0.5">→</span>
@@ -321,7 +322,7 @@ export default function LandingPage() {
         <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">First-class REST API</h2>
           <p className="text-chronos-muted max-w-xl mx-auto">
-            Full OpenAPI 3.0 spec. Every endpoint is documented and testable via Swagger UI at <code className="text-chronos-teal">/docs</code>.
+            Full OpenAPI 3.0 spec. Every endpoint is documented and testable via Swagger UI at <code className="text-chronos-teal">/docs</code>, which stays off in production until you turn it on.
           </p>
         </div>
 
@@ -440,8 +441,8 @@ const FEATURES = [
     iconColor: 'text-chronos-teal',
   },
   {
-    title: '3D Geofenced Attendance',
-    desc: 'Haversine surface distance + 4m altitude check prevents cross-floor spoofing. Falls back to Wi-Fi BSSID when GPS accuracy exceeds 30m.',
+    title: 'Geofenced Attendance',
+    desc: 'Haversine surface distance, plus a 4m altitude check when the device and the room both report one, so a floor above does not count. Marking is refused when GPS accuracy is worse than 30m.',
     icon: MapPin,
     iconBg: 'bg-chronos-emerald/10',
     iconColor: 'text-chronos-emerald',
@@ -455,7 +456,7 @@ const FEATURES = [
   },
   {
     title: 'Real-Time WebSocket',
-    desc: 'JWT-authenticated persistent connections. Instant guest handshake requests, absence approvals, and organization broadcasts — no polling.',
+    desc: 'JWT-authenticated persistent connections. Instant guest handshake requests, absence approvals, and organization broadcasts, no polling.',
     icon: Zap,
     iconBg: 'bg-chronos-warning/10',
     iconColor: 'text-chronos-warning',
@@ -476,14 +477,14 @@ const FEATURES = [
   },
   {
     title: 'Guest Kiosk',
-    desc: 'No login required. Visitors fill a check-in form; the target staff receives an instant WebSocket notification with Approve/Decline actions.',
+    desc: 'No visitor login: the device holds an admin-issued kiosk key. Visitors fill a check-in form; the target staff receives an instant WebSocket notification with Approve/Decline actions.',
     icon: Users,
     iconBg: 'bg-pink-500/10',
     iconColor: 'text-pink-400',
   },
   {
     title: 'Offline Notifications',
-    desc: 'Class reminders fire 15 minutes before start — even offline. Scheduled via JS timers while active and Periodic Background Sync when the app is closed.',
+    desc: 'Class reminders fire 15 minutes before start, even offline. Scheduled via JS timers while active and Periodic Background Sync when the app is closed.',
     icon: Bell,
     iconBg: 'bg-chronos-teal/10',
     iconColor: 'text-chronos-teal',
@@ -532,13 +533,13 @@ const ROLES = [
     iconColor: 'text-chronos-accent',
     capabilities: [
       'Live timeline of today\'s classes with status indicators',
-      '3D geofenced attendance marking with GPS/BSSID',
+      'Geofenced attendance marking over GPS',
       'Staff locator with real-time availability',
       'Offline attendance queue with background sync',
     ],
   },
   {
-    name: 'Guest (no login)',
+    name: 'Guest (kiosk key)',
     path: '/guest/kiosk',
     icon: Users,
     iconBg: 'bg-chronos-warning/10',
@@ -569,9 +570,9 @@ const INSTALL_STEPS = [
     note: 'Skip this step if you do not need browser push notifications.',
   },
   {
-    title: 'Open the app and change the default password',
-    code: '# App:     http://<your-server-ip>\n# API docs: http://<your-server-ip>/docs\n# Login:    admin@org.internal / ChronosAdmin2026!',
-    note: 'The setup script prints the exact URL when it finishes.',
+    title: 'Open the app and choose your own password',
+    code: '# App:     http://<your-server-ip>\n# API docs: off (set DOCS_ENABLED=true in .env)\n# Login:    admin@org.internal\n# Password: the one setup.sh printed',
+    note: 'The setup script prints the exact URL and the first password when it finishes.',
   },
 ]
 
@@ -598,6 +599,6 @@ const API_GROUPS = [
   },
   {
     group: 'Sync',
-    endpoints: ['GET /sync/user-feed/{feed_token}.ics', 'WS /ws?token={jwt}', 'GET /ws/stats'],
+    endpoints: ['GET /sync/user-feed/{feed_token}.ics', 'WS /ws', 'GET /ws/stats'],
   },
 ]

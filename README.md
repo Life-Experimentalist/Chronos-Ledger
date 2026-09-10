@@ -6,11 +6,11 @@
 
   ----
 
-  **Organization Schedule & Attendance Management — self-hosted, offline-first, production-ready.**
+  **Organization Schedule & Attendance Management, self-hosted, offline-first, production-ready.**
 
 
-  [![CI](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml)  [![Release](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/release.yml/badge.svg)](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/release.yml)  [![License](https://img.shields.io/badge/License-Apache_2.0-14b8a6.svg)](LICENSE)
-  [![Docker — Backend](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-backend/size?label=backend)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-backend)  [![Docker — Web](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-web/size?label=web)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-web)
+  [![CI](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/Life-Experimentalist/chronos-ledger/actions/workflows/ci.yml)  [![License](https://img.shields.io/badge/License-Apache_2.0-14b8a6.svg)](LICENSE)
+  [![Docker: Backend](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-backend/size?label=backend)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-backend)  [![Docker: Web](https://ghcr-badge.egpl.dev/Life-Experimentalist/chronos-ledger-web/size?label=web)](https://github.com/Life-Experimentalist/chronos-ledger/pkgs/container/chronos-ledger-web)  [![Docker Hub](https://img.shields.io/docker/pulls/vkrishna04/chronos-ledger-backend?label=docker%20hub&color=2496ed)](https://hub.docker.com/r/vkrishna04/chronos-ledger-backend)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-10b981.svg)](https://github.com/Life-Experimentalist/chronos-ledger/pulls)  [![Views](https://counter.vkrishna04.me/api/views/chronos-ledger-landing/badge)](https://github.com/Life-Experimentalist/chronos-ledger)
 
 </div>
@@ -21,7 +21,7 @@
 
 Universities and organizations track attendance on paper, manage timetables in Excel, and learn of staff absences only when members complain. Organization networks are unreliable. Staff don't know where their colleagues are. Visitors have no formal check-in system.
 
-**Chronos Ledger** solves all of this in a single, self-hosted, Docker-deployable stack that runs entirely on your organization intranet — no cloud subscription, no data leaving your network.
+**Chronos Ledger** solves all of this in a single, self-hosted, Docker-deployable stack that runs entirely on your organization intranet, no cloud subscription, no data leaving your network.
 
 ---
 
@@ -39,7 +39,7 @@ Universities and organizations track attendance on paper, manage timetables in E
 
 ---
 
-## Quick Start — One Command
+## Quick Start: One Command
 
 ```bash
 # Clone, configure, and launch everything
@@ -52,11 +52,11 @@ chmod +x setup.sh && ./setup.sh
 
 - **App** → `http://<your-server-ip>`
 - **API docs** → `http://<your-server-ip>/docs`
-- **Default login** → `admin@org.internal` / `ChronosAdmin2026!` *(change immediately)*
+- **Login** → `admin@org.internal`, with the password `setup.sh` printed *(also in `.env` as `INITIAL_ADMIN_PASSWORD`)*
 
 Want to demo it to someone? `./setup.sh --build --demo` boots it with sample data; [docs/demo.md](docs/demo.md) has the five-minute walkthrough.
 
-### Or pull from GHCR (no build required)
+### Or pull a published image (no build required)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Life-Experimentalist/chronos-ledger/main/docker-compose.prod.yml \
@@ -70,6 +70,15 @@ docker compose -f docker-compose.prod.yml up -d
 ```
 
 Pin any release: `VERSION=v1.2.0 docker compose -f docker-compose.prod.yml up -d`
+
+The compose file pulls from GHCR, which does not rate-limit anonymous pulls of a
+public image. The same two images go to Docker Hub as well, for anyone who would
+rather not type a registry prefix:
+
+```bash
+docker pull vkrishna04/chronos-ledger-backend
+docker pull vkrishna04/chronos-ledger-web
+```
 
 ---
 
@@ -96,12 +105,12 @@ Full diagrams with Mermaid charts: [`docs/architecture.md`](docs/architecture.md
 
 ## Feature Highlights
 
-### 3D Geofenced Attendance
-Members mark attendance via GPS. The server runs a Haversine distance check **plus** an altitude delta (`|Δalt| < 4m`) to prevent members on floors above or below from registering. When GPS accuracy exceeds 30m, the client flags a BSSID Wi-Fi fallback.
+### Geofenced Attendance
+Members mark attendance via GPS. The server runs a Haversine distance check, plus an altitude delta (`|Δalt| <= 4m`) when both the device and the room report an altitude, so that somebody a floor above or below does not register. Altitude is optional on both sides: a fix without one is judged on the horizontal radius alone. The client refuses to mark at all when the reported accuracy is worse than 30m.
 
 ### 4-Tier Staff Location Resolution
-Always know where staff are — in priority order:
-1. **Redis manual override** (e.g., "In meeting — back at 15:00")
+Always know where staff are, in priority order:
+1. **Redis manual override** (e.g., "In meeting, back at 15:00")
 2. **Approved absence** from the daily exception log
 3. **Active master slot** room from the live timetable
 4. **Base station fallback** (their configured office/staffroom)
@@ -116,7 +125,7 @@ Organization Wi-Fi drops. Chronos Ledger keeps working:
 - Class reminders fire up to 20 minutes before start, even with the app closed, via `periodicsync` in the service worker
 
 ### Real-Time WebSocket Hub
-JWT-authenticated persistent connections. Guest handshake requests, absence approvals, and ledger state changes arrive in milliseconds — no polling.
+JWT-authenticated persistent connections. Guest handshake requests, absence approvals, and ledger state changes arrive in milliseconds, no polling.
 
 ### CSV Bulk Import
 Drop a member-centric CSV on the Admin dashboard. One upload creates/updates users, activity offerings, master timetable slots, and member registrations atomically and idempotently.
@@ -131,7 +140,7 @@ Drop a member-centric CSV on the Admin dashboard. One upload creates/updates use
 | **Unit Admin**  | `/admin/dashboard`   | Absence approvals, ledger overrides for own unit                 |
 | **Staff**     | `/staff/dashboard` | Availability switcher, attendance matrix, absence requests, guest desk |
 | **Member**     | `/member/dashboard` | Live timeline, geofenced self-mark, staff locator, offline queue     |
-| **Guest**       | `/guest/kiosk`       | No login — check-in form, real-time staff notification               |
+| **Guest**       | `/guest/kiosk`       | No visitor login, check-in form, real-time staff notification  |
 
 ---
 
@@ -149,7 +158,7 @@ Drop a member-centric CSV on the Admin dashboard. One upload creates/updates use
 | Reverse proxy  | Nginx 1.27                                                          |
 | Packaging      | uv (Python) · npm (Node.js)                                         |
 | Container      | Docker 24 · Docker Compose 2.20                                     |
-| CI/CD          | GitHub Actions · GHCR                                               |
+| CI/CD          | GitHub Actions · GHCR · Docker Hub                                  |
 | Releases       | Release Please (semver, CHANGELOG)                                  |
 
 ---
@@ -160,9 +169,9 @@ Drop a member-centric CSV on the Admin dashboard. One upload creates/updates use
 chronos-ledger/
 ├── .github/
 │   ├── workflows/
-│   │   ├── ci.yml          # Lint, type-check, build, Trivy scan
-│   │   ├── cd.yml          # Build & push to GHCR (main + releases)
-│   │   └── release.yml     # Release Please automated semver releases
+│   │   ├── ci.yml          # Lint, tests, type-check, build, Trivy, publish, release
+│   │   ├── cd.yml          # Build & push to GHCR + Docker Hub (main + releases)
+│   │   └── release.yml     # Release Please semver releases (called by ci.yml)
 │   └── dependabot.yml      # Automated dep updates (pip, npm, Docker, Actions)
 ├── assets/
 │   ├── logo.svg            # Vector wordmark
@@ -223,6 +232,9 @@ uv run uvicorn app.main:app --reload --port 8000
 
 API: `http://localhost:8000` · Swagger: `http://localhost:8000/docs`
 
+Swagger and ReDoc follow `DOCS_ENABLED`, which is unset here, so they are
+on in development and off under `APP_ENV=production`.
+
 ### Frontend
 
 ```bash
@@ -240,24 +252,48 @@ App: `http://localhost:3000`
 ## CI/CD Pipeline
 
 ```
-Pull Request ──▶ ci.yml ──▶ ruff + mypy
-                       ├──▶ eslint + tsc + build
-                       ├──▶ Trivy security scan
+Pull Request ──▶ ci.yml ──▶ ruff format + ruff check
+                       ├──▶ pytest
+                       ├──▶ eslint + tsc + next build
+                       ├──▶ Trivy scan (critical fails the build)
                        └──▶ Docker build check (no push)
 
-Push to main ──▶ ci.yml (all above)
-             └──▶ cd.yml ──▶ Build backend + web images
-                         └──▶ Push to GHCR (sha tag + latest)
+Push to main ──▶ ci.yml (all of the above)
+                       ├──▶ every gate green ──▶ cd.yml
+                       │                         └──▶ Push to GHCR + Docker Hub
+                       │                               (sha tag + latest)
+                       └──▶ every gate green ──▶ release.yml
+                                                 └──▶ Release Please opens
+                                                      or updates a release PR
 
-Merge release PR ──▶ release.yml ──▶ GitHub Release created
-                                 ├──▶ CHANGELOG.md updated
-                                 ├──▶ version.txt bumped
-                                 └──▶ cd.yml (version tag) ──▶ GHCR vX.Y.Z
+Merge release PR ──▶ ci.yml ──▶ release.yml ──▶ GitHub Release created
+                                            ├──▶ CHANGELOG.md updated
+                                            ├──▶ version.txt bumped
+                                            └──▶ cd.yml (version tag) ──▶ GHCR + Docker Hub, vX.Y.Z
 ```
 
-GHCR images:
-- `ghcr.io/Life-Experimentalist/chronos-ledger-backend:latest`
-- `ghcr.io/Life-Experimentalist/chronos-ledger-web:latest`
+Published images, one build pushed to both:
+
+| Registry | Backend | Web |
+| -------- | ------- | --- |
+| GHCR (canonical, what `docker-compose.prod.yml` pulls) | `ghcr.io/life-experimentalist/chronos-ledger-backend` | `ghcr.io/life-experimentalist/chronos-ledger-web` |
+| Docker Hub | `vkrishna04/chronos-ledger-backend` | `vkrishna04/chronos-ledger-web` |
+
+Both carry the same tags: `latest`, `main`, a short commit sha, and `vX.Y.Z` on a
+release. GHCR is the one the compose file points at because it does not
+rate-limit anonymous pulls of a public image; Docker Hub does. A fork that sets
+neither `DOCKERHUB_NAMESPACE` nor `DOCKERHUB_TOKEN` publishes to GHCR alone.
+
+Every image carries an SBOM and build provenance, plus a Sigstore-signed SLSA
+attestation naming the workflow and commit it was built from:
+
+```bash
+gh attestation verify oci://ghcr.io/life-experimentalist/chronos-ledger-backend:latest \
+  --owner Life-Experimentalist
+```
+
+[docs/faq.md](docs/faq.md#cicd--container-registries) has the Docker Hub form and
+the buildkit attestations that ride along inside the image itself.
 
 ---
 
@@ -265,9 +301,19 @@ GHCR images:
 
 | Variable                 | Required    | Description                                                 |
 | ------------------------ | ----------- | ----------------------------------------------------------- |
-| `JWT_SECRET_SIGNING_KEY` | **yes**     | 64-char hex — `openssl rand -hex 32`                        |
+| `JWT_SECRET_SIGNING_KEY` | **yes**     | 64-char hex: `openssl rand -hex 32`. Production refuses to start on the placeholder or on anything under 32 characters. |
 | `DB_PASSWORD`            | **yes**     | PostgreSQL password                                         |
-| `VAPID_PUBLIC_KEY`       | recommended | Web Push — `npx web-push generate-vapid-keys`               |
+| `ORG_TIMEZONE`           | recommended | IANA name of where the organization is, such as `Asia/Kolkata`. Decides what "today" means. Defaults to `UTC`, which is what a container runs. An offset is refused. |
+| `LABEL_STAFF` and five more | optional | What the interface calls the engine's six nouns: `LABEL_STAFF`, `LABEL_MEMBER`, `LABEL_ACTIVITY`, `LABEL_UNIT`, `LABEL_LEAD`, `LABEL_CYCLE`. Blank means the engine's own neutral word (Staff, Member, Activity, Unit, Lead, Cycle). Labels only, never the schema and never the API, so they are safe to change on a running instance. There are no domain presets on purpose. [docs/vocabulary.md](docs/vocabulary.md) explains why, and what labels never change. |
+| `PASSWORD_MIN_LENGTH`    | optional    | Shortest password a person may choose, default 12. Applies to the first-login change and to any account an admin creates with a typed password. Generated passwords are random and not measured against it. Refused below 8. |
+| `RATE_LIMIT_ENABLED`     | optional    | A budget per caller on sign-in, the visitor kiosk and the calendar feed. On by default. Counted in Redis, and if Redis is unreachable the limits stop applying rather than the requests failing. |
+| `RATE_LIMIT_LOGIN_PER_IP` | optional   | Failed sign-ins per calling address per 15 minutes, default 10. A correct password costs nothing. `0` turns it off. |
+| `RATE_LIMIT_LOGIN_PER_EMAIL` | optional | Failed sign-ins per account per 15 minutes, default 5. `0` turns it off. |
+| `RATE_LIMIT_GUEST_CHECKIN` | optional  | Visitor check-ins per kiosk account per hour, default 300. `0` turns it off. |
+| `RATE_LIMIT_CALENDAR_FEED` | optional  | Calendar feed fetches per feed token per hour, default 60. `0` turns it off. |
+| `DOCS_ENABLED`           | optional    | Whether `/docs`, `/redoc` and `/openapi.json` are served. Blank follows `APP_ENV`: off in production, on everywhere else. Set `true` to publish them from a production instance anyway. |
+| `FORWARDED_ALLOW_IPS`    | optional    | Which upstream addresses uvicorn believes `X-Forwarded-For` from, default `*`. The app container publishes no ports, so nginx is the only way in. The sign-in limit needs it to tell callers apart from the proxy, and the proxy overwrites that header rather than appending to it, so a caller cannot forge an address. |
+| `VAPID_PUBLIC_KEY`       | recommended | Web Push: `npx web-push generate-vapid-keys`               |
 | `VAPID_PRIVATE_KEY`      | recommended | Web Push                                                    |
 | `VAPID_CONTACT_EMAIL`    | recommended | Admin contact for push service                              |
 | `NEXT_PUBLIC_API_URL`    | dev only    | Baked in at build time; defaults to `/api/v1` in GHCR image |
@@ -280,16 +326,24 @@ See [`.env.example`](.env.example) for the full template.
 
 ---
 
-## Default Credentials (First Boot)
+## First Boot Credentials
 
-The Alembic seed migration creates one super-admin:
+The Alembic seed migration creates one super-admin. It seeds a hash of a
+random string it throws away, so the account exists, nothing can log into
+it, and this repository publishes no password for anyone to find. What the
+first password is comes from your `.env`:
 
-| Field    | Value                    |
-| -------- | ------------------------ |
-| Email    | `admin@org.internal` |
-| Password | `ChronosAdmin2026!`      |
+| Field    | Value                                     |
+| -------- | ----------------------------------------- |
+| Email    | `admin@org.internal`                      |
+| Password | `INITIAL_ADMIN_PASSWORD` from your `.env` |
 
-**Change this password immediately** via Admin Portal → Profile → Change Password.
+`setup.sh` generates that password and prints it once, in its summary. It is
+applied on boot while the account is still waiting for a password of its own,
+and does nothing once you have logged in and chosen one. Until you have, the
+account is refused by every endpoint except the password change itself, so
+the first login is the only thing it can do: use Admin Portal → Profile
+→ Change Password, or the Onboarding Wizard, which opens on its own.
 
 ---
 
@@ -297,13 +351,14 @@ The Alembic seed migration creates one super-admin:
 
 | Document                                       | Description                                                            |
 | ---------------------------------------------- | ---------------------------------------------------------------------- |
-| [`docs/openapi.yaml`](docs/openapi.yaml)       | OpenAPI 3.1 contract — all endpoints, schemas, enums                   |
+| [`docs/openapi.yaml`](docs/openapi.yaml)       | OpenAPI 3.1 contract, all endpoints, schemas, enums                   |
 | [`docs/architecture.md`](docs/architecture.md) | System topology, module deps, location resolution, WebSocket lifecycle |
 | [`docs/data-model.md`](docs/data-model.md)     | ERD for all 10 database tables                                         |
 | [`docs/flows.md`](docs/flows.md)               | Sequence diagrams: attendance, RSVP, guest handshake, ledger cron      |
 | [`docs/api.md`](docs/api.md)                   | Human-readable API reference with examples                             |
 | [`docs/deployment.md`](docs/deployment.md)     | Deployment guide, cycle rollover, TLS, scaling                         |
-| [`docs/faq.md`](docs/faq.md)                   | FAQ & troubleshooting — setup, auth, CSV import, geofencing, CI/CD     |
+| [`docs/vocabulary.md`](docs/vocabulary.md)     | What an instance calls things, and which value sets are closed         |
+| [`docs/faq.md`](docs/faq.md)                   | FAQ & troubleshooting, setup, auth, CSV import, geofencing, CI/CD     |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md)           | Development setup, commit conventions, PR checklist                    |
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)     | Community standards and enforcement                                    |
 | [`SECURITY.md`](SECURITY.md)                   | Vulnerability reporting and disclosure policy                          |
@@ -313,9 +368,9 @@ The Alembic seed migration creates one super-admin:
 
 ## Telemetry
 
-Telemetry is **off by default** — a stock build sends nothing anywhere, and the `ghcr.io` image is built from `nginx/Dockerfile` with those same defaults. Nothing in a default install reaches a host you do not run.
+Telemetry is **off by default**, a stock build sends nothing anywhere, and the `ghcr.io` image is built from `nginx/Dockerfile` with those same defaults. Nothing in a default install reaches a host you do not run.
 
-If you turn it on, Chronos Ledger reports **anonymous, aggregate view counts** to a [CFlair-Counter](https://github.com/Life-Experimentalist/CFlair-Counter) instance — a privacy-first, self-hostable counter. No IP addresses, usernames, or session data are collected or transmitted.
+If you turn it on, Chronos Ledger reports **anonymous, aggregate view counts** to a [CFlair-Counter](https://github.com/Life-Experimentalist/CFlair-Counter) instance, a privacy-first, self-hostable counter. No IP addresses, usernames, or session data are collected or transmitted.
 
 ### What is tracked, if you opt in
 
@@ -326,7 +381,7 @@ If you turn it on, Chronos Ledger reports **anonymous, aggregate view counts** t
 
 ### Opt in
 
-Set both at build time — either is enough to keep it off:
+Set both at build time, either is enough to keep it off:
 
 ```bash
 NEXT_PUBLIC_TELEMETRY_ENABLED=true
@@ -345,7 +400,7 @@ Contributions are welcome. Please:
 
 1. Fork the repo and create a feature branch.
 2. Follow [Conventional Commits](https://www.conventionalcommits.org/) so Release Please can generate the changelog.
-3. Open a PR — CI runs automatically (lint, type-check, build, Trivy scan).
+3. Open a PR: CI runs automatically (lint, tests, type-check, build, Trivy scan).
 4. All checks must pass before merge.
 
 Commit examples:

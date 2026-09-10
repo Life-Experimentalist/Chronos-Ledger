@@ -91,7 +91,7 @@ export function MasterLedger({ entries }: MasterLedgerProps) {
                     <td className="px-4 py-3 text-chronos-text-dim text-xs">
                       {entry.substitute_lead_id
                         ? <><span className="text-chronos-warning">{entry.substitute_lead_id}</span> <span className="text-chronos-muted">(proxy)</span></>
-                        : entry.active_lead_id || '—'}
+                        : entry.active_lead_id || '-'}
                     </td>
                     <td className="px-4 py-3"><DynamicStateBadge state={entry.operational_state} /></td>
                     <td className="px-4 py-3 text-xs text-chronos-muted">{entry.delivery_format === 'ONLINE_STREAM' ? '🌐 Online' : '🏫 Physical'}</td>

@@ -2,9 +2,11 @@
 # Licensed under the Apache License, Version 2.0
 
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core import rate_limit
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.websocket_manager import socket_broker
@@ -33,7 +35,24 @@ _AVAILABILITY_LABELS = {
 
 
 @router.post("/register-checkin")
-async def process_guest_entry(payload: GuestCheckInRequest, db: Session = Depends(get_db)):
+async def process_guest_entry(
+    payload: GuestCheckInRequest,
+    db: Session = Depends(get_db),
+    # The visitor does not sign in; the kiosk device does, with an API key an
+    # admin issues it once. It turns anonymous callers away before they reach
+    # the visitor log, and it is what the rate limit below counts against.
+    caller: User = Depends(get_current_user),
+):
+    # Keyed on the account the kiosk key belongs to rather than the address it
+    # dialled from: a lobby tablet on the guest network changes address, and
+    # two kiosks behind one router would otherwise share a budget.
+    budget = get_settings().rate_limit_guest_checkin
+    window = rate_limit.GUEST_WINDOW_SECONDS
+    rate_limit.guard(
+        "guest-checkin", caller.id, budget, window, "visitor check-ins from this device"
+    )
+    rate_limit.spend("guest-checkin", caller.id, budget, window)
+
     staff = db.query(User).filter(User.id == payload.target_staff_id).first()
     if not staff or staff.role_type not in (
         InstitutionalRole.STAFF,
@@ -105,7 +124,13 @@ def get_pending_guests(
 
 
 @router.get("/directory", response_model=list[StaffAvailabilityResponse])
-def get_staff_directory(name: str | None = None, db: Session = Depends(get_db)):
+def get_staff_directory(
+    name: str | None = Query(default=None, min_length=2, max_length=100),
+    db: Session = Depends(get_db),
+    # Same kiosk credential. This response is the staff roster plus each
+    # person's live presence, so it is not something to hand out anonymously.
+    _caller: User = Depends(get_current_user),
+):
     q = db.query(User).filter(User.role_type == InstitutionalRole.STAFF)
     if name:
         q = q.filter(User.full_name.ilike(f"%{name}%"))

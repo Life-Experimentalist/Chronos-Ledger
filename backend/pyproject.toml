@@ -3,8 +3,8 @@
 
 [project]
 name = "chronos-ledger-backend"
-version = "1.0.0"
-description = "Chronos Ledger — Organization Schedule & Attendance Management Backend"
+version = "0.9.0"
+description = "Chronos Ledger: Organization Schedule & Attendance Management Backend"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.11"
 authors = [
@@ -33,6 +33,10 @@ dependencies = [
     "pywebpush>=2.0.3",
     "aiofiles>=24.1.0",
     "email-validator>=2.2.0",
+    # zoneinfo reads the operating system's zone database, and a slim image
+    # ships without one. ORG_TIMEZONE would then fail for every name but UTC,
+    # on the deployment shape most likely to be used.
+    "tzdata>=2024.2",
 ]
 
 [project.optional-dependencies]
@@ -75,9 +79,9 @@ select = [
     "SIM", # flake8-simplify
 ]
 ignore = [
-    "E501",   # line too long — handled by formatter
+    "E501",   # line too long, handled by formatter
     "B008",   # do not perform function calls in default arguments (FastAPI Depends pattern)
-    "SIM108", # ternary operator — sometimes less readable
+    "SIM108", # ternary operator, sometimes less readable
 ]
 
 [tool.ruff.lint.isort]

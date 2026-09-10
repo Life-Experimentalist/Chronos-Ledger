@@ -1,7 +1,7 @@
 // Copyright 2026 Chronos Ledger Contributors
 // Licensed under the Apache License, Version 2.0
 //
-// Custom service worker additions — injected alongside the Workbox-generated SW.
+// Custom service worker additions, injected alongside the Workbox-generated SW.
 // Handles:
 //   1. Server push notifications (VAPID)
 //   2. Background sync for offline attendance queue
@@ -92,12 +92,12 @@ async function syncOfflineAttendance() {
         // and 5xx keep the record for the next sync.
         if (response.status < 500) await store.delete(record.id);
       } catch {
-        // Keep the record — will retry on next sync
+        // Keep the record, will retry on next sync
       }
     }
     await tx.done;
   } catch {
-    // Silently fail — will retry on next sync event
+    // Silently fail, will retry on next sync event
   }
 }
 
@@ -152,7 +152,7 @@ async function checkUpcomingClasses() {
       }
     }
   } catch {
-    // Silently fail — non-critical
+    // Silently fail, non-critical
   }
 }
 
@@ -164,7 +164,7 @@ self.addEventListener('message', function (event) {
     if ('periodicSync' in self.registration) {
       self.registration.periodicSync
         .register('class-reminder-check', { minInterval: 10 * 60 * 1000 }) // every 10 min
-        .catch(() => {}); // permission not granted — graceful degradation
+        .catch(() => {}); // permission not granted, graceful degradation
     }
   }
 });

@@ -18,7 +18,7 @@ db_url = os.getenv("DATABASE_URL")
 if db_url:
     config.set_main_option("sqlalchemy.url", db_url)
 
-import app.models.db  # noqa: E402, F401 — registers all models with metadata
+import app.models.db  # noqa: E402, F401 (registers all models with metadata)
 from app.core.database import Base  # noqa: E402
 
 target_metadata = Base.metadata

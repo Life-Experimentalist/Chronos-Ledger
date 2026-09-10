@@ -8,12 +8,19 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import (
     ensure_unit_scope,
+    generate_password,
     get_current_user,
     hash_password,
     require_roles,
 )
-from app.models.db import InstitutionalRole, User
-from app.schemas.users import UserCreate, UserResponse, UserStatusUpdate, UserUpdate
+from app.models.db import InstitutionalRole, RefreshToken, User, generate_feed_token
+from app.schemas.users import (
+    PasswordResetResponse,
+    UserCreate,
+    UserResponse,
+    UserStatusUpdate,
+    UserUpdate,
+)
 
 router = APIRouter()
 
@@ -131,6 +138,45 @@ def update_user(
     db.commit()
     db.refresh(user)
     return user
+
+
+@router.post("/{user_id}/reset-password", response_model=PasswordResetResponse)
+def reset_user_password(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+):
+    """Issue a new random password for someone who cannot sign in.
+
+    There is no self-service route back into a locked-out account:
+    change-password needs the current password, and there is no mail
+    sender to put a reset link through. Without this, an account whose
+    password is lost is lost with it, and the CSV import creates accounts
+    whose password is only ever shown once.
+
+    The new password comes back in this response for the admin to hand
+    over. It is never stored and never logged.
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    admin_roles = (InstitutionalRole.SUPER_ADMIN, InstitutionalRole.UNIT_ADMIN)
+    if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="Only a super-admin can modify admin accounts")
+    ensure_unit_scope(current_user, user.unit_code)
+
+    raw_password = generate_password()
+    user.credential_secure_hash = hash_password(raw_password)
+    # The same consequences a self-service change has. A reset is how an
+    # admin responds to a compromised account, so whoever is already in it
+    # has to lose their sessions and their calendar feed URL with it.
+    user.calendar_feed_token = generate_feed_token()
+    db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
+    # Inert for a member, since the first-login gate only covers admins,
+    # but it makes a reset admin choose their own password before going on.
+    user.initial_login_state = True
+    db.commit()
+    return PasswordResetResponse(user_id=user.id, initial_password=raw_password)
 
 
 @router.put("/{user_id}/status")

@@ -4,6 +4,7 @@
 
 from pydantic import BaseModel, EmailStr
 
+from app.core.passwords import AcceptablePassword
 from app.models.db import AccessReadiness, InstitutionalRole
 
 
@@ -11,11 +12,18 @@ class UserCreate(BaseModel):
     id: str
     full_name: str
     email_address: EmailStr
-    password: str
+    password: AcceptablePassword
     role_type: InstitutionalRole
     unit_code: str | None = None
-    assigned_base_station: str | None = "Staff Room Main"
+    assigned_base_station: str | None = None
     reporting_line_manager: str | None = None
+
+
+class PasswordResetResponse(BaseModel):
+    """Returned once, at reset. The raw password is never stored anywhere."""
+
+    user_id: str
+    initial_password: str
 
 
 class UserUpdate(BaseModel):

@@ -49,6 +49,6 @@ Out of scope:
 - JWTs signed with HS256; the signing key must be a 64-character hex string
 - All API routes require a valid JWT except `/api/v1/auth/login` and `/api/v1/guest/*`
 - Role-based access control enforced at the route handler level via `Depends(require_role(...))`
-- SQL queries use SQLAlchemy ORM — no raw string interpolation
+- SQL queries use SQLAlchemy ORM, no raw string interpolation
 - CORS origins restricted via `APP_CORS_ORIGINS` environment variable
 - Nginx serves `X-Frame-Options`, `X-Content-Type-Options`, and `Referrer-Policy` headers by default

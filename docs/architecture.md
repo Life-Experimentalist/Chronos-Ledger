@@ -1,24 +1,24 @@
 # Architecture
 
-<!-- Copyright 2026 Chronos Ledger Contributors — Apache 2.0 -->
+<!-- Copyright 2026 Chronos Ledger Contributors (Apache 2.0) -->
 
 ## System Topology
 
 ```mermaid
 graph TB
-    subgraph Clients["Client Layer (PWA — installed or browser)"]
+    subgraph Clients["Client Layer (PWA, installed or browser)"]
         S[Member Mobile]
         F[Staff Desktop]
         A[Admin Dashboard]
-        G[Guest Kiosk<br/>no auth]
+        G[Guest Kiosk<br/>device key]
     end
 
-    subgraph Edge["Edge — Nginx 1.27"]
+    subgraph Edge["Edge: Nginx 1.27"]
         NX[Reverse Proxy<br/>Port 80/443]
         ST[Static Files<br/>Next.js export]
     end
 
-    subgraph App["Application — FastAPI 0.115"]
+    subgraph App["Application: FastAPI 0.115"]
         API[REST API<br/>/api/v1/…]
         WS[WebSocket<br/>/ws]
         CRON[Ledger Cron<br/>APScheduler]
@@ -118,7 +118,7 @@ flowchart TD
     Start([Resolve location for staff_id]) --> R1
 
     R1{Redis override<br/>exists?}
-    R1 -->|Yes| RET1[Return override value<br/>e.g. 'In Meeting — Back at 15:00']
+    R1 -->|Yes| RET1[Return override value<br/>e.g. 'In Meeting: Back at 15:00']
     R1 -->|No| R2
 
     R2{Approved absence<br/>today?}
@@ -134,10 +134,10 @@ flowchart TD
 
 **Each tier explained:**
 
-1. **Redis override** — A staff member or admin has pushed a manual status via `PATCH /users/{id}/status`. Stored in Redis with an optional TTL. Cleared automatically when TTL expires or manually via the same endpoint.
-2. **Daily exception log** — The `ReverseRsvpLog` table is checked for an approved absence on today's date. If found, the ledger entry for that slot is in `ON_LEAVE`.
-3. **Master timetable** — The current wall-clock time is compared against `StructuralMasterSlot` time windows. If the staff is in a scheduled session right now, the room from the `DailyLedger` entry is returned.
-4. **Base station fallback** — The `assigned_base_station` field on the `User` record (e.g., "Staff Room Block A") is the last-resort answer.
+1. **Redis override**: A staff member or admin has pushed a manual status via `PATCH /users/{id}/status`. Stored in Redis with an optional TTL. Cleared automatically when TTL expires or manually via the same endpoint.
+2. **Daily exception log**: The `ReverseRsvpLog` table is checked for an approved absence on today's date. If found, the ledger entry for that slot is in `ON_LEAVE`.
+3. **Master timetable**: The current wall-clock time is compared against `StructuralMasterSlot` time windows. If the staff is in a scheduled session right now, the room from the `DailyLedger` entry is returned.
+4. **Base station fallback**: The `assigned_base_station` field on the `User` record (e.g., "Front Desk") is the last-resort answer. The column has no default, so a user with none recorded resolves to `Unassigned` rather than to a named place.
 
 ---
 
@@ -174,13 +174,13 @@ sequenceDiagram
 
 ```mermaid
 graph TD
-    subgraph Pages["app/ — Next.js App Router"]
+    subgraph Pages["app/: Next.js App Router"]
         Login["/  Login"]
         Landing["/landing  Marketing"]
         Admin["/admin/dashboard"]
         Staff["/staff/dashboard"]
         Member["/member/dashboard"]
-        Kiosk["/guest/kiosk  (no auth)"]
+        Kiosk["/guest/kiosk  (device key)"]
     end
 
     subgraph Shared["components/shared/"]
@@ -214,14 +214,14 @@ graph TD
     end
 
     subgraph Lib["lib/"]
-        api["api.ts — Axios wrappers"]
-        auth["auth.ts — localStorage helpers"]
-        idb["indexeddb.ts — IDB schema + helpers"]
+        api["api.ts: Axios wrappers"]
+        auth["auth.ts, localStorage helpers"]
+        idb["indexeddb.ts: IDB schema + helpers"]
     end
 
     subgraph Store["store/"]
-        authStore["auth.ts — Zustand"]
-        notifStore["notifications.ts — Zustand"]
+        authStore["auth.ts: Zustand"]
+        notifStore["notifications.ts: Zustand"]
     end
 
     subgraph SW["Service Worker (Workbox + sw-custom.js)"]
@@ -241,7 +241,7 @@ graph TD
 
 **Key design choices:**
 
-- **Static export** (`output: 'export'`): The entire frontend is pre-built into static HTML/JS at Docker image build time. Nginx serves it from a shared volume — no Node.js runtime in production, no cold-start latency.
+- **Static export** (`output: 'export'`): The entire frontend is pre-built into static HTML/JS at Docker image build time. Nginx serves it from a shared volume, no Node.js runtime in production, no cold-start latency.
 - **Zustand over Redux**: Minimal boilerplate. Auth state and notification inbox are the only global stores; everything else is local component state or server state via Axios.
 - **`useSearchParams` Suspense**: Next.js 14 static export requires any component calling `useSearchParams()` to be wrapped in a `<Suspense>` boundary. All three dashboards use an outer default-export wrapper + inner content component pattern.
-- **Offline notifications**: Two-layer design — `setTimeout` timers while the page is open (via `useScheduleNotifications`), and `periodicsync` in the service worker for when the device is locked. Both layers deduplicate via the `notified-classes` IndexedDB store.
+- **Offline notifications**: Two-layer design: `setTimeout` timers while the page is open (via `useScheduleNotifications`), and `periodicsync` in the service worker for when the device is locked. Both layers deduplicate via the `notified-classes` IndexedDB store.

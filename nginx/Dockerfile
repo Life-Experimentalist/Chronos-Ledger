@@ -1,4 +1,4 @@
-# Copyright 2026 Chronos Ledger Contributors — Apache 2.0
+# Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
 #
 # Multi-stage image: builds Next.js static export then bakes it into nginx.
 # Used by CI/CD to produce the ghcr.io chronos-ledger-web image.
@@ -15,7 +15,7 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Dependency layer — cached unless package files change
+# Dependency layer, cached unless package files change
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --legacy-peer-deps --ignore-scripts
 
@@ -58,7 +58,7 @@ RUN chmod +x /docker-entrypoint.d/40-tls.sh && mkdir -p /etc/nginx/tls
 
 EXPOSE 80 443
 
-# Lightweight healthcheck — nginx must respond to /health which it proxies
+# Lightweight healthcheck, nginx must respond to /health which it proxies
 # to the backend. Use a simple port check here so the container reports
 # healthy even before the backend is ready (compose handles sequencing).
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \

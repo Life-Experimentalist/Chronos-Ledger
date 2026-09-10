@@ -66,8 +66,17 @@ export const authApi = {
   login: (email: string, password: string) =>
     api.post('/auth/login', { email, password }),
   me: () => api.get('/auth/me'),
-  changePassword: (current_password: string, new_password: string) =>
-    api.post('/auth/change-password', { current_password, new_password }),
+  changePassword: async (current_password: string, new_password: string) => {
+    const res = await api.post('/auth/change-password', { current_password, new_password })
+    // The change kills every refresh token the account had, this one included,
+    // and the response carries its replacement. Storing it here rather than at
+    // the call site means the next screen to offer a password change cannot
+    // forget to, and get itself signed out fifteen minutes later.
+    if (typeof window !== 'undefined' && res.data?.refresh_token) {
+      localStorage.setItem('chronos_refresh', res.data.refresh_token)
+    }
+    return res
+  },
   logout: (refresh_token: string) => api.post('/auth/logout', { refresh_token }),
 }
 
@@ -103,12 +112,37 @@ export const attendanceApi = {
 }
 
 // ── Guest ─────────────────────────────────────────────────────────────────────
+// The lobby kiosk is an unattended public terminal with no one to log in, so it
+// authenticates with a device API key an admin provisions once. The key cannot
+// be baked into the build: this frontend is a static export, so anything
+// compiled in ships to every visitor inside the JS bundle.
+const KIOSK_KEY_STORAGE = 'chronos_kiosk_key'
+
+export const kioskKey = {
+  read: () => (typeof window !== 'undefined' ? localStorage.getItem(KIOSK_KEY_STORAGE) : null),
+  save: (key: string) => localStorage.setItem(KIOSK_KEY_STORAGE, key),
+  forget: () => localStorage.removeItem(KIOSK_KEY_STORAGE),
+}
+
+// A separate instance on purpose. The shared client attaches a Bearer token and,
+// on a 401, tries a refresh and then redirects to the sign-in page, which would
+// strand a kiosk mid check-in and hand a visitor the staff login screen.
+const kioskClient = axios.create({ baseURL: BASE_URL, timeout: 10000 })
+kioskClient.interceptors.request.use((config) => {
+  const key = kioskKey.read()
+  if (key) config.headers['X-API-Key'] = key
+  return config
+})
+
 export const guestApi = {
-  checkIn: (data: object) => api.post('/guest/register-checkin', data),
+  // Kiosk-side: device key, no session.
+  checkIn: (data: object) => kioskClient.post('/guest/register-checkin', data),
+  searchStaff: (name?: string) =>
+    kioskClient.get('/guest/directory', { params: name ? { name } : {} }),
+  // Staff-side: these run inside the signed-in app.
   decidePending: (id: number, decision: string) =>
     api.patch(`/guest/${id}/decide`, { decision }),
   getPendingGuests: () => api.get('/guest/pending'),
-  searchStaff: (name?: string) => api.get('/guest/directory', { params: name ? { name } : {} }),
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────
@@ -129,6 +163,10 @@ export const ingestionApi = {
     form.append('file', file)
     return api.post(`/ingestion/upload-csv?cycle_id=${cycleId}`, form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      // Every new member costs a bcrypt hash on the request thread, so
+      // this call is measured in seconds, not the 10s the shared client
+      // assumes. Matches nginx proxy_read_timeout, which caps it anyway.
+      timeout: 60000,
     })
   },
   generateLedger: (targetDate?: string) =>

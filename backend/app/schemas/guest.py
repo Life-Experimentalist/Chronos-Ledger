@@ -3,17 +3,19 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.db import LogVerificationState
 
 
 class GuestCheckInRequest(BaseModel):
-    guest_name: str
-    contact_phone: str
-    originating_body: str
-    target_staff_id: str
-    visitation_intent: str
+    # Bounds match the kiosk form's own validation, so a real visitor never
+    # meets them, while a scripted caller cannot post a megabyte per field.
+    guest_name: str = Field(min_length=2, max_length=100)
+    contact_phone: str = Field(min_length=8, max_length=20, pattern=r"^[-0-9+() ]+$")
+    originating_body: str = Field(min_length=2, max_length=100)
+    target_staff_id: str = Field(min_length=1, max_length=50)
+    visitation_intent: str = Field(min_length=10, max_length=500)
 
 
 class GuestDecisionRequest(BaseModel):

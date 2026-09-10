@@ -11,7 +11,7 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   workboxOptions: {
     runtimeCaching: [
       {
-        // Cache API responses (exclude auth endpoints — never cache credentials)
+        // Cache API responses (exclude auth endpoints, never cache credentials)
         urlPattern: /\/api\/v1\/(?!auth).*/,
         handler: 'NetworkFirst',
         options: {

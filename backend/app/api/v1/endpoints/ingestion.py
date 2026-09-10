@@ -1,6 +1,7 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
+import datetime
 import os
 import tempfile
 
@@ -9,6 +10,8 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import require_roles
+from app.core.time import org_tomorrow
+from app.models.db import PlanningCycle
 from app.services.ingestion_engine import ChronosIngestionEngine
 
 router = APIRouter()
@@ -25,6 +28,12 @@ async def upload_csv(
 ):
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are accepted")
+
+    # Looked up here rather than left to the foreign key. A bad id reaching the
+    # database comes back as a driver error naming a constraint, which tells an
+    # admin who mistyped a number nothing they can act on.
+    if not db.query(PlanningCycle).filter(PlanningCycle.id == cycle_id).first():
+        raise HTTPException(status_code=404, detail="Cycle not found")
 
     # tempfile honours the platform temp dir; a hardcoded /tmp only exists on Linux.
     fd, tmp_path = tempfile.mkstemp(prefix="chronos_upload_", suffix=".csv")
@@ -47,18 +56,16 @@ async def upload_csv(
 
 @router.post("/generate-ledger")
 def trigger_ledger_generation(
-    target_date: str | None = None,
+    target_date: datetime.date | None = None,
     db: Session = Depends(get_db),
     _=Depends(require_roles("SUPER_ADMIN")),
 ):
-    import datetime
-
     from app.cron.ledger_generator import generate_daily_ledger_entries
 
-    if target_date:
-        date_obj = datetime.date.fromisoformat(target_date)
-    else:
-        date_obj = datetime.date.today() + datetime.timedelta(days=1)
+    # Typed as a date so FastAPI refuses anything else with a 422. Parsed by
+    # hand it raised ValueError inside the handler, which left the caller a 500
+    # for a typo in a query string.
+    date_obj = target_date or org_tomorrow()
 
     generate_daily_ledger_entries(date_obj, db)
     return {"status": "generated", "date": str(date_obj)}

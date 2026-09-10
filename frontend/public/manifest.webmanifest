@@ -1,7 +1,7 @@
 {
   "name": "Chronos Ledger",
   "short_name": "Chronos",
-  "description": "Organization Schedule & Attendance Management System — real-time timetables, geofenced attendance, and staff tracking for educational institutions.",
+  "description": "Organization Schedule & Attendance Management System, real-time timetables, geofenced attendance, and staff tracking for educational institutions.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

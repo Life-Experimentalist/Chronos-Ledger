@@ -15,6 +15,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { useScheduleNotifications } from '@/hooks/useScheduleNotifications'
 import { scheduleApi } from '@/lib/api'
+import { windowState } from '@/lib/schedule'
 import type { LedgerEntry } from '@/types'
 
 const TABS = ['schedule', 'attendance', 'locator'] as const
@@ -49,11 +50,7 @@ function MemberDashboardContent() {
     scheduleApi.getTodayLedger().then((r) => {
       setTodayEntries(r.data)
       const now = new Date()
-      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
-      const active = r.data.find((e: LedgerEntry) =>
-        e.time_window_start && e.time_window_end &&
-        e.time_window_start <= currentTime && e.time_window_end >= currentTime
-      )
+      const active = r.data.find((e: LedgerEntry) => windowState(e, now).active)
       if (active) setCurrentEntry(active)
     }).catch(() => {})
   }, [])

@@ -1,6 +1,6 @@
 name: CI
 
-# Copyright 2026 Chronos Ledger Contributors — Apache 2.0
+# Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
 #
 # Runs on every pull request and on every push to main.
 # All jobs must pass before a branch can merge.
@@ -13,12 +13,16 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A superseded pull request run is wasted compute and worth cancelling. A run
+  # on main is not: it ends by publishing, and cancelling it halfway can leave
+  # the backend image and the web image on the registry from two different
+  # commits until the next run finishes. Pushes to main queue instead.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # ── Backend: lint ──────────────────────────────────────────────────────────
   backend-lint:
-    name: Backend — ruff lint
+    name: Backend, ruff lint
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -67,7 +71,7 @@ jobs:
 
   # ── Frontend: lint + type-check + build ───────────────────────────────────
   frontend-check:
-    name: Frontend — lint + type-check + build
+    name: Frontend, lint + type-check + build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -102,15 +106,24 @@ jobs:
 
   # ── Security: Trivy filesystem vulnerability scan ─────────────────────────
   security-scan:
-    name: Security — Trivy scan
+    name: Security (Trivy scan)
     runs-on: ubuntu-latest
     permissions:
+      # Naming any scope sets every other one to none, so checkout needs
+      # saying out loud. It matters more now that publishing waits on this job.
+      contents: read
       security-events: write
 
     steps:
       - uses: actions/checkout@v5
 
-      - name: Run Trivy filesystem scan
+      # Two passes, because they answer different questions. The first one
+      # reports: everything critical and everything high, written to the
+      # Security tab so somebody can triage it without reading a build log.
+      # The second one blocks, and only on critical, so a known-exploitable
+      # dependency cannot reach the registry while the merely-worrying ones
+      # do not hold up a release nobody would otherwise stop.
+      - name: Trivy scan, report every finding
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
@@ -127,16 +140,35 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
+      # Runs after the upload on purpose. This is the step allowed to fail,
+      # and the Security tab should already have the findings by the time it
+      # does. ignore-unfixed stays on: a critical with no patch published
+      # anywhere would otherwise block every build until upstream moves, which
+      # turns the gate into something people switch off.
+      - name: Trivy scan, fail the build on anything critical
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          # Only this step reads the suppressions, so anything listed in that
+          # file still reaches the Security tab through the pass above. Every
+          # entry carries its reasoning and a date it expires on.
+          trivyignores: .trivy-release-gate.yaml
+          severity: CRITICAL
+          exit-code: 1
+          ignore-unfixed: true
+          format: table
+
   # ── Docker: verify both images build cleanly ──────────────────────────────
   docker-build-check:
-    name: Docker — build check (no push)
+    name: Docker, build check (no push)
     runs-on: ubuntu-latest
     needs: [backend-lint, frontend-check]
 
     steps:
       - uses: actions/checkout@v5
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Build backend image
         uses: docker/build-push-action@v6
@@ -159,3 +191,42 @@ jobs:
             NEXT_PUBLIC_WS_URL=/ws
             NEXT_PUBLIC_TELEMETRY_ENABLED=false
             NEXT_PUBLIC_TELEMETRY_ENDPOINT=
+
+  # ── Publish: only reachable once every gate above is green ────────────────
+  publish:
+    name: Publish images to GHCR and Docker Hub
+    # This is the CI gate the registry never had. The build workflow used to
+    # carry its own push-to-main trigger, so it raced this one and a commit
+    # that failed its tests still shipped :latest to a public registry.
+    needs: [backend-lint, backend-test, frontend-check, security-scan, docker-build-check]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/cd.yml
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  # ── Release: the same gate, for the release PR and its images ─────────────
+  release:
+    name: Release
+    # The same hole as publish had, one workflow over: release.yml carried its
+    # own push-to-main trigger and reached the build workflow without waiting
+    # for anything here. Smaller, since a release commit is a version file and
+    # a changelog over code this has already seen, but the same shape.
+    needs: [backend-lint, backend-test, frontend-check, security-scan, docker-build-check]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pull-requests: write
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/release.yml
+    secrets:
+      RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
