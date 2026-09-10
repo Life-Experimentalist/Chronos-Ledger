@@ -262,7 +262,7 @@ Create users individually. For bulk creation, use CSV import (`POST /ingestion/u
   "password": "InitialPass1!",
   "role_type": "STAFF",
   "unit_code": "CSE",
-  "assigned_base_station": "Staff Room Block A",
+  "assigned_base_station": "Front Desk",
   "reporting_line_manager": "HOD001"
 }
 ```

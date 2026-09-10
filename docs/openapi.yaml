@@ -184,7 +184,7 @@ components:
         assigned_base_station:
           type: string
           nullable: true
-          example: Staff Room Block A
+          example: Front Desk
         reporting_line_manager:
           type: string
           nullable: true

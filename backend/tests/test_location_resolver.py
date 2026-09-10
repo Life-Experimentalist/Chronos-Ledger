@@ -211,7 +211,7 @@ def test_leave_on_a_night_shift_is_still_leave_after_midnight(db, seed_users, at
     slot = _slot(db, 1, NIGHT)
     _ledger(db, slot, MONDAY, DynamicState.ON_LEAVE, "W-9")
     at(TUESDAY, 2, 0)
-    assert _state(db)["resolved_location"] == "OFF_CAMPUS"
+    assert _state(db)["resolved_location"] == "OFF_SITE"
 
 
 def test_a_ledger_row_from_a_finished_night_shift_is_not_reported(db, seed_users, at):
@@ -238,7 +238,7 @@ def test_leave_on_a_class_taken_off_the_timetable_is_still_leave(db, seed_users,
     db.commit()
 
     at(MONDAY, 9, 30)
-    assert _state(db)["resolved_location"] == "OFF_CAMPUS"
+    assert _state(db)["resolved_location"] == "OFF_SITE"
 
 
 def test_an_adhoc_day_with_no_window_is_not_reported(db, seed_users, at):

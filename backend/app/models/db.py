@@ -120,7 +120,7 @@ class User(Base):
     credential_secure_hash = Column(String(255), nullable=False)
     role_type = Column(Enum(InstitutionalRole, name="institutional_role"), nullable=False)
     unit_code = Column(String(50), nullable=True)
-    assigned_base_station = Column(String(100), default="Staff Room Main")
+    assigned_base_station = Column(String(100))
     current_occupancy_index = Column(
         Enum(AccessReadiness, name="access_readiness"), default=AccessReadiness.OPEN_AD_HOC
     )

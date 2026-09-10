@@ -608,7 +608,7 @@ def test_staff_location_redis_override(client, seed_users, monkeypatch):
     res = client.get("/api/v1/schedule/staff/FAC001/location", headers=headers)
     assert res.status_code == 200
     assert res.json()["status"] == "In a meeting"
-    assert res.json()["resolved_location"] == "ISOLATED_CELL"
+    assert res.json()["resolved_location"] == "UNKNOWN"
 
 
 def test_all_staff_locations(client, seed_users, monkeypatch):

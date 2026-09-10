@@ -51,7 +51,10 @@ def determine_staff_current_state(staff_id: str, db: Session, redis_cache: Redis
     cached_raw = redis_cache.get(f"state_override:{staff_id}")
     if cached_raw:
         cached = cached_raw.decode("utf-8") if isinstance(cached_raw, bytes) else cached_raw
-        return {"resolved_location": "ISOLATED_CELL", "status": cached}
+        # An override says what somebody is doing, not where. No location was
+        # worked out at all on this path, and saying so is better than naming
+        # a place the override never claimed.
+        return {"resolved_location": "UNKNOWN", "status": cached}
 
     # Both tiers below fetch yesterday as well as today and then decide in
     # Python. A shift running 22:00 to 06:00 is dated the day it opened on,
@@ -96,7 +99,7 @@ def determine_staff_current_state(staff_id: str, db: Session, redis_cache: Redis
     if daily:
         ledger = daily
         if ledger.operational_state == DynamicState.ON_LEAVE:
-            return {"resolved_location": "OFF_CAMPUS", "status": "On Approved Leave"}
+            return {"resolved_location": "OFF_SITE", "status": "On Approved Leave"}
         if ledger.operational_state == DynamicState.PROXY_SUBSTITUTE:
             return {
                 "resolved_location": ledger.target_room_identifier,
@@ -106,7 +109,7 @@ def determine_staff_current_state(staff_id: str, db: Session, redis_cache: Redis
             offering = db.query(Activity).filter(Activity.id == ledger.activity_id).first()
             return {
                 "resolved_location": ledger.target_room_identifier,
-                "status": f"Teaching {offering.activity_code if offering else 'class'} in Room {ledger.target_room_identifier}",
+                "status": f"Leading {offering.activity_code if offering else 'a session'} in Room {ledger.target_room_identifier}",
             }
 
     # Tier 3: Structural master timetable
@@ -134,10 +137,13 @@ def determine_staff_current_state(staff_id: str, db: Session, redis_cache: Redis
         slot, offering = master
         return {
             "resolved_location": slot.target_room_identifier,
-            "status": f"Teaching {offering.activity_code} in Room {slot.target_room_identifier}",
+            "status": f"Leading {offering.activity_code} in Room {slot.target_room_identifier}",
         }
 
     # Tier 4: Base station fallback
     user = db.query(User).filter(User.id == staff_id).first()
-    base = user.assigned_base_station if user else "Staff Room"
+    # No base station is the normal state now that the column has no default,
+    # and the field is a plain string to every client, so it is filled in here
+    # rather than handed out as null.
+    base = (user.assigned_base_station if user else None) or "Unassigned"
     return {"resolved_location": base, "status": "Available / Unassigned"}

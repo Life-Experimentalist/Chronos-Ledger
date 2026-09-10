@@ -237,6 +237,11 @@ Listed so nobody spends an afternoon looking for a setting that is not there.
   client that needs "Students" pluralizes the label itself.
 - **No labels for states.** The closed sets in part 2 render as they are, or as
   whatever your own client maps them to.
+- **The locator's `status` is engine prose.** `GET /schedule/staff/all/locations`
+  returns a readable English sentence the engine builds itself, along the lines
+  of "Leading CS301 in Room B204". It is not assembled from the six labels and
+  does not change when you set them. A client that needs its own wording builds
+  it from `resolved_location` and the ledger rather than from this field.
 - **Labels are per instance, not per unit.** One deployment cannot call the
   same role Faculty in one department and Clinician in another.
 - **No per-locale labels.** One set of words per instance. Translation is a

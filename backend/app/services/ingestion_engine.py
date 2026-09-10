@@ -239,7 +239,7 @@ class ChronosIngestionEngine:
                                 f"activity '{row['activity_code']}': room "
                                 f"{room.code} is already held on {taken['date']} "
                                 f"from {taken['start']} to {taken['end']}, "
-                                "so the class cannot be put there"
+                                "so it cannot be put there"
                             )
                         # The same question against the timetable rather than
                         # against the bookings. A file is the bulk version of
@@ -261,7 +261,7 @@ class ChronosIngestionEngine:
                                 f"activity '{row['activity_code']}': room "
                                 f"{room.code} is already on the timetable for "
                                 f"{taken['activity_code']} from {taken['start']} "
-                                f"to {taken['end']}, so the class cannot be put there"
+                                f"to {taken['end']}, so it cannot be put there"
                             )
                     # And the rows that actually put somebody at a door, which
                     # are neither a booking nor a slot. This one is asked
@@ -287,7 +287,7 @@ class ChronosIngestionEngine:
                             f"{room.code} already has a generated day for "
                             f"{taken['activity_code']} on {taken['date']} "
                             f"from {taken['start']} to {taken['end']}, "
-                            "so the class cannot be put there"
+                            "so it cannot be put there"
                         )
                 if not slot:
                     slot = StructuralMasterSlot(

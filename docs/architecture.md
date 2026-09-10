@@ -137,7 +137,7 @@ flowchart TD
 1. **Redis override**: A staff member or admin has pushed a manual status via `PATCH /users/{id}/status`. Stored in Redis with an optional TTL. Cleared automatically when TTL expires or manually via the same endpoint.
 2. **Daily exception log**: The `ReverseRsvpLog` table is checked for an approved absence on today's date. If found, the ledger entry for that slot is in `ON_LEAVE`.
 3. **Master timetable**: The current wall-clock time is compared against `StructuralMasterSlot` time windows. If the staff is in a scheduled session right now, the room from the `DailyLedger` entry is returned.
-4. **Base station fallback**: The `assigned_base_station` field on the `User` record (e.g., "Staff Room Block A") is the last-resort answer.
+4. **Base station fallback**: The `assigned_base_station` field on the `User` record (e.g., "Front Desk") is the last-resort answer. The column has no default, so a user with none recorded resolves to `Unassigned` rather than to a named place.
 
 ---
 

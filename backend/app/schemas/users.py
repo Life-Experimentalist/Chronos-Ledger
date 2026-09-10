@@ -15,7 +15,7 @@ class UserCreate(BaseModel):
     password: AcceptablePassword
     role_type: InstitutionalRole
     unit_code: str | None = None
-    assigned_base_station: str | None = "Staff Room Main"
+    assigned_base_station: str | None = None
     reporting_line_manager: str | None = None
 
 
