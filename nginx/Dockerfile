@@ -61,5 +61,7 @@ EXPOSE 80 443
 # Lightweight healthcheck, nginx must respond to /health which it proxies
 # to the backend. Use a simple port check here so the container reports
 # healthy even before the backend is ready (compose handles sequencing).
+# 127.0.0.1, not localhost: busybox wget resolves localhost to ::1 first and
+# nginx listens on IPv4 only, so localhost was refused on every probe.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget -qO- http://localhost/ > /dev/null || exit 1
+    CMD wget -qO- http://127.0.0.1/ > /dev/null || exit 1
