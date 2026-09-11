@@ -460,7 +460,9 @@ class ApiKey(Base):
     """A long-lived machine credential for external integrations, bound to a
     normal user row (a service account). Only the SHA-256 hash is stored; the
     raw key is shown once at creation. Every request made with the key acts
-    as the bound user, so role checks and unit scoping apply unchanged."""
+    as the bound user, so role checks and unit scoping apply unchanged. The
+    first-login gate does not: it concerns the account's password, which a
+    key never uses."""
 
     __tablename__ = "api_keys"
 

@@ -156,6 +156,9 @@ def get_current_user_id(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"API key is not scoped for {needed or 'this request'}",
             )
+        # Read by get_current_user, which holds a person at the first-login
+        # gate and has no reason to hold a key there.
+        request.state.api_key_id = row.id
         return row.user_id
 
     raise HTTPException(
@@ -189,7 +192,17 @@ def get_current_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    if first_login_blocks(user) and not request.url.path.endswith(_FIRST_LOGIN_EXEMPT_SUFFIXES):
+    # The gate moves a person off a password they were handed. A key never
+    # uses that password, and issuing one already took a super admin who had
+    # cleared the gate, so a request made with a key is not held. Holding it
+    # left a service account at an admin role with nobody to change its
+    # password, and so unusable.
+    by_key = getattr(request.state, "api_key_id", None) is not None
+    if (
+        not by_key
+        and first_login_blocks(user)
+        and not request.url.path.endswith(_FIRST_LOGIN_EXEMPT_SUFFIXES)
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Change the initial password before using other endpoints",
