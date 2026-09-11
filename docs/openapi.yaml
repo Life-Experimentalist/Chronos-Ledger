@@ -72,6 +72,11 @@ components:
         working the moment it runs out and answers 401 `API key expired`. A
         null expiry never runs out.
 
+        The first-login gate does not apply to a key. It holds an admin
+        account until the password it was handed is changed, and a key never
+        uses that password, so a service account at an admin role works
+        through its key without anyone signing in as it.
+
   schemas:
     # ── Enumerations ──────────────────────────
     InstitutionalRole:
@@ -494,6 +499,51 @@ components:
           nullable: true
         active:
           type: boolean
+
+    ResourceCreate:
+      type: object
+      required: [code]
+      description: >
+        A room. Every string is trimmed first, code included, the same as
+        the importer trims a room name, so this room and the same name in a
+        later CSV are one row.
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 30
+          description: >
+            The importer's match key, unique across every resource. Not
+            editable afterwards.
+          example: LH-3
+        label:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: Defaults to the code, which is what an imported room gets.
+          example: Lecture Hall 3
+        unit_code:
+          type: string
+          maxLength: 50
+          nullable: true
+        capacity:
+          type: integer
+          minimum: 0
+          nullable: true
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+          nullable: true
+          description: Set together with longitude, or not at all.
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+          nullable: true
+        altitude_target:
+          type: number
+          nullable: true
 
     ResourceUpdate:
       type: object
@@ -1775,6 +1825,48 @@ paths:
                   $ref: "#/components/schemas/ResourceResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags: [Resources]
+      summary: Create a room
+      description: >
+        Requires `SUPER_ADMIN`. Registers a room before any timetable names
+        it, for a system that manages its own rooms. The row is the one an
+        import would have made, so a later CSV naming the room finds it
+        rather than creating a second. A retry after a lost response reads
+        the room back with `GET /api/v1/resources/?code=`: the code already
+        identifies it, so no Idempotency-Key is taken.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResourceCreate"
+      responses:
+        "201":
+          description: The room as created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResourceResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: A resource with that code already exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            A blank or over-long code, latitude without longitude or the
+            reverse, or a coordinate out of range.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/resources/{resource_id}:
     parameters:

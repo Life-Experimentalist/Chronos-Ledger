@@ -20,9 +20,10 @@ from app.models.db import (
     StructuralMasterSlot,
 )
 from app.services.master_slot import propagate_slot_corrections
-from tests.conftest import ADMIN_PASSWORD, login
+from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, login
 from tests.test_import_corrections import TOMORROW, _csv, _row, _slots
 from tests.test_ingestion import _make_cycle, _upload
+from tests.test_reservations import _issue_key, _unit_admin
 
 
 def _rooms(db):
@@ -216,3 +217,89 @@ def test_a_past_day_can_name_a_room_no_slot_names(client, db, seed_users):
     assert entry.resource.code == "LH-201"
     assert _slots(db)[0].resource.code == "LH-305"
     assert entry.resource_id != _slots(db)[0].resource_id
+
+
+# -- Created through the API ----------------------------------------------------
+
+
+def _create(client, headers, **body):
+    return client.post("/api/v1/resources/", json={"code": "LH-9", **body}, headers=headers)
+
+
+def test_a_room_can_be_created_before_any_timetable_names_it(client, db, seed_users):
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    res = _create(
+        client,
+        headers,
+        code="  LH-9 ",
+        label="Lecture Hall 9",
+        unit_code="CSE",
+        capacity=60,
+        latitude=12.9716,
+        longitude=77.5946,
+    )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    # Trimmed the way the importer trims a room name.
+    assert body["code"] == "LH-9"
+    assert body["label"] == "Lecture Hall 9"
+    assert body["resource_type"] == "ROOM"
+    assert body["unit_code"] == "CSE"
+    assert body["capacity"] == 60
+    assert body["latitude"] == 12.9716
+    assert body["user_id"] is None
+    assert body["active"] is True
+
+
+def test_a_later_import_finds_the_room_created_here(client, db, seed_users):
+    """The row is the one the importer would have made, so there is one room."""
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    created = _create(client, headers, code="LH-201").json()
+    assert created["label"] == "LH-201"
+
+    cycle = _make_cycle(db)
+    assert _upload(client, headers, cycle.id, _csv(_row(room="LH-201"))).status_code == 200
+
+    db.expire_all()
+    assert [r.id for r in _rooms(db)] == [created["id"]]
+    assert _slots(db)[0].resource_id == created["id"]
+
+
+def test_a_code_already_taken_is_409(client, db, seed_users):
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    assert _create(client, headers).status_code == 201
+
+    again = _create(client, headers, code=" LH-9", label="Somewhere else")
+    assert again.status_code == 409
+    assert again.json()["detail"] == "a resource with that code already exists"
+    # A retry that meets it reads the room back by code and carries on.
+    found = client.get("/api/v1/resources/", params={"code": "LH-9"}, headers=headers)
+    assert [r["label"] for r in found.json()] == ["LH-9"]
+
+
+def test_only_a_super_admin_creates_rooms(client, db, seed_users):
+    for headers in (
+        login(client, "staff@test.internal", STAFF_PASSWORD),
+        login(client, "member@test.internal", MEMBER_PASSWORD),
+        _unit_admin(db, client),
+    ):
+        assert _create(client, headers).status_code == 403
+    assert _rooms(db) == []
+
+
+def test_a_blank_code_or_half_a_location_is_refused(client, db, seed_users):
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    assert _create(client, headers, code="   ").status_code == 422
+    assert _create(client, headers, latitude=12.9716).status_code == 422
+    assert _rooms(db) == []
+
+
+def test_a_key_needs_resources_write_to_create_a_room(client, db, seed_users):
+    admin = login(client, "admin@test.internal", ADMIN_PASSWORD)
+
+    refused = _create(client, _issue_key(client, admin, scopes=["resources:read"]))
+    assert refused.status_code == 403
+    assert "resources:write" in refused.json()["detail"]
+
+    key = _issue_key(client, admin, scopes=["resources:read", "resources:write"])
+    assert _create(client, key).status_code == 201

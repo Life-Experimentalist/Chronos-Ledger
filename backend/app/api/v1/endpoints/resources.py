@@ -17,6 +17,7 @@ from app.schemas.resources import (
     ReservationConflict,
     ReservationCreate,
     ReservationResponse,
+    ResourceCreate,
     ResourceResponse,
     ResourceUpdate,
 )
@@ -36,6 +37,7 @@ RANGE_TOO_LONG = f"the range must not exceed {MAX_RANGE_DAYS} days"
 ALREADY_TAKEN = "the resource is already taken for part of that window"
 KEY_REUSED = "that Idempotency-Key was used for a different request"
 NOT_YOUR_HOLD = "only the caller that took a hold may cancel it"
+CODE_TAKEN = "a resource with that code already exists"
 # The name migration 010 gave the exclusion constraint. Postgres puts it in
 # the error text, which is how an overlap is told apart from the unique key
 # on the idempotency key: both arrive here as one IntegrityError.
@@ -64,6 +66,41 @@ def list_resources(
     if code is not None:
         query = query.filter(Resource.code == code.strip())
     return query.order_by(Resource.code).all()
+
+
+@router.post("/", response_model=ResourceResponse, status_code=status.HTTP_201_CREATED)
+def create_resource(
+    payload: ResourceCreate,
+    db: Session = Depends(get_db),
+    _=Depends(require_roles("SUPER_ADMIN")),
+):
+    """Register a room before any timetable names it.
+
+    Otherwise a room comes into being only when an import or a slot first
+    names it. That suits a timetable and does not suit a system that manages
+    its own rooms and wants to book one before any class is put in it. The
+    row is the one the importer would have made, so a later CSV naming the
+    room finds it rather than creating a second.
+
+    A room only. A person resource is tied to a user row, which is a
+    different thing to create, so no resource_type is taken.
+
+    A code already taken is 409. A caller retrying after a lost response
+    reads the room back with GET /resources/?code= and needs no idempotency
+    key: the code already is one.
+    """
+    fields = payload.model_dump()
+    if fields["label"] is None:
+        fields["label"] = fields["code"]
+    resource = Resource(resource_type=ResourceType.ROOM, **fields)
+    db.add(resource)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=CODE_TAKEN) from None
+    db.refresh(resource)
+    return resource
 
 
 @router.get("/{resource_id}/availability", response_model=AvailabilityResponse)

@@ -192,6 +192,11 @@ A key holding `schedule:read` passes `GET /schedule/slots` and is refused
 same key is refused `GET /users/` naming `users:read`: holding one area says
 nothing about another.
 
+A scope narrows what the bound account may do and never widens it. The role
+checks still run as that account, so a key holding `resources:write` that is
+bound to a `STAFF` account reads rooms and is refused a hold, which needs
+`UNIT_ADMIN`. See [Service accounts](#service-accounts).
+
 The single scope `*` is every area. That is what a key created without naming
 any scopes gets, and what every key issued before scopes existed was
 backfilled to, so nothing that worked before stopped working. `GET /api-keys/`
@@ -203,6 +208,27 @@ shows the scopes of each key, which is how you find the unrestricted ones.
 working the moment it runs out, answering `401` with `API key expired`. Omit
 the field for a key that never runs out. A time already in the past is refused
 at creation: a key that is dead on arrival is a mistake, not a request.
+
+### Service accounts
+
+An admin account signing in with a password is held at the first-login gate
+until it changes the password it was handed (see
+[POST /auth/change-password](#post-authchange-password)). A request made with a
+key is not held there: the gate exists to move a person off that password, and
+a key never uses it. Issuing a key already takes a `SUPER_ADMIN` who has cleared
+the gate.
+
+So a service account takes two steps, and nobody signs in as it:
+
+1. `POST /users/` at the role the routes it calls require. Creating and editing
+   rooms needs `SUPER_ADMIN`; holding and releasing them needs `UNIT_ADMIN` or
+   above.
+2. `POST /api-keys/` bound to that account, scoped to the areas it calls (for a
+   room-booking integration, `resources:read` and `resources:write`), with an
+   `expires_at`.
+
+The password set in step 1 is never used. Anyone who signs in with it still
+meets the gate.
 
 ### POST /api-keys/ `[SUPER_ADMIN]`
 
@@ -307,8 +333,10 @@ Update staff occupancy. Enum values: `OPEN_AD_HOC`, `BUSY`, `CRITICAL_DO_NOT_DIS
 ## Resources
 
 A resource is a thing the schedule can point at: a room, a person, a piece of
-equipment. Rooms arrive from a CSV import knowing only their name, so capacity
-and coordinates are filled in here.
+equipment. A room comes into being when a CSV import or a slot first names it,
+or ahead of that through `POST /resources/`, which is how a system that manages
+its own rooms registers one. An imported room knows only its name, so its
+capacity and coordinates are filled in with `PATCH`.
 
 ### GET /resources/
 
@@ -332,6 +360,39 @@ Readable by anyone signed in.
   }
 ]
 ```
+
+### POST /resources/ `[SUPER_ADMIN]`
+
+Register a room before any timetable names it.
+
+```json
+{
+  "code": "LH-3",
+  "label": "Lecture Hall 3",
+  "unit_code": "CSE",
+  "capacity": 90,
+  "latitude": 12.9716,
+  "longitude": 77.5946,
+  "altitude_target": 920.0
+}
+```
+
+Only `code` is required. It is trimmed, the same as the importer trims a room
+name, so a room created here and the same name in a later CSV are one row and
+the import attaches its slots to this one. `label` defaults to the code.
+`latitude` and `longitude` come as a pair or not at all, the same rule as on
+`PATCH`.
+
+The answer is `201` with the room in the shape `GET /resources/` returns. A code
+already taken, whether by a room created here or one an import made, is `409`
+(`a resource with that code already exists`). That is also what a retry gets
+when its first attempt went through and the response was lost, so a caller that
+meets `409` reads the room back with `GET /resources/?code=` and carries on. No
+`Idempotency-Key` is taken: the code already is one.
+
+Rooms only. There is no delete either: retiring a room is `PATCH` with
+`"active": false`, which keeps its calendar and every slot and day that points
+at it.
 
 ### GET /resources/{id}/availability?from={date}&to={date}
 

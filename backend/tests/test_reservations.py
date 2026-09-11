@@ -764,3 +764,42 @@ def test_an_integration_cancels_its_own_hold_with_its_key(client, db, seed_users
     res = client.delete(f"/api/v1/resources/{room.id}/reservations/{held['id']}", headers=key)
     assert res.status_code == 200, res.text
     assert _busy(client, admin, room.id) == []
+
+
+def test_a_service_account_works_through_its_key_without_a_sign_in(client, db, seed_users):
+    """The two-step setup for an integration that manages its own rooms.
+
+    An account created at an admin role starts held at the first-login gate,
+    and nothing will ever sign in to clear it. Its key is not held there, so
+    the account works as issued: create a room, edit it, hold an hour and
+    release it again.
+    """
+    admin = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    created = client.post(
+        "/api/v1/users/",
+        json={
+            "id": "SVC001",
+            "full_name": "Rooms integration",
+            "email_address": "rooms@test.internal",
+            "password": "set-once-and-never-used",
+            "role_type": "SUPER_ADMIN",
+        },
+        headers=admin,
+    )
+    assert created.status_code == 201, created.text
+    assert db.get(User, "SVC001").initial_login_state is True
+    key = _issue_key(client, admin, user_id="SVC001", scopes=["resources:read", "resources:write"])
+
+    room = client.post("/api/v1/resources/", json={"code": "WARD-4"}, headers=key)
+    assert room.status_code == 201, room.text
+    room_id = room.json()["id"]
+    edited = client.patch(f"/api/v1/resources/{room_id}", json={"capacity": 12}, headers=key)
+    assert edited.status_code == 200, edited.text
+
+    held = _book(client, key, room_id)
+    assert held.status_code == 201, held.text
+    assert held.json()["requested_by_id"] == "SVC001"
+    released = client.delete(
+        f"/api/v1/resources/{room_id}/reservations/{held.json()['id']}", headers=key
+    )
+    assert released.status_code == 200, released.text

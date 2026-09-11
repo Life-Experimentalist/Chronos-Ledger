@@ -24,6 +24,34 @@ class ResourceResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ResourceCreate(BaseModel):
+    """A room registered before any timetable names it.
+
+    Every string is stripped first, code included, the same as the importer
+    strips a room name, so this row and a later CSV mentioning the room are
+    one room. label defaults to the code, which is what an imported room
+    gets.
+    """
+
+    model_config = {"str_strip_whitespace": True}
+
+    code: str = Field(min_length=1, max_length=30)
+    label: str | None = Field(default=None, min_length=1, max_length=120)
+    unit_code: str | None = Field(default=None, max_length=50)
+    capacity: int | None = Field(default=None, ge=0)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    altitude_target: float | None = None
+
+    @model_validator(mode="after")
+    def _coordinates_come_together(self):
+        # The same rule as on update: half a location fences the room to a
+        # point on the equator.
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("latitude and longitude must be set together")
+        return self
+
+
 class ResourceUpdate(BaseModel):
     """What an admin may change about a resource that already exists.
 
