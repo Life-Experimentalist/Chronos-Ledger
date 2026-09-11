@@ -1410,8 +1410,11 @@ paths:
       summary: Exchange a refresh token for a new access token
       description: >
         A refresh token works exactly once. The response carries its
-        replacement, and the token sent is deleted whether or not the exchange
-        succeeds, so a client that loses the response signs in again.
+        replacement, so a client that loses the response signs in again. A
+        used token presented again more than ten seconds after its use ends
+        every token descended from the same sign-in, on the reading that two
+        parties hold it; inside those ten seconds it is refused and nothing
+        else changes.
       security: []
       requestBody:
         required: true
@@ -1442,7 +1445,8 @@ paths:
       tags: [Authentication]
       summary: Revoke a refresh token
       description: >
-        Deletes the refresh token named in the body. An unknown token is not an
+        Deletes the refresh token named in the body along with the used tokens
+        it replaced, which ends that sign-in. An unknown token is not an
         error, so a client that has already lost its token can call this
         without handling a failure. The access token keeps working until it
         expires: there is no server-side revocation of access tokens.

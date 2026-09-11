@@ -15,6 +15,7 @@ from app.core.config import docs_are_published, get_settings
 from app.core.database import SessionLocal
 from app.core.time import org_timezone, org_tomorrow
 from app.cron.ledger_generator import generate_daily_ledger_entries
+from app.cron.refresh_token_cleanup import purge_expired_refresh_tokens
 
 settings = get_settings()
 # Pinned to the organization's zone, not the container's. Unpinned, "23:00"
@@ -34,6 +35,15 @@ async def lifespan(_app: FastAPI):
         hour=23,
         minute=0,
         id="nightly_ledger_gen",
+        replace_existing=True,
+    )
+    # Daily, away from the ledger run.
+    scheduler.add_job(
+        _purge_refresh_tokens,
+        "cron",
+        hour=3,
+        minute=0,
+        id="refresh_token_purge",
         replace_existing=True,
     )
     scheduler.start()
@@ -70,6 +80,14 @@ def _run_ledger_generator():
     db = SessionLocal()
     try:
         generate_daily_ledger_entries(tomorrow, db)
+    finally:
+        db.close()
+
+
+def _purge_refresh_tokens():
+    db = SessionLocal()
+    try:
+        purge_expired_refresh_tokens(db)
     finally:
         db.close()
 

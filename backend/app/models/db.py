@@ -437,8 +437,15 @@ class GuestGateRegistry(Base):
 
 
 class RefreshToken(Base):
-    """One row per live session. The raw token never touches the database:
-    only its SHA-256 hash is stored, and a row is deleted the moment it is used."""
+    """One row per refresh token issued, until it expires. The raw token never
+    touches the database: only its SHA-256 hash is stored.
+
+    A token works once. Using it sets consumed_at and mints its successor in
+    the same family_id, and a sign-in starts a new family. The used row is
+    kept so that a second presentation of it reads as reuse rather than as a
+    typo, and reuse ends the family: see endpoints/auth.py::refresh. Rows go
+    at logout (the whole family), at a password change (every family the
+    user has), and a day after expiry (cron/refresh_token_cleanup.py)."""
 
     __tablename__ = "refresh_tokens"
 
@@ -447,7 +454,9 @@ class RefreshToken(Base):
     user_id = Column(
         String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    family_id = Column(String(36), nullable=False, index=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 

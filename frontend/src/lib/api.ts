@@ -7,18 +7,35 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api/v1'
 
 let refreshInFlight: Promise<string | null> | null = null
 
-async function tryRefresh(): Promise<string | null> {
-  const stored = localStorage.getItem('chronos_refresh')
-  if (!stored) return null
-  try {
-    // Plain axios on purpose: the client's own interceptor must not see this 401.
-    const res = await axios.post(`${BASE_URL}/auth/refresh`, { refresh_token: stored })
-    localStorage.setItem('chronos_token', res.data.access_token)
-    localStorage.setItem('chronos_refresh', res.data.refresh_token)
-    return res.data.access_token as string
-  } catch {
-    return null
+// Every tab shares one refresh token through localStorage, and a refresh token
+// works once. Two tabs whose access tokens lapse together would both spend it,
+// and the one refused would clear the session the other had just stored. The
+// lock takes tabs through one at a time. It exists only in a secure context,
+// which the service worker needs anyway; without it the storage checks below
+// still catch a tab that finishes second.
+async function tryRefresh(failedWith: string | null): Promise<string | null> {
+  // An access token other than the one refused means another tab has already
+  // refreshed, and spending the refresh token again would rotate it for nothing.
+  const renewedElsewhere = () => {
+    const current = localStorage.getItem('chronos_token')
+    return current && current !== failedWith ? current : null
   }
+  const refresh = async () => {
+    const renewed = renewedElsewhere()
+    if (renewed) return renewed
+    const stored = localStorage.getItem('chronos_refresh')
+    if (!stored) return null
+    try {
+      // Plain axios on purpose: the client's own interceptor must not see this 401.
+      const res = await axios.post(`${BASE_URL}/auth/refresh`, { refresh_token: stored })
+      localStorage.setItem('chronos_token', res.data.access_token)
+      localStorage.setItem('chronos_refresh', res.data.refresh_token)
+      return res.data.access_token as string
+    } catch {
+      return renewedElsewhere()
+    }
+  }
+  return navigator.locks ? navigator.locks.request('chronos-refresh', refresh) : refresh()
 }
 
 function createApiClient(): AxiosInstance {
@@ -37,7 +54,8 @@ function createApiClient(): AxiosInstance {
       if (err.response?.status === 401 && typeof window !== 'undefined' && original && !original._retried) {
         // One silent refresh, shared across concurrent 401s, then retry once.
         if (!refreshInFlight) {
-          refreshInFlight = tryRefresh().finally(() => {
+          const sent = String(original.headers.Authorization ?? '').replace(/^Bearer /, '')
+          refreshInFlight = tryRefresh(sent || null).finally(() => {
             refreshInFlight = null
           })
         }

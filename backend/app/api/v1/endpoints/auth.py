@@ -1,6 +1,8 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
+import logging
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -29,15 +31,35 @@ from app.schemas.auth import (
 
 settings = get_settings()
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+# How long after its use a refresh token can come back without that counting
+# as reuse. The web client keeps one refresh token per browser, shared by its
+# tabs, and a tab that refreshes a moment after another presents the token the
+# first has just spent. Treating that as theft would end the session the first
+# tab has just renewed. The window is short because it is also where reuse goes
+# unnoticed: a thief who spends a token first, followed by its owner inside the
+# window, keeps the session.
+REUSE_GRACE = timedelta(seconds=10)
 
 
-def _mint_refresh_token(db: Session, user_id: str) -> str:
-    """The caller gets the raw token; the database keeps only its hash."""
+def _as_utc(moment: datetime) -> datetime:
+    # SQLite hands naive datetimes back; Postgres keeps the timezone.
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
+def _mint_refresh_token(db: Session, user_id: str, family_id: str | None = None) -> str:
+    """The caller gets the raw token; the database keeps only its hash.
+
+    A sign-in starts a new family; a refresh passes the family of the token
+    it replaces.
+    """
     raw = generate_refresh_token()
     db.add(
         RefreshToken(
             token_hash=hash_refresh_token(raw),
             user_id=user_id,
+            family_id=family_id or str(uuid.uuid4()),
             expires_at=datetime.now(UTC) + timedelta(days=settings.jwt_refresh_token_expire_days),
         )
     )
@@ -101,24 +123,60 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         )
 
-    # SQLite hands naive datetimes back; Postgres keeps the timezone.
-    expires_at = row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=UTC)
-    if expires_at < datetime.now(UTC):
+    now = datetime.now(UTC)
+    if row.consumed_at is not None:
+        if now - _as_utc(row.consumed_at) > REUSE_GRACE:
+            # Two parties hold one token and nothing here says which is the
+            # thief, so every token from that sign-in goes and both have to
+            # sign in again, which only the owner can.
+            user_id, family_id = row.user_id, row.family_id
+            db.query(RefreshToken).filter(RefreshToken.family_id == family_id).delete(
+                synchronize_session=False
+            )
+            db.commit()
+            logger.warning(
+                "A used refresh token for user %s was presented again. "
+                "Every session from that sign-in has been ended.",
+                user_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token reused; sign in again",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token already used"
+        )
+
+    if _as_utc(row.expires_at) < now:
         db.delete(row)
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired"
         )
 
+    # Spent by a conditional update rather than by setting the attribute, so
+    # that two requests carrying the same token at once cannot both get past
+    # the check above and fork the family into two live sessions. The one that
+    # finds nothing left to update arrived second.
+    spent = (
+        db.query(RefreshToken)
+        .filter(RefreshToken.id == row.id, RefreshToken.consumed_at.is_(None))
+        .update({RefreshToken.consumed_at: now}, synchronize_session=False)
+    )
+    if not spent:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token already used"
+        )
+
     user = db.get(User, row.user_id)
-    db.delete(row)  # single use: a refresh token works exactly once
     if user is None:
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         )
 
-    new_refresh = _mint_refresh_token(db, user.id)
+    new_refresh = _mint_refresh_token(db, user.id, row.family_id)
     db.commit()
     return TokenResponse(
         access_token=create_access_token(subject=user.id, extra={"role": user.role_type.value}),
@@ -132,13 +190,20 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
 
 @router.post("/logout")
 def logout(payload: RefreshRequest, db: Session = Depends(get_db)):
+    # The refresh token is the only credential this takes. Holding it is a
+    # stronger claim than holding an access token, and asking for an access
+    # token as well would fail the sign-out of whoever comes back to an idle
+    # tab, whose access token lapsed long ago.
     row = (
         db.query(RefreshToken)
         .filter(RefreshToken.token_hash == hash_refresh_token(payload.refresh_token))
         .first()
     )
     if row is not None:
-        db.delete(row)
+        # The family rather than the row, so the used tokens it replaced go too.
+        db.query(RefreshToken).filter(RefreshToken.family_id == row.family_id).delete(
+            synchronize_session=False
+        )
         db.commit()
     return {"message": "Logged out"}
 

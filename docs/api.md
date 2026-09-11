@@ -67,7 +67,12 @@ Authorization: Bearer <access_token>
 Access tokens expire after `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` (default: 15).
 `POST /auth/refresh` exchanges the refresh token returned by `/auth/login` for a
 new pair; refresh tokens are single use and last
-`JWT_REFRESH_TOKEN_EXPIRE_DAYS` (default: 30).
+`JWT_REFRESH_TOKEN_EXPIRE_DAYS` (default: 30). A used refresh token presented
+again more than ten seconds after its use is taken to be in two hands: every
+token descended from the same sign-in stops working and the client has to sign
+in again. Inside those ten seconds the repeat is refused and nothing else
+changes, which is what two tabs refreshing together look like.
+`POST /auth/logout` ends the sign-in its refresh token belongs to.
 
 An API key in `X-API-Key` is accepted anywhere a Bearer token is. See
 [API keys](#api-keys).
