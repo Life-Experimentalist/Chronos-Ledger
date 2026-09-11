@@ -31,9 +31,9 @@ info:
     url: https://www.apache.org/licenses/LICENSE-2.0
 
 servers:
-  - url: http://localhost/api/v1
+  - url: http://localhost
     description: Local development (Docker Compose)
-  - url: http://{server_ip}/api/v1
+  - url: http://{server_ip}
     description: Organization intranet
     variables:
       server_ip:
@@ -153,6 +153,25 @@ components:
           description: >
             At least PASSWORD_MIN_LENGTH characters, 12 unless the deployment
             has raised it, and not a placeholder published in this repository.
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+
+    FeedToken:
+      type: object
+      properties:
+        feed_token:
+          type: string
+          description: 256 bits out of the system random source, hex encoded.
+        feed_path:
+          type: string
+          description: >
+            The feed path this token opens, relative to the server root.
+          example: /api/v1/sync/user-feed/1f4a9c2e.ics
 
     # ── Users ─────────────────────────────────
     UserCreate:
@@ -1266,7 +1285,7 @@ security:
 paths:
 
   # ── Configuration ─────────────────────────
-  /config:
+  /api/v1/config:
     get:
       tags: [Configuration]
       summary: Display vocabulary and password floor
@@ -1310,7 +1329,7 @@ paths:
                       password before sending it.
 
   # ── Authentication ────────────────────────
-  /auth/login:
+  /api/v1/auth/login:
     post:
       tags: [Authentication]
       summary: Login and receive JWT
@@ -1335,7 +1354,70 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
-  /auth/me:
+  /api/v1/auth/refresh:
+    post:
+      tags: [Authentication]
+      summary: Exchange a refresh token for a new access token
+      description: >
+        A refresh token works exactly once. The response carries its
+        replacement, and the token sent is deleted whether or not the exchange
+        succeeds, so a client that loses the response signs in again.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: A new access token and a replacement refresh token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          description: >
+            The token is unknown, already used, expired, or belongs to an
+            account that no longer exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Revoke a refresh token
+      description: >
+        Deletes the refresh token named in the body. An unknown token is not an
+        error, so a client that has already lost its token can call this
+        without handling a failure. The access token keeps working until it
+        expires: there is no server-side revocation of access tokens.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: Token revoked, or it was already gone.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logged out
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/v1/auth/me:
     get:
       tags: [Authentication]
       summary: Get current authenticated user profile
@@ -1349,7 +1431,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /auth/change-password:
+  /api/v1/auth/change-password:
     post:
       tags: [Authentication]
       summary: Change own password
@@ -1389,7 +1471,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
 
   # ── Users ─────────────────────────────────
-  /users/:
+  /api/v1/users/:
     get:
       tags: [Users]
       summary: List all users
@@ -1445,7 +1527,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /users/staff/available:
+  /api/v1/users/staff/available:
     get:
       tags: [Users]
       summary: List staff with OPEN_AD_HOC or VERY_FREE status
@@ -1464,7 +1546,7 @@ paths:
                 items:
                   $ref: "#/components/schemas/StaffAvailabilityResponse"
 
-  /users/{user_id}:
+  /api/v1/users/{user_id}:
     get:
       tags: [Users]
       summary: Get a specific user
@@ -1484,10 +1566,13 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-    put:
+    patch:
       tags: [Users]
       summary: Update a user
-      description: Admins can update any user. Users can update only themselves.
+      description: >
+        Requires `SUPER_ADMIN` or `UNIT_ADMIN`, and a unit admin only within
+        their own unit. Only a super-admin can modify an account that is itself
+        an admin. A user cannot update their own record here.
       parameters:
         - name: user_id
           in: path
@@ -1512,25 +1597,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-    delete:
-      tags: [Users]
-      summary: Delete a user
-      description: Requires `SUPER_ADMIN`.
-      parameters:
-        - name: user_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "204":
-          description: Deleted.
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
-  /users/{user_id}/reset-password:
+  /api/v1/users/{user_id}/reset-password:
     post:
       tags: [Users]
       summary: Issue a new password for a user who cannot sign in
@@ -1559,11 +1626,11 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /users/{user_id}/status:
-    patch:
+  /api/v1/users/{user_id}/status:
+    put:
       tags: [Users]
       summary: Update staff availability status
-      description: Staff update their own. Admins can update anyone.
+      description: Staff update their own. A super-admin can update anyone.
       parameters:
         - name: user_id
           in: path
@@ -1582,14 +1649,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserResponse"
+                type: object
+                properties:
+                  status:
+                    type: string
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
   # ── API keys ─────────────────────────────
-  /api-keys/:
+  /api/v1/api-keys/:
     get:
       tags: [API Keys]
       summary: List issued keys
@@ -1648,7 +1718,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api-keys/{key_id}:
+  /api/v1/api-keys/{key_id}:
     delete:
       tags: [API Keys]
       summary: Revoke a key
@@ -1669,7 +1739,7 @@ paths:
           $ref: "#/components/responses/NotFound"
 
   # ── Resources ─────────────────────────────
-  /resources/:
+  /api/v1/resources/:
     get:
       tags: [Resources]
       summary: List resources
@@ -1706,7 +1776,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /resources/{resource_id}:
+  /api/v1/resources/{resource_id}:
     parameters:
       - name: resource_id
         in: path
@@ -1748,7 +1818,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /resources/{resource_id}/availability:
+  /api/v1/resources/{resource_id}/availability:
     get:
       tags: [Resources]
       summary: When a resource is already taken
@@ -1821,7 +1891,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /resources/{resource_id}/reservations:
+  /api/v1/resources/{resource_id}/reservations:
     post:
       tags: [Resources]
       summary: Hold a resource for one dated window
@@ -1911,7 +1981,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /resources/{resource_id}/reservations/{reservation_id}:
+  /api/v1/resources/{resource_id}/reservations/{reservation_id}:
     delete:
       tags: [Resources]
       summary: Let a hold go
@@ -1957,7 +2027,7 @@ paths:
           $ref: "#/components/responses/NotFound"
 
   # ── Schedule ──────────────────────────────
-  /schedule/slots:
+  /api/v1/schedule/slots:
     get:
       tags: [Schedule]
       summary: List master slots
@@ -2045,7 +2115,7 @@ paths:
         "422":
           $ref: "#/components/responses/UnprocessableEntity"
 
-  /schedule/slots/{slot_id}:
+  /api/v1/schedule/slots/{slot_id}:
     patch:
       tags: [Schedule]
       summary: Change a master slot, and the days it has already produced
@@ -2161,7 +2231,7 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
-  /schedule/ledger/today:
+  /api/v1/schedule/ledger/today:
     get:
       tags: [Schedule]
       summary: Today's ledger entries for the authenticated user
@@ -2181,26 +2251,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /schedule/ledger/{ledger_id}:
-    get:
-      tags: [Schedule]
-      summary: Get a specific ledger entry
-      parameters:
-        - name: ledger_id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Ledger entry.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DailyLedgerResponse"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
+  /api/v1/schedule/ledger/{ledger_id}:
     patch:
       tags: [Schedule]
       summary: Update a ledger entry
@@ -2229,7 +2280,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /schedule/staff/{staff_id}/location:
+  /api/v1/schedule/staff/{staff_id}/location:
     get:
       tags: [Schedule]
       summary: Resolve a staff member's current location via 4-tier resolver
@@ -2249,7 +2300,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /schedule/staff/all/locations:
+  /api/v1/schedule/staff/all/locations:
     get:
       tags: [Schedule]
       summary: Snapshot of all staff locations (Member Locator feed)
@@ -2263,7 +2314,7 @@ paths:
                 items:
                   $ref: "#/components/schemas/StaffLocationResponse"
 
-  /schedule/cycles:
+  /api/v1/schedule/cycles:
     get:
       tags: [Schedule]
       summary: List planning cycles
@@ -2297,7 +2348,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /schedule/cycles/{cycle_id}/close:
+  /api/v1/schedule/cycles/{cycle_id}/close:
     patch:
       tags: [Schedule]
       summary: Close an active planning cycle
@@ -2318,7 +2369,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /schedule/cycles/{cycle_id}/open:
+  /api/v1/schedule/cycles/{cycle_id}/open:
     patch:
       tags: [Schedule]
       summary: Put a drafted planning cycle into service
@@ -2365,7 +2416,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CycleActivationConflict"
 
-  /schedule/cycles/{source_cycle_id}/clone-to/{target_cycle_id}:
+  /api/v1/schedule/cycles/{old_id}/clone-to/{new_id}:
     post:
       tags: [Schedule]
       summary: Clone all activity offerings from one cycle to another
@@ -2374,12 +2425,12 @@ paths:
         Member enrollment and attendance records are **not** cloned.
         Re-import CSV after cloning to update enrollment.
       parameters:
-        - name: source_cycle_id
+        - name: old_id
           in: path
           required: true
           schema:
             type: integer
-        - name: target_cycle_id
+        - name: new_id
           in: path
           required: true
           schema:
@@ -2396,7 +2447,7 @@ paths:
                     type: integer
 
   # ── Attendance ────────────────────────────
-  /attendance/mark:
+  /api/v1/attendance/mark:
     post:
       tags: [Attendance]
       summary: Mark single member attendance
@@ -2433,7 +2484,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /attendance/batch:
+  /api/v1/attendance/batch:
     post:
       tags: [Attendance]
       summary: Batch mark attendance for multiple members
@@ -2459,7 +2510,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /attendance/ledger/{ledger_id}:
+  /api/v1/attendance/ledger/{ledger_id}:
     get:
       tags: [Attendance]
       summary: Get the roster for a ledger entry
@@ -2488,7 +2539,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /attendance/absence:
+  /api/v1/attendance/absence:
     post:
       tags: [Attendance]
       summary: Submit an absence request (Reverse RSVP)
@@ -2513,7 +2564,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /attendance/absence/pending:
+  /api/v1/attendance/absence/pending:
     get:
       tags: [Attendance]
       summary: List absence requests pending the caller's approval
@@ -2528,12 +2579,12 @@ paths:
                 items:
                   $ref: "#/components/schemas/ReverseRsvpResponse"
 
-  /attendance/absence/{request_id}/decide:
+  /api/v1/attendance/absence/{log_id}/decide:
     patch:
       tags: [Attendance]
       summary: Approve or deny an absence request
       parameters:
-        - name: request_id
+        - name: log_id
           in: path
           required: true
           schema:
@@ -2556,7 +2607,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /attendance/annotations:
+  /api/v1/attendance/annotations:
     post:
       tags: [Attendance]
       summary: Create a ledger annotation
@@ -2582,7 +2633,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /attendance/annotations/{ledger_id}:
+  /api/v1/attendance/annotations/{ledger_id}:
     get:
       tags: [Attendance]
       summary: Get all annotations for a ledger entry
@@ -2611,7 +2662,7 @@ paths:
           $ref: "#/components/responses/NotFound"
 
   # ── Guest Gate ────────────────────────────
-  /guest/register-checkin:
+  /api/v1/guest/register-checkin:
     post:
       tags: [Guest Gate]
       summary: Register an organization visitor (kiosk)
@@ -2641,7 +2692,7 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
-  /guest/directory:
+  /api/v1/guest/directory:
     get:
       tags: [Guest Gate]
       summary: Staff availability directory (kiosk)
@@ -2669,7 +2720,7 @@ paths:
                 items:
                   $ref: "#/components/schemas/StaffAvailabilityResponse"
 
-  /guest/:
+  /api/v1/guest/pending:
     get:
       tags: [Guest Gate]
       summary: List pending guest requests for authenticated staff
@@ -2684,12 +2735,12 @@ paths:
                 items:
                   $ref: "#/components/schemas/GuestResponse"
 
-  /guest/{transaction_id}/decide:
+  /api/v1/guest/{entry_id}/decide:
     patch:
       tags: [Guest Gate]
       summary: Accept or decline a guest visit
       parameters:
-        - name: transaction_id
+        - name: entry_id
           in: path
           required: true
           schema:
@@ -2713,7 +2764,7 @@ paths:
           $ref: "#/components/responses/NotFound"
 
   # ── Ingestion ─────────────────────────────
-  /ingestion/upload-csv:
+  /api/v1/ingestion/upload-csv:
     post:
       tags: [Ingestion]
       summary: Bulk import schedule from CSV
@@ -2805,7 +2856,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /ingestion/generate-ledger:
+  /api/v1/ingestion/generate-ledger:
     post:
       tags: [Ingestion]
       summary: Trigger daily ledger generation
@@ -2848,7 +2899,44 @@ paths:
           $ref: "#/components/responses/Forbidden"
 
   # ── Calendar Sync ─────────────────────────
-  /sync/user-feed/{user_id}.ics:
+  /api/v1/sync/feed-token:
+    get:
+      tags: [Calendar Sync]
+      summary: Get the caller's calendar feed token
+      description: >
+        Returns the token that keys the caller's iCalendar feed, minting one on
+        the first call. `feed_path` is the path to subscribe, already built from
+        the token. The token is the only thing guarding the feed, so hand it out
+        the way a password is handed out.
+      responses:
+        "200":
+          description: The feed token and the path built from it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedToken"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/sync/feed-token/rotate:
+    post:
+      tags: [Calendar Sync]
+      summary: Replace the caller's calendar feed token
+      description: >
+        Mints a new token and invalidates the old one. Every calendar app
+        subscribed to the old path stops updating and has to be resubscribed,
+        which is the point: this is what to call when a feed URL has leaked.
+      responses:
+        "200":
+          description: The new feed token and the path built from it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedToken"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/sync/user-feed/{feed_token}.ics:
     get:
       tags: [Calendar Sync]
       summary: iCalendar feed for a user (rolling 37-day window)
@@ -2865,11 +2953,15 @@ paths:
         ad-hoc day nobody gave a time to, or a day generated before the ledger
         carried its own window.
       parameters:
-        - name: user_id
+        - name: feed_token
           in: path
           required: true
           schema:
             type: string
+          description: >
+            The token from `GET /api/v1/sync/feed-token`, not a user id. The
+            feed itself is unauthenticated so a calendar app can poll it, which
+            leaves the token as the only thing guarding it.
       responses:
         "200":
           description: iCalendar feed.
@@ -2882,6 +2974,29 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+
+  # ── WebSocket ─────────────────────────
+  /api/v1/ws/stats:
+    get:
+      tags: [WebSocket]
+      summary: Count of open websocket connections
+      description: >
+        Requires `SUPER_ADMIN`. The count is organization-wide, and there is
+        nothing in it a unit admin could be shown only their own share of.
+      responses:
+        "200":
+          description: Open connection count.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  online_connections:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   # ── Health ────────────────────────────────
   /health:
@@ -2937,6 +3052,3 @@ paths:
 #     "payload": { "ledger_id": 1042, "new_state": "ON_LEAVE" } }
 #
 # The AUTH frame is the only thing a client sends upstream.
-#
-# GET /ws/stats reports { "online_connections": <n> } and needs
-# SUPER_ADMIN: it is an organization-wide headcount.

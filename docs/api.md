@@ -576,7 +576,6 @@ Returns today's `DailyLedger` entries scoped to the caller's role:
 - **Member** → sessions for their registered activities
 - **Admin** → all sessions
 
-### GET /schedule/ledger/{ledger_id}
 ### PATCH /schedule/ledger/{ledger_id} `[STAFF, ADMIN]`
 
 ```json
@@ -876,7 +875,7 @@ else, which matters for a device sitting in a public space. See
 roster cannot be walked one letter at a time. Returns staff with `OPEN_AD_HOC`
 or `VERY_FREE` status.
 
-### GET /guest/ `[STAFF]`
+### GET /guest/pending `[STAFF]`
 
 Pending guest requests targeting the authenticated staff member.
 
@@ -1008,13 +1007,17 @@ timeouts.
 
 ## Calendar Sync
 
-### GET /sync/user-feed/{user_id}.ics
+### GET /sync/user-feed/{feed_token}.ics
 
 Live iCalendar feed (rolling 37-day window). Subscribe directly in any calendar app:
 
 ```
-webcal://<server>/api/v1/sync/user-feed/FAC001.ics
+webcal://<server>/api/v1/sync/user-feed/<feed_token>.ics
 ```
+
+The feed takes a token, not a user id. `GET /sync/feed-token` returns the
+caller's token and the path built from it, and `POST /sync/feed-token/rotate`
+replaces it, which stops every calendar subscribed to the old path.
 
 Staff feed includes sessions where they are active or substitute lead.
 Member feed includes all registered activities.
