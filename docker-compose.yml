@@ -55,7 +55,7 @@ services:
       dockerfile: Dockerfile
     container_name: chronos_core_engine
     environment:
-      - DATABASE_URL=postgresql://chronos_admin:${DB_PASSWORD:-SecureCloud2026}@chronos-db:5432/chronos_ledger
+      - DATABASE_URL=postgresql://chronos_admin:${DB_PASSWORD:?set DB_PASSWORD before compose up}@chronos-db:5432/chronos_ledger
       - REDIS_URL=${REDIS_URL:-redis://chronos-cache:6379/0}
       - JWT_SECRET_SIGNING_KEY=${JWT_SECRET_SIGNING_KEY:?set JWT_SECRET_SIGNING_KEY before compose up}
       - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
@@ -129,7 +129,7 @@ services:
     container_name: chronos_postgres_persistence
     environment:
       POSTGRES_USER: chronos_admin
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-SecureCloud2026}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD before compose up}
       POSTGRES_DB: chronos_ledger
     volumes:
       - chronos_data:/var/lib/postgresql/data

@@ -7,7 +7,7 @@ import pytest
 from app.core.config import (
     MINIMUM_SIGNING_KEY_LENGTH,
     PUBLISHED_ADMIN_PASSWORDS,
-    PUBLISHED_DATABASE_URL,
+    PUBLISHED_DB_PASSWORDS,
     PUBLISHED_SIGNING_KEYS,
     Settings,
     assert_production_secrets_are_set,
@@ -15,6 +15,8 @@ from app.core.config import (
 
 GOOD_KEY = "b7f1" * 16  # 64 hex characters, the shape openssl rand -hex 32 gives
 GOOD_DB = "postgresql://someone:a-real-password@db:5432/chronos_ledger"
+# The field default, which is also what a bare checkout runs on.
+PUBLISHED_DB = "postgresql://chronos_admin:SecureCloud2026@localhost:5432/chronos_ledger"
 
 
 def _settings(**overrides) -> Settings:
@@ -46,9 +48,18 @@ def test_production_refuses_a_short_signing_key():
     assert str(MINIMUM_SIGNING_KEY_LENGTH) in str(exc.value)
 
 
-def test_production_refuses_the_published_database_password():
+@pytest.mark.parametrize("host", ["localhost", "chronos-db"])
+@pytest.mark.parametrize("published", sorted(PUBLISHED_DB_PASSWORDS))
+def test_production_refuses_a_published_database_password(published, host):
+    """Both published passwords, at both hostnames a deployment produces.
+
+    chronos-db is the one that matters: every compose deployment builds it,
+    and the check used to compare the whole URL against the localhost
+    literal, so it stayed silent on the only shape production ever has.
+    """
+    url = f"postgresql://chronos_admin:{published}@{host}:5432/chronos_ledger"
     with pytest.raises(RuntimeError) as exc:
-        assert_production_secrets_are_set(_settings(database_url=PUBLISHED_DATABASE_URL))
+        assert_production_secrets_are_set(_settings(database_url=url))
     assert "DATABASE_URL" in str(exc.value)
 
 
@@ -88,7 +99,7 @@ def test_the_refusal_names_every_problem_at_once():
         assert_production_secrets_are_set(
             _settings(
                 jwt_secret_signing_key="insecure_dev_key_change_in_production",
-                database_url=PUBLISHED_DATABASE_URL,
+                database_url=PUBLISHED_DB,
             )
         )
     message = str(exc.value)
@@ -106,6 +117,6 @@ def test_development_keeps_the_defaults():
         Settings(
             app_env="development",
             jwt_secret_signing_key="insecure_dev_key_change_in_production",
-            database_url=PUBLISHED_DATABASE_URL,
+            database_url=PUBLISHED_DB,
         )
     )

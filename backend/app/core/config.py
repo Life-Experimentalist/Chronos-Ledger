@@ -21,7 +21,18 @@ PUBLISHED_SIGNING_KEYS = frozenset(
         "replace_with_64_char_hex_secret_generated_by_openssl_rand_hex_32",
     }
 )
-PUBLISHED_DATABASE_URL = "postgresql://chronos_admin:SecureCloud2026@localhost:5432/chronos_ledger"
+# The database passwords published in this repository: the one the field
+# default and docker-compose.prod.yml both carried, and the placeholder in
+# .env.example. Compared against the password rather than the whole URL,
+# because the same password reaches production as @localhost in a bare
+# checkout and as @chronos-db under compose, and an exact-URL match saw
+# neither of the shapes a deployment actually has.
+PUBLISHED_DB_PASSWORDS = frozenset(
+    {
+        "SecureCloud2026",
+        "change_me_password",
+    }
+)
 # The password migration 001 used to seed for the administrator account,
 # and the placeholder .env.example carries in its place. Either one lets
 # whoever reaches the instance first take a SUPER_ADMIN account, so this is
@@ -218,8 +229,8 @@ def describe_production_secret_problems(settings: Settings) -> list[str]:
             f"JWT_SECRET_SIGNING_KEY is {len(settings.jwt_secret_signing_key)} characters, "
             f"below the {MINIMUM_SIGNING_KEY_LENGTH} minimum"
         )
-    if settings.database_url == PUBLISHED_DATABASE_URL:
-        problems.append("DATABASE_URL still carries the password published in this repository")
+    if any(f":{published}@" in settings.database_url for published in PUBLISHED_DB_PASSWORDS):
+        problems.append("DATABASE_URL still carries a password published in this repository")
     if settings.initial_admin_password in PUBLISHED_ADMIN_PASSWORDS:
         problems.append(
             "INITIAL_ADMIN_PASSWORD is a value published in this repository, "

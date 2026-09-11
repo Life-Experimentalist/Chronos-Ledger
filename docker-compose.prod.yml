@@ -63,7 +63,7 @@ services:
     <<: [*restart, *chronos-net]
     image: ghcr.io/${GHCR_OWNER:-life-experimentalist}/chronos-ledger-backend:${VERSION:-latest}
     environment:
-      DATABASE_URL: postgresql://chronos_admin:${DB_PASSWORD:-SecureCloud2026}@chronos-db:5432/chronos_ledger
+      DATABASE_URL: postgresql://chronos_admin:${DB_PASSWORD:?DB_PASSWORD is required}@chronos-db:5432/chronos_ledger
       REDIS_URL: redis://chronos-cache:6379/0
       JWT_SECRET_SIGNING_KEY: ${JWT_SECRET_SIGNING_KEY:?JWT_SECRET_SIGNING_KEY is required}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
@@ -140,7 +140,7 @@ services:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: chronos_admin
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-SecureCloud2026}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       POSTGRES_DB: chronos_ledger
     volumes:
       - chronos_data:/var/lib/postgresql/data
