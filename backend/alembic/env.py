@@ -11,7 +11,9 @@ from alembic import context
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Run in-process (the Postgres tests do), the default would switch off
+    # every logger the app had already set up.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Override URL from environment if set
 db_url = os.getenv("DATABASE_URL")
