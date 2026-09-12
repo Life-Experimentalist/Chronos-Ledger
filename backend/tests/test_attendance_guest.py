@@ -4,17 +4,21 @@
 
 import datetime
 import json
+import re
 
 import pytest
 import redis
 from pydantic import ValidationError
 
 from app.core.config import Settings, get_settings
+from app.core.security import hash_visit_code
 from app.core.time import org_today
 from app.core.websocket_manager import socket_broker
+from app.cron.guest_retention import purge_old_guest_check_ins
 from app.models.db import (
     Activity,
     DailyLedger,
+    GuestGateRegistry,
     InstitutionalRole,
     PlanningCycle,
     Resource,
@@ -779,6 +783,70 @@ def test_guest_decide_only_by_target_staff(client, db, seed_users, kiosk_key):
     assert res.status_code == 200
     assert res.json() == {"status": "VERIFIED_APPROVED", "guest": "Ravi Verma"}
     assert client.get("/api/v1/guest/pending", headers=fac).json() == []
+
+
+# -- The visitor's code ----------------------------------------------------------
+
+_VISIT_CODE = re.compile(r"[2-9A-HJKMNP-Z]{4}(-[2-9A-HJKMNP-Z]{4}){3}")
+
+
+def _check_in(client, kiosk_key):
+    res = client.post("/api/v1/guest/register-checkin", json=_GUEST, headers=kiosk_key)
+    assert res.status_code == 200, res.text
+    return res.json()
+
+
+def test_guest_checkin_hands_back_a_code_and_keeps_only_its_hash(client, db, seed_users, kiosk_key):
+    body = _check_in(client, kiosk_key)
+    code = body["visit_code"]
+    assert _VISIT_CODE.fullmatch(code), code
+    entry = db.get(GuestGateRegistry, body["reference_token"])
+    assert entry.visit_code_hash == hash_visit_code(code)
+
+
+def test_a_visit_code_follows_the_visit_without_a_credential(client, seed_users, kiosk_key):
+    body = _check_in(client, kiosk_key)
+    url = f"/api/v1/guest/visit/{body['visit_code']}"
+
+    res = client.get(url)
+    assert res.status_code == 200, res.text
+    # Status only: whoever stands behind the visitor can read the code too.
+    assert set(res.json()) == {"handshake_status", "timestamp_marked"}
+    assert res.json()["handshake_status"] == "PENDING_VERIFICATION"
+
+    fac = login(client, "staff@test.internal", STAFF_PASSWORD)
+    res = client.patch(
+        f"/api/v1/guest/{body['reference_token']}/decide",
+        json={"decision": "VERIFIED_APPROVED"},
+        headers=fac,
+    )
+    assert res.status_code == 200, res.text
+    assert client.get(url).json()["handshake_status"] == "VERIFIED_APPROVED"
+
+
+def test_a_visit_code_ignores_case_and_separators(client, seed_users, kiosk_key):
+    code = _check_in(client, kiosk_key)["visit_code"]
+    for typed in (code.lower().replace("-", " "), code.replace("-", "")):
+        assert client.get(f"/api/v1/guest/visit/{typed}").status_code == 200, typed
+
+
+@pytest.mark.parametrize("code", ["2345-6789-ABCD-EFGH", "short", "2" * 17])
+def test_an_unknown_visit_code_is_a_404(client, db, seed_users, code):
+    # A check-in from before there were codes has a NULL hash. Input that
+    # cannot be a code must not be compared with that NULL and find the row.
+    db.add(GuestGateRegistry(**_GUEST))
+    db.commit()
+    assert client.get(f"/api/v1/guest/visit/{code}").status_code == 404
+
+
+def test_a_purged_visit_code_is_a_404(client, db, seed_users, kiosk_key):
+    body = _check_in(client, kiosk_key)
+    entry = db.get(GuestGateRegistry, body["reference_token"])
+    entry.timestamp_marked = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=2)
+    db.commit()
+
+    assert purge_old_guest_check_ins(db, 1) == 1
+    assert client.get(f"/api/v1/guest/visit/{body['visit_code']}").status_code == 404
 
 
 # -- Notices over the socket ---------------------------------------------------

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0
 
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios'
+import type { GuestVisitStatus } from '@/types'
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api/v1'
 
@@ -161,6 +162,12 @@ export const guestApi = {
   decidePending: (id: number, decision: string) =>
     api.patch(`/guest/${id}/decide`, { decision }),
   getPendingGuests: () => api.get('/guest/pending'),
+  // Visitor-side, from the kiosk or the visitor's own phone: the code is the
+  // only credential, so plain axios, with neither a token nor a device key.
+  visitStatus: (code: string) =>
+    axios.get<GuestVisitStatus>(`${BASE_URL}/guest/visit/${encodeURIComponent(code)}`, {
+      timeout: 10000,
+    }),
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────

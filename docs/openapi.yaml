@@ -14,8 +14,8 @@ info:
   description: |
     Organization Schedule & Attendance Management REST API.
 
-    **Authentication**: All endpoints except `/config` and `/auth/login`
-    require a Bearer JWT in the `Authorization` header. An API key in
+    **Authentication**: All endpoints except `/config`, `/auth/login` and
+    `/guest/visit/{code}` require a Bearer JWT in the `Authorization` header. An API key in
     `X-API-Key` is accepted in place of one anywhere, which is how a lobby
     terminal with no one to sign in reaches `/guest/register-checkin` and
     `/guest/directory`. A key can be narrowed to part of the API and given
@@ -1307,6 +1307,19 @@ components:
         timestamp_marked:
           type: string
           format: date-time
+
+    GuestVisitStatus:
+      type: object
+      description: >
+        What a visit code opens. The name, phone and target are left out,
+        because a code on a kiosk screen can be read over a shoulder.
+      properties:
+        handshake_status:
+          $ref: "#/components/schemas/LogVerificationState"
+        timestamp_marked:
+          type: string
+          format: date-time
+          description: When the visitor checked in.
 
     StaffAvailabilityResponse:
       type: object
@@ -3193,7 +3206,8 @@ paths:
         The visitor does not authenticate; the kiosk device does, with an
         admin-issued API key in `X-API-Key`.
         Sends a `GUEST_HANDSHAKE_REQ` WebSocket frame to the target staff
-        member. Nothing is sent back to the kiosk when they decide.
+        member. The kiosk and the visitor learn the decision from
+        `/guest/visit/{code}`, with the code this response carries.
       requestBody:
         required: true
         content:
@@ -3214,6 +3228,13 @@ paths:
                   reference_token:
                     type: integer
                     description: The entry id that `/guest/{entry_id}/decide` takes.
+                  visit_code:
+                    type: string
+                    example: 7KQM-3XHP-R9DW-4TNC
+                    description: >
+                      The visitor's code for `/guest/visit/{code}`. It is in
+                      this response and nowhere else: the server keeps only
+                      its hash.
         "404":
           description: Target staff not found.
           content:
@@ -3252,6 +3273,40 @@ paths:
                 items:
                   $ref: "#/components/schemas/StaffAvailabilityResponse"
 
+  /api/v1/guest/visit/{code}:
+    get:
+      tags: [Guest Gate]
+      summary: Follow a visit by its code (visitor)
+      description: >
+        No credential: the code the check-in returned is the credential.
+        Case, spaces and dashes are ignored. The answer is the visit's status
+        and nothing about who came or whom they came to see. Not rate
+        limited: a code is about 79 bits, and a right guess shows only whether
+        one unnamed visit was approved.
+      security: []
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+          example: 7KQM-3XHP-R9DW-4TNC
+      responses:
+        "200":
+          description: The visit's status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuestVisitStatus"
+        "404":
+          description: >
+            No visit with that code, including one deleted under
+            `GUEST_RETENTION_DAYS`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/guest/pending:
     get:
       tags: [Guest Gate]
@@ -3285,7 +3340,7 @@ paths:
               $ref: "#/components/schemas/GuestDecisionRequest"
       responses:
         "200":
-          description: Decision recorded. Nothing is sent to the kiosk.
+          description: Decision recorded. The kiosk reads it from `/guest/visit/{code}`.
           content:
             application/json:
               schema:

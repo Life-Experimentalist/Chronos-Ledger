@@ -1163,11 +1163,20 @@ else, which matters for a device sitting in a public space. See
 }
 ```
 
-The response carries the entry id the staff member decides on:
+The response carries the entry id the staff member decides on, and the
+visitor's code:
 
 ```json
-{ "registration_state": "PENDING_STAFF_AUTH", "reference_token": 57 }
+{
+  "registration_state": "PENDING_STAFF_AUTH",
+  "reference_token": 57,
+  "visit_code": "7KQM-3XHP-R9DW-4TNC"
+}
 ```
+
+`visit_code` is in this response and nowhere else, since the server keeps only
+its hash. Show it to the visitor: it is how they, and the kiosk, follow the
+answer through [`GET /guest/visit/{code}`](#get-guestvisitcode-public).
 
 ### GET /guest/directory `[KIOSK KEY]`
 
@@ -1189,7 +1198,25 @@ Pending guest requests targeting the authenticated staff member.
 
 Only the staff member the visitor asked for can decide; anyone else gets `404`.
 The response is `{"status": "VERIFIED_APPROVED", "guest": "John Smith"}`.
-Nothing is sent back to the kiosk.
+The kiosk and the visitor see the decision through `GET /guest/visit/{code}`.
+
+### GET /guest/visit/{code} `[public]`
+
+What a visitor follows their check-in with. No credential: the code the
+check-in returned is the credential. Case and dashes do not matter, so
+`7kqm 3xhp r9dw 4tnc` finds the same visit. The answer is the visit's status
+and when it was made, and nothing about who came or whom they came to see,
+since a code on a kiosk screen can be read by whoever is standing behind the
+visitor:
+
+```json
+{ "handshake_status": "VERIFIED_APPROVED", "timestamp_marked": "2026-09-12T05:31:07Z" }
+```
+
+`404` for a code that matches no visit, including one deleted under
+`GUEST_RETENTION_DAYS`. It is not rate limited: a code is about 79 bits, so
+guessing one is not a strategy, and a right guess shows only whether one
+unnamed visit was approved.
 
 ---
 

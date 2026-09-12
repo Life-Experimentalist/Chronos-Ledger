@@ -896,7 +896,7 @@ const ROLES = [
   { icon:'user-check', name:'Member', path:'/member/dashboard', bg:'rgba(129,140,248,.1)', color:'var(--accent)',
     caps:["Live timeline of today's classes with status indicators",'Geofenced attendance marking over GPS','Staff locator with real-time availability','Offline attendance queue with background sync'] },
   { icon:'users', name:'Guest (kiosk key)', path:'/guest/kiosk', bg:'rgba(245,158,11,.1)', color:'var(--warning)',
-    caps:['Search staff directory by name','Submit check-in request with purpose','Real-time notification to target staff','Public availability status display'] },
+    caps:['Search staff directory by name','Submit check-in request with purpose','Real-time notification to target staff','Visit code to follow the answer from a phone'] },
 ];
 
 const INSTALL_STEPS = [
@@ -918,7 +918,7 @@ const API_GROUPS = [
   { group:'Auth', eps:['POST /auth/login','GET  /auth/me','POST /auth/change-password'] },
   { group:'Schedule', eps:['GET  /schedule/ledger/today','GET  /schedule/staff/{id}/location','POST /schedule/cycles'] },
   { group:'Attendance', eps:['POST /attendance/mark','POST /attendance/batch','POST /attendance/absence'] },
-  { group:'Guest', eps:['POST /guest/register-checkin','GET  /guest/directory','PATCH /guest/{id}/decide'] },
+  { group:'Guest', eps:['POST /guest/register-checkin','GET  /guest/directory','PATCH /guest/{id}/decide','GET  /guest/visit/{code}'] },
   { group:'Ingestion', eps:['POST /ingestion/upload-csv','POST /ingestion/generate-ledger'] },
   { group:'Sync', eps:['GET  /sync/user-feed/{id}.ics','WS   /ws?token={jwt}','GET  /ws/stats'] },
 ];

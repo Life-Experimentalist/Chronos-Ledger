@@ -548,7 +548,7 @@ const ROLES = [
       'Search staff directory by name',
       'Submit check-in request with purpose',
       'Real-time notification to target staff',
-      'Public availability status display',
+      'Visit code to follow the answer from a phone',
     ],
   },
 ]
@@ -591,7 +591,12 @@ const API_GROUPS = [
   },
   {
     group: 'Guest',
-    endpoints: ['POST /guest/register-checkin', 'GET /guest/directory', 'PATCH /guest/{id}/decide'],
+    endpoints: [
+      'POST /guest/register-checkin',
+      'GET /guest/directory',
+      'PATCH /guest/{id}/decide',
+      'GET /guest/visit/{code}',
+    ],
   },
   {
     group: 'Ingestion',

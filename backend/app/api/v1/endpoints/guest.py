@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core import rate_limit
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import generate_visit_code, get_current_user, hash_visit_code
 from app.core.websocket_manager import socket_broker
 from app.models.db import (
     AccessReadiness,
@@ -21,6 +21,7 @@ from app.schemas.guest import (
     GuestCheckInRequest,
     GuestDecisionRequest,
     GuestResponse,
+    GuestVisitStatus,
     StaffAvailabilityResponse,
 )
 
@@ -67,12 +68,14 @@ def process_guest_entry(
     ):
         raise HTTPException(status_code=404, detail="Staff member not found")
 
+    visit_code = generate_visit_code()
     entry = GuestGateRegistry(
         guest_name=payload.guest_name,
         contact_phone=payload.contact_phone,
         originating_body=payload.originating_body,
         target_staff_id=payload.target_staff_id,
         visitation_intent=payload.visitation_intent,
+        visit_code_hash=hash_visit_code(visit_code),
     )
     db.add(entry)
     db.commit()
@@ -91,7 +94,12 @@ def process_guest_entry(
             "intent": payload.visitation_intent,
         },
     )
-    return {"registration_state": "PENDING_STAFF_AUTH", "reference_token": entry.id}
+    # The visit code exists here and nowhere else; the row keeps its hash.
+    return {
+        "registration_state": "PENDING_STAFF_AUTH",
+        "reference_token": entry.id,
+        "visit_code": visit_code,
+    }
 
 
 @router.patch("/{entry_id}/decide")
@@ -115,6 +123,25 @@ def decide_guest_entry(
     entry.handshake_status = payload.decision
     db.commit()
     return {"status": payload.decision.value, "guest": entry.guest_name}
+
+
+@router.get("/visit/{code}", response_model=GuestVisitStatus)
+def get_visit_status(code: str, db: Session = Depends(get_db)):
+    # No credential. The visitor has no account and the phone they follow the
+    # check-in from holds no kiosk key, so the code is the credential, and it
+    # opens one check-in's status and nothing about who made it or whom they
+    # came to see. core/rate_limit.py says why it carries no budget.
+    digest = hash_visit_code(code)
+    # A None digest must not reach the filter: compared with None the column
+    # reads IS NULL, which is every check-in made before there were codes.
+    entry = (
+        db.query(GuestGateRegistry).filter(GuestGateRegistry.visit_code_hash == digest).first()
+        if digest
+        else None
+    )
+    if entry is None:
+        raise HTTPException(status_code=404, detail="No visit with that code")
+    return entry
 
 
 @router.get("/pending", response_model=list[GuestResponse])

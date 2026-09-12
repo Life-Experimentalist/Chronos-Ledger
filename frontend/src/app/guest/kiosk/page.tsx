@@ -2,18 +2,23 @@
 // Copyright 2026 Chronos Ledger Contributors
 // Licensed under the Apache License, Version 2.0
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { motion, AnimatePresence } from 'framer-motion'
 import { isAxiosError } from 'axios'
-import { Search, User, Phone, Building2, MessageSquare, Loader2, CheckCircle2, ArrowLeft, KeyRound } from 'lucide-react'
+import { Search, User, Phone, Building2, MessageSquare, Loader2, CheckCircle2, CircleX, ArrowLeft, KeyRound } from 'lucide-react'
 import { guestApi, kioskKey } from '@/lib/api'
 import { useVocabulary } from '@/hooks/useVocabulary'
-import type { StaffAvailability } from '@/types'
+import type { LogVerificationState, StaffAvailability } from '@/types'
 
 type KioskStep = 'provision' | 'search' | 'form' | 'pending' | 'done'
+
+// How often a waiting kiosk asks for the answer, and how long it shows one
+// before it clears itself for the next visitor.
+const POLL_MS = 5000
+const DONE_RESET_MS = 30000
 
 // Upper bounds mirror the server's, so a visitor is told what is wrong here
 // instead of meeting an opaque 422 after they press submit.
@@ -46,7 +51,8 @@ export default function GuestKioskPage() {
   const [searchResults, setSearchResults] = useState<StaffAvailability[]>([])
   const [searching, setSearching] = useState(false)
   const [selectedStaff, setSelectedStaff] = useState<StaffAvailability | null>(null)
-  const [referenceToken, setReferenceToken] = useState<number | null>(null)
+  const [visitCode, setVisitCode] = useState<string | null>(null)
+  const [decision, setDecision] = useState<LogVerificationState | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   const { register, handleSubmit, formState: { errors }, reset } = useForm<CheckInForm>({
@@ -103,7 +109,7 @@ export default function GuestKioskPage() {
         ...data,
         target_staff_id: selectedStaff.staff_id,
       })
-      setReferenceToken(res.data.reference_token)
+      setVisitCode(res.data.visit_code)
       setStep('pending')
     } catch (err) {
       if (isAxiosError(err) && err.response?.status === 401) handleUnauthorized()
@@ -113,14 +119,49 @@ export default function GuestKioskPage() {
     }
   }
 
-  const resetKiosk = () => {
+  const resetKiosk = useCallback(() => {
     setStep('search')
     setSearchQuery('')
     setSearchResults([])
     setSelectedStaff(null)
-    setReferenceToken(null)
+    setVisitCode(null)
+    setDecision(null)
     reset()
-  }
+  }, [reset])
+
+  // Nothing is pushed to a kiosk, since nobody is signed in on it to push to.
+  // It asks with the visit code, the same way the visitor's phone does.
+  useEffect(() => {
+    if (step !== 'pending' || !visitCode) return
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout>
+    const ask = async () => {
+      try {
+        const res = await guestApi.visitStatus(visitCode)
+        if (cancelled) return
+        if (res.data.handshake_status !== 'PENDING_VERIFICATION') {
+          setDecision(res.data.handshake_status)
+          setStep('done')
+          return
+        }
+      } catch {
+        // A dropped connection or a restarting server: ask again next time.
+        if (cancelled) return
+      }
+      timer = setTimeout(ask, POLL_MS)
+    }
+    timer = setTimeout(ask, POLL_MS)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [step, visitCode])
+
+  useEffect(() => {
+    if (step !== 'done') return
+    const timer = setTimeout(resetKiosk, DONE_RESET_MS)
+    return () => clearTimeout(timer)
+  }, [step, resetKiosk])
 
   return (
     <div className="min-h-screen bg-chronos-dark flex flex-col items-center justify-center p-6 relative overflow-hidden">
@@ -303,7 +344,7 @@ export default function GuestKioskPage() {
             </motion.div>
           )}
 
-          {/* Step 3: Waiting for staff response */}
+          {/* Step 3: Waiting for staff response, with the code to follow it by */}
           {step === 'pending' && (
             <motion.div key="pending" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="glass-card p-10 text-center">
               <div className="w-16 h-16 rounded-full border-4 border-chronos-teal border-t-transparent animate-spin mx-auto mb-6" />
@@ -312,19 +353,51 @@ export default function GuestKioskPage() {
                 Your request has been sent to <strong className="text-chronos-teal">{selectedStaff?.full_name}</strong>.
                 Please wait while they review your request.
               </p>
-              {referenceToken && (
-                <div className="bg-chronos-surface rounded-xl p-3 inline-block">
-                  <p className="text-xs text-chronos-muted">Reference Token</p>
-                  <p className="text-2xl font-mono font-bold text-chronos-teal">#{referenceToken}</p>
+              {visitCode && (
+                <div className="bg-chronos-surface rounded-xl p-4 inline-block">
+                  <p className="text-xs text-chronos-muted">Your Visit Code</p>
+                  <p className="text-2xl font-mono font-bold text-chronos-teal tracking-wider">{visitCode}</p>
+                  <p className="text-xs text-chronos-muted mt-2">
+                    {`Follow the answer on your phone at ${window.location.host}/guest/visit`}
+                  </p>
                 </div>
               )}
-              <p className="text-xs text-chronos-muted mt-6">Show this screen to the security desk while waiting.</p>
+              <button onClick={resetKiosk} className="btn-secondary w-full justify-center py-3 mt-6">
+                Next Visitor
+              </button>
+            </motion.div>
+          )}
+
+          {/* Step 4: The answer, until the next visitor or the reset */}
+          {step === 'done' && (
+            <motion.div key="done" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="glass-card p-10 text-center">
+              {decision === 'VERIFIED_APPROVED' ? (
+                <>
+                  <CheckCircle2 className="w-16 h-16 text-chronos-teal mx-auto mb-6" />
+                  <h2 className="text-xl font-bold text-chronos-text mb-2">Request Approved</h2>
+                  <p className="text-chronos-text-dim text-sm">
+                    <strong className="text-chronos-teal">{selectedStaff?.full_name}</strong> is expecting you.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <CircleX className="w-16 h-16 text-chronos-danger mx-auto mb-6" />
+                  <h2 className="text-xl font-bold text-chronos-text mb-2">Request Declined</h2>
+                  <p className="text-chronos-text-dim text-sm">
+                    <strong className="text-chronos-text">{selectedStaff?.full_name}</strong> cannot see you right now.
+                    Please ask at the front desk.
+                  </p>
+                </>
+              )}
+              <button onClick={resetKiosk} className="btn-primary w-full justify-center py-3 mt-8 text-base">
+                Next Visitor
+              </button>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {step !== 'pending' && (
+      {step !== 'pending' && step !== 'done' && (
         <p className="mt-8 text-xs text-chronos-muted text-center relative">
           <a href="/" className="hover:text-chronos-text transition-colors">{`${vocab.staff} Sign In`}</a>
           {' · '}

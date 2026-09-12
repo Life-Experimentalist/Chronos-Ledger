@@ -35,6 +35,20 @@ class GuestResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class GuestVisitStatus(BaseModel):
+    """Everything a visit code answers with.
+
+    Whoever holds the code sees this, and a code on a kiosk screen can be
+    read over a shoulder, so the visitor's name, their phone number and whom
+    they came to see stay out of it.
+    """
+
+    handshake_status: LogVerificationState
+    timestamp_marked: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class StaffAvailabilityResponse(BaseModel):
     staff_id: str
     full_name: str

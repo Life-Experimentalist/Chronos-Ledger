@@ -11,8 +11,10 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   workboxOptions: {
     runtimeCaching: [
       {
-        // Cache API responses (exclude auth endpoints, never cache credentials)
-        urlPattern: /\/api\/v1\/(?!auth).*/,
+        // Cache API responses (exclude auth endpoints, never cache credentials).
+        // A visit lookup is polled for an answer that changes, carries its
+        // code in the path, and must never be answered from a cache.
+        urlPattern: /\/api\/v1\/(?!auth|guest\/visit).*/,
         handler: 'NetworkFirst',
         options: {
           cacheName: 'api-runtime-cache',

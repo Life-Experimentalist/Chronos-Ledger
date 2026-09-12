@@ -109,9 +109,9 @@ sequenceDiagram
     KI->>API: POST /guest/register-checkin<br/>X-API-Key (the kiosk's)
     API->>DB: INSERT GuestGateRegistry<br/>handshake_status = PENDING_VERIFICATION
     API->>DB: SELECT User WHERE id = target_staff_id
-    API-->>KI: 200 {registration_state, reference_token}
+    API-->>KI: 200 {registration_state, reference_token, visit_code}
     API->>WS: broadcast(staff_id, GUEST_HANDSHAKE_REQ)
-    KI-->>G: "Your request has been sent.<br/>Please wait."
+    KI-->>G: Shows the visit code<br/>"Please wait."
 
     WS-->>Fac: {event: GUEST_HANDSHAKE_REQ,<br/>payload: {transaction_reference, guest_name, organization, intent}}
     Note over Fac: NotificationPanel shows badge
@@ -120,15 +120,21 @@ sequenceDiagram
     API->>DB: UPDATE GuestGateRegistry<br/>handshake_status = VERIFIED_APPROVED
     API-->>Fac: 200 {status, guest}
 
-    Note over KI,G: Nothing is sent back to the kiosk.<br/>It shows the request as pending.
+    loop Every 5 seconds until decided
+        KI->>API: GET /guest/visit/{code}
+        API-->>KI: 200 {handshake_status, timestamp_marked}
+    end
+    KI-->>G: Approved, or declined
+
+    Note over KI,G: The visitor can follow the same code<br/>from a phone at /guest/visit
 ```
 
 **Step-by-step:**
 
 1. The **Guest Kiosk** (`/guest/kiosk`) is a page nobody signs in to. The terminal holds an API key an admin issues it once, and sends it with every call. It searches the staff directory (`GET /guest/directory?name=…`) to let the guest pick the right person.
-2. The check-in POST carries that key rather than anyone's bearer token. The server creates a `GuestGateRegistry` row and, once the response is out, pushes a `GUEST_HANDSHAKE_REQ` frame to the target staff's WebSocket connection.
+2. The check-in POST carries that key rather than anyone's bearer token. The server creates a `GuestGateRegistry` row, answers with a visit code for the visitor and, once the response is out, pushes a `GUEST_HANDSHAKE_REQ` frame to the target staff's WebSocket connection.
 3. If the staff is connected, their **NotificationPanel** badge increments and the **Interaction Desk** tab shows the incoming request within milliseconds.
-4. Staff approves or declines, and the `GuestGateRegistry` row is updated. Nothing is sent back to the kiosk.
+4. Staff approves or declines, and the `GuestGateRegistry` row is updated. Nothing is pushed to the kiosk, which has nobody signed in to push to. It asks `GET /guest/visit/{code}` with the code the check-in returned, and the visitor can ask the same from a phone at `/guest/visit`. The row keeps only the code's hash.
 
 ---
 

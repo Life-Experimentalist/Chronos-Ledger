@@ -84,6 +84,11 @@ export interface GuestEntry {
   timestamp_marked: string
 }
 
+export interface GuestVisitStatus {
+  handshake_status: LogVerificationState
+  timestamp_marked: string
+}
+
 export interface StaffLocation {
   staff_id: string
   full_name: string

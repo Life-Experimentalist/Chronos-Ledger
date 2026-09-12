@@ -13,7 +13,12 @@ Nothing else is counted. A bearer token, an API key and a feed token are all
 256 bits of `secrets`, and guessing one is not a strategy, so a budget there
 would only get in the way of the integrations this is meant to have. The feed
 budget is a guard against one subscriber polling in a loop, not against
-someone enumerating tokens, which is not a thing that can be done.
+someone enumerating tokens, which is not a thing that can be done. A
+visitor's check-in code is shorter, about 79 bits, because a person types it
+on a phone. That is still far past guessing, and a right guess would show
+only whether one unnamed visit was approved. Looking one up is a single
+indexed read, so the kiosk and the visitor polling it do no work worth a
+budget either.
 
 Fixed windows, not sliding. The count lives under a single key with a TTL and
 the budget refills when that key expires. A sliding window is more accurate

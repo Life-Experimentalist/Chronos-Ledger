@@ -75,6 +75,36 @@ def hash_api_key(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+# No 0, 1, I, L or O: a visit code is read off a screen and typed on a phone,
+# and those are the characters people misread.
+VISIT_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+VISIT_CODE_LENGTH = 16
+
+
+def generate_visit_code() -> str:
+    """The code a visitor follows their check-in with, in groups of four.
+
+    Sixteen characters from that alphabet are about 79 bits: short enough to
+    type on a phone and far past guessing. The visitor is shown it once and
+    the database keeps only its hash.
+    """
+    raw = "".join(secrets.choice(VISIT_CODE_ALPHABET) for _ in range(VISIT_CODE_LENGTH))
+    return "-".join(raw[i : i + 4] for i in range(0, VISIT_CODE_LENGTH, 4))
+
+
+def hash_visit_code(code: str) -> str | None:
+    """The stored form of a visit code, or None when the input cannot be one.
+
+    Case and separators do not count, so a code typed as "abcd efgh ..." finds
+    the check-in the kiosk showed as "ABCD-EFGH-...". Anything that is not
+    sixteen characters once they are gone is turned away before it is hashed.
+    """
+    cleaned = "".join(ch for ch in code if ch.isascii() and ch.isalnum()).upper()
+    if len(cleaned) != VISIT_CODE_LENGTH:
+        return None
+    return hashlib.sha256(cleaned.encode("utf-8")).hexdigest()
+
+
 def decode_token(token: str) -> dict[str, Any] | None:
     try:
         return jwt.decode(

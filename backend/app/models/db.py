@@ -440,6 +440,10 @@ class GuestGateRegistry(Base):
         default=LogVerificationState.PENDING_VERIFICATION,
     )
     timestamp_marked = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    # What GET /guest/visit/{code} finds the check-in by. The code itself is
+    # shown to the visitor once and kept nowhere. Null on the check-ins made
+    # before there were codes.
+    visit_code_hash = Column(String(64), unique=True, index=True, nullable=True)
 
     target_staff = relationship("User", foreign_keys=[target_staff_id])
 
