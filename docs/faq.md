@@ -262,7 +262,11 @@ The import is all-or-nothing: any bad row rolls back the whole upload, and the r
 
 - `Missing columns: {...}`: the CSV header lacks one of the required columns listed above
 - `Cannot parse time value ...`: a time is not `HH:MM` or `HH:MM:SS` 24-hour format
-- a database constraint error: usually `day_of_week_index` outside 1 to 7, or the same member+activity+slot appearing twice
+- `email ... already belongs to ...`: the row gives a member an address another account already has
+- `lead '...' does not exist`: `lead_id` names nobody; the lead needs an account before a file can name them
+- `... is deactivated`: the row names a member or lead who has been deactivated; reactivate them or change the file
+- a message naming a room: the row puts a class in a room something else holds at that hour
+- `the import failed and nothing was saved`: the database refused a row, for example a `day_of_week_index` outside 1 to 7, and the server log has the reason
 
 Fix the offending rows and re-upload; re-running a corrected file is safe.
 

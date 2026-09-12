@@ -168,6 +168,15 @@ class ChronosIngestionEngine:
                 # 1. Upsert member user
                 member = users.get(str(row["member_id"]))
                 if not member:
+                    # The same refusal as an address change below, for the
+                    # same reason. A new member was never checked, so an
+                    # address already in use went as far as the unique index.
+                    owner = email_owners.get(str(row["member_email"]))
+                    if owner is not None:
+                        raise ValueError(
+                            f"member '{row['member_id']}': email "
+                            f"{row['member_email']} already belongs to '{owner}'"
+                        )
                     # One password per member. The shared constant this replaces
                     # meant a single leaked credential opened every account the
                     # import had ever created, across every unit.
@@ -334,10 +343,18 @@ class ChronosIngestionEngine:
                             f"from {taken['start']} to {taken['end']}, "
                             "so it cannot be put there"
                         )
+                lead = users.get(str(row["lead_id"]))
+                if lead is None:
+                    # The slot's lead is a foreign key, so an id naming nobody
+                    # failed in the database and the uploader was told only
+                    # that the import had failed.
+                    raise ValueError(
+                        f"activity '{row['activity_code']}': lead '{row['lead_id']}' does "
+                        "not exist; name somebody who has an account"
+                    )
                 # A lead who has left would be put in front of a class they can
                 # no longer sign in to run.
-                lead = users.get(str(row["lead_id"]))
-                if lead is not None and lead.deactivated_at is not None:
+                if lead.deactivated_at is not None:
                     raise ValueError(
                         f"activity '{row['activity_code']}': lead '{row['lead_id']}' is "
                         "deactivated; name another lead or reactivate them"

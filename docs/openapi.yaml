@@ -3243,8 +3243,8 @@ paths:
             The file was refused and nothing was saved. `detail` says why, and
             names the line where the file is at fault: a missing column, an
             unparseable time, an address already belonging to somebody else, a
-            room already taken for that window, a member or lead who has been
-            deactivated. Where the failure is the
+            room already taken for that window, a lead who has no account, a
+            member or lead who has been deactivated. Where the failure is the
             server's rather than the file's, `detail` says only that the import
             failed and that the reason is in the server log.
           content:

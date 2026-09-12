@@ -1115,6 +1115,10 @@ A row naming a member or a lead who has been deactivated is refused with
 `422` and the whole file rolled back. Reactivate them, or take the member's
 rows out of the file or name another lead.
 
+A row naming a lead who has no account is refused the same way, and so is a
+row giving a member an address that already belongs to somebody else, whether
+the member is new or already exists.
+
 A row that would put a class in a room already taken for that window, by a
 booking, by another class, or by a day already generated onto it, is refused
 with `422`, and the whole file is rolled back rather than the row skipped,

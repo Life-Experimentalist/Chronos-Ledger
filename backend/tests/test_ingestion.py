@@ -328,6 +328,51 @@ def test_an_address_taken_earlier_in_the_file_is_refused_later(client, db, seed_
     assert db.query(User).filter(User.id == "STU900").one().email_address == "ada@test.internal"
 
 
+def test_a_new_member_cannot_take_an_address_already_in_use(client, db, seed_users):
+    """Only a member whose address had changed was checked. A new one given an
+    address already in use went as far as the unique index, and came back as a
+    failure whose reason was only in the server log."""
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    csv_text = (
+        HEADER + "\n"
+        "STU900,Ada Newling,member@test.internal,MA201,Linear Algebra,CSE,2,09:00,10:00,FAC001,LH-201\n"
+    )
+    r = _upload(client, headers, cycle.id, csv_text)
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"] == (
+        "line 2: member 'STU900': email member@test.internal already belongs to 'STU001'"
+    )
+
+    # Or to somebody an earlier row of the same file created.
+    csv_text = _two_members_with("ada@test.internal", "ada@test.internal")
+    r = _upload(client, headers, cycle.id, csv_text)
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"] == (
+        "line 3: member 'STU901': email ada@test.internal already belongs to 'STU900'"
+    )
+
+
+def test_a_lead_with_no_account_is_refused(client, db, seed_users):
+    """On PostgreSQL an id naming nobody failed at the foreign key, and the
+    uploader was told only that the import had failed. SQLite, which most of
+    this suite runs on, has no foreign keys and took the row."""
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    csv_text = (
+        HEADER + "\n"
+        "STU900,Ada Newling,ada@test.internal,MA201,Linear Algebra,CSE,2,09:00,10:00,NOBODY,LH-201\n"
+    )
+    r = _upload(client, headers, cycle.id, csv_text)
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"] == (
+        "line 2: activity 'MA201': lead 'NOBODY' does not exist; name somebody who has an account"
+    )
+
+    db.expire_all()
+    assert db.query(User).filter(User.id == "STU900").first() is None
+
+
 def test_an_unknown_cycle_is_404_not_a_driver_error(client, db, seed_users):
     """A mistyped cycle id used to reach the foreign key and come back as SQL."""
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
