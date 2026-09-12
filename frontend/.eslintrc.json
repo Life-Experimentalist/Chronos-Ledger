@@ -1,0 +1,7 @@
+{
+  "extends": ["next/core-web-vitals"],
+  "rules": {
+    "prefer-const": "warn",
+    "@next/next/no-img-element": "off"
+  }
+}
