@@ -2384,7 +2384,11 @@ paths:
     patch:
       tags: [Schedule]
       summary: Update a ledger entry
-      description: Staff/Admin only. Used to set substitute, delivery format, or override geofence coords.
+      description: >
+        Requires `SUPER_ADMIN` or `UNIT_ADMIN`, and a unit admin only within
+        their own unit. Sets the substitute, the delivery format, or the day's
+        own geofence. A field left out, or sent as null, keeps its current
+        value.
       parameters:
         - name: ledger_id
           in: path
@@ -2399,15 +2403,23 @@ paths:
               $ref: "#/components/schemas/DailyLedgerUpdate"
       responses:
         "200":
-          description: Updated ledger entry.
+          description: The entry was updated.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DailyLedgerResponse"
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Updated
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: "#/components/responses/NotFound"
+          description: The ledger entry, or the user named in `substitute_lead_id`, does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/schedule/staff/{staff_id}/location:
     get:

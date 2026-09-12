@@ -650,7 +650,12 @@ Returns today's `DailyLedger` entries scoped to the caller's role:
 - **Member** → sessions for their registered activities
 - **Admin** → all sessions
 
-### PATCH /schedule/ledger/{ledger_id} `[STAFF, ADMIN]`
+### PATCH /schedule/ledger/{ledger_id} `[SUPER_ADMIN, UNIT_ADMIN]`
+
+A unit admin can edit only the days of their own unit's activities. A field
+left out, or sent as `null`, keeps its current value, and
+`substitute_lead_id` has to name an existing user (`404` otherwise). The
+response is `{"message": "Updated"}`.
 
 ```json
 // Patch to switch to online delivery

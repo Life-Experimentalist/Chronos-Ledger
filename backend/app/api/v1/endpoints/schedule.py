@@ -666,8 +666,25 @@ def update_ledger_entry(
     if not entry:
         raise HTTPException(status_code=404, detail="Ledger entry not found")
     ensure_unit_scope(current_user, entry.activity.unit_code)
-    for field, value in payload.model_dump(exclude_none=True).items():
-        setattr(entry, field, value)
+    substitute = payload.substitute_lead_id
+    if substitute is not None and not db.query(User.id).filter(User.id == substitute).first():
+        raise HTTPException(status_code=404, detail="Substitute not found")
+    # Named rather than taken from model_dump: the unit check above holds only
+    # while the day stays on its activity, so a field added to DailyLedgerUpdate
+    # later has to be listed here before it is written.
+    for field in (
+        "operational_state",
+        "substitute_lead_id",
+        "delivery_format",
+        "virtual_connection_string",
+        "latitude_target",
+        "longitude_target",
+        "altitude_target",
+        "precision_radius_meters",
+    ):
+        value = getattr(payload, field)
+        if value is not None:
+            setattr(entry, field, value)
     db.commit()
     return {"message": "Updated"}
 

@@ -166,4 +166,4 @@ flowchart TD
 2. Only cycles that are open and whose `date_bounds_start` to `date_bounds_end` includes tomorrow, both ends included, count. If there are none (e.g., term break), the job is a no-op.
 3. For tomorrow's `day_of_week_index`, the `StructuralMasterSlot` rows of those cycles are fetched.
 4. For each slot, an existence check is performed, backed by a unique key on `target_date` and `master_slot_id` (migration 017). This makes the job fully **idempotent**, safe to re-run manually via `POST /ingestion/generate-ledger` and safe on several instances at once, without creating duplicates.
-5. New rows are inserted with `operational_state = SCHEDULED` and the slot's lead. Staff/admins can subsequently mutate the row (substitute lead, delivery format, geofence coords) via `PATCH /schedule/ledger/{id}`.
+5. New rows are inserted with `operational_state = SCHEDULED` and the slot's lead. Admins (a unit admin only within their own unit) can subsequently mutate the row (substitute lead, delivery format, geofence coords) via `PATCH /schedule/ledger/{id}`.
