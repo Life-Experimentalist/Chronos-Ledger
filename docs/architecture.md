@@ -18,7 +18,7 @@ graph TB
         ST[Static Files<br/>Next.js export]
     end
 
-    subgraph App["Application: FastAPI 0.115"]
+    subgraph App["Application: FastAPI"]
         API[REST API<br/>/api/v1/…]
         WS[WebSocket<br/>/ws]
         CRON[Ledger Cron<br/>APScheduler]
@@ -42,10 +42,10 @@ graph TB
 | Component | Role |
 |---|---|
 | **Nginx** | TLS termination, gzip, security headers, static file serving, proxy to FastAPI. Serves pre-built Next.js export from the shared `frontend_build` Docker volume. |
-| **FastAPI app** | All REST endpoints + WebSocket hub. Single process (uvicorn), stateless beyond DB/Redis. |
+| **FastAPI app** | All REST endpoints + WebSocket hub. One uvicorn process per container with no state of its own beyond PostgreSQL and Redis, so several can run behind a load balancer; see [Scaling](deployment.md#scaling). |
 | **APScheduler** | Runs `ledger_generator` at 23:00 in `ORG_TIMEZONE` to materialize `DailyLedger` rows from `StructuralMasterSlot` for the next day, and once at startup for any day a stopped process missed. Also deletes expired refresh tokens at 03:00 and, when `GUEST_RETENTION_DAYS` is set, old visitor check-ins at 03:30. |
 | **PostgreSQL** | Source of truth for all persistent data: users, schedule, attendance, absence logs, guest transactions. |
-| **Redis** | Short-lived state: staff status overrides (TTL), the channel instances relay WebSocket events and closes over, and each instance's set of connected users (TTL) for the connection count. |
+| **Redis** | Short-lived state: the rate-limit counters, the per-person status override the location resolver checks first, the channel instances relay WebSocket events and closes over, and each instance's set of connected users (TTL) for the connection count. |
 
 ---
 
@@ -117,26 +117,27 @@ graph LR
 flowchart TD
     Start([Resolve location for staff_id]) --> R1
 
-    R1{Redis override<br/>exists?}
-    R1 -->|Yes| RET1[Return override value<br/>e.g. 'In Meeting: Back at 15:00']
+    R1{Redis override<br/>state_override:id?}
+    R1 -->|Yes| RET1[Return the override as status<br/>location UNKNOWN]
     R1 -->|No| R2
 
-    R2{Approved absence<br/>today?}
-    R2 -->|Yes| RET2[Return 'ON_LEAVE']
-    R2 -->|No| R3
+    R2{A generated day they lead<br/>running right now?}
+    R2 -->|ON_LEAVE| RET2[Return OFF_SITE<br/>On Approved Leave]
+    R2 -->|SCHEDULED or substitute| RET2B[Return the day's room]
+    R2 -->|No, or another state| R3
 
-    R3{Active master slot<br/>right now?}
-    R3 -->|Yes| RET3[Return room from<br/>DailyLedger entry]
+    R3{A weekly slot they lead<br/>running right now?}
+    R3 -->|Yes| RET3[Return the slot's room]
     R3 -->|No| R4
 
-    R4[Return base station<br/>assigned_base_station]
+    R4[Return base station<br/>assigned_base_station, or Unassigned]
 ```
 
 **Each tier explained:**
 
-1. **Redis override**: A staff member or admin has pushed a manual status via `PATCH /users/{id}/status`. Stored in Redis with an optional TTL. Cleared automatically when TTL expires or manually via the same endpoint.
-2. **Daily exception log**: The `ReverseRsvpLog` table is checked for an approved absence on today's date. If found, the ledger entry for that slot is in `ON_LEAVE`.
-3. **Master timetable**: The current wall-clock time is compared against `StructuralMasterSlot` time windows. If the staff is in a scheduled session right now, the room from the `DailyLedger` entry is returned.
+1. **Redis override**: If Redis holds `state_override:<staff_id>`, its value is returned as the status and the location as `UNKNOWN`, since an override says what somebody is doing rather than where. No route in Chronos writes this key. `PUT /users/{user_id}/status` sets the account's `current_occupancy_index` instead, which the location routes report as `occupancy_index` next to whatever the tiers resolve.
+2. **Generated day**: The `DailyLedger` rows the person leads today, and yesterday's for a shift that runs past midnight, each compared on its own window. A row running now answers: `ON_LEAVE`, which is what an approved absence sets, gives `OFF_SITE`, and `SCHEDULED` or `PROXY_SUBSTITUTE` gives the row's room. A row in any other state, a lunch or a meeting, falls through to the timetable.
+3. **Master timetable**: The weekly `StructuralMasterSlot` rows the person leads. A slot running now gives its room. This is what answers on a day the nightly job has not written yet.
 4. **Base station fallback**: The `assigned_base_station` field on the `User` record (e.g., "Front Desk") is the last-resort answer. The column has no default, so a user with none recorded resolves to `Unassigned` rather than to a named place.
 
 ---

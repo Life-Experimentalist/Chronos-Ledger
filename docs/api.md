@@ -318,9 +318,12 @@ on another allowed origin can read it.
 
 Deactivated accounts are left out unless `?include_deactivated=true`.
 
-### POST /users/ `[SUPER_ADMIN]`
+### POST /users/ `[ADMIN]`
 
 Create users individually. For bulk creation, use CSV import (`POST /ingestion/upload-csv`).
+
+A `UNIT_ADMIN` can create users only in their own unit, and only a
+`SUPER_ADMIN` can create an admin account. Either is refused with `403`.
 
 ```json
 // POST body
@@ -343,9 +346,11 @@ through others, or somebody who has been deactivated (`422`). The same checks ru
 also refuses with `409` an email address already registered to another
 account, as create does.
 
-### GET /users/staff/available `[public]`
+### GET /users/staff/available
 
-Returns staff with `OPEN_AD_HOC` or `VERY_FREE` status. Used by the Guest Kiosk.
+Every active staff member with their `current_occupancy_index`, whatever it is,
+paged. `?unit=<code>` narrows it to one unit. The visitor kiosk does not use
+this; it searches by name through `GET /guest/directory`.
 
 ### GET /users/{user_id}
 ### PATCH /users/{user_id} `[ADMIN]`
@@ -403,6 +408,10 @@ apply.
 ### PUT /users/{user_id}/status
 
 Update staff occupancy. Enum values: `OPEN_AD_HOC`, `BUSY`, `CRITICAL_DO_NOT_DISTURB`, `VERY_FREE`.
+Anyone signed in can set their own; only a `SUPER_ADMIN` can set somebody
+else's (`403`). This is the `current_occupancy_index` the staff list, the
+location routes and the kiosk directory's labels are read from. It does not
+change where somebody is resolved to be.
 
 ```json
 { "status": "BUSY" }
@@ -513,7 +522,7 @@ parameters are required.
 Busy intervals, not free ones. Free time is the complement against whatever
 hours the caller considers open, and only the caller knows those.
 
-Times are naive wall clock in the organisation's own timezone, the same as the
+Times are naive wall clock in the organization's own timezone, the same as the
 slot stores. They carry no offset and no `Z`.
 
 What counts as taken: a weekly slot pointing at this resource whose cycle is
@@ -679,7 +688,7 @@ be put on top of a hold either, so `POST /schedule/slots`, `PATCH
 already stands. A hold taken here holds against the timetable and not only
 against other holds.
 
-Two callers racing for the same window are serialised by a row lock on the
+Two callers racing for the same window are serialized by a row lock on the
 resource, two copies of one request collide on the unique key index, and
 underneath both sits an exclusion constraint over the window itself, added
 by migration 010. The second row is refused whatever order the two callers
@@ -745,27 +754,33 @@ not been deactivated (`422`). The response is `{"message": "Updated"}`.
 
 ### GET /schedule/staff/{staff_id}/location
 
-4-tier location resolver result. See [`docs/flows.md`](flows.md) for resolution order.
+Where somebody is right now, worked out in four tiers. See
+[`docs/architecture.md`](architecture.md#4-tier-staff-location-resolution) for
+the order. A user id that matches nobody, or a deactivated account, gets `404`.
 
 ```json
 {
-  "resolved_location": "Room 204: Active Class",
-  "status": "SCHEDULED",
+  "resolved_location": "LH-204",
+  "status": "Leading CS101 in Room LH-204",
   "staff_id": "FAC001",
   "full_name": "Dr. Priya Sharma",
   "occupancy_index": "BUSY"
 }
 ```
 
+`resolved_location` is a room, `OFF_SITE` for somebody on approved leave, the
+base station (or `Unassigned`) when nothing is scheduled, or `UNKNOWN` when a
+status override answered. `status` is a sentence for display, not an enum.
+
 ### GET /schedule/staff/all/locations
 
 Snapshot of all staff locations. Polled by the Member Locator panel.
 
 ### GET /schedule/cycles
-### POST /schedule/cycles `[ADMIN]`
-### PATCH /schedule/cycles/{id}/close `[ADMIN]`
-### PATCH /schedule/cycles/{id}/open `[ADMIN]`
-### POST /schedule/cycles/{old}/clone-to/{new} `[ADMIN]`
+### POST /schedule/cycles `[SUPER_ADMIN]`
+### PATCH /schedule/cycles/{id}/close `[SUPER_ADMIN]`
+### PATCH /schedule/cycles/{id}/open `[SUPER_ADMIN]`
+### POST /schedule/cycles/{old}/clone-to/{new} `[SUPER_ADMIN]`
 
 A cycle can be created closed, filled in over as long as that takes, and put
 into service once it is ready, which is what `open` is for. It is the only
@@ -1012,7 +1027,7 @@ nothing gets `404`.
 An API key carries the role of the account it was issued to, so an integration
 that needs whole rosters wants a key issued on an admin account.
 
-### POST /attendance/absence `[STAFF]`
+### POST /attendance/absence
 
 Submit a Reverse RSVP (absence request):
 
@@ -1020,16 +1035,22 @@ Submit a Reverse RSVP (absence request):
 { "target_absence_date": "2026-06-15", "context_justification": "National seminar." }
 ```
 
-Routes to `reporting_line_manager` for approval. On approval, the corresponding `DailyLedger` entry flips to `ON_LEAVE`. See [`docs/flows.md`](flows.md) for the full state machine.
+Anyone signed in can submit one. It goes to their `reporting_line_manager` for
+approval, and that manager is sent an `ABSENCE_APPROVAL_REQUIRED` frame. On
+approval, every `DailyLedger` row the submitter leads on that date flips to
+`ON_LEAVE` and loses any substitute; a denial puts any of those rows still
+`ON_LEAVE` back to `SCHEDULED`. See [`docs/flows.md`](flows.md) for the full
+state machine.
 
 Somebody with no manager set, or whose manager has been deactivated, gets `400`
 rather than a request waiting on nobody.
 
-### GET /attendance/absence/pending `[MANAGER, ADMIN]`
+### GET /attendance/absence/pending
 
-Returns absence requests pending your approval.
+Returns the requests routed to you that nobody has decided yet. Being an admin
+adds nothing: only requests whose submitter names you as their manager appear.
 
-### PATCH /attendance/absence/{id}/decide `[MANAGER, ADMIN]`
+### PATCH /attendance/absence/{id}/decide
 
 ```json
 { "decision": "VERIFIED_APPROVED" }
@@ -1093,8 +1114,10 @@ The response carries the entry id the staff member decides on:
 ### GET /guest/directory `[KIOSK KEY]`
 
 `?name=<string>`, case-insensitive name search, minimum two characters so the
-roster cannot be walked one letter at a time. Returns staff with `OPEN_AD_HOC`
-or `VERY_FREE` status.
+roster cannot be walked one letter at a time. Returns up to 20 active staff
+whose name matches, busy ones included, each with `staff_id`, `full_name`,
+`unit_code` and an `availability_label` of `Available`, `Very Available`,
+`Occupied` or `Do Not Disturb`.
 
 ### GET /guest/pending `[STAFF]`
 
@@ -1157,9 +1180,8 @@ the member is new or already exists.
 
 A row that would put a class in a room already taken for that window, by a
 booking, by another class, or by a day already generated onto it, is refused
-with `422`, and the whole file is rolled back rather than the row skipped,
-which is what every other bad row in an import does. The message names the
-room and what it ran into. Rows are checked against each other as well, so
+with `422` and the whole file rolled back, the same as any other refused row.
+The message names the room and what it ran into. Rows are checked against each other as well, so
 one file cannot put two classes in one room at one hour. The check only looks
 where a row would actually move a class, so re-uploading a file that
 describes the timetable as it already stands is not refused by what is
@@ -1235,11 +1257,14 @@ regardless, so the accounts exist but nobody ever saw their passwords.
 Reset those members individually, or re-upload after raising both
 timeouts.
 
-### POST /ingestion/generate-ledger `[ADMIN]`
+### POST /ingestion/generate-ledger `[SUPER_ADMIN]`
 
-```json
-{ "target_date": "2026-09-01" }   // optional; defaults to tomorrow
 ```
+POST /api/v1/ingestion/generate-ledger?target_date=2026-09-01
+```
+
+`target_date` is a query parameter, optional, and defaults to tomorrow in
+`ORG_TIMEZONE`.
 
 The nightly job does this for tomorrow at 23:00 in `ORG_TIMEZONE`. A server
 that starts also does it once for today, and for tomorrow as well if it starts

@@ -222,7 +222,7 @@ The ledger is not generated automatically after import. Go to **Step 4: Generate
 
 Use the **Setup Guide** link from the Admin Dashboard. On Step 2, create a new planning cycle (leave the old one, historical data is preserved under the previous cycle). Then re-upload the new term's CSV.
 
-The new cycle becomes active immediately for ledger generation.
+The wizard creates the new cycle open, and the old one stays open alongside it until you close it with `PATCH /schedule/cycles/{id}/close` once its last day has run.
 
 ---
 
@@ -250,9 +250,9 @@ Column names are case-sensitive. Extra columns are ignored. Times accept `HH:MM`
 
 ---
 
-### Import returns "duplicate key" errors
+### Can I upload the same file twice?
 
-The import is idempotent, re-running it with the same data is safe. "Duplicate key" errors suggest the CSV has internal duplicates (the same member+activity+slot appears twice). Remove duplicates and re-upload.
+Yes. An import matches what already exists and reuses it: a slot is matched on activity, weekday and start time, and a row repeated in the file is taken once. Where a matched slot's end time, lead or room has changed, the slot is corrected and the days already generated follow it. A changed start time cannot be matched, so it arrives as a second slot and the old one is listed in `not_in_file`. That list is a report only; an import never deletes anything. The CSV import section of [`docs/api.md`](api.md) covers what to do with it.
 
 ---
 
@@ -286,7 +286,7 @@ Options:
 
 ### Attendance is being rejected with "Outside geofence"
 
-The server-side check uses the room's coordinates and a 15-metre radius. A room placed at the wrong point refuses every mark; a room never placed at all is not fenced, and every mark is accepted.
+The server-side check uses the room's coordinates and a 15-meter radius. A room placed at the wrong point refuses every mark; a room never placed at all is not fenced, and every mark is accepted.
 
 Find the room and see where it thinks it is:
 
@@ -302,7 +302,7 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/js
 
 `latitude` and `longitude` are set or cleared together: sending one without the other is refused, since half a location fences the room to a point on the equator. `altitude_target` is optional, and a room without one is fenced horizontally only.
 
-One day held somewhere else is a day-level override, `PATCH /schedule/ledger/{id}` with `latitude_target` and `longitude_target`. Where a day carries its own coordinates the room's are not consulted. The radius is the day's `precision_radius_meters`, defaulting to 15 metres.
+One day held somewhere else is a day-level override, `PATCH /schedule/ledger/{id}` with `latitude_target` and `longitude_target`. Where a day carries its own coordinates the room's are not consulted. The radius is the day's `precision_radius_meters`, defaulting to 15 meters.
 
 ---
 
@@ -316,7 +316,7 @@ To loosen it, raise `GEOFENCE_ACCURACY_FACTOR` or widen the day's `precision_rad
 
 ### The altitude check is blocking members on the correct floor
 
-The altitude delta threshold is `|Δalt| < 4 metres`. GPS altitude accuracy is typically ±10–20m on mobile devices, making this check unreliable outdoors. The check only fires when the device reports altitude, if the device does not expose it, the check is skipped.
+The altitude delta threshold is `|Δalt| < 4 meters`. GPS altitude accuracy is typically ±10–20m on mobile devices, making this check unreliable outdoors. The check only fires when the device reports altitude, if the device does not expose it, the check is skipped.
 
 If you want to widen the threshold, it is a constant in `backend/app/services/geo_fence.py`:
 
@@ -604,13 +604,13 @@ Permissions are granted by the `release` job in `ci.yml`: a called workflow's to
 3. Move to **Step 3: Import CSV**. Upload the new term's timetable CSV.
 4. Click **Generate Ledger** to populate the first day's entries.
 
-The old cycle is preserved in full, historical attendance records and ledger snapshots remain untouched. The new cycle is set as active.
+The old cycle is preserved in full; historical attendance records and ledger snapshots remain untouched. The wizard opens the new cycle and leaves the old one open too, so close the old one with `PATCH /schedule/cycles/{id}/close` once its last day has run. [Planning Cycle Rollover](deployment.md#planning-cycle-rollover) in the deployment guide walks through it.
 
 ---
 
 ### Can I have multiple cycles active simultaneously?
 
-No. The system maintains one active cycle at a time. Switching cycles makes the new one active for ledger generation; historical data remains queryable under the old cycle's ID.
+Yes. Several cycles can be open at once, and each writes days only for dates inside its own start and end, so a spring cycle and an autumn cycle never touch. Opening a cycle checks its slots against the rooms already taken on the dates it shares with the other open cycles and is refused with `409` on a clash; two cycles whose dates do not overlap can use the same room at the same hour. Close a cycle with `PATCH /schedule/cycles/{id}/close` once its last day has run; its history stays queryable under its ID.
 
 ---
 

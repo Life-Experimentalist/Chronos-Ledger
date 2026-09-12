@@ -398,7 +398,7 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-          description: What this key is for, so it can be recognised in the list.
+          description: What this key is for, so it can be recognized in the list.
           example: PulseWard HMS
         user_id:
           type: string
@@ -665,7 +665,7 @@ components:
           type: array
           description: >
             Busy intervals, not free ones. Times are naive wall clock in the
-            organisation's own timezone, with no offset and no Z.
+            organization's own timezone, with no offset and no Z.
           items:
             $ref: "#/components/schemas/BusyInterval"
 
@@ -1051,11 +1051,15 @@ components:
       properties:
         resolved_location:
           type: string
-          description: Human-readable location label derived from 4-tier resolver.
-          example: Room 204 (Active Class)
+          description: >
+            A room, OFF_SITE for somebody on approved leave, the base station
+            (or Unassigned) when nothing is scheduled, or UNKNOWN when a status
+            override answered.
+          example: LH-204
         status:
           type: string
-          description: Redis override value if set, otherwise derived state.
+          description: A sentence for display, not an enum.
+          example: Leading CS101 in Room LH-204
         staff_id:
           type: string
         full_name:
@@ -1091,7 +1095,7 @@ components:
           format: double
           nullable: true
           example: 920.5
-          description: Altitude in metres. Optional. The floor check runs only when the client supplies an altitude it can vouch for, and is skipped otherwise; a geo-fenced session requires lat/lon alone.
+          description: Altitude in meters. Optional. The floor check runs only when the client supplies an altitude it can vouch for, and is skipped otherwise; a geo-fenced session requires lat/lon alone.
         user_accuracy:
           type: number
           format: double
@@ -1609,7 +1613,10 @@ paths:
     post:
       tags: [Users]
       summary: Create a new user
-      description: Requires `SUPER_ADMIN`.
+      description: >
+        Requires `SUPER_ADMIN` or `UNIT_ADMIN`. A unit admin can create users
+        only in their own unit, and only a super-admin can create an admin
+        account; either is refused with `403`.
       requestBody:
         required: true
         content:
@@ -1650,18 +1657,24 @@ paths:
   /api/v1/users/staff/available:
     get:
       tags: [Users]
-      summary: List staff with OPEN_AD_HOC or VERY_FREE status
+      summary: List active staff with their current status
       description: >
-        Used by the Guest Kiosk to look up who can receive a visitor right now.
+        Every staff member who has not been deactivated, whatever their
+        status. The visitor kiosk searches by name through
+        `GET /guest/directory` instead.
         This route **must** appear before `GET /users/{user_id}` in the router
         to prevent "staff" being matched as a user_id path parameter.
-      security: []
       parameters:
+        - name: unit
+          in: query
+          schema:
+            type: string
+          description: Only staff in this unit.
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Offset"
       responses:
         "200":
-          description: Available staff.
+          description: Active staff.
           headers:
             X-Total-Count:
               $ref: "#/components/headers/XTotalCount"
@@ -1670,7 +1683,19 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/StaffAvailabilityResponse"
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    full_name:
+                      type: string
+                    unit_code:
+                      type: string
+                      nullable: true
+                    current_occupancy_index:
+                      $ref: "#/components/schemas/AccessReadiness"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /api/v1/users/{user_id}:
     get:
@@ -1856,7 +1881,10 @@ paths:
     put:
       tags: [Users]
       summary: Update staff availability status
-      description: Staff update their own. A super-admin can update anyone.
+      description: >
+        Anyone signed in can update their own. A super-admin can update
+        anyone's. This is the occupancy index, and it does not change the
+        location the location routes resolve.
       parameters:
         - name: user_id
           in: path
@@ -2747,7 +2775,8 @@ paths:
         is taken. A refused open writes nothing.
 
 
-        Opening a cycle that is already open changes nothing. Requires admin.
+        Opening a cycle that is already open changes nothing. Requires
+        `SUPER_ADMIN`.
       parameters:
         - name: cycle_id
           in: path
@@ -2964,11 +2993,12 @@ paths:
       tags: [Attendance]
       summary: Submit an absence request (Reverse RSVP)
       description: >
-        Staff submit a request for a future absence.
-        The request is routed to `reporting_line_manager` for approval, and
-        that manager is sent an `ABSENCE_APPROVAL_REQUIRED` WebSocket frame.
-        On approval, the relevant daily ledger entry transitions to `ON_LEAVE`.
-        Either decision sends the submitter an `ABSENCE_DECISION` frame.
+        Any signed-in user whose account names a `reporting_line_manager` can
+        submit one. The request is routed to that manager for approval, and
+        the manager is sent an `ABSENCE_APPROVAL_REQUIRED` WebSocket frame.
+        On approval, every daily ledger row the submitter leads on that date
+        becomes `ON_LEAVE` and loses its substitute. Either decision sends the
+        submitter an `ABSENCE_DECISION` frame.
       requestBody:
         required: true
         content:
@@ -2997,7 +3027,9 @@ paths:
     get:
       tags: [Attendance]
       summary: List absence requests pending the caller's approval
-      description: Managers/Admins only. Returns requests where caller is the line manager.
+      description: >
+        Any signed-in user. Returns the undecided requests routed to the
+        caller as the submitter's line manager; being an admin adds nothing.
       responses:
         "200":
           description: Pending requests.
@@ -3144,7 +3176,8 @@ paths:
       tags: [Guest Gate]
       summary: Staff availability directory (kiosk)
       description: >
-        Returns staff with OPEN_AD_HOC or VERY_FREE status for kiosk display.
+        Returns up to 20 active staff whose name matches, busy ones included,
+        each with an availability label for kiosk display.
         Requires a credential: this response carries the staff roster and each
         person's live presence.
       parameters:
@@ -3159,7 +3192,7 @@ paths:
             the roster cannot be walked one letter at a time.
       responses:
         "200":
-          description: Available staff.
+          description: Matching staff.
           content:
             application/json:
               schema:
@@ -3329,7 +3362,7 @@ paths:
       tags: [Ingestion]
       summary: Trigger daily ledger generation
       description: >
-        Requires admin. Generates `DailyLedger` rows from
+        Requires `SUPER_ADMIN`. Generates `DailyLedger` rows from
         `StructuralMasterSlot` for a given date, tomorrow by default. The
         same job the nightly cron runs. Safe to re-run: a day already written
         for a slot is skipped.
