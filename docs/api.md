@@ -298,6 +298,13 @@ Create users individually. For bulk creation, use CSV import (`POST /ingestion/u
 }
 ```
 
+`reporting_line_manager` is who the user's absence requests go to for
+approval. It has to name an existing user (`404` otherwise), and it cannot
+name the user themselves or anyone who already reports to them, directly or
+through others (`422`). The same checks run on `PATCH /users/{user_id}`, which
+also refuses with `409` an email address already registered to another
+account, as create does.
+
 ### GET /users/staff/available `[public]`
 
 Returns staff with `OPEN_AD_HOC` or `VERY_FREE` status. Used by the Guest Kiosk.

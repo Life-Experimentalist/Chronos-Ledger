@@ -1572,14 +1572,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UserResponse"
-        "400":
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The manager named in `reporting_line_manager` does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
           description: Duplicate user ID or email.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "403":
-          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: >
+            A malformed body, or a `reporting_line_manager` that names the
+            user or someone who already reports to them.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/users/staff/available:
     get:
@@ -1649,7 +1663,25 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: "#/components/responses/NotFound"
+          description: The user, or the manager named in `reporting_line_manager`, does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The email address is already registered to another account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            A malformed body, or a `reporting_line_manager` that names the
+            user or someone who already reports to them.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/users/{user_id}/reset-password:
     post:

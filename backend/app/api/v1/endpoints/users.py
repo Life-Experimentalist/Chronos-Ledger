@@ -25,6 +25,30 @@ from app.schemas.users import (
 router = APIRouter()
 
 
+def _check_manager(user_id: str, manager_id: str, db: Session) -> None:
+    """Refuse a manager who does not exist or who already reports to the user.
+
+    Absence requests go to the manager for approval, so a user set as their
+    own manager approves their own, and a loop of any length is a reporting
+    line with nobody at the top of it.
+    """
+    if manager_id == user_id:
+        raise HTTPException(status_code=422, detail="A user cannot be their own manager")
+    row = db.query(User.reporting_line_manager).filter(User.id == manager_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Manager not found")
+    above, seen = row[0], {manager_id}
+    # A loop the user is not in can predate this check; stop rather than spin.
+    while above is not None and above not in seen:
+        if above == user_id:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{manager_id} already reports to {user_id}, directly or through others",
+            )
+        seen.add(above)
+        above = db.query(User.reporting_line_manager).filter(User.id == above).scalar()
+
+
 @router.get("/", response_model=list[UserResponse])
 def list_users(
     role: str | None = None,
@@ -57,6 +81,8 @@ def create_user(
         raise HTTPException(status_code=409, detail="User ID already exists")
     if db.query(User).filter(User.email_address == payload.email_address).first():
         raise HTTPException(status_code=409, detail="Email already registered")
+    if payload.reporting_line_manager is not None:
+        _check_manager(payload.id, payload.reporting_line_manager, db)
 
     user = User(
         id=payload.id,
@@ -133,6 +159,16 @@ def update_user(
     if payload.unit_code is not None:
         # A unit admin cannot move a user into or out of another unit.
         ensure_unit_scope(current_user, payload.unit_code)
+    if payload.email_address is not None:
+        taken = (
+            db.query(User)
+            .filter(User.email_address == payload.email_address, User.id != user.id)
+            .first()
+        )
+        if taken:
+            raise HTTPException(status_code=409, detail="Email already registered")
+    if payload.reporting_line_manager is not None:
+        _check_manager(user.id, payload.reporting_line_manager, db)
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(user, field, value)
     db.commit()
