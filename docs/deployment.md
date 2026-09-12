@@ -166,33 +166,37 @@ superuser against the target database and then run the migration again.
 
 ```mermaid
 flowchart LR
-    A([Active Cycle Running]) --> B[Close current cycle\nAdmin → Schedule → Cycles → Close]
-    B --> C[Create new cycle\nPOST /schedule/cycles]
-    C --> D[Clone master slots\nPOST /cycles/old/clone-to/new]
-    D --> E[Re-import enrollment CSV\nPOST /ingestion/upload-csv?cycle_id=new]
-    E --> F[Generate first ledger\nPOST /ingestion/generate-ledger]
+    A([Active Cycle Running]) --> B[Create new cycle, closed\nPOST /schedule/cycles]
+    B --> C[Clone activities and slots\nPOST /cycles/old/clone-to/new]
+    C --> D[Re-import enrollment CSV\nPOST /ingestion/upload-csv?cycle_id=new]
+    D --> E[Open new cycle\nPATCH /cycles/new/open]
+    E --> F[Close old cycle\nPATCH /cycles/old/close]
     F --> G([New Cycle Active])
 ```
 
 ### Step-by-step
 
-1. **Close the active cycle**: Admin Portal → Schedule → Cycles → `Close Cycle`, or:
-   ```sql
-   UPDATE planning_cycles SET operational_status = false WHERE id = <current_id>;
-   ```
-2. **Create the new cycle**: Admin Portal → New Cycle or `POST /api/v1/schedule/cycles`:
+1. **Create the new cycle** with `POST /api/v1/schedule/cycles`. Leaving `operational_status` out creates it closed:
    ```json
    { "cycle_label": "2026-Fall-Trimester", "date_bounds_start": "2026-09-01",
-     "date_bounds_end": "2026-12-20", "operational_status": true }
+     "date_bounds_end": "2026-12-20" }
    ```
-3. **Clone master slots**, copies all `StructuralMasterSlot` rows (not enrollment or attendance):
+2. **Clone activities and slots**, copies every activity and weekly slot (not enrollment or attendance). The target has to be closed and empty:
    ```
    POST /api/v1/schedule/cycles/{old_id}/clone-to/{new_id}
    ```
-4. **Re-import CSV**, upload the new term's enrollment sheet to assign members and update leads.
-5. **Generate first ledger**, trigger ledger generation for the first day of the new cycle:
+3. **Re-import CSV**, upload the new term's enrollment sheet to assign members and update leads.
+4. **Open the new cycle**. Every slot is checked against the rooms, and the open is refused with `409`, listing each clash, if one lands on a room already taken. Two cycles whose dates do not overlap can share a room:
    ```
-   POST /api/v1/ingestion/generate-ledger   { "target_date": "2026-09-01" }
+   PATCH /api/v1/schedule/cycles/{new_id}/open
+   ```
+5. **Close the old cycle** once its last day has run. Its days from today onward are withdrawn unless attendance or a note has been written on them:
+   ```
+   PATCH /api/v1/schedule/cycles/{old_id}/close
+   ```
+6. **Generate the first ledger** if it is needed before the nightly job writes it the evening before:
+   ```
+   POST /api/v1/ingestion/generate-ledger?target_date=2026-09-01
    ```
 
 ---

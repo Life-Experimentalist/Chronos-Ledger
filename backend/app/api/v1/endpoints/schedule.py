@@ -106,8 +106,8 @@ def _refuse_if_a_day_is_there(
     behind by a slot nobody can see any more holds a room that both of those
     checks report as free.
 
-    There are two ways to get one. Closing a cycle does not withdraw the days
-    it has already produced, and the checks above skip a closed cycle on
+    There are two ways to get one. Closing a cycle keeps the days ahead that
+    carry attendance or a note, and the checks above skip a closed cycle on
     purpose. Deleting a slot withdraws its future days unless attendance has
     been marked on them, and a day that has been marked stays.
 
@@ -158,12 +158,46 @@ def create_cycle(
 def close_cycle(
     cycle_id: int, db: Session = Depends(get_db), _=Depends(require_roles("SUPER_ADMIN"))
 ):
+    """Take a cycle out of service, and the days it had planned ahead with it.
+
+    Closing only flipped the flag. The generator stopped writing new days,
+    but every day it had already written from today onward stayed in the
+    table naming a room and an hour, so a room a finished term had given up
+    read as taken to every check and every booking until those dates passed.
+
+    The days from today onward that are still only plans are removed, the
+    same days a slot delete removes. What differs is a day somebody has
+    already marked or written a note on. A slot delete refuses over one,
+    because it would leave a class the timetable no longer has. Closing keeps
+    it and says how many it kept: a cycle is closed at the end of a term,
+    and refusing over the register taken on its last morning would leave the
+    admin nothing to do but wait for tomorrow.
+
+    Days before today are records and are neither touched nor counted.
+    Closing a cycle that is already closed runs the same sweep, which is how
+    the days left behind by a close from before this change are cleared.
+    """
     cycle = db.query(PlanningCycle).filter(PlanningCycle.id == cycle_id).first()
     if not cycle:
         raise HTTPException(status_code=404, detail="Cycle not found")
     cycle.operational_status = False
+
+    ahead = (
+        db.query(DailyLedger)
+        .join(Activity, DailyLedger.activity_id == Activity.id)
+        .filter(Activity.cycle_id == cycle_id, DailyLedger.target_date >= org_today())
+        .all()
+    )
+    kept = rows_in_use([row.id for row in ahead], db)
+    for row in ahead:
+        if row.id not in kept:
+            db.delete(row)
     db.commit()
-    return {"message": f"Cycle {cycle_id} closed"}
+    return {
+        "message": f"Cycle {cycle_id} closed",
+        "ledger_rows_removed": len(ahead) - len(kept),
+        "ledger_rows_kept": len(kept),
+    }
 
 
 @router.patch("/cycles/{cycle_id}/open", responses={409: {"model": CycleActivationConflict}})
@@ -258,7 +292,44 @@ def clone_cycle_offerings(
     db: Session = Depends(get_db),
     _=Depends(require_roles("SUPER_ADMIN")),
 ):
-    old_offerings = db.query(Activity).filter(Activity.cycle_id == old_id).all()
+    """Copy one cycle's activities and weekly slots into another.
+
+    It copied the activities and nothing else, so a cloned cycle had no
+    timetable and the documented rollover left an admin an empty week to type
+    in again. The slots come across now, each pointed at its activity's copy
+    with the same lead, room and window. Enrollments do not: the next cycle's
+    groups come from the next import.
+
+    The target has to be closed and empty. Closed, because the copied slots
+    are not checked against the rooms here. Opening a cycle runs every check
+    a slot is put through, over all of its slots at once, so a clone into a
+    closed cycle followed by an open is the same two steps as drafting one by
+    hand, and the checks are not written twice. Empty, because copying into
+    a cycle that already has activities would stop halfway on the unique key
+    on activity code and cycle, or double a timetable somebody had started.
+    """
+    found = db.query(PlanningCycle).filter(PlanningCycle.id.in_([old_id, new_id])).all()
+    cycles = {cycle.id: cycle for cycle in found}
+    if old_id not in cycles or new_id not in cycles:
+        raise HTTPException(status_code=404, detail="Cycle not found")
+    if cycles[new_id].operational_status:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Cycle {new_id} is open. Clone into a closed cycle and open it "
+                "afterwards: opening is what checks the copied slots against the rooms"
+            ),
+        )
+    if db.query(Activity).filter(Activity.cycle_id == new_id).first():
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cycle {new_id} already has activities. Clone into an empty cycle",
+        )
+
+    old_offerings = (
+        db.query(Activity).filter(Activity.cycle_id == old_id).order_by(Activity.id).all()
+    )
+    cloned_slots = 0
     for offering in old_offerings:
         new = Activity(
             activity_code=offering.activity_code,
@@ -267,8 +338,22 @@ def clone_cycle_offerings(
             cycle_id=new_id,
         )
         db.add(new)
+        db.flush()
+        for slot in offering.master_slots:
+            db.add(
+                StructuralMasterSlot(
+                    day_of_week_index=slot.day_of_week_index,
+                    time_window_start=slot.time_window_start,
+                    time_window_end=slot.time_window_end,
+                    activity_id=new.id,
+                    primary_lead_id=slot.primary_lead_id,
+                    resource_id=slot.resource_id,
+                    target_room_identifier=slot.target_room_identifier,
+                )
+            )
+            cloned_slots += 1
     db.commit()
-    return {"cloned": len(old_offerings)}
+    return {"cloned": len(old_offerings), "cloned_slots": cloned_slots}
 
 
 # ── Master Slots ──────────────────────────────────────────────────────────────

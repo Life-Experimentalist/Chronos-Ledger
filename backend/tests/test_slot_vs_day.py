@@ -8,7 +8,7 @@ them they still miss the rows that actually put somebody at a door. A
 generated day is neither a slot nor a hold, and there are two ordinary ways
 to end up with one that no slot speaks for any more:
 
-Closing a cycle does not withdraw the days it has already produced, and both
+Closing a cycle keeps the days ahead that carry attendance or a note, and both
 of the checks above skip a closed cycle on purpose. Deleting a slot nulls
 master_slot_id on the days it has already run rather than erasing them, so
 that attendance marked against those days survives, and those days keep

@@ -449,8 +449,9 @@ flag and the dates are the two tests nightly ledger generation applies, so a
 date reported free here is not one the generator is going to fill.
 
 A generated day counts whatever its cycle now says. Closing a cycle stops the
-generator producing more days but does not withdraw the ones it produced, and
-deleting a slot leaves behind the days attendance was marked on. Those rows
+generator producing more days and withdraws the ones it had planned from today
+on, but keeps the days already past and any ahead that carry attendance or a
+note, and deleting a slot leaves behind the days attendance was marked on. Those rows
 still hold a room and an hour, and the database refuses a second booking on
 top of them either way, so they are reported here too.
 
@@ -743,6 +744,28 @@ clash, and where they do overlap the date reported is the first one both
 slots run on. That is the same thing `GET /resources/{id}/availability`
 reports.
 
+`close` sets the flag back to false, so the nightly generator writes no more
+days for the cycle, and removes the days it has already written from today
+onward. A day that carries attendance or a note is kept rather than refused
+over, because a cycle is closed at the end of a term whatever was marked on its
+last morning. Days before today are not touched. Closing a cycle that is
+already closed runs the same sweep.
+
+```json
+{ "message": "Cycle 3 closed", "ledger_rows_removed": 12, "ledger_rows_kept": 1 }
+```
+
+`clone-to` copies every activity in the old cycle and every weekly slot under
+them into the new one, each slot with the same lead, room and window.
+Enrollment and attendance are not copied: import the new cycle's CSV after
+cloning. The target has to be closed and have no activities, or the clone is
+refused with `409`. The copied slots are not checked against the rooms here;
+opening the target is what checks them.
+
+```json
+{ "cloned": 14, "cloned_slots": 31 }
+```
+
 ### POST /schedule/slots `[ADMIN]`
 ### PATCH /schedule/slots/{id} `[ADMIN]`
 
@@ -809,7 +832,7 @@ A day already generated is the third, with the message `the resource already
 has a generated day in part of that window`. It reads as a class, because a
 class is what it came from, and its `master_slot_id` is null where that slot
 has since been deleted. Unlike the other two it counts whatever its cycle now
-says: closing a cycle does not withdraw the days it has already produced, and
+says: closing a cycle keeps the days ahead that carry attendance or a note, and
 the database refuses a second row on top of one either way.
 
 A weekly slot has no date of its own, so the one reported is the next time

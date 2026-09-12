@@ -37,7 +37,8 @@ def _open(client, headers, cycle_id):
 
 
 def _close(db, cycle_id):
-    """Closed the way the route closes it, which leaves the days behind."""
+    """Closed by writing the flag, the way SQL or a close from before the
+    route withdrew days would, which leaves every day behind."""
     cycle = db.query(PlanningCycle).filter(PlanningCycle.id == cycle_id).first()
     cycle.operational_status = False
     db.commit()
@@ -124,9 +125,10 @@ def test_a_cycle_is_not_opened_over_another_cycles_class(client, db, seed_users)
 
 
 def test_a_cycle_is_not_opened_over_a_day_already_generated(client, db, seed_users):
-    """Closing a cycle does not withdraw the days it has already produced.
+    """A closed cycle can still have days ahead of it.
 
-    Those days are the rows that put somebody at a door, and they are still
+    The route keeps the ones carrying attendance or a note, and a flag
+    written by hand keeps them all. Those days are the rows that put somebody at a door, and they are still
     in the table however their cycle is flagged. Migration 013 refuses a
     second row on top of one, so an open that ignored them would turn a
     refusal the admin could act on into a 500 at 23:00.

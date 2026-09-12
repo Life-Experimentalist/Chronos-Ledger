@@ -1929,9 +1929,10 @@ paths:
 
 
         A generated day counts whatever its cycle now says: closing a cycle
-        does not withdraw the days it has already produced, deleting a slot
-        leaves behind the days attendance was marked on, and the database
-        refuses a second booking on top of either. Where a day and the slot it
+        leaves behind the days already past and any ahead that carry
+        attendance or a note, deleting a slot leaves behind the days
+        attendance was marked on, and the database refuses a second booking
+        on top of either. Where a day and the slot it
         came from both cover a date you get the day, once, because the day is
         the row that holds the hour and keeps its window when the slot is
         corrected later. Dates the generator has not reached yet come from the
@@ -2168,9 +2169,9 @@ paths:
 
         Refused with 409 as well where a day has already been generated on
         that room in part of that window. Such a day may have no slot
-        speaking for it any more: closing a cycle leaves behind the days it
-        has already produced, and deleting a slot leaves behind the days that
-        carry attendance. Both of those read as free to the two checks above
+        speaking for it any more: closing a cycle leaves behind the days
+        ahead that carry attendance or a note, and deleting a slot leaves
+        behind the days that carry attendance. Both of those read as free to the two checks above
         while somebody is still due at the door, so this one has no cycle
         gate on either side.
       requestBody:
@@ -2452,8 +2453,17 @@ paths:
   /api/v1/schedule/cycles/{cycle_id}/close:
     patch:
       tags: [Schedule]
-      summary: Close an active planning cycle
-      description: Sets `operational_status = false`. Requires admin.
+      summary: Take a planning cycle out of service
+      description: >
+        Sets `operational_status = false`, so the nightly generator writes no
+        more days for the cycle's slots, and removes the days it has already
+        written from today onward, which are still only plans. A day that
+        carries attendance or a note is kept rather than refused over. Days
+        before today are not touched.
+
+
+        Closing a cycle that is already closed runs the same sweep. Requires
+        `SUPER_ADMIN`.
       parameters:
         - name: cycle_id
           in: path
@@ -2466,7 +2476,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PlanningCycleResponse"
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Cycle 3 closed
+                  ledger_rows_removed:
+                    type: integer
+                    description: Days from today onward that were withdrawn.
+                  ledger_rows_kept:
+                    type: integer
+                    description: Days from today onward kept because they carry attendance or a note.
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -2520,11 +2540,18 @@ paths:
   /api/v1/schedule/cycles/{old_id}/clone-to/{new_id}:
     post:
       tags: [Schedule]
-      summary: Clone all activity offerings from one cycle to another
+      summary: Copy one cycle's activities and weekly slots into another
       description: >
-        Copies `StructuralMasterSlot` and `Activity` records.
-        Member enrollment and attendance records are **not** cloned.
-        Re-import CSV after cloning to update enrollment.
+        Copies every `Activity` in the old cycle and every
+        `StructuralMasterSlot` under them, each slot pointed at its activity's
+        copy with the same lead, room and window. Member enrollment and
+        attendance records are **not** cloned. Re-import CSV after cloning to
+        update enrollment.
+
+
+        The target must be closed and have no activities. The copied slots
+        are not checked against the rooms here; opening the target runs those
+        checks over all of them at once. Requires `SUPER_ADMIN`.
       parameters:
         - name: old_id
           in: path
@@ -2538,14 +2565,26 @@ paths:
             type: integer
       responses:
         "200":
-          description: Clone complete. Returns count of cloned offerings.
+          description: Clone complete.
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  cloned_offerings:
+                  cloned:
                     type: integer
+                    description: Activities copied.
+                  cloned_slots:
+                    type: integer
+                    description: Weekly slots copied.
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The target cycle is open or already has activities.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ── Attendance ────────────────────────────
   /api/v1/attendance/mark:

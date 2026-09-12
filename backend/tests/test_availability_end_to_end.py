@@ -21,6 +21,7 @@ import datetime
 from app.cron.ledger_generator import generate_daily_ledger_entries
 from app.models.db import DailyLedger
 from tests.test_availability_vs_day import ALREADY_TAKEN, _hold
+from tests.test_cycle_activation import _close
 from tests.test_import_corrections import TOMORROW
 from tests.test_slot_editing import _mark, _timetable
 
@@ -123,14 +124,61 @@ def test_a_marked_day_keeps_its_hour_while_the_slot_moves_on(client, db, seed_us
 # -- PATCH /schedule/cycles/{id}/close and /open -------------------------------
 
 
-def test_closing_a_cycle_leaves_the_day_it_already_generated_busy(client, db, seed_users):
-    """Closing withdraws the weekly repeat, not the days already laid down."""
+def test_closing_a_cycle_gives_up_the_days_it_had_planned(client, db, seed_users):
+    """Closing only flipped the flag, and the room stayed taken until the dates ran out."""
     headers, slot = _timetable(client, db, seed_users)
     room_id, cycle_id = slot.resource_id, slot.activity.cycle_id
     assert generate_daily_ledger_entries(TOMORROW, db) == 1
 
     r = client.patch(f"/api/v1/schedule/cycles/{cycle_id}/close", headers=headers)
     assert r.status_code == 200, r.text
+    assert r.json() == {
+        "message": f"Cycle {cycle_id} closed",
+        "ledger_rows_removed": 1,
+        "ledger_rows_kept": 0,
+    }
+
+    assert _busy(client, headers, room_id, from_=TOMORROW) == []
+    held = _hold(client, headers, room_id, TOMORROW)
+    assert held.status_code == 201, held.text
+
+
+def test_closing_a_cycle_leaves_the_days_already_past_alone(client, db, seed_users):
+    headers, slot = _timetable(client, db, seed_users)
+    room_id, cycle_id = slot.resource_id, slot.activity.cycle_id
+    assert generate_daily_ledger_entries(LAST_WEEK, db) == 1
+
+    r = client.patch(f"/api/v1/schedule/cycles/{cycle_id}/close", headers=headers)
+    assert r.status_code == 200, r.text
+    assert (r.json()["ledger_rows_removed"], r.json()["ledger_rows_kept"]) == (0, 0)
+
+    busy = _busy(client, headers, room_id, to=LAST_WEEK)
+    assert [window["date"] for window in busy] == [str(LAST_WEEK)]
+
+
+def test_closing_again_clears_the_days_an_earlier_close_left(client, db, seed_users):
+    """A cycle closed before the route withdrew anything still has its days."""
+    headers, slot = _timetable(client, db, seed_users)
+    room_id, cycle_id = slot.resource_id, slot.activity.cycle_id
+    assert generate_daily_ledger_entries(TOMORROW, db) == 1
+    _close(db, cycle_id)
+
+    r = client.patch(f"/api/v1/schedule/cycles/{cycle_id}/close", headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["ledger_rows_removed"] == 1
+    assert _busy(client, headers, room_id, from_=TOMORROW) == []
+
+
+def test_closing_a_cycle_leaves_a_marked_day_busy(client, db, seed_users):
+    """A day somebody was marked on is a record, and closing keeps it."""
+    headers, slot = _timetable(client, db, seed_users)
+    room_id, cycle_id = slot.resource_id, slot.activity.cycle_id
+    assert generate_daily_ledger_entries(TOMORROW, db) == 1
+    _mark(db, db.query(DailyLedger).one().id)
+
+    r = client.patch(f"/api/v1/schedule/cycles/{cycle_id}/close", headers=headers)
+    assert r.status_code == 200, r.text
+    assert (r.json()["ledger_rows_removed"], r.json()["ledger_rows_kept"]) == (0, 1)
 
     busy = _busy(client, headers, room_id, from_=TOMORROW)
     assert [window["date"] for window in busy] == [str(TOMORROW)]
@@ -145,13 +193,14 @@ def test_reopening_a_cycle_is_not_blocked_by_the_day_its_own_slot_produced(clien
     """Opening checks every slot against the room, and must skip its own days.
 
     The check is the same one that refuses a slot drafted onto an hour a day
-    already holds. Without the exclusion a cycle could be closed and never
-    reopened as soon as one night's generation had run, which is the state
-    every cycle that has been in service is in.
+    already holds. Without the exclusion a cycle closed after that day's
+    register was taken could never be reopened, because closing keeps a day
+    somebody has been marked on.
     """
     headers, slot = _timetable(client, db, seed_users)
     room_id, cycle_id = slot.resource_id, slot.activity.cycle_id
     assert generate_daily_ledger_entries(TOMORROW, db) == 1
+    _mark(db, db.query(DailyLedger).one().id)
     closed = client.patch(f"/api/v1/schedule/cycles/{cycle_id}/close", headers=headers)
     assert closed.status_code == 200, closed.text
 

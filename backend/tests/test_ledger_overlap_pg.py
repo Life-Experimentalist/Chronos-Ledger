@@ -402,8 +402,8 @@ def test_the_endpoint_returns_409_when_the_database_refuses_the_propagate(
     """The branch that exists for the race, reached without running a race.
 
     The reachable sequence, in full: a class in a cycle that has since been
-    closed leaves its generated days behind, because closing a cycle does
-    not withdraw them. _refuse_if_scheduled skips a closed cycle on purpose,
+    closed leaves behind the generated days ahead that attendance was marked
+    on, because closing a cycle keeps those. _refuse_if_scheduled skips a closed cycle on purpose,
     so it reports that window free. An admin moves another class onto it,
     propagate_slot_corrections copies the new window onto every day that
     class has still to run, and the commit lands on top of the leftover.

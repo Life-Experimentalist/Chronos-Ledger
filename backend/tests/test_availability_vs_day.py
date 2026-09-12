@@ -9,8 +9,9 @@ row is what attendance is marked against and what the database refuses a
 second booking on top of.
 
 Three ordinary things leave a generated day that the timetable no longer
-speaks for, or speaks for wrongly. Closing a cycle does not withdraw the days
-it has already produced, and booked_slots counts open cycles only. Deleting a
+speaks for, or speaks for wrongly. Closing a cycle keeps the days already past
+and any ahead that carry attendance or a note, and booked_slots counts open
+cycles only. Deleting a
 slot nulls master_slot_id on its days rather than erasing them, so attendance
 survives. And moving a slot's hours leaves the days already in use holding
 their old window. In all three the room read as free here and was refused by

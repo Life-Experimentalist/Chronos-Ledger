@@ -125,8 +125,8 @@ def resource_availability(
     ledger is going to fill, which is the direction that ends in two bookings.
 
     A generated day counts whatever its cycle says, because closing a cycle
-    does not withdraw the days it has already produced and the database
-    refuses a second row on top of them either way. Where a day and the slot
+    keeps the days already past and any ahead that carry attendance or a
+    note, and the database refuses a second row on top of them either way. Where a day and the slot
     it came from both cover a date, the day is what is reported: it is the
     row that holds the hour, and it keeps the window it was generated with
     when the slot is later corrected.

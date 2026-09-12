@@ -352,9 +352,10 @@ def booked_days(
     No cycle gate, and that is the point of the function. booked_slots counts
     open cycles only, because closing a cycle stops the generator producing
     any more days and reporting its slots would claim dates nothing is going
-    to fill. The days it already produced are still in the table, still name
-    a room and an hour, and the database refuses a second row on top of them
-    whatever their cycle says. days_against_slot does not gate the days by
+    to fill. Closing withdraws the days it had planned from today on, but the
+    ones already past, and any ahead that carry attendance or a note, are
+    still in the table, still name a room and an hour, and the database
+    refuses a second row on top of them whatever their cycle says. days_against_slot does not gate the days by
     cycle either, for the same reason, and these two must not disagree.
 
     The day before the range is fetched too, exactly as held_reservations
