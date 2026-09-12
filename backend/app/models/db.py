@@ -233,6 +233,10 @@ class StructuralMasterSlot(Base):
 
 class DailyLedger(Base):
     __tablename__ = "daily_ledger"
+    # One day per slot per date. See migration 017.
+    __table_args__ = (
+        UniqueConstraint("target_date", "master_slot_id", name="uq_daily_ledger_slot_date"),
+    )
 
     id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
     target_date = Column(Date, nullable=False, index=True)

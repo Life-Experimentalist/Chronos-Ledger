@@ -292,3 +292,4 @@ The FastAPI layer is stateless beyond DB/Redis. To scale horizontally:
 1. Add Redis Pub/Sub broadcasting to `OrganizationConnectionManager` so WebSocket events fanout across multiple app instances.
 2. Place a load balancer in front of the app containers (sticky sessions not required once Pub/Sub is implemented: WS connections land on any instance and receive events via Redis).
 3. The PostgreSQL connection pool (`pool_size=10`, `max_overflow=20` in `core/database.py`) handles typical single-organization loads without change.
+4. Every instance runs the nightly ledger job, and the catch-up when it starts. That needs no leader: the database allows one generated day per slot per date (migration 017), and a run that finds another instance got there first skips the day without logging it.

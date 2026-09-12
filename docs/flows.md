@@ -138,10 +138,10 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    T([APScheduler fires at 00:05 UTC]) --> Q1
+    T([APScheduler fires at 23:00 in ORG_TIMEZONE]) --> Q1
 
-    Q1[Query active PlanningCycle<br/>WHERE operational_status = true] --> Q2
-    Q2[Query all StructuralMasterSlots<br/>for tomorrows day_of_week_index] --> LOOP
+    Q1[Query open PlanningCycles<br/>whose dates include tomorrow] --> Q2
+    Q2[Query their StructuralMasterSlots<br/>for tomorrows day_of_week_index] --> LOOP
 
     LOOP{For each slot} --> CHK
 
@@ -162,8 +162,8 @@ flowchart TD
 
 **Step-by-step:**
 
-1. APScheduler (configured in `backend/app/main.py`) triggers `cron/ledger_generator.generate_tomorrow_ledger()` at 00:05 UTC daily.
-2. The active `PlanningCycle` is queried. If none is active (e.g., term break), the job is a no-op.
-3. For tomorrow's `day_of_week_index`, all `StructuralMasterSlot` rows for that day are fetched.
-4. For each slot, an existence check is performed. This makes the job fully **idempotent**, safe to re-run manually via `POST /ingestion/generate-ledger` without creating duplicates.
+1. APScheduler (configured in `backend/app/main.py`) runs `cron/ledger_generator.generate_daily_ledger_entries()` for tomorrow at 23:00 in `ORG_TIMEZONE`. A server that starts also runs it once for today, and for tomorrow too if it starts at or after 23:00, because the scheduler keeps no record of a run it missed while the server was down. The catch-up never writes a date that has already passed.
+2. Only cycles that are open and whose `date_bounds_start` to `date_bounds_end` includes tomorrow, both ends included, count. If there are none (e.g., term break), the job is a no-op.
+3. For tomorrow's `day_of_week_index`, the `StructuralMasterSlot` rows of those cycles are fetched.
+4. For each slot, an existence check is performed, backed by a unique key on `target_date` and `master_slot_id` (migration 017). This makes the job fully **idempotent**, safe to re-run manually via `POST /ingestion/generate-ledger` and safe on several instances at once, without creating duplicates.
 5. New rows are inserted with `operational_state = SCHEDULED` and the slot's lead. Staff/admins can subsequently mutate the row (substitute lead, delivery format, geofence coords) via `PATCH /schedule/ledger/{id}`.

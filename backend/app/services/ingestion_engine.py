@@ -232,6 +232,7 @@ class ChronosIngestionEngine:
                             int(row["day_of_week_index"]),
                             t_start,
                             t_end,
+                            cycle=cycle,
                         )
                         if held:
                             taken = held[0]
@@ -254,6 +255,7 @@ class ChronosIngestionEngine:
                             t_start,
                             t_end,
                             slot.id if slot else None,
+                            cycle=cycle,
                         )
                         if booked:
                             taken = booked[0]
@@ -279,6 +281,7 @@ class ChronosIngestionEngine:
                         t_start,
                         t_end,
                         slot.id if slot else None,
+                        cycle=cycle,
                     )
                     if days:
                         taken = days[0]

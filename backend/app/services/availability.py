@@ -64,14 +64,23 @@ def _overlaps(
     return first[0] < second[1] and second[0] < first[1]
 
 
+def _within(cycle: PlanningCycle | None, day: datetime.date) -> bool:
+    """Whether a date falls inside a cycle's own dates, both ends included.
+
+    No cycle means no bound, for a caller that wants every date counted.
+    """
+    return cycle is None or cycle.date_bounds_start <= day <= cycle.date_bounds_end
+
+
 def booked_slots(db: Session, resource_id: int) -> list[StructuralMasterSlot]:
     """The weekly slots that count against this resource.
 
-    A slot counts when its cycle is flagged open, and the flag is the whole
-    test. generate_daily_ledger_entries books a day whenever the cycle is
-    open and never looks at date_bounds_start or date_bounds_end, so neither
-    does this. Reading the bounds here would report a room free on a date the
-    nightly job is going to fill, and two systems would book it.
+    A slot counts while its cycle is flagged open, and only on the dates
+    inside the cycle's own bounds. Those are the two tests
+    generate_daily_ledger_entries applies before it writes a day, so a room
+    reported free here is a room the nightly job is not going to fill. The
+    flag is tested here. The dates are tested date by date, in occupied() and
+    slots_against_slot, which is why the cycle is loaded with the slot.
     """
     return (
         db.query(StructuralMasterSlot)
@@ -81,7 +90,7 @@ def booked_slots(db: Session, resource_id: int) -> list[StructuralMasterSlot]:
             StructuralMasterSlot.resource_id == resource_id,
             PlanningCycle.operational_status,
         )
-        .options(joinedload(StructuralMasterSlot.activity))
+        .options(joinedload(StructuralMasterSlot.activity).joinedload(Activity.cycle))
         .all()
     )
 
@@ -129,7 +138,12 @@ def _held_interval(held: Reservation) -> dict:
 
 
 def held_against_slot(
-    db: Session, resource_id: int, weekday: int, start: datetime.time, end: datetime.time
+    db: Session,
+    resource_id: int,
+    weekday: int,
+    start: datetime.time,
+    end: datetime.time,
+    cycle: PlanningCycle | None = None,
 ) -> list[dict]:
     """The still standing bookings a weekly slot at this window would sit on.
 
@@ -158,6 +172,9 @@ def held_against_slot(
     weekday could have and still touch it, its own and the two either side.
     Only one of those three is this weekday, so a hold can be named once at
     most. Nothing further apart can reach it: both windows are under a day.
+
+    cycle is the new slot's own. The slot only ever produces days inside its
+    cycle's dates, so a hold on a date it will never run on is not sat on.
     """
     clashes = []
     for held in (
@@ -173,6 +190,8 @@ def held_against_slot(
             slot_date = held.reserved_date + datetime.timedelta(days=offset)
             if slot_date.isoweekday() != weekday:
                 continue
+            if not _within(cycle, slot_date):
+                continue
             taken = window_span(held.reserved_date, held.time_window_start, held.time_window_end)
             if _overlaps(window_span(slot_date, start, end), taken):
                 clashes.append(_held_interval(held))
@@ -186,6 +205,7 @@ def slots_against_slot(
     start: datetime.time,
     end: datetime.time,
     exclude_slot_id: int | None = None,
+    cycle: PlanningCycle | None = None,
 ) -> list[dict]:
     """The weekly slots a slot at this window on this resource would sit on.
 
@@ -213,10 +233,12 @@ def slots_against_slot(
 
     Which slots count is booked_slots' decision, not this function's, so
     this and the availability endpoint cannot disagree about whether a room
-    is free. That means every open cycle counts, including a second one
-    covering a different part of the year: the generator lays both onto the
-    same date today, so both occupy the room today. Whether two cycles
-    should be open at once is a separate question and is not decided here.
+    is free. Two windows that meet on the probe meet in every week both
+    slots run, and each runs only inside its own cycle's dates, so what is
+    left to ask is whether there is such a week. cycle is the new slot's
+    own. Two open cycles covering different parts of the year can share a
+    room at one hour, and when they do overlap the date reported is the
+    first week they both run, not the probe.
     """
     probe = org_today() + datetime.timedelta(days=1)
     while probe.isoweekday() != weekday:
@@ -228,22 +250,40 @@ def slots_against_slot(
         if slot.id == exclude_slot_id:
             continue
         for offset in (-1, 0, 1):
-            day = probe + datetime.timedelta(days=offset)
+            shift = datetime.timedelta(days=offset)
+            day = probe + shift
             if day.isoweekday() != slot.day_of_week_index:
                 continue
+            if not _overlaps(
+                window_span(day, slot.time_window_start, slot.time_window_end), window
+            ):
+                continue
+            # The first date on the new slot's weekday, from the probe on,
+            # that is inside its cycle while the other side, a shift away, is
+            # inside the other cycle. None of them means the two never meet.
+            other = slot.activity.cycle
+            first = max(probe, other.date_bounds_start - shift)
+            last = other.date_bounds_end - shift
+            if cycle is not None:
+                first = max(first, cycle.date_bounds_start)
+                last = min(last, cycle.date_bounds_end)
+            first += datetime.timedelta(days=(weekday - first.isoweekday()) % 7)
+            if first > last:
+                continue
+            day = first + shift
             _, ends = window_span(day, slot.time_window_start, slot.time_window_end)
-            entry = {
-                "date": day,
-                "start": slot.time_window_start,
-                "end_date": ends.date(),
-                "end": slot.time_window_end,
-                "activity_id": slot.activity_id,
-                "activity_code": slot.activity.activity_code if slot.activity else None,
-                "master_slot_id": slot.id,
-                "reservation_id": None,
-            }
-            if _overlaps(_bounds(entry), window):
-                clashes.append(entry)
+            clashes.append(
+                {
+                    "date": day,
+                    "start": slot.time_window_start,
+                    "end_date": ends.date(),
+                    "end": slot.time_window_end,
+                    "activity_id": slot.activity_id,
+                    "activity_code": slot.activity.activity_code,
+                    "master_slot_id": slot.id,
+                    "reservation_id": None,
+                }
+            )
     return clashes
 
 
@@ -314,8 +354,8 @@ def booked_days(
     any more days and reporting its slots would claim dates nothing is going
     to fill. The days it already produced are still in the table, still name
     a room and an hour, and the database refuses a second row on top of them
-    whatever their cycle says. days_against_slot has no cycle gate on either
-    side for the same reason, and these two must not disagree.
+    whatever their cycle says. days_against_slot does not gate the days by
+    cycle either, for the same reason, and these two must not disagree.
 
     The day before the range is fetched too, exactly as held_reservations
     fetches it: a day dated Monday running 22:00 to 06:00 occupies Tuesday
@@ -359,6 +399,7 @@ def days_against_slot(
     start: datetime.time,
     end: datetime.time,
     exclude_slot_id: int | None = None,
+    cycle: PlanningCycle | None = None,
 ) -> list[dict]:
     """The generated days a weekly slot at this window would sit on.
 
@@ -372,8 +413,10 @@ def days_against_slot(
     so a booking may be accepted on top of a closed cycle's slot. The days it
     already produced are a different matter. They are still in the table, they
     still name a room and an hour, and the database will refuse a second row
-    on top of them whatever their cycle says. So there is no cycle gate here,
-    on either side.
+    on top of them whatever their cycle says. So the days are not gated by
+    cycle at all. The new slot is: cycle is its own, and it only ever
+    produces days inside that cycle's dates, so a day on a date it will never
+    run beside is not a clash.
 
     Every future day of the resource is scanned rather than one probe date,
     because a correction is copied onto every day this slot has still to run
@@ -390,6 +433,8 @@ def days_against_slot(
         for offset in (-1, 0, 1):
             slot_date = row.target_date + datetime.timedelta(days=offset)
             if slot_date.isoweekday() != weekday:
+                continue
+            if not _within(cycle, slot_date):
                 continue
             entry = _day_interval(row)
             if _overlaps(_bounds(entry), window_span(slot_date, start, end)):
@@ -423,6 +468,9 @@ def occupied(
     they were generated with, and it is a closed cycle's leftovers and a
     deleted slot's days staying booked: those carry no live slot to drop and
     are simply added.
+
+    A slot is expanded only onto the dates inside its cycle's own bounds,
+    which are the dates the generator will write it on.
 
     A reservation carries no activity and a slot carries no reservation id,
     so which kind an interval is can be read off the fields that are set.
@@ -461,6 +509,8 @@ def occupied(
             if (day, slot.id) in settled:
                 continue
             activity = slot.activity
+            if activity is not None and not _within(activity.cycle, day):
+                continue
             _, ends = window_span(day, slot.time_window_start, slot.time_window_end)
             entry = {
                 "date": day,

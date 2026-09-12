@@ -214,7 +214,7 @@ Automatically on first login when `initial_login_state` is `true` for a `SUPER_A
 
 ### CSV import succeeded but the timetable looks empty
 
-The ledger is not generated automatically after import. Go to **Step 4: Generate Ledger** in the wizard (or Admin Dashboard → Import → Generate Daily Ledger). The nightly cron runs at midnight, but you can trigger it manually from the UI.
+The ledger is not generated automatically after import. Go to **Step 4: Generate Ledger** in the wizard (or Admin Dashboard → Import → Generate Daily Ledger). The nightly job only writes the next day, at 23:00 in `ORG_TIMEZONE`, but you can trigger it manually from the UI.
 
 ---
 

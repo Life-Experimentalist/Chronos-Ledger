@@ -442,11 +442,11 @@ Times are naive wall clock in the organisation's own timezone, the same as the
 slot stores. They carry no offset and no `Z`.
 
 What counts as taken: a weekly slot pointing at this resource whose cycle is
-flagged open, any reservation on it that has not been cancelled, and any day
-the nightly generator has already written for it. Cycle date bounds are
-**not** consulted for slots, because nightly ledger generation does not
-consult them either. Answering otherwise would report a room free on a date
-the generator is going to fill.
+flagged open, on the dates from that cycle's `date_bounds_start` to its
+`date_bounds_end`, both included; any reservation on it that has not been
+cancelled; and any day the nightly generator has already written for it. The
+flag and the dates are the two tests nightly ledger generation applies, so a
+date reported free here is not one the generator is going to fill.
 
 A generated day counts whatever its cycle now says. Closing a cycle stops the
 generator producing more days but does not withdraw the ones it produced, and
@@ -690,6 +690,11 @@ A cycle can be created closed, filled in over as long as that takes, and put
 into service once it is ready, which is what `open` is for. It is the only
 thing that sets `operational_status` back to true.
 
+A cycle's two dates are the days its slots run on, both included: the nightly
+generator writes no day for a slot outside them. A `date_bounds_end` earlier
+than `date_bounds_start` is refused with `422`, and equal dates are a cycle of
+one day.
+
 It is not a flag flip. A slot entered into a closed cycle is never checked
 against the bookings or against the rest of the timetable, because a closed
 cycle's slots occupy nothing, and every one of them starts occupying its room
@@ -732,10 +737,11 @@ because neither of the two is the one at fault and one of them has to move.
 A refused open writes nothing: the cycle stays closed. Opening a cycle that is
 already open changes nothing and returns `200`.
 
-Date bounds are not consulted, and whether two cycles may be open at once is
-not decided here. The nightly generator lays every open cycle onto today
-whatever the bounds say, which is the same thing
-`GET /resources/{id}/availability` reports.
+Two cycles may be open at once. Each slot runs only on the dates inside its
+own cycle's bounds, so two cycles covering different parts of the year do not
+clash, and where they do overlap the date reported is the first one both
+slots run on. That is the same thing `GET /resources/{id}/availability`
+reports.
 
 ### POST /schedule/slots `[ADMIN]`
 ### PATCH /schedule/slots/{id} `[ADMIN]`
@@ -809,11 +815,12 @@ the database refuses a second row on top of one either way.
 A weekly slot has no date of its own, so the one reported is the next time
 the clash actually happens. It repeats every week until one of the two moves.
 
-Every open cycle counts, including a second one covering a different part of
-the year. The nightly generator lays every open cycle onto today whatever the
-cycles say their date bounds are, so all of them hold the room today, and a
-free-looking hour that the generator is going to fill would be worse than a
-refusal.
+Every open cycle counts, on its own dates only. A slot produces days only from
+its cycle's `date_bounds_start` to its `date_bounds_end`, so a class in a cycle
+covering the spring does not block one in a cycle covering the autumn, and
+where two cycles do overlap the date reported is the first week both classes
+run. The new slot's own cycle limits it the same way: a booking or a generated
+day on a date that cycle never reaches is not a clash.
 
 A `PATCH` is only checked when it would actually move the class. Changing the
 lead on a slot, or anything else that leaves the room, weekday and window
@@ -1068,6 +1075,15 @@ timeouts.
 ```json
 { "target_date": "2026-09-01" }   // optional; defaults to tomorrow
 ```
+
+The nightly job does this for tomorrow at 23:00 in `ORG_TIMEZONE`. A server
+that starts also does it once for today, and for tomorrow as well if it starts
+at or after 23:00, because a run missed while the server was down is not
+remembered. That catch-up never writes a date that has already passed.
+
+A slot gets a day only while its cycle is open and the date is inside the
+cycle's own dates. Running this again for a date is harmless: a slot has at
+most one day per date, and the database refuses a second (migration 017).
 
 ---
 

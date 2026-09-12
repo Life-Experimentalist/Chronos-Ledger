@@ -200,15 +200,12 @@ def test_a_closed_cycle_does_not_occupy_the_room(client, db, seed_users):
 
 
 def test_availability_counts_cycles_the_way_generation_does(client, db, seed_users):
-    """The gate is the open flag, and only the open flag.
+    """The gate is the open flag and the cycle's own dates, and nothing else.
 
-    generate_daily_ledger_entries books a day whenever the cycle is flagged
-    open; it never looks at date_bounds_start or date_bounds_end. So neither
-    does this. Reading the bounds here would report a room free on a date the
-    nightly job is going to fill, and two systems would book it.
-
-    If the generator ever starts honouring bounds, the second half of this
-    fails on purpose, so availability moves with it rather than drifting.
+    generate_daily_ledger_entries books a day when the cycle is flagged open
+    and the date is inside date_bounds_start to date_bounds_end, and so does
+    this. Reading either test differently here would report a room free on a
+    date the nightly job is going to fill, or taken on one it never will.
     """
     room = _room(db)
     open_cycle = _cycle(db, start=datetime.date(2026, 1, 1), end=datetime.date(2026, 6, 30))
@@ -227,7 +224,27 @@ def test_availability_counts_cycles_the_way_generation_does(client, db, seed_use
         from_=datetime.date(2026, 12, 7),
         to=datetime.date(2026, 12, 13),
     ).json()["busy"]
-    assert [e["activity_code"] for e in past_the_end] == ["OPEN"]
+    assert past_the_end == []
+
+
+def test_a_cycle_holds_the_room_on_both_of_its_own_dates(client, db, seed_users):
+    """Both ends included, and not a day either side.
+
+    The cycle starts and ends on a Monday, so a Monday slot has a date on
+    each edge and a Monday just outside each, and the range covers all four.
+    """
+    room = _room(db)
+    _slot(db, room, _cycle(db, start=MONDAY, end=datetime.date(2026, 1, 12)))
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+
+    busy = _availability(
+        client,
+        headers,
+        room.id,
+        from_=datetime.date(2025, 12, 29),
+        to=datetime.date(2026, 1, 25),
+    ).json()["busy"]
+    assert [e["date"] for e in busy] == ["2026-01-05", "2026-01-12"]
 
 
 def test_a_retired_room_still_answers(client, db, seed_users):

@@ -15,6 +15,15 @@ class PlanningCycleCreate(BaseModel):
     date_bounds_end: date
     operational_status: bool = False
 
+    @model_validator(mode="after")
+    def _ends_after_it_starts(self):
+        # A day is generated only between the two dates, both included, so a
+        # cycle that ends before it starts could never produce one. Equal
+        # dates are a cycle of a single day.
+        if self.date_bounds_end < self.date_bounds_start:
+            raise ValueError("date_bounds_end must not be earlier than date_bounds_start")
+        return self
+
 
 class PlanningCycleResponse(BaseModel):
     id: int

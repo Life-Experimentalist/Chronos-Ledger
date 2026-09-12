@@ -58,7 +58,7 @@ def _refuse_if_held(db, cycle, resource_id, weekday, start, end) -> None:
     """
     if cycle is None or not cycle.operational_status:
         return
-    conflicts = held_against_slot(db, resource_id, weekday, start, end)
+    conflicts = held_against_slot(db, resource_id, weekday, start, end, cycle=cycle)
     if conflicts:
         raise HTTPException(
             status_code=409,
@@ -86,7 +86,9 @@ def _refuse_if_scheduled(db, cycle, resource_id, weekday, start, end, exclude_sl
     """
     if cycle is None or not cycle.operational_status:
         return
-    conflicts = slots_against_slot(db, resource_id, weekday, start, end, exclude_slot_id)
+    conflicts = slots_against_slot(
+        db, resource_id, weekday, start, end, exclude_slot_id, cycle=cycle
+    )
     if conflicts:
         raise HTTPException(
             status_code=409,
@@ -94,7 +96,9 @@ def _refuse_if_scheduled(db, cycle, resource_id, weekday, start, end, exclude_sl
         )
 
 
-def _refuse_if_a_day_is_there(db, resource_id, weekday, start, end, exclude_slot_id=None) -> None:
+def _refuse_if_a_day_is_there(
+    db, cycle, resource_id, weekday, start, end, exclude_slot_id=None
+) -> None:
     """Refuse a slot that would be laid on top of a day already generated.
 
     The two checks above read the timetable and the bookings. A generated day
@@ -107,17 +111,21 @@ def _refuse_if_a_day_is_there(db, resource_id, weekday, start, end, exclude_slot
     purpose. Deleting a slot withdraws its future days unless attendance has
     been marked on them, and a day that has been marked stays.
 
-    No cycle gate here, on either side, for the same reason: the day is in the
+    The days are not gated by cycle, for the same reason: a day is in the
     table whatever its cycle now says, and migration 013 will refuse a second
     row on top of it whatever anybody thinks about the cycle. A check that
-    disagreed with the constraint would turn a refusal into a 500.
+    disagreed with the constraint would turn a refusal into a 500. cycle is
+    the new slot's own, and only limits the dates it will run on; whether it
+    is open does not matter here.
 
     Asked twice on the edit path, once before writing and once if the database
     refuses the write anyway. Two admins moving two classes onto one room at
     the same moment both pass the first ask, and the loser has to be told what
     beat it rather than handed a stack trace.
     """
-    conflicts = days_against_slot(db, resource_id, weekday, start, end, exclude_slot_id)
+    conflicts = days_against_slot(
+        db, resource_id, weekday, start, end, exclude_slot_id, cycle=cycle
+    )
     if conflicts:
         raise HTTPException(
             status_code=409,
@@ -224,9 +232,11 @@ def open_cycle(
             continue
         window = (slot.day_of_week_index, slot.time_window_start, slot.time_window_end)
         found = (
-            held_against_slot(db, slot.resource_id, *window)
-            + slots_against_slot(db, slot.resource_id, *window, exclude_slot_id=slot.id)
-            + days_against_slot(db, slot.resource_id, *window, exclude_slot_id=slot.id)
+            held_against_slot(db, slot.resource_id, *window, cycle=cycle)
+            + slots_against_slot(
+                db, slot.resource_id, *window, exclude_slot_id=slot.id, cycle=cycle
+            )
+            + days_against_slot(db, slot.resource_id, *window, exclude_slot_id=slot.id, cycle=cycle)
         )
         conflicts.extend({**clash, "blocked_slot_id": slot.id} for clash in found)
 
@@ -317,6 +327,7 @@ def create_master_slot(
     )
     _refuse_if_a_day_is_there(
         db,
+        offering.cycle,
         room.id,
         payload.day_of_week_index,
         payload.time_window_start,
@@ -399,7 +410,9 @@ def update_master_slot(
         # CSV importer uses, for the same reason.
         _refuse_if_held(db, slot.activity.cycle, resource_id, weekday, start, end)
         _refuse_if_scheduled(db, slot.activity.cycle, resource_id, weekday, start, end, slot.id)
-        _refuse_if_a_day_is_there(db, resource_id, weekday, start, end, slot.id)
+        _refuse_if_a_day_is_there(
+            db, slot.activity.cycle, resource_id, weekday, start, end, slot.id
+        )
 
     removed = 0
     if weekday != slot.day_of_week_index:
@@ -420,8 +433,12 @@ def update_master_slot(
         # else's edit landing between the check above and this commit is how
         # that gets refused here, and the rollback is what makes the second
         # ask possible: the session is unusable until it happens.
+        #
+        # No cycle this time. A day generated before the cycle's dates were
+        # honored can sit outside them and still be moved, and a refusal
+        # over it has to come back as a 409 and not a 500.
         db.rollback()
-        _refuse_if_a_day_is_there(db, resource_id, weekday, start, end, slot_id)
+        _refuse_if_a_day_is_there(db, None, resource_id, weekday, start, end, slot_id)
         raise
     return {**result, "ledger_rows_removed": removed}
 

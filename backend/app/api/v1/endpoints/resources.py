@@ -118,11 +118,11 @@ def resource_availability(
     refused when it tried to take the hour, or take an hour something had
     already claimed.
 
-    A slot counts when its cycle is open. Cycle date bounds are not
-    consulted, because the nightly ledger generation does not consult them
-    either: it books a day whenever the cycle flag is on. Answering anything
-    else here would tell a caller a room was free on a date the ledger is
-    going to fill, which is the direction that ends in two bookings.
+    A slot counts when its cycle is open and the date is inside the cycle's
+    own dates, both ends included, because those are the two tests the
+    nightly ledger generation applies before it books a day. Answering
+    anything else here would tell a caller a room was free on a date the
+    ledger is going to fill, which is the direction that ends in two bookings.
 
     A generated day counts whatever its cycle says, because closing a cycle
     does not withdraw the days it has already produced and the database

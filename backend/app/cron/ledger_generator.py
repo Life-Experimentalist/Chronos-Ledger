@@ -7,6 +7,10 @@ A slot says a class runs on Mondays at nine. A ledger row says it runs on the
 sixteenth of March at nine, in this room, with this lead, and is the row
 attendance is marked against. This is the only thing that writes those rows.
 
+A slot produces a day only while its cycle is open and the date falls inside
+the cycle's own dates, both ends included. availability.occupied applies the
+same two tests, so what the API reports as taken is what this will write.
+
 Two slots can be on one room at one hour despite every check in the API, so
 this has to survive finding out. Migration 013 puts an exclusion constraint on
 daily_ledger, which means the second insert on a taken window is refused by
@@ -49,6 +53,8 @@ def generate_daily_ledger_entries(target_date: datetime.date, db: Session) -> in
         .filter(
             StructuralMasterSlot.day_of_week_index == day_index,
             PlanningCycle.operational_status,
+            PlanningCycle.date_bounds_start <= target_date,
+            PlanningCycle.date_bounds_end >= target_date,
         )
         # Oldest slot first, so which of two clashing classes keeps the room
         # is decided by which was put on the timetable first and not by the
@@ -102,8 +108,9 @@ def generate_daily_ledger_entries(target_date: datetime.date, db: Session) -> in
             #
             # This is also what closes the gap between the query above and the
             # insert. Two runs of this job against one database both find no
-            # existing row and both insert; the second is now refused here
-            # instead of quietly doubling every day of the week.
+            # existing row and both insert; the second is refused here, by the
+            # one-day-per-slot key from migration 017, instead of quietly
+            # doubling every day of the week.
             with db.begin_nested():
                 db.add(entry)
                 db.flush()
@@ -111,6 +118,19 @@ def generate_daily_ledger_entries(target_date: datetime.date, db: Session) -> in
             # Nothing to expunge: rolling the savepoint back has already taken
             # the pending row out of the session, and asking for it again
             # raises rather than being a harmless no-op.
+            #
+            # A row for this slot and date now means another run wrote it
+            # between the query above and the insert. The day exists, so there
+            # is nothing to report.
+            lost_race = (
+                db.query(DailyLedger)
+                .filter(
+                    DailyLedger.master_slot_id == slot.id, DailyLedger.target_date == target_date
+                )
+                .first()
+            )
+            if lost_race:
+                continue
             taken = days_against_window(
                 db,
                 slot.resource_id,
@@ -134,3 +154,23 @@ def generate_daily_ledger_entries(target_date: datetime.date, db: Session) -> in
 
     db.commit()
     return created
+
+
+def missed_ledger_dates(now: datetime.datetime, nightly_hour: int) -> list[datetime.date]:
+    """The dates a process starting at `now` should make sure exist.
+
+    The nightly job writes tomorrow at nightly_hour, and the scheduler keeps no
+    record of runs it missed while the process was down. Today is always
+    included, because last night's run may be the one that was missed.
+    Tomorrow is included once the nightly hour has come, because tonight's may
+    have been missed too. Earlier dates never are: a day that is over is
+    history, and a planned row written into it now would read as a class that
+    ran with nobody marked present.
+
+    Running a date twice is harmless, since generation skips a slot that
+    already has its day.
+    """
+    today = now.date()
+    if now.hour >= nightly_hour:
+        return [today, today + datetime.timedelta(days=1)]
+    return [today]

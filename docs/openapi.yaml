@@ -1922,10 +1922,10 @@ paths:
         Expands the weekly slots pointing at this resource over the range,
         inclusive of both ends, and unions in the reservations and the days
         the nightly generator has already written. A slot counts when its
-        cycle is flagged open; cycle date bounds are not consulted, because
-        nightly ledger generation does not consult them either, and answering
-        otherwise would report a room free on a date the generator is going to
-        fill.
+        cycle is flagged open and the date is inside the cycle's date bounds,
+        both ends included, which are the two tests nightly ledger generation
+        applies; answering otherwise would report a room free on a date the
+        generator is going to fill.
 
 
         A generated day counts whatever its cycle now says: closing a cycle
@@ -2427,7 +2427,10 @@ paths:
     post:
       tags: [Schedule]
       summary: Create a new planning cycle
-      description: Requires `SUPER_ADMIN` or `UNIT_ADMIN`.
+      description: >
+        Requires `SUPER_ADMIN`. The two dates are the days the cycle's slots
+        run on, both included. An end earlier than the start is refused with
+        422; equal dates are a cycle of one day.
       requestBody:
         required: true
         content:
@@ -2435,7 +2438,7 @@ paths:
             schema:
               $ref: "#/components/schemas/PlanningCycleCreate"
       responses:
-        "201":
+        "200":
           description: Cycle created.
           content:
             application/json:
@@ -2443,6 +2446,8 @@ paths:
                 $ref: "#/components/schemas/PlanningCycleResponse"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   /api/v1/schedule/cycles/{cycle_id}/close:
     patch:

@@ -13,8 +13,8 @@ from app.api.v1.router import api_router
 from app.core.bootstrap import apply_initial_admin_password
 from app.core.config import docs_are_published, get_settings
 from app.core.database import SessionLocal
-from app.core.time import org_timezone, org_tomorrow
-from app.cron.ledger_generator import generate_daily_ledger_entries
+from app.core.time import org_now, org_timezone, org_tomorrow
+from app.cron.ledger_generator import generate_daily_ledger_entries, missed_ledger_dates
 from app.cron.refresh_token_cleanup import purge_expired_refresh_tokens
 
 settings = get_settings()
@@ -22,7 +22,15 @@ settings = get_settings()
 # meant 23:00 UTC, which is 04:30 the next morning in Kolkata and lunchtime in
 # Los Angeles, so the nightly job ran in the middle of the working day for
 # half the world.
-scheduler = AsyncIOScheduler(timezone=org_timezone())
+#
+# A run that comes due while the process is busy still happens if it is under
+# half an hour late, instead of being dropped after the one second APScheduler
+# allows by default. Not a full hour: the ledger run works out tomorrow when
+# it starts, and an hour after 23:00 tomorrow is a different date. The
+# catch-up job is due the moment it is added, before the scheduler starts,
+# so it leans on this as well.
+scheduler = AsyncIOScheduler(timezone=org_timezone(), job_defaults={"misfire_grace_time": 1800})
+NIGHTLY_LEDGER_HOUR = 23
 
 
 @asynccontextmanager
@@ -32,11 +40,13 @@ async def lifespan(_app: FastAPI):
     scheduler.add_job(
         _run_ledger_generator,
         "cron",
-        hour=23,
+        hour=NIGHTLY_LEDGER_HOUR,
         minute=0,
         id="nightly_ledger_gen",
         replace_existing=True,
     )
+    # Once, now: whatever the nightly job missed while this process was down.
+    scheduler.add_job(_catch_up_ledger, id="ledger_catch_up", replace_existing=True)
     # Daily, away from the ledger run.
     scheduler.add_job(
         _purge_refresh_tokens,
@@ -80,6 +90,25 @@ def _run_ledger_generator():
     db = SessionLocal()
     try:
         generate_daily_ledger_entries(tomorrow, db)
+    finally:
+        db.close()
+
+
+def _catch_up_ledger():
+    """Write the days the nightly job would have written while nothing ran.
+
+    The scheduler forgets a run it missed across a restart, so a deploy over
+    23:00 left tomorrow empty until somebody called generate-ledger by hand.
+    missed_ledger_dates says which dates, and why never earlier ones.
+
+    Every instance does this when it starts, and two at once is safe: the
+    database refuses a second day for one slot and date, and the run that
+    loses skips it without a word.
+    """
+    db = SessionLocal()
+    try:
+        for day in missed_ledger_dates(org_now(), NIGHTLY_LEDGER_HOUR):
+            generate_daily_ledger_entries(day, db)
     finally:
         db.close()
 

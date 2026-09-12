@@ -355,10 +355,10 @@ def test_an_upload_into_a_closed_cycle_is_not_checked(client, db, seed_users):
 def test_a_slot_in_another_open_cycle_still_blocks(client, db, seed_users):
     """Two open cycles are two timetables competing for one room.
 
-    booked_slots counts every open cycle and the generator lays every open
-    cycle onto today, so both occupy the room today whatever the cycles say
-    their date bounds are. This check inherits that and does not decide
-    whether two cycles should be open at once.
+    Both of these cycles cover tomorrow, so both slots would put a day in the
+    room on the same dates and the second is refused. This check does not
+    decide whether two cycles should be open at once; test_cycle_dates has
+    two that cover different dates.
     """
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
     room = _room(db)
