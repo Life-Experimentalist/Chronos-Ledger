@@ -122,7 +122,7 @@ jobs:
       # ── Backend image ──────────────────────────────────────────────────────
       - name: Extract metadata, backend
         id: meta-backend
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: |
             ${{ steps.images.outputs.ghcr_backend }}
@@ -175,7 +175,7 @@ jobs:
       # ── Web image (nginx + pre-built Next.js static files) ────────────────
       - name: Extract metadata, web
         id: meta-web
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: |
             ${{ steps.images.outputs.ghcr_web }}
