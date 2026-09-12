@@ -1092,6 +1092,13 @@ components:
           nullable: true
           example: 920.5
           description: Altitude in metres. Optional. The floor check runs only when the client supplies an altitude it can vouch for, and is skipped otherwise; a geo-fenced session requires lat/lon alone.
+        user_accuracy:
+          type: number
+          format: double
+          nullable: true
+          minimum: 0
+          example: 8.0
+          description: How far off the fix may be, in meters, as the device reports it (coords.accuracy in a browser). Optional. On a geo-fenced session a fix coarser than GEOFENCE_ACCURACY_FACTOR times precision_radius_meters (30 m on the default 15 m radius) returns 400.
 
     AttendanceBatchRequest:
       type: object
@@ -2831,7 +2838,9 @@ paths:
         `precision_radius_meters`. `user_alt` is optional and only adds a
         floor check when the ledger also carries an `altitude_target`.
         Omitting the coordinates on a fenced session returns 400; there is no
-        client-side way to skip the fence.
+        client-side way to skip the fence. When the member sends
+        `user_accuracy`, a fix coarser than `GEOFENCE_ACCURACY_FACTOR` times
+        the radius also returns 400.
         Marking a member again replaces their status rather than adding a
         second row.
       requestBody:

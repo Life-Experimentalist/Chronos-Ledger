@@ -9,6 +9,7 @@ import { useGeolocation } from '@/hooks/useGeolocation'
 import { attendanceApi } from '@/lib/api'
 import { queueAttendanceMark, getPendingCount, flushAttendanceQueue } from '@/lib/indexeddb'
 import { getToken } from '@/lib/auth'
+import { apiErrorMessage } from '@/lib/errors'
 import type { LedgerEntry } from '@/types'
 
 interface ProximityCardProps {
@@ -20,6 +21,7 @@ export function ProximityCard({ currentEntry, userId }: ProximityCardProps) {
   const { position, error, startWatching, isWatching, hasGoodAccuracy } = useGeolocation()
   const [marking, setMarking] = useState(false)
   const [markResult, setMarkResult] = useState<'success' | 'fail' | null>(null)
+  const [failReason, setFailReason] = useState('')
   const [pendingCount, setPendingCount] = useState(0)
   const [online, setOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
 
@@ -54,6 +56,7 @@ export function ProximityCard({ currentEntry, userId }: ProximityCardProps) {
       user_lat: position?.lat,
       user_lon: position?.lon,
       user_alt: position?.alt,
+      user_accuracy: position?.accuracy,
     }
 
     try {
@@ -65,7 +68,8 @@ export function ProximityCard({ currentEntry, userId }: ProximityCardProps) {
         await attendanceApi.markAttendance(payload)
         setMarkResult('success')
       }
-    } catch {
+    } catch (err) {
+      setFailReason(apiErrorMessage(err, 'You appear to be outside the class geofence boundary.'))
       setMarkResult('fail')
     } finally {
       setMarking(false)
@@ -168,8 +172,8 @@ export function ProximityCard({ currentEntry, userId }: ProximityCardProps) {
               className="glass-card p-5 text-center border border-chronos-danger/30"
             >
               <AlertCircle className="w-12 h-12 text-chronos-danger mx-auto mb-2" />
-              <p className="font-semibold text-chronos-danger">Location Mismatch</p>
-              <p className="text-xs text-chronos-text-dim mt-1">You appear to be outside the class geofence boundary.</p>
+              <p className="font-semibold text-chronos-danger">Not Marked</p>
+              <p className="text-xs text-chronos-text-dim mt-1">{failReason}</p>
               <button onClick={() => setMarkResult(null)} className="mt-3 text-xs text-chronos-muted hover:text-chronos-text">
                 Try Again
               </button>

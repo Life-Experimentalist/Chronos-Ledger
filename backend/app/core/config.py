@@ -141,6 +141,14 @@ class Settings(BaseSettings):
     # raising this past 25 means raising that too.
     csv_upload_max_mb: int = 25
 
+    # How coarse a member's location fix may be, as a multiple of the
+    # session's fence radius. A fix that could be 80 m off proves little
+    # about a 15 m fence even when its point lands inside. 2 refuses
+    # anything coarser than 30 m on the default radius, the same line the
+    # web client draws. 0 turns the check off. A mark that reports no
+    # accuracy at all is not refused for it.
+    geofence_accuracy_factor: float = 2.0
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.app_cors_origins.split(",") if o.strip()]
@@ -166,6 +174,16 @@ class Settings(BaseSettings):
                 "this refuses to go under. Raise it, or leave it unset for 12."
             )
         return length
+
+    @field_validator("geofence_accuracy_factor")
+    @classmethod
+    def _factor_is_not_negative(cls, factor: float) -> float:
+        if factor < 0:
+            raise ValueError(
+                f"GEOFENCE_ACCURACY_FACTOR={factor} is negative. Set 0 to turn the "
+                "accuracy check off, or leave it unset for 2."
+            )
+        return factor
 
     @field_validator("org_timezone")
     @classmethod

@@ -106,7 +106,7 @@ Full diagrams with Mermaid charts: [`docs/architecture.md`](docs/architecture.md
 ## Feature Highlights
 
 ### Geofenced Attendance
-Members mark attendance via GPS. The server runs a Haversine distance check, plus an altitude delta (`|Δalt| <= 4m`) when both the device and the room report an altitude, so that somebody a floor above or below does not register. Altitude is optional on both sides: a fix without one is judged on the horizontal radius alone. The client refuses to mark at all when the reported accuracy is worse than 30m.
+Members mark attendance via GPS. The server runs a Haversine distance check, plus an altitude delta (`|Δalt| <= 4m`) when both the device and the room report an altitude, so that somebody a floor above or below does not register. Altitude is optional on both sides: a fix without one is judged on the horizontal radius alone. The client refuses to mark at all when the reported accuracy is worse than 30m, and the server refuses a fix coarser than `GEOFENCE_ACCURACY_FACTOR` times the fence radius, which by default is the same 30m on a 15m fence.
 
 ### 4-Tier Staff Location Resolution
 Always know where staff are, in priority order:
@@ -312,6 +312,7 @@ the buildkit attestations that ride along inside the image itself.
 | `RATE_LIMIT_GUEST_CHECKIN` | optional  | Visitor check-ins per kiosk account per hour, default 300. `0` turns it off. |
 | `RATE_LIMIT_CALENDAR_FEED` | optional  | Calendar feed fetches per feed token per hour, default 60. `0` turns it off. |
 | `CSV_UPLOAD_MAX_MB`      | optional    | Largest CSV `POST /ingestion/upload-csv` accepts, in MB, default 25. A bigger file is refused with `413` before anything is imported. nginx refuses requests over 25 MB on its own, so going past 25 means raising `client_max_body_size` in `nginx/nginx.conf` too. |
+| `GEOFENCE_ACCURACY_FACTOR` | optional  | How coarse a member's location fix may be, as a multiple of the session's fence radius, default 2 (30 m on the default 15 m radius). A mark whose reported accuracy is coarser gets `400`. `0` turns the check off. A mark that reports no accuracy is not refused for it. |
 | `DOCS_ENABLED`           | optional    | Whether `/docs`, `/redoc` and `/openapi.json` are served. Blank follows `APP_ENV`: off in production, on everywhere else. Set `true` to publish them from a production instance anyway. |
 | `FORWARDED_ALLOW_IPS`    | optional    | Which upstream addresses uvicorn believes `X-Forwarded-For` from, default `*`. The app container publishes no ports, so nginx is the only way in. The sign-in limit needs it to tell callers apart from the proxy, and the proxy overwrites that header rather than appending to it, so a caller cannot forge an address. |
 | `VAPID_PUBLIC_KEY`       | recommended | Web Push: `npx web-push generate-vapid-keys`               |

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import get_current_user, in_unit_scope
 from app.core.websocket_manager import socket_broker
@@ -116,6 +117,18 @@ def mark_attendance(
                     status_code=400,
                     detail="This session is geo-fenced; location coordinates are required",
                 )
+            radius = ledger.precision_radius_meters or 15
+            factor = get_settings().geofence_accuracy_factor
+            if factor and payload.user_accuracy is not None:
+                limit = radius * factor
+                if payload.user_accuracy > limit:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Location accuracy of {payload.user_accuracy:.0f} m is too coarse "
+                            f"for this session's {radius:.0f} m fence; the limit is {limit:.0f} m"
+                        ),
+                    )
             target_lat, target_lon, target_alt = target
             valid = validate_3d_presence(
                 payload.user_lat,
@@ -124,7 +137,7 @@ def mark_attendance(
                 target_lat,
                 target_lon,
                 target_alt,
-                ledger.precision_radius_meters or 15,
+                radius,
             )
             if not valid:
                 raise HTTPException(status_code=400, detail="Location outside geofence boundary")

@@ -85,6 +85,9 @@ services:
       RATE_LIMIT_CALENDAR_FEED: ${RATE_LIMIT_CALENDAR_FEED:-60}
       # Largest CSV upload in MB. nginx refuses anything over 25 MB first.
       CSV_UPLOAD_MAX_MB: ${CSV_UPLOAD_MAX_MB:-25}
+      # How coarse a member's location fix may be, as a multiple of the
+      # fence radius. 0 turns the check off.
+      GEOFENCE_ACCURACY_FACTOR: ${GEOFENCE_ACCURACY_FACTOR:-2}
       # Which upstream addresses uvicorn believes X-Forwarded-For from. This
       # service publishes no ports, so nginx is the only way in. Without it
       # every request looks like it came from the proxy and the sign-in

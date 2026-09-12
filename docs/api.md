@@ -953,7 +953,8 @@ has not been deactivated (`422`, `Lead is deactivated`).
   "marking_status": "PRESENT",
   "user_lat": 12.971598,
   "user_lon": 77.594562,
-  "user_alt": 920.5
+  "user_alt": 920.5,
+  "user_accuracy": 8.0
 }
 ```
 
@@ -966,6 +967,11 @@ member marking one has to send `user_lat` and `user_lon` and be inside
 `precision_radius_meters`, or gets `400`; there is no way to skip the fence from
 the client. `user_alt` is optional and only adds a floor check when the session
 carries an altitude.
+
+`user_accuracy` is how far off the fix may be, in meters, as the device reports
+it (`coords.accuracy` in a browser). On a fenced session a fix coarser than
+`GEOFENCE_ACCURACY_FACTOR` times the radius, 30 m on the default 15 m fence,
+gets `400`. It is optional, and a mark without it is judged on its point alone.
 
 A `member_id` matching nobody gets `404`. Marking a member again replaces their
 status rather than adding a second row.

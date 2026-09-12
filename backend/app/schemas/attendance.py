@@ -15,6 +15,9 @@ class AttendanceMarkRequest(BaseModel):
     user_lat: float | None = None
     user_lon: float | None = None
     user_alt: float | None = None
+    # The device's own estimate of how far off the fix may be, in meters:
+    # coords.accuracy from the browser's Geolocation API.
+    user_accuracy: float | None = Field(default=None, ge=0, allow_inf_nan=False)
 
 
 class AttendanceBatchRequest(BaseModel):

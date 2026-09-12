@@ -306,6 +306,14 @@ One day held somewhere else is a day-level override, `PATCH /schedule/ledger/{id
 
 ---
 
+### A member in the room is told their location accuracy is too coarse
+
+The phone reports how far off its fix may be, and the server refuses a mark whose fix is coarser than `GEOFENCE_ACCURACY_FACTOR` times the fence radius: 30 meters on the default 15 meter radius. Indoors and away from a window, a phone on a network-based fix often reports 50 meters or more. Waiting a few seconds for the fix to settle, or moving nearer a window, is usually enough.
+
+To loosen it, raise `GEOFENCE_ACCURACY_FACTOR` or widen the day's `precision_radius_meters`; `0` turns the accuracy check off. The web client separately refuses to mark when the accuracy is worse than 30 meters, whatever the server allows.
+
+---
+
 ### The altitude check is blocking members on the correct floor
 
 The altitude delta threshold is `|Δalt| < 4 metres`. GPS altitude accuracy is typically ±10–20m on mobile devices, making this check unreliable outdoors. The check only fires when the device reports altitude, if the device does not expose it, the check is skipped.

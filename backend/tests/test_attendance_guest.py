@@ -6,7 +6,9 @@ import datetime
 import json
 
 import pytest
+from pydantic import ValidationError
 
+from app.core.config import Settings, get_settings
 from app.core.time import org_today
 from app.core.websocket_manager import socket_broker
 from app.models.db import (
@@ -196,6 +198,76 @@ def test_geofence_accepts_member_without_altitude(client, db, seed_users):
         headers=headers,
     )
     assert res.status_code == 200, res.text
+
+
+def _mark_at_the_target(client, ledger, **fix):
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    return client.post(
+        "/api/v1/attendance/mark",
+        json={
+            "ledger_instance_id": ledger.id,
+            "member_id": "STU001",
+            "marking_status": "PRESENT",
+            "user_lat": 12.9716,
+            "user_lon": 77.5946,
+            **fix,
+        },
+        headers=headers,
+    )
+
+
+@pytest.fixture()
+def accuracy_factor(monkeypatch):
+    def set_factor(value):
+        monkeypatch.setenv("GEOFENCE_ACCURACY_FACTOR", value)
+        get_settings.cache_clear()
+
+    yield set_factor
+    get_settings.cache_clear()
+
+
+def test_a_fix_too_coarse_for_the_fence_is_refused(client, db, seed_users):
+    """A point inside a 15 m fence proves little when it could be 80 m off."""
+    ledger = _make_ledger(db, with_geo=True)
+    res = _mark_at_the_target(client, ledger, user_accuracy=80.0)
+    assert res.status_code == 400
+    assert res.json()["detail"] == (
+        "Location accuracy of 80 m is too coarse for this session's 15 m fence; the limit is 30 m"
+    )
+    assert db.query(VerificationLedger).count() == 0
+
+
+def test_a_fix_within_the_limit_is_marked(client, db, seed_users):
+    ledger = _make_ledger(db, with_geo=True)
+    assert _mark_at_the_target(client, ledger, user_accuracy=30.0).status_code == 200
+
+
+def test_a_mark_that_reports_no_accuracy_is_not_refused_for_it(client, db, seed_users):
+    ledger = _make_ledger(db, with_geo=True)
+    assert _mark_at_the_target(client, ledger).status_code == 200
+
+
+def test_the_limit_follows_the_factor(client, db, seed_users, accuracy_factor):
+    accuracy_factor("1")
+    ledger = _make_ledger(db, with_geo=True)
+    assert _mark_at_the_target(client, ledger, user_accuracy=20.0).status_code == 400
+
+
+def test_a_factor_of_zero_turns_the_accuracy_check_off(client, db, seed_users, accuracy_factor):
+    accuracy_factor("0")
+    ledger = _make_ledger(db, with_geo=True)
+    assert _mark_at_the_target(client, ledger, user_accuracy=500.0).status_code == 200
+
+
+def test_a_negative_factor_is_refused_at_startup():
+    with pytest.raises(ValidationError, match="GEOFENCE_ACCURACY_FACTOR"):
+        Settings(geofence_accuracy_factor=-1)
+
+
+@pytest.mark.parametrize("accuracy", [-1, "inf", "nan"])
+def test_an_accuracy_that_is_not_a_distance_is_refused(client, db, seed_users, accuracy):
+    ledger = _make_ledger(db, with_geo=True)
+    assert _mark_at_the_target(client, ledger, user_accuracy=accuracy).status_code == 422
 
 
 def test_geofence_still_rejects_far_member_without_altitude(client, db, seed_users):
