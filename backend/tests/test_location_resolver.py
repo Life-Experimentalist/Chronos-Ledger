@@ -102,7 +102,14 @@ def _slot(
     return slot
 
 
-def _ledger(db, slot: StructuralMasterSlot, day: datetime.date, state: DynamicState, room: str):
+def _ledger(
+    db,
+    slot: StructuralMasterSlot,
+    day: datetime.date,
+    state: DynamicState,
+    room: str,
+    cover: str | None = None,
+):
     db.add(
         DailyLedger(
             target_date=day,
@@ -112,8 +119,23 @@ def _ledger(db, slot: StructuralMasterSlot, day: datetime.date, state: DynamicSt
             master_slot_id=slot.id,
             activity_id=slot.activity_id,
             active_lead_id=slot.primary_lead_id,
+            substitute_lead_id=cover,
             target_room_identifier=room,
             operational_state=state,
+        )
+    )
+    db.commit()
+
+
+def _colleague(db, user_id: str = "FAC002") -> None:
+    db.add(
+        User(
+            id=user_id,
+            full_name="A colleague",
+            email_address=f"{user_id.lower()}@test.internal",
+            credential_secure_hash="never-logs-in",
+            role_type=InstitutionalRole.STAFF,
+            unit_code="CSE",
         )
     )
     db.commit()
@@ -122,6 +144,11 @@ def _ledger(db, slot: StructuralMasterSlot, day: datetime.date, state: DynamicSt
 def _state(db):
     staff = db.query(User).filter(User.id == "FAC001").one()
     return determine_staff_current_states([staff], db, NoOverride())["FAC001"]
+
+
+def _states(db, *ids: str):
+    staff = db.query(User).filter(User.id.in_(ids)).all()
+    return determine_staff_current_states(staff, db, NoOverride())
 
 
 def test_the_dates_here_are_the_weekdays_they_claim():
@@ -261,7 +288,71 @@ def test_an_adhoc_day_with_no_window_is_not_reported(db, seed_users, at):
     db.commit()
 
     at(MONDAY, 9, 30)
-    # Tier 2 skips it and tier 3 answers off the slot, which still has a window.
+    # Tier 2 skips it, and the slot does not answer for a date it already has
+    # a row for, so nothing places them.
+    assert _state(db)["status"] == "Available / Unassigned"
+
+
+# -- Somebody covering, and the timetable deferring to the day -----------------
+
+
+@pytest.mark.parametrize("state", [DynamicState.SCHEDULED, DynamicState.PROXY_SUBSTITUTE])
+def test_the_cover_is_in_the_room_and_the_lead_is_not(db, seed_users, at, state):
+    """A covered day used to be looked up by its lead alone.
+
+    The cover was never found, and on a PROXY_SUBSTITUTE row the original
+    lead was the one reported as substituting. The lead's slot covers the
+    same hour here, so this also holds the timetable to the day: it used to
+    answer for them off the slot and put them back in the room.
+    """
+    _colleague(db)
+    _ledger(db, _slot(db, 1, DAY), MONDAY, state, "W-1", cover="FAC002")
+    at(MONDAY, 9, 30)
+    states = _states(db, "FAC001", "FAC002")
+    assert states["FAC002"] == {"resolved_location": "W-1", "status": "Substituting in Room W-1"}
+    assert states["FAC001"]["status"] == "Available / Unassigned"
+
+
+def test_a_cover_named_on_a_day_given_up_to_leave(db, seed_users, at):
+    """Approval clears the substitute and an admin names one afterwards,
+    which leaves the row ON_LEAVE with somebody covering it."""
+    _colleague(db)
+    _ledger(db, _slot(db, 1, DAY), MONDAY, DynamicState.ON_LEAVE, "W-1", cover="FAC002")
+    at(MONDAY, 9, 30)
+    states = _states(db, "FAC001", "FAC002")
+    assert states["FAC001"]["resolved_location"] == "OFF_SITE"
+    assert states["FAC002"]["resolved_location"] == "W-1"
+
+
+def test_a_lunch_on_the_day_is_not_overruled_by_the_timetable(db, seed_users, at):
+    _ledger(db, _slot(db, 1, DAY), MONDAY, DynamicState.LUNCH, "W-1")
+    at(MONDAY, 9, 30)
+    assert _state(db)["status"] == "Available / Unassigned"
+
+
+def test_a_slot_in_a_closed_cycle_is_not_reported(db, seed_users, at):
+    _slot(db, 1, DAY)
+    db.query(PlanningCycle).update({PlanningCycle.operational_status: False})
+    db.commit()
+    at(MONDAY, 9, 30)
+    assert _state(db)["status"] == "Available / Unassigned"
+
+
+def test_a_slot_after_its_cycle_has_ended_is_not_reported(db, seed_users, at):
+    _slot(db, 1, DAY)
+    db.query(PlanningCycle).update({PlanningCycle.date_bounds_end: MONDAY - datetime.timedelta(1)})
+    db.commit()
+    at(MONDAY, 9, 30)
+    assert _state(db)["status"] == "Available / Unassigned"
+
+
+def test_a_night_shift_on_the_cycles_last_day_runs_past_it(db, seed_users, at):
+    """The bounds are checked against the date the shift opened on. Checked
+    against the clock, the last night of a cycle would end at midnight."""
+    _slot(db, 1, NIGHT)
+    db.query(PlanningCycle).update({PlanningCycle.date_bounds_end: MONDAY})
+    db.commit()
+    at(TUESDAY, 2, 0)
     assert _state(db)["resolved_location"] == "W-1"
 
 

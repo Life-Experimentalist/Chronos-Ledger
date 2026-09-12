@@ -121,12 +121,13 @@ flowchart TD
     R1 -->|Yes| RET1[Return the override as status<br/>location UNKNOWN]
     R1 -->|No| R2
 
-    R2{A generated day they lead<br/>running right now?}
-    R2 -->|ON_LEAVE| RET2[Return OFF_SITE<br/>On Approved Leave]
-    R2 -->|SCHEDULED or substitute| RET2B[Return the day's room]
-    R2 -->|No, or another state| R3
+    R2{A generated day running right now<br/>that they lead or cover?}
+    R2 -->|They cover it| RET2C[Return the day's room<br/>Substituting]
+    R2 -->|They lead it, ON_LEAVE| RET2[Return OFF_SITE<br/>On Approved Leave]
+    R2 -->|They lead it, SCHEDULED,<br/>nobody covering| RET2B[Return the day's room]
+    R2 -->|No, or it says<br/>nothing about them| R3
 
-    R3{A weekly slot they lead<br/>running right now?}
+    R3{A weekly slot they lead, running now,<br/>in an open cycle, on a date<br/>with no generated day?}
     R3 -->|Yes| RET3[Return the slot's room]
     R3 -->|No| R4
 
@@ -136,8 +137,8 @@ flowchart TD
 **Each tier explained:**
 
 1. **Redis override**: If Redis holds `state_override:<staff_id>`, its value is returned as the status and the location as `UNKNOWN`, since an override says what somebody is doing rather than where. No route in Chronos writes this key. `PUT /users/{user_id}/status` sets the account's `current_occupancy_index` instead, which the location routes report as `occupancy_index` next to whatever the tiers resolve.
-2. **Generated day**: The `DailyLedger` rows the person leads today, and yesterday's for a shift that runs past midnight, each compared on its own window. A row running now answers: `ON_LEAVE`, which is what an approved absence sets, gives `OFF_SITE`, and `SCHEDULED` or `PROXY_SUBSTITUTE` gives the row's room. A row in any other state, a lunch or a meeting, falls through to the timetable.
-3. **Master timetable**: The weekly `StructuralMasterSlot` rows the person leads. A slot running now gives its room. This is what answers on a day the nightly job has not written yet.
+2. **Generated day**: The `DailyLedger` rows the person leads or covers, today's and yesterday's for a shift that runs past midnight, each compared on its own window. Somebody named as `substitute_lead_id` on a running `SCHEDULED`, `PROXY_SUBSTITUTE` or `ON_LEAVE` row is in its room, substituting. The lead is answered only by a row that is still theirs to run: `ON_LEAVE`, which is what an approved absence sets, gives `OFF_SITE`, and `SCHEDULED` with nobody covering gives the room. A covered row, a lunch or a meeting says nothing about the lead, and a later row can still answer for them.
+3. **Master timetable**: The weekly `StructuralMasterSlot` rows the person leads, filtered the way the nightly job filters them: the cycle is open and the date the slot runs on is inside the cycle's bounds. A slot that already has a `DailyLedger` row for that date is left to the row, so the timetable answers only on a day the nightly job has not written yet and never contradicts one it has. A lead whose running row is a lunch, a meeting or covered by someone else therefore reads as their base station.
 4. **Base station fallback**: The `assigned_base_station` field on the `User` record (e.g., "Front Desk") is the last-resort answer. The column has no default, so a user with none recorded resolves to `Unassigned` rather than to a named place.
 
 ---

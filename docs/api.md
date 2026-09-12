@@ -756,7 +756,9 @@ not been deactivated (`422`). The response is `{"message": "Updated"}`.
 
 Where somebody is right now, worked out in four tiers. See
 [`docs/architecture.md`](architecture.md#4-tier-staff-location-resolution) for
-the order. A user id that matches nobody, or a deactivated account, gets `404`.
+the order. Open to anyone signed in, members included, since the member
+dashboard's staff locator is what calls it. A user id that matches nobody, or a
+deactivated account, gets `404`.
 
 ```json
 {
@@ -771,10 +773,13 @@ the order. A user id that matches nobody, or a deactivated account, gets `404`.
 `resolved_location` is a room, `OFF_SITE` for somebody on approved leave, the
 base station (or `Unassigned`) when nothing is scheduled, or `UNKNOWN` when a
 status override answered. `status` is a sentence for display, not an enum.
+Somebody covering a class is in its room with a status saying they are
+substituting, and the lead they cover for is not reported in it.
 
 ### GET /schedule/staff/all/locations
 
-Snapshot of all staff locations. Polled by the Member Locator panel.
+Snapshot of every active staff member's location, paged. Open to anyone signed
+in, like the single lookup. Polled by the Member Locator panel.
 
 ### GET /schedule/cycles
 ### POST /schedule/cycles `[SUPER_ADMIN]`

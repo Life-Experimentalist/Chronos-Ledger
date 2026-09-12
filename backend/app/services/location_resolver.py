@@ -4,10 +4,22 @@
 import datetime
 
 from redis import Redis
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.core.time import org_now, window_span
-from app.models.db import Activity, DailyLedger, DynamicState, StructuralMasterSlot, User
+from app.models.db import (
+    Activity,
+    DailyLedger,
+    DynamicState,
+    PlanningCycle,
+    StructuralMasterSlot,
+    User,
+)
+
+# The states a named cover is in the room for. A lunch or a meeting with a
+# substitute on it is not a class anybody is running.
+_COVERABLE = {DynamicState.SCHEDULED, DynamicState.PROXY_SUBSTITUTE, DynamicState.ON_LEAVE}
 
 
 def _covers(
@@ -91,64 +103,97 @@ def determine_staff_current_states(
     # as teaching it, because the tier that knew about the leave never saw the
     # row and tier 3 answered instead.
     #
+    # A row speaks for two people once somebody covers it. It was only ever
+    # looked up by its lead, so the cover was never found here at all, and a
+    # PROXY_SUBSTITUTE row reported its original lead as the one substituting.
+    # Now the cover is in the room on any row they have taken over, and the
+    # lead is answered only by a row that is still theirs to run: ON_LEAVE
+    # says where they are not, SCHEDULED with nobody covering says where they
+    # are, and anything else says nothing about them.
+    #
     # The rows come back in the order they are tried in, so the first one
-    # running for a lead is the one that answers for them.
+    # running that answers for somebody is the one that does. A row that says
+    # nothing about a person leaves a later one free to.
     unresolved = [person.id for person in staff if person.id not in resolved]
-    daily: dict[str, DailyLedger] = {}
-    for ledger in (
-        db.query(DailyLedger)
+    asked = set(unresolved)
+    running = [
+        ledger
+        for ledger in db.query(DailyLedger)
         .filter(
-            DailyLedger.active_lead_id.in_(unresolved),
+            or_(
+                DailyLedger.active_lead_id.in_(unresolved),
+                DailyLedger.substitute_lead_id.in_(unresolved),
+            ),
             DailyLedger.target_date.in_((yesterday, today)),
             DailyLedger.time_window_start.isnot(None),
             DailyLedger.time_window_end.isnot(None),
         )
         .order_by(DailyLedger.target_date, DailyLedger.time_window_start)
         .all()
-    ):
-        if ledger.active_lead_id not in daily and _covers(
-            ledger.target_date, ledger.time_window_start, ledger.time_window_end, instant
-        ):
-            daily[ledger.active_lead_id] = ledger
-    scheduled = [
-        ledger.activity_id
-        for ledger in daily.values()
-        if ledger.operational_state == DynamicState.SCHEDULED
+        if _covers(ledger.target_date, ledger.time_window_start, ledger.time_window_end, instant)
     ]
     codes = dict(
-        db.query(Activity.id, Activity.activity_code).filter(Activity.id.in_(scheduled)).all()
+        db.query(Activity.id, Activity.activity_code)
+        .filter(Activity.id.in_([ledger.activity_id for ledger in running]))
+        .all()
     )
-    for lead, ledger in daily.items():
+    for ledger in running:
+        room = ledger.target_room_identifier
+        cover, lead = ledger.substitute_lead_id, ledger.active_lead_id
+        if cover in asked and cover not in resolved and ledger.operational_state in _COVERABLE:
+            resolved[cover] = {"resolved_location": room, "status": f"Substituting in Room {room}"}
+        if lead not in asked or lead in resolved:
+            continue
         if ledger.operational_state == DynamicState.ON_LEAVE:
             resolved[lead] = {"resolved_location": "OFF_SITE", "status": "On Approved Leave"}
-        elif ledger.operational_state == DynamicState.PROXY_SUBSTITUTE:
-            resolved[lead] = {
-                "resolved_location": ledger.target_room_identifier,
-                "status": f"Substituting in Room {ledger.target_room_identifier}",
-            }
-        elif ledger.operational_state == DynamicState.SCHEDULED:
+        elif ledger.operational_state == DynamicState.SCHEDULED and cover is None:
             code = codes.get(ledger.activity_id, "a session")
-            resolved[lead] = {
-                "resolved_location": ledger.target_room_identifier,
-                "status": f"Leading {code} in Room {ledger.target_room_identifier}",
-            }
-        # Any other state, a lunch or a meeting, leaves them to the timetable.
+            resolved[lead] = {"resolved_location": room, "status": f"Leading {code} in Room {room}"}
 
     # Tier 3: Structural master timetable
+    #
+    # Only what the nightly job would have written, and only where it has not
+    # written it yet. The slots used to be read on their own, so a slot in a
+    # closed cycle, or on a date outside its cycle, still put its lead in the
+    # room. Worse, a day already generated was read twice: whatever tier 2 made
+    # of it, a class handed to a substitute or a row marked as a lunch, tier 3
+    # then answered off the slot and reported the lead as leading it. The
+    # filter is the generator's own, and a slot with a row for the date is
+    # left to the row, whether or not tier 2 had anything to say about it.
     days = {yesterday.isoweekday(): yesterday, today.isoweekday(): today}
     unresolved = [lead for lead in unresolved if lead not in resolved]
     candidates = [
         (days[slot.day_of_week_index], slot, offering)
         for slot, offering in db.query(StructuralMasterSlot, Activity)
         .join(Activity, StructuralMasterSlot.activity_id == Activity.id)
+        .join(PlanningCycle, Activity.cycle_id == PlanningCycle.id)
         .filter(
             StructuralMasterSlot.primary_lead_id.in_(unresolved),
-            StructuralMasterSlot.day_of_week_index.in_(list(days)),
+            PlanningCycle.operational_status,
+            or_(
+                *(
+                    and_(
+                        StructuralMasterSlot.day_of_week_index == day.isoweekday(),
+                        PlanningCycle.date_bounds_start <= day,
+                        PlanningCycle.date_bounds_end >= day,
+                    )
+                    for day in days.values()
+                )
+            ),
         )
         .all()
     ]
+    generated = {
+        (slot_id, day)
+        for slot_id, day in db.query(DailyLedger.master_slot_id, DailyLedger.target_date).filter(
+            DailyLedger.master_slot_id.in_([slot.id for _, slot, _ in candidates]),
+            DailyLedger.target_date.in_((yesterday, today)),
+        )
+    }
     candidates.sort(key=lambda found: (found[0], found[1].time_window_start))
     for day, slot, offering in candidates:
+        if (slot.id, day) in generated:
+            continue
         if slot.primary_lead_id not in resolved and _covers(
             day, slot.time_window_start, slot.time_window_end, instant
         ):
