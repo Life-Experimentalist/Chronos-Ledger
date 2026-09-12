@@ -28,9 +28,9 @@ sequenceDiagram
         GF-->>API: inside=true / false
         alt Inside geofence
             API->>DB: UPSERT VerificationLedger (PRESENT)
-            API-->>Stu: 201 {marking_status: PRESENT}
+            API-->>Stu: 200 {status, member_id, marking_status}
         else Outside geofence
-            API-->>Stu: 400 {detail: "Geofence violation"}
+            API-->>Stu: 400 {detail: "Location outside geofence boundary"}
         end
     else Offline
         Stu->>IDB: enqueueAttendance(record)
@@ -38,7 +38,7 @@ sequenceDiagram
         Note over SW: Fires when connectivity restored
         SW->>API: POST /attendance/mark (replayed)
         API->>DB: UPSERT VerificationLedger
-        API-->>SW: 201
+        API-->>SW: 200
     end
 ```
 
@@ -47,7 +47,7 @@ sequenceDiagram
 1. The member opens the **ProximityCard** component which starts a GPS watch via `useGeolocation.ts`. The hook calls `navigator.geolocation.watchPosition` (stable `useRef` for the watch ID, fixes a prior bug where a plain object was used).
 2. **Online path**: Coordinates + ledger ID are posted to `/attendance/mark`. The backend queries the `DailyLedger` row for the geofence target coordinates and calls `geo_fence.check_geofence()`. The function runs a Haversine 2D distance check then validates `|user_alt - target_alt| < 4m` to prevent members on adjacent floors from registering.
 3. If the check passes, a `VerificationLedger` row is upserted (idempotent, re-marking is allowed, last write wins).
-4. **Offline path**: The mark is written to the `attendance-queue` IndexedDB store. The service worker's `background-sync` tag `sync-attendance` is registered. On reconnect, the SW replays the queue to `/attendance/mark` and clears the store entry on 2xx response.
+4. **Offline path**: The mark is written to the `attendance-queue` IndexedDB store. The service worker's `background-sync` tag `sync-attendance` is registered. On reconnect, the SW replays the queue to `/attendance/mark` and clears the store entry on any response below 500, since a refusal will not change on a retry.
 
 ---
 
@@ -65,31 +65,29 @@ sequenceDiagram
     Fac->>API: POST /attendance/absence<br/>{target_absence_date, context_justification}
     API->>DB: INSERT ReverseRsvpLog<br/>approval_state = PENDING_VERIFICATION
     API->>DB: SELECT User WHERE id = fac.reporting_line_manager
+    API-->>Fac: 200 ReverseRsvpResponse
     API->>WS: broadcast(manager_id, ABSENCE_APPROVAL_REQUIRED)
     WS-->>Mgr: {event: ABSENCE_APPROVAL_REQUIRED,<br/>payload: {log_id, from, date}}
-    API-->>Fac: 201 ReverseRsvpResponse
 
     Mgr->>API: PATCH /attendance/absence/{id}/decide<br/>{decision: VERIFIED_APPROVED}
-    API->>RSVP: process_decision(log_id, decision)
+    API->>RSVP: commit_absence_override(log_id, decision)
 
     alt VERIFIED_APPROVED
         RSVP->>DB: UPDATE ReverseRsvpLog<br/>approval_state = VERIFIED_APPROVED
         RSVP->>DB: UPDATE DailyLedger<br/>operational_state = ON_LEAVE<br/>(for target_absence_date slots)
-        RSVP->>WS: broadcast(staff_id, ABSENCE_DECISION)
-        WS-->>Fac: {event: ABSENCE_DECISION,<br/>payload: {log_id, decision: VERIFIED_APPROVED}}
     else VERIFIED_DENIED
         RSVP->>DB: UPDATE ReverseRsvpLog<br/>approval_state = VERIFIED_DENIED
-        RSVP->>WS: broadcast(staff_id, ABSENCE_DECISION)
-        WS-->>Fac: {event: ABSENCE_DECISION,<br/>payload: {log_id, decision: VERIFIED_DENIED}}
     end
 
-    API-->>Mgr: 200 ReverseRsvpResponse
+    API-->>Mgr: 200 {status}
+    API->>WS: broadcast(staff_id, ABSENCE_DECISION)
+    WS-->>Fac: {event: ABSENCE_DECISION,<br/>payload: {log_id, decision}}
 ```
 
 **Step-by-step:**
 
 1. Staff submits an absence request via the **Absence Requests** tab. The `ReverseRsvpLog` row is created with `approval_state = PENDING_VERIFICATION`.
-2. The API immediately resolves the staff's `reporting_line_manager` user ID and broadcasts a `ABSENCE_APPROVAL_REQUIRED` WebSocket event. If the manager is connected, they see a notification badge in real time.
+2. The API resolves the staff's `reporting_line_manager` user ID and, once the response is out, sends a `ABSENCE_APPROVAL_REQUIRED` WebSocket event. If the manager is connected, they see a notification badge in real time.
 3. The manager opens **Pending Approvals** and approves or denies.
 4. On approval, `services/reverse_rsvp.py` updates every `DailyLedger` entry on the target date where the staff is `active_lead_id` to `operational_state = ON_LEAVE`. This cascades the absence into the live schedule.
 5. A `ABSENCE_DECISION` WebSocket event is sent to the staff member so they see the outcome immediately without polling.
@@ -108,29 +106,29 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     G->>KI: Fills check-in form<br/>(name, phone, org, staff, intent)
-    KI->>API: POST /guest/register-checkin<br/>(no auth required)
+    KI->>API: POST /guest/register-checkin<br/>X-API-Key (the kiosk's)
     API->>DB: INSERT GuestGateRegistry<br/>handshake_status = PENDING_VERIFICATION
     API->>DB: SELECT User WHERE id = target_staff_id
+    API-->>KI: 200 {registration_state, reference_token}
     API->>WS: broadcast(staff_id, GUEST_HANDSHAKE_REQ)
-    API-->>KI: 201 GuestResponse
     KI-->>G: "Your request has been sent.<br/>Please wait."
 
-    WS-->>Fac: {event: GUEST_HANDSHAKE_REQ,<br/>payload: {transaction_id, guest_name, org, intent}}
+    WS-->>Fac: {event: GUEST_HANDSHAKE_REQ,<br/>payload: {transaction_reference, guest_name, organization, intent}}
     Note over Fac: NotificationPanel shows badge
 
     Fac->>API: PATCH /guest/{id}/decide<br/>{decision: VERIFIED_APPROVED}
     API->>DB: UPDATE GuestGateRegistry<br/>handshake_status = VERIFIED_APPROVED
-    API-->>Fac: 200 GuestResponse
+    API-->>Fac: 200 {status, guest}
 
-    Note over KI,G: Kiosk polls /guest/{id} or receives<br/>push notification on approval
+    Note over KI,G: Nothing is sent back to the kiosk.<br/>It shows the request as pending.
 ```
 
 **Step-by-step:**
 
-1. The **Guest Kiosk** (`/guest/kiosk`) is a public, unauthenticated page accessible from any organization terminal. It searches the staff directory (`GET /guest/directory?name=…`) to let the guest pick the right person.
-2. The check-in POST requires no bearer token. The server creates a `GuestGateRegistry` row and immediately pushes a `GUEST_HANDSHAKE_REQ` frame to the target staff's WebSocket connection.
+1. The **Guest Kiosk** (`/guest/kiosk`) is a page nobody signs in to. The terminal holds an API key an admin issues it once, and sends it with every call. It searches the staff directory (`GET /guest/directory?name=…`) to let the guest pick the right person.
+2. The check-in POST carries that key rather than anyone's bearer token. The server creates a `GuestGateRegistry` row and, once the response is out, pushes a `GUEST_HANDSHAKE_REQ` frame to the target staff's WebSocket connection.
 3. If the staff is connected, their **NotificationPanel** badge increments and the **Interaction Desk** tab shows the incoming request within milliseconds.
-4. Staff approves or declines. The `GuestGateRegistry` row is updated and the decision is broadcast back. The kiosk can display the outcome to the guest.
+4. Staff approves or declines, and the `GuestGateRegistry` row is updated. Nothing is sent back to the kiosk.
 
 ---
 

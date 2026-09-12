@@ -927,10 +927,24 @@ has not been deactivated (`422`, `Lead is deactivated`).
 }
 ```
 
-Omit `user_lat`/`user_lon`/`user_alt` to skip geofence validation (e.g., GPS unavailable).
-Members may only mark themselves; staff/admins can mark any member.
+Members may only mark themselves. Anyone else has to run the session: the
+assigned or substitute lead, or an admin, and a unit admin only inside their
+own unit.
 
-### POST /attendance/batch `[STAFF, ADMIN]`
+A physical session is fenced when it has coordinates, its own or its room's. A
+member marking one has to send `user_lat` and `user_lon` and be inside
+`precision_radius_meters`, or gets `400`; there is no way to skip the fence from
+the client. `user_alt` is optional and only adds a floor check when the session
+carries an altitude.
+
+A `member_id` matching nobody gets `404`. Marking a member again replaces their
+status rather than adding a second row.
+
+```json
+{ "status": "marked", "member_id": "STU20210001", "marking_status": "PRESENT" }
+```
+
+### POST /attendance/batch `[LEAD, ADMIN]`
 
 ```json
 {
@@ -940,6 +954,15 @@ Members may only mark themselves; staff/admins can mark any member.
     { "ledger_instance_id": 1042, "member_id": "STU002", "marking_status": "LATE" }
   ]
 }
+```
+
+For whoever runs the session, on the same rule as marking one member. Every
+record has to repeat the batch's `ledger_instance_id`, and no member may appear
+twice; either gets `422`. A member id matching nobody gets `404`. A refused
+batch writes nothing, and an accepted one is written in one transaction:
+
+```json
+{ "status": "batch_complete", "count": 2 }
 ```
 
 ### GET /attendance/ledger/{ledger_id}
@@ -963,6 +986,9 @@ Submit a Reverse RSVP (absence request):
 
 Routes to `reporting_line_manager` for approval. On approval, the corresponding `DailyLedger` entry flips to `ON_LEAVE`. See [`docs/flows.md`](flows.md) for the full state machine.
 
+Somebody with no manager set, or whose manager has been deactivated, gets `400`
+rather than a request waiting on nobody.
+
 ### GET /attendance/absence/pending `[MANAGER, ADMIN]`
 
 Returns absence requests pending your approval.
@@ -974,6 +1000,10 @@ Returns absence requests pending your approval.
 // or
 { "decision": "VERIFIED_DENIED" }
 ```
+
+Only the manager the request went to can decide it; anyone else gets `404`. The
+response is `{"status": "VERIFIED_APPROVED"}`, and the submitter is sent an
+`ABSENCE_DECISION` frame.
 
 ### POST /attendance/annotations `[LEAD, ADMIN]`
 ### GET /attendance/annotations/{ledger_id} `[LEAD, ADMIN]`
@@ -1018,6 +1048,12 @@ else, which matters for a device sitting in a public space. See
 }
 ```
 
+The response carries the entry id the staff member decides on:
+
+```json
+{ "registration_state": "PENDING_STAFF_AUTH", "reference_token": 57 }
+```
+
 ### GET /guest/directory `[KIOSK KEY]`
 
 `?name=<string>`, case-insensitive name search, minimum two characters so the
@@ -1033,6 +1069,10 @@ Pending guest requests targeting the authenticated staff member.
 ```json
 { "decision": "VERIFIED_APPROVED" }
 ```
+
+Only the staff member the visitor asked for can decide; anyone else gets `404`.
+The response is `{"status": "VERIFIED_APPROVED", "guest": "John Smith"}`.
+Nothing is sent back to the kiosk.
 
 ---
 
@@ -1216,8 +1256,7 @@ Events are delivered as JSON frames:
 |---|---|---|
 | `ABSENCE_APPROVAL_REQUIRED` | Line manager | `{log_id, from, date}` |
 | `ABSENCE_DECISION` | Staff who submitted | `{log_id, decision}` |
-| `GUEST_HANDSHAKE_REQ` | Target staff | `{transaction_id, guest_name, originating_body, intent}` |
-| `LEDGER_STATE_CHANGE` | All connected users | `{ledger_id, new_state}` |
+| `GUEST_HANDSHAKE_REQ` | Target staff | `{transaction_reference, guest_name, organization, intent}` |
 
 The `AUTH` frame is the only thing a client sends. Everything after it
 travels server to client.

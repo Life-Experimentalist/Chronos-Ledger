@@ -3,17 +3,21 @@
 """Attendance marking, reverse-RSVP absence flow, guest gate, and staff location."""
 
 import datetime
+import json
 
 import pytest
 
 from app.core.time import org_today
+from app.core.websocket_manager import socket_broker
 from app.models.db import (
     Activity,
     DailyLedger,
+    InstitutionalRole,
     PlanningCycle,
     Resource,
     ResourceType,
     ReverseRsvpLog,
+    User,
     VerificationLedger,
 )
 from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, login
@@ -52,6 +56,36 @@ def _make_ledger(db, lead_id=None, with_geo=False, alt_target=920.0):
     db.add(ledger)
     db.commit()
     return ledger
+
+
+def _second_ledger(db, first, lead_id="FAC999"):
+    """Another session on the same day, run by somebody else."""
+    offering = Activity(
+        activity_code="CS102",
+        activity_title="Data Structures",
+        unit_code="CSE",
+        cycle_id=first.activity.cycle_id,
+    )
+    db.add(offering)
+    db.flush()
+    ledger = DailyLedger(target_date=TODAY, activity_id=offering.id, active_lead_id=lead_id)
+    db.add(ledger)
+    db.commit()
+    return ledger
+
+
+def _add_member(db, member_id):
+    db.add(
+        User(
+            id=member_id,
+            full_name=member_id,
+            email_address=f"{member_id.lower()}@test.internal",
+            credential_secure_hash="not-a-real-hash",
+            role_type=InstitutionalRole.MEMBER,
+            unit_code="CSE",
+        )
+    )
+    db.commit()
 
 
 # -- Attendance marking -------------------------------------------------------
@@ -412,6 +446,7 @@ def test_batch_mark_requires_assigned_lead(client, db, seed_users):
 
 def test_batch_mark_by_assigned_lead(client, db, seed_users):
     ledger = _make_ledger(db, lead_id="FAC001")
+    _add_member(db, "STU002")
     headers = login(client, "staff@test.internal", STAFF_PASSWORD)
     body = {
         "ledger_instance_id": ledger.id,
@@ -422,8 +457,99 @@ def test_batch_mark_by_assigned_lead(client, db, seed_users):
     }
     res = client.post("/api/v1/attendance/batch", json=body, headers=headers)
     assert res.status_code == 200
-    assert res.json()["count"] == 2
+    assert res.json() == {"status": "batch_complete", "count": 2}
     assert db.query(VerificationLedger).filter_by(ledger_instance_id=ledger.id).count() == 2
+
+
+def test_batch_refuses_a_record_naming_another_ledger(client, db, seed_users):
+    """Each record's own ledger id was the one written to, and only the batch's
+    was checked, so a lead could mark a session somebody else runs."""
+    mine = _make_ledger(db, lead_id="FAC001")
+    theirs = _second_ledger(db, mine)
+    mine_id, theirs_id = mine.id, theirs.id
+    headers = login(client, "staff@test.internal", STAFF_PASSWORD)
+    body = {
+        "ledger_instance_id": mine_id,
+        "records": [
+            {"ledger_instance_id": theirs_id, "member_id": "STU001", "marking_status": "ABSENT"}
+        ],
+    }
+    res = client.post("/api/v1/attendance/batch", json=body, headers=headers)
+    assert res.status_code == 422
+    assert res.json()["detail"] == f"Every record must name ledger {mine_id}, not {theirs_id}"
+    assert db.query(VerificationLedger).count() == 0
+
+
+def test_batch_refuses_a_member_listed_twice(client, db, seed_users):
+    """Which of the two lines counted was down to the order they came in."""
+    ledger = _make_ledger(db, lead_id="FAC001")
+    headers = login(client, "staff@test.internal", STAFF_PASSWORD)
+    body = {
+        "ledger_instance_id": ledger.id,
+        "records": [
+            {"ledger_instance_id": ledger.id, "member_id": "STU001", "marking_status": "PRESENT"},
+            {"ledger_instance_id": ledger.id, "member_id": "STU001", "marking_status": "ABSENT"},
+        ],
+    }
+    res = client.post("/api/v1/attendance/batch", json=body, headers=headers)
+    assert res.status_code == 422
+    assert res.json()["detail"] == "Listed more than once: STU001"
+    assert db.query(VerificationLedger).count() == 0
+
+
+def test_batch_with_an_unknown_member_writes_nothing(client, db, seed_users):
+    """Each record used to commit on its own, so on PostgreSQL the members
+    before an unknown one were marked and the batch then failed with a 500."""
+    ledger = _make_ledger(db, lead_id="FAC001")
+    headers = login(client, "staff@test.internal", STAFF_PASSWORD)
+    body = {
+        "ledger_instance_id": ledger.id,
+        "records": [
+            {"ledger_instance_id": ledger.id, "member_id": "STU001", "marking_status": "PRESENT"},
+            {"ledger_instance_id": ledger.id, "member_id": "NOBODY", "marking_status": "ABSENT"},
+        ],
+    }
+    res = client.post("/api/v1/attendance/batch", json=body, headers=headers)
+    assert res.status_code == 404
+    assert res.json()["detail"] == "Member not found: NOBODY"
+    assert db.query(VerificationLedger).count() == 0
+
+
+def test_mark_refuses_an_unknown_member(client, db, seed_users):
+    ledger = _make_ledger(db, lead_id="FAC001")
+    headers = login(client, "staff@test.internal", STAFF_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/mark",
+        json={"ledger_instance_id": ledger.id, "member_id": "NOBODY", "marking_status": "PRESENT"},
+        headers=headers,
+    )
+    assert res.status_code == 404
+    assert res.json()["detail"] == "Member not found: NOBODY"
+
+
+def test_batch_replaces_an_existing_mark_and_adds_the_rest(client, db, seed_users):
+    ledger = _make_ledger(db, lead_id="FAC001")
+    ledger_id = ledger.id
+    _add_member(db, "STU002")
+    headers = login(client, "staff@test.internal", STAFF_PASSWORD)
+    first = {"ledger_instance_id": ledger_id, "member_id": "STU001", "marking_status": "PRESENT"}
+    res = client.post("/api/v1/attendance/mark", json=first, headers=headers)
+    assert res.json() == {"status": "marked", "member_id": "STU001", "marking_status": "PRESENT"}
+
+    body = {
+        "ledger_instance_id": ledger_id,
+        "records": [
+            {**first, "marking_status": "ABSENT"},
+            {"ledger_instance_id": ledger_id, "member_id": "STU002", "marking_status": "PRESENT"},
+        ],
+    }
+    assert client.post("/api/v1/attendance/batch", json=body, headers=headers).status_code == 200
+    db.expire_all()
+    rows = db.query(VerificationLedger).filter_by(ledger_instance_id=ledger_id)
+    assert {r.member_id: r.marking_status.value for r in rows} == {
+        "STU001": "ABSENT",
+        "STU002": "PRESENT",
+    }
 
 
 # -- Reverse RSVP (absence) ---------------------------------------------------
@@ -578,7 +704,83 @@ def test_guest_decide_only_by_target_staff(client, db, seed_users, kiosk_key):
         f"/api/v1/guest/{entry_id}/decide", json={"decision": "VERIFIED_APPROVED"}, headers=fac
     )
     assert res.status_code == 200
+    assert res.json() == {"status": "VERIFIED_APPROVED", "guest": "Ravi Verma"}
     assert client.get("/api/v1/guest/pending", headers=fac).json() == []
+
+
+# -- Notices over the socket ---------------------------------------------------
+
+
+class _FakeSocket:
+    """Stands in for a browser with the app open, and keeps what it is sent."""
+
+    def __init__(self):
+        self.frames = []
+
+    async def send_text(self, text):
+        self.frames.append(json.loads(text))
+
+
+@pytest.fixture()
+def open_socket():
+    opened = {}
+
+    def open_for(user_id):
+        opened[user_id] = _FakeSocket()
+        socket_broker.register_session(user_id, opened[user_id])
+        return opened[user_id]
+
+    yield open_for
+    for user_id, sock in opened.items():
+        socket_broker.terminate_session(user_id, sock)
+
+
+def test_absence_notices_reach_the_manager_and_the_submitter(client, db, seed_users, open_socket):
+    """The routes are plain functions now, and the notices go out after the response."""
+    seed_users["staff"].reporting_line_manager = "ADM001"
+    db.commit()
+    manager, submitter = open_socket("ADM001"), open_socket("FAC001")
+
+    fac = login(client, "staff@test.internal", STAFF_PASSWORD)
+    log_id = client.post(
+        "/api/v1/attendance/absence",
+        json={"target_absence_date": str(TODAY), "context_justification": "Medical"},
+        headers=fac,
+    ).json()["id"]
+    assert manager.frames == [
+        {
+            "event": "ABSENCE_APPROVAL_REQUIRED",
+            "payload": {"log_id": log_id, "from": "Staff One", "date": str(TODAY)},
+        }
+    ]
+
+    adm = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    res = client.patch(
+        f"/api/v1/attendance/absence/{log_id}/decide",
+        json={"decision": "VERIFIED_DENIED"},
+        headers=adm,
+    )
+    assert res.json() == {"status": "VERIFIED_DENIED"}
+    assert submitter.frames == [
+        {"event": "ABSENCE_DECISION", "payload": {"log_id": log_id, "decision": "VERIFIED_DENIED"}}
+    ]
+
+
+def test_guest_checkin_notice_reaches_the_staff_member(client, seed_users, kiosk_key, open_socket):
+    staff = open_socket("FAC001")
+    res = client.post("/api/v1/guest/register-checkin", json=_GUEST, headers=kiosk_key)
+    assert res.json()["registration_state"] == "PENDING_STAFF_AUTH"
+    assert staff.frames == [
+        {
+            "event": "GUEST_HANDSHAKE_REQ",
+            "payload": {
+                "transaction_reference": res.json()["reference_token"],
+                "guest_name": "Ravi Verma",
+                "organization": "Acme Corp",
+                "intent": "Project discussion",
+            },
+        }
+    ]
 
 
 # -- Staff location (Redis-backed) -----------------------------------------

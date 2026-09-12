@@ -184,7 +184,7 @@ The materialised daily schedule. Generated nightly from `StructuralMasterSlot` b
 A slot has at most one row per date. Migration 017 puts a unique key on `target_date` and `master_slot_id`, so two runs of the nightly job cannot both write the day, including for a slot with no room, which the overlap constraint from migration 013 does not see. Rows with no slot are not limited by it.
 
 ### `VerificationLedger`
-One row per member per ledger entry. `authorizing_agent_id` is `null` for self-marks and set to the staff/admin user_id for batch marks. The same row is overwritten on re-mark (upsert logic in `attendance.py`).
+One row per member per ledger entry. `authorizing_agent_id` is whoever set the current status: the member for a self-mark, otherwise the lead or admin. The same row is overwritten on re-mark (upsert logic in `attendance.py`).
 
 `member_id` is `ON DELETE RESTRICT` since migration 018, so a user with attendance on file cannot be deleted and is deactivated instead. Before 018 it cascaded, and deleting a user took their attendance with it.
 
@@ -192,7 +192,7 @@ One row per member per ledger entry. `authorizing_agent_id` is `null` for self-m
 The Reverse RSVP state machine. Starts at `PENDING_VERIFICATION`. Transition to `VERIFIED_APPROVED` triggers `services/reverse_rsvp.py` which updates the corresponding `DailyLedger.operational_state` to `ON_LEAVE` and broadcasts a WebSocket event to the staff member.
 
 ### `GuestGateRegistry`
-Records each organization visitor interaction. `handshake_status` transitions from `PENDING_VERIFICATION` → `VERIFIED_APPROVED | VERIFIED_DENIED` when the target staff member acts via the Interaction Desk. The decision is broadcast back to the kiosk via WebSocket.
+Records each organization visitor interaction. `handshake_status` transitions from `PENDING_VERIFICATION` → `VERIFIED_APPROVED | VERIFIED_DENIED` when the target staff member acts via the Interaction Desk. Nothing is sent back to the kiosk.
 
 ### `LedgerAnnotation`
 Free-form notes attached to a ledger entry (e.g., "lab equipment failure", "class started late"). Used for post-session audits. No schema constraint on `classification_tag`, it's a freeform string at the application layer.

@@ -1,9 +1,10 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
+from collections import Counter
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -93,7 +94,7 @@ def _ensure_ledger_authority(current_user: User, ledger: DailyLedger) -> None:
 
 
 @router.post("/mark")
-async def mark_attendance(
+def mark_attendance(
     payload: AttendanceMarkRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -130,7 +131,8 @@ async def mark_attendance(
     else:
         _ensure_ledger_authority(current_user, ledger)
 
-    _upsert_attendance(db, payload, current_user.id)
+    _refuse_unknown_members(db, [payload.member_id])
+    _write_marks(db, ledger.id, [payload], current_user.id)
     return {
         "status": "marked",
         "member_id": payload.member_id,
@@ -147,35 +149,70 @@ def batch_mark_attendance(
     ledger = _ledger_or_404(db, payload.ledger_instance_id)
     _ensure_ledger_authority(current_user, ledger)
 
-    for record in payload.records:
-        _upsert_attendance(db, record, current_user.id)
+    # Each record names a session of its own, and that was the one written to,
+    # while the check above only looked at the batch's. A lead could mark any
+    # session in the organization by naming their own at the top.
+    stray = sorted({r.ledger_instance_id for r in payload.records} - {ledger.id})
+    if stray:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Every record must name ledger {ledger.id}, not {', '.join(map(str, stray))}",
+        )
+    # Two lines for one member leave it unclear which one was meant.
+    counts = Counter(r.member_id for r in payload.records)
+    repeated = sorted(member for member, n in counts.items() if n > 1)
+    if repeated:
+        raise HTTPException(status_code=422, detail=f"Listed more than once: {', '.join(repeated)}")
+    _refuse_unknown_members(db, list(counts))
 
+    _write_marks(db, ledger.id, payload.records, current_user.id)
     return {"status": "batch_complete", "count": len(payload.records)}
 
 
-def _upsert_attendance(db: Session, payload: AttendanceMarkRequest, agent_id: str):
-    existing = (
-        db.query(VerificationLedger)
-        .filter(
-            VerificationLedger.ledger_instance_id == payload.ledger_instance_id,
-            VerificationLedger.member_id == payload.member_id,
-        )
-        .first()
-    )
+def _refuse_unknown_members(db: Session, member_ids: list[str]) -> None:
+    """Refuse a mark for somebody who does not exist.
 
-    if existing:
-        if existing.marking_status != payload.marking_status:
-            existing.marking_status = payload.marking_status
-            existing.authorizing_agent_id = agent_id
-            existing.modification_timestamp = datetime.now(UTC)
-    else:
-        record = VerificationLedger(
-            ledger_instance_id=payload.ledger_instance_id,
-            member_id=payload.member_id,
-            marking_status=payload.marking_status,
-            authorizing_agent_id=agent_id,
+    Left to the foreign key, an unknown id is a 500 on PostgreSQL. Somebody
+    deactivated can still be marked, so a day they attended can be corrected
+    after they leave.
+    """
+    known = {row[0] for row in db.query(User.id).filter(User.id.in_(member_ids))}
+    unknown = sorted(set(member_ids) - known)
+    if unknown:
+        raise HTTPException(status_code=404, detail=f"Member not found: {', '.join(unknown)}")
+
+
+def _write_marks(
+    db: Session, ledger_id: int, records: list[AttendanceMarkRequest], agent_id: str
+) -> None:
+    """Mark members on one session, all of them or none.
+
+    Each record used to look itself up and commit on its own, so a batch cost
+    a round trip and a commit per member, and one that failed partway left the
+    members before it marked and the rest not.
+    """
+    existing = {
+        row.member_id: row
+        for row in db.query(VerificationLedger).filter(
+            VerificationLedger.ledger_instance_id == ledger_id,
+            VerificationLedger.member_id.in_([r.member_id for r in records]),
         )
-        db.add(record)
+    }
+    for record in records:
+        row = existing.get(record.member_id)
+        if row is None:
+            db.add(
+                VerificationLedger(
+                    ledger_instance_id=ledger_id,
+                    member_id=record.member_id,
+                    marking_status=record.marking_status,
+                    authorizing_agent_id=agent_id,
+                )
+            )
+        elif row.marking_status != record.marking_status:
+            row.marking_status = record.marking_status
+            row.authorizing_agent_id = agent_id
+            row.modification_timestamp = datetime.now(UTC)
     db.commit()
 
 
@@ -211,8 +248,9 @@ def get_attendance_for_ledger(
 
 
 @router.post("/absence", response_model=ReverseRsvpResponse)
-async def submit_absence(
+def submit_absence(
     payload: ReverseRsvpCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -223,7 +261,12 @@ async def submit_absence(
         db=db,
     )
     log = db.query(ReverseRsvpLog).filter(ReverseRsvpLog.id == result["tracking_reference"]).first()
-    await socket_broker.forward_direct_message(
+    # A plain def, so the database work above runs on a worker thread instead
+    # of holding the event loop, and every other request and socket with it,
+    # while PostgreSQL answers. The socket belongs to the loop, so the notice
+    # is sent from there once the response is out.
+    background_tasks.add_task(
+        socket_broker.forward_direct_message,
         log.authorized_by_user_id,
         "ABSENCE_APPROVAL_REQUIRED",
         {
@@ -251,9 +294,10 @@ def get_pending_absences(
 
 
 @router.patch("/absence/{log_id}/decide")
-async def decide_absence(
+def decide_absence(
     log_id: int,
     payload: RsvpDecision,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -269,7 +313,8 @@ async def decide_absence(
         raise HTTPException(status_code=404, detail="Absence request not found or not authorized")
 
     commit_absence_override(log_id, current_user.id, payload.decision.value, db)
-    await socket_broker.forward_direct_message(
+    background_tasks.add_task(
+        socket_broker.forward_direct_message,
         log.submitting_user_id,
         "ABSENCE_DECISION",
         {"log_id": log_id, "decision": payload.decision.value},

@@ -1133,7 +1133,6 @@ components:
           example: "2026-06-15"
         context_justification:
           type: string
-          minLength: 10
           example: Attending national staff development seminar.
 
     ReverseRsvpResponse:
@@ -2770,6 +2769,8 @@ paths:
         floor check when the ledger also carries an `altitude_target`.
         Omitting the coordinates on a fenced session returns 400; there is no
         client-side way to skip the fence.
+        Marking a member again replaces their status rather than adding a
+        second row.
       requestBody:
         required: true
         content:
@@ -2777,26 +2778,49 @@ paths:
             schema:
               $ref: "#/components/schemas/AttendanceMarkRequest"
       responses:
-        "201":
+        "200":
           description: Attendance marked.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AttendanceResponse"
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: marked
+                  member_id:
+                    type: string
+                  marking_status:
+                    $ref: "#/components/schemas/VerificationMetric"
         "400":
-          description: Geofence violation or duplicate mark.
+          description: >
+            Outside the geofence, or a fenced session marked without
+            coordinates.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No such ledger, or no such member.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/attendance/batch:
     post:
       tags: [Attendance]
       summary: Batch mark attendance for multiple members
-      description: Staff/Admin only.
+      description: >
+        For whoever runs the session, on the same rule as
+        `/attendance/mark`: the ledger's assigned or substitute lead, or an
+        admin, and a UNIT_ADMIN only within their own unit. Every record must
+        repeat the batch's `ledger_instance_id` and no member may appear
+        twice, or the batch is refused with 422. A member id matching nobody
+        is refused with 404. A refused batch writes nothing; an accepted one
+        is written in one transaction.
       requestBody:
         required: true
         content:
@@ -2805,18 +2829,34 @@ paths:
               $ref: "#/components/schemas/AttendanceBatchRequest"
       responses:
         "200":
-          description: Batch result summary.
+          description: Every record written.
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  marked:
+                  status:
+                    type: string
+                    example: batch_complete
+                  count:
                     type: integer
-                  skipped:
-                    type: integer
+                    description: Records in the batch.
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No such ledger, or a record names a member who does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            A record names a different ledger from the batch, or one member
+            appears twice.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/attendance/ledger/{ledger_id}:
     get:
@@ -2853,9 +2893,10 @@ paths:
       summary: Submit an absence request (Reverse RSVP)
       description: >
         Staff submit a request for a future absence.
-        The request is routed to `reporting_line_manager` for approval.
-        On approval, the relevant daily ledger entry transitions to `ON_LEAVE`
-        and a WebSocket event is broadcast to the staff member.
+        The request is routed to `reporting_line_manager` for approval, and
+        that manager is sent an `ABSENCE_APPROVAL_REQUIRED` WebSocket frame.
+        On approval, the relevant daily ledger entry transitions to `ON_LEAVE`.
+        Either decision sends the submitter an `ABSENCE_DECISION` frame.
       requestBody:
         required: true
         content:
@@ -2863,12 +2904,20 @@ paths:
             schema:
               $ref: "#/components/schemas/ReverseRsvpCreate"
       responses:
-        "201":
+        "200":
           description: Absence request created.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReverseRsvpResponse"
+        "400":
+          description: >
+            The caller has no manager set, or the one set has been
+            deactivated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "403":
           $ref: "#/components/responses/Forbidden"
 
@@ -2905,15 +2954,25 @@ paths:
               $ref: "#/components/schemas/RsvpDecision"
       responses:
         "200":
-          description: Decision recorded. If approved, ledger entry updated and WebSocket event fired.
+          description: >
+            Decision recorded. Approval turns the submitter's sessions that
+            day `ON_LEAVE`, and either decision sends them an
+            `ABSENCE_DECISION` WebSocket frame.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ReverseRsvpResponse"
+                type: object
+                properties:
+                  status:
+                    $ref: "#/components/schemas/LogVerificationState"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: "#/components/responses/NotFound"
+          description: No such request, or it was sent to somebody else.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/attendance/annotations:
     post:
@@ -2977,7 +3036,8 @@ paths:
       description: >
         The visitor does not authenticate; the kiosk device does, with an
         admin-issued API key in `X-API-Key`.
-        Fires a `GUEST_HANDSHAKE_REQ` WebSocket event to the target staff member.
+        Sends a `GUEST_HANDSHAKE_REQ` WebSocket frame to the target staff
+        member. Nothing is sent back to the kiosk when they decide.
       requestBody:
         required: true
         content:
@@ -2985,12 +3045,19 @@ paths:
             schema:
               $ref: "#/components/schemas/GuestCheckInRequest"
       responses:
-        "201":
-          description: Guest registered. Staff notified via WebSocket.
+        "200":
+          description: Guest registered.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GuestResponse"
+                type: object
+                properties:
+                  registration_state:
+                    type: string
+                    example: PENDING_STAFF_AUTH
+                  reference_token:
+                    type: integer
+                    description: The entry id that `/guest/{entry_id}/decide` takes.
         "404":
           description: Target staff not found.
           content:
@@ -3061,15 +3128,25 @@ paths:
               $ref: "#/components/schemas/GuestDecisionRequest"
       responses:
         "200":
-          description: Decision recorded. If approved, guest receives notification.
+          description: Decision recorded. Nothing is sent to the kiosk.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GuestResponse"
+                type: object
+                properties:
+                  status:
+                    $ref: "#/components/schemas/LogVerificationState"
+                  guest:
+                    type: string
+                    description: The visitor's name.
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: "#/components/responses/NotFound"
+          description: No such entry, or the visitor asked for somebody else.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ── Ingestion ─────────────────────────────
   /api/v1/ingestion/upload-csv:
@@ -3355,9 +3432,6 @@ paths:
 #
 #   { "event": "GUEST_HANDSHAKE_REQ",
 #     "payload": { "transaction_reference": 5, "guest_name": "J. Smith",
-#                  "originating_body": "TechCorp", "intent": "..." } }
-#
-#   { "event": "LEDGER_STATE_CHANGE",
-#     "payload": { "ledger_id": 1042, "new_state": "ON_LEAVE" } }
+#                  "organization": "TechCorp", "intent": "..." } }
 #
 # The AUTH frame is the only thing a client sends upstream.

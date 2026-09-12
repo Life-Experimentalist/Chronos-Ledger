@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core import rate_limit
@@ -35,8 +35,9 @@ _AVAILABILITY_LABELS = {
 
 
 @router.post("/register-checkin")
-async def process_guest_entry(
+def process_guest_entry(
     payload: GuestCheckInRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     # The visitor does not sign in; the kiosk device does, with an API key an
     # admin issues it once. It turns anonymous callers away before they reach
@@ -77,7 +78,10 @@ async def process_guest_entry(
     db.commit()
     db.refresh(entry)
 
-    await socket_broker.forward_direct_message(
+    # The socket belongs to the event loop, so the notice goes out from there
+    # once the response is sent, as with the absence notices.
+    background_tasks.add_task(
+        socket_broker.forward_direct_message,
         payload.target_staff_id,
         "GUEST_HANDSHAKE_REQ",
         {
@@ -91,7 +95,7 @@ async def process_guest_entry(
 
 
 @router.patch("/{entry_id}/decide")
-async def decide_guest_entry(
+def decide_guest_entry(
     entry_id: int,
     payload: GuestDecisionRequest,
     db: Session = Depends(get_db),
