@@ -235,6 +235,99 @@ def test_a_reimport_does_not_reset_an_existing_password(client, db, seed_users):
     assert res.status_code == 200, res.text
 
 
+# -- Rows matched against what was fetched up front ----------------------------
+
+
+def test_a_member_on_several_rows_is_created_once(client, db, seed_users):
+    """Every row after the first finds the member the first row created.
+
+    What the rows are matched against is fetched before the loop starts, and a
+    member the file itself creates is not in that fetch. Missing them would
+    create them a second time, which the primary key refuses.
+    """
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    csv_text = (
+        HEADER + "\n"
+        "STU910,Ada Newling,ada@test.internal,MA201,Linear Algebra,CSE,2,09:00,10:00,FAC001,LH-201\n"
+        "STU910,Ada Newling,ada@test.internal,PH101,Mechanics,CSE,3,11:00,12:00,FAC001,LH-105\n"
+        "STU910,Ada Newling,ada@test.internal,MA201,Linear Algebra,CSE,4,09:00,10:00,FAC001,LH-201\n"
+    )
+    r = _upload(client, headers, cycle.id, csv_text)
+    assert r.status_code == 200, r.text
+    assert [c["member_id"] for c in r.json()["provisioned_credentials"]] == ["STU910"]
+
+    db.expire_all()
+    ma201 = db.query(Activity).filter(Activity.activity_code == "MA201").one()
+    ph101 = db.query(Activity).filter(Activity.activity_code == "PH101").one()
+    enrolled = db.query(ActivityEnrollment).filter(ActivityEnrollment.member_id == "STU910").all()
+    # MA201 twice in one file is one enrollment and two weekly slots.
+    assert sorted(reg.activity_id for reg in enrolled) == sorted([ma201.id, ph101.id])
+    assert (
+        db.query(StructuralMasterSlot).filter(StructuralMasterSlot.activity_id == ma201.id).count()
+        == 2
+    )
+
+
+def test_numeric_ids_are_found_again_on_a_reupload(client, db, seed_users):
+    """pandas reads a column of digits as integers. What the rows are matched
+    against is keyed by the same str() each row goes through, or every
+    re-upload of a file with numeric ids would try to create its members again.
+    """
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    csv_text = (
+        HEADER + "\n"
+        "1001,Ada Newling,ada@test.internal,MA201,Linear Algebra,CSE,2,09:00,10:00,FAC001,LH-201\n"
+    )
+    assert _upload(client, headers, cycle.id, csv_text).status_code == 200
+    again = _upload(client, headers, cycle.id, csv_text)
+    assert again.status_code == 200, again.text
+    assert again.json()["provisioned_credentials"] == []
+
+
+def _two_members_with(first_email, second_email):
+    return (
+        HEADER + "\n"
+        f"STU900,Ada Newling,{first_email},MA201,Linear Algebra,CSE,2,09:00,10:00,FAC001,LH-201\n"
+        f"STU901,Grace Hoppen,{second_email},MA201,Linear Algebra,CSE,2,09:00,10:00,FAC001,LH-201\n"
+    )
+
+
+def test_an_address_given_up_earlier_in_the_file_is_free_later(client, db, seed_users):
+    """One row moves a member off an address and a later row gives it to
+    somebody else. The address is free by then, and the file is taken."""
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    assert _upload(client, headers, cycle.id, _two_member_csv()).status_code == 200
+
+    csv_text = _two_members_with("ada.new@test.internal", "ada@test.internal")
+    r = _upload(client, headers, cycle.id, csv_text)
+    assert r.status_code == 200, r.text
+
+    db.expire_all()
+    emails = dict(db.query(User.id, User.email_address).filter(User.id.in_(["STU900", "STU901"])))
+    assert emails == {"STU900": "ada.new@test.internal", "STU901": "ada@test.internal"}
+
+
+def test_an_address_taken_earlier_in_the_file_is_refused_later(client, db, seed_users):
+    """The other way round: a later row asking for an address an earlier row
+    has just given somebody is a clash, named against the line that asked."""
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    assert _upload(client, headers, cycle.id, _two_member_csv()).status_code == 200
+
+    csv_text = _two_members_with("shared@test.internal", "shared@test.internal")
+    r = _upload(client, headers, cycle.id, csv_text)
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"] == (
+        "line 3: member 'STU901': email shared@test.internal already belongs to 'STU900'"
+    )
+
+    db.expire_all()
+    assert db.query(User).filter(User.id == "STU900").one().email_address == "ada@test.internal"
+
+
 def test_an_unknown_cycle_is_404_not_a_driver_error(client, db, seed_users):
     """A mistyped cycle id used to reach the foreign key and come back as SQL."""
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)

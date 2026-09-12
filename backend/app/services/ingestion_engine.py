@@ -14,6 +14,7 @@ from app.models.db import (
     ActivityEnrollment,
     InstitutionalRole,
     PlanningCycle,
+    Resource,
     StructuralMasterSlot,
     User,
 )
@@ -56,6 +57,12 @@ def _parse_time(raw: str) -> datetime.time:
 def _where(line: int) -> str:
     """Name the file line a failure came from, when it came from one at all."""
     return f"line {line}: " if line else ""
+
+
+def _chunked(values) -> list[list]:
+    """An IN list in pieces of a thousand, so no file is too big for one statement."""
+    values = list(values)
+    return [values[i : i + 1000] for i in range(0, len(values), 1000)]
 
 
 class ChronosIngestionEngine:
@@ -108,10 +115,58 @@ class ChronosIngestionEngine:
         # Plus two because pandas counts from zero and line one is the header.
         line = 0
         try:
-            for index, row in df.iterrows():
+            rows = list(df.iterrows())
+            # What the rows are matched against, fetched once for the whole
+            # file instead of queried for again on every line of it. Each map
+            # is kept up to date as the loop adds to it, so a row finds what an
+            # earlier row created just as it would in the database. The keys
+            # go through the same str() the loop puts each value through, or a
+            # numeric id pandas read as an integer would never match.
+            users = {
+                user.id: user
+                for ids in _chunked(
+                    {str(row[column]) for _, row in rows for column in ("member_id", "lead_id")}
+                )
+                for user in self.db.query(User).filter(User.id.in_(ids))
+            }
+            email_owners = dict(
+                owner
+                for emails in _chunked({str(row["member_email"]) for _, row in rows})
+                for owner in self.db.query(User.email_address, User.id).filter(
+                    User.email_address.in_(emails)
+                )
+            )
+            offerings = {
+                offering.activity_code: offering
+                for codes in _chunked({str(row["activity_code"]) for _, row in rows})
+                for offering in self.db.query(Activity).filter(
+                    Activity.cycle_id == cycle_id, Activity.activity_code.in_(codes)
+                )
+            }
+            activity_ids = [offering.id for offering in offerings.values()]
+            enrolled = {
+                (activity_id, member_id)
+                for ids in _chunked(activity_ids)
+                for activity_id, member_id in self.db.query(
+                    ActivityEnrollment.activity_id, ActivityEnrollment.member_id
+                ).filter(ActivityEnrollment.activity_id.in_(ids))
+            }
+            slots: dict[tuple[int, int, datetime.time], StructuralMasterSlot] = {}
+            for ids in _chunked(activity_ids):
+                for slot in (
+                    self.db.query(StructuralMasterSlot)
+                    .filter(StructuralMasterSlot.activity_id.in_(ids))
+                    .order_by(StructuralMasterSlot.id)
+                ):
+                    slots.setdefault(
+                        (slot.activity_id, slot.day_of_week_index, slot.time_window_start), slot
+                    )
+            rooms: dict[str, Resource] = {}
+
+            for index, row in rows:
                 line = int(index) + 2
                 # 1. Upsert member user
-                member = self.db.query(User).filter(User.id == str(row["member_id"])).first()
+                member = users.get(str(row["member_id"]))
                 if not member:
                     # One password per member. The shared constant this replaces
                     # meant a single leaked credential opened every account the
@@ -126,6 +181,8 @@ class ChronosIngestionEngine:
                         unit_code=str(row["unit"]),
                     )
                     self.db.add(member)
+                    users[member.id] = member
+                    email_owners[member.email_address] = member.id
                     provisioned.append(
                         {
                             "member_id": str(row["member_id"]),
@@ -147,32 +204,22 @@ class ChronosIngestionEngine:
                         # email_address is unique. Letting the collision reach
                         # the database turns a fixable typo into a rolled-back
                         # import explained by a raw driver error.
-                        clash = (
-                            self.db.query(User)
-                            .filter(
-                                User.email_address == str(row["member_email"]),
-                                User.id != member.id,
-                            )
-                            .first()
-                        )
-                        if clash:
+                        clash = email_owners.get(str(row["member_email"]))
+                        if clash is not None and clash != member.id:
                             raise ValueError(
                                 f"member '{row['member_id']}': email "
-                                f"{row['member_email']} already belongs to '{clash.id}'"
+                                f"{row['member_email']} already belongs to '{clash}'"
                             )
+                        # The address it had is free from here on, for a later
+                        # row to take.
+                        email_owners.pop(member.email_address, None)
                         member.email_address = str(row["member_email"])
+                        email_owners[member.email_address] = member.id
                     # role_type is deliberately not touched. Somebody promoted
                     # to STAFF since the last import stays STAFF.
 
                 # 2. Upsert activity offering
-                offering = (
-                    self.db.query(Activity)
-                    .filter(
-                        Activity.activity_code == str(row["activity_code"]),
-                        Activity.cycle_id == cycle_id,
-                    )
-                    .first()
-                )
+                offering = offerings.get(str(row["activity_code"]))
                 if not offering:
                     offering = Activity(
                         activity_code=str(row["activity_code"]),
@@ -182,23 +229,17 @@ class ChronosIngestionEngine:
                     )
                     self.db.add(offering)
                     self.db.flush()
+                    offerings[offering.activity_code] = offering
                 else:
                     offering.activity_title = str(row["activity_title"])
                     offering.unit_code = str(row["unit"])
 
                 # 3. Upsert registration
-                reg = (
-                    self.db.query(ActivityEnrollment)
-                    .filter(
-                        ActivityEnrollment.activity_id == offering.id,
-                        ActivityEnrollment.member_id == str(row["member_id"]),
-                    )
-                    .first()
-                )
-                if not reg:
+                if (offering.id, str(row["member_id"])) not in enrolled:
                     self.db.add(
                         ActivityEnrollment(activity_id=offering.id, member_id=str(row["member_id"]))
                     )
+                    enrolled.add((offering.id, str(row["member_id"])))
                 seen_enrollments.add((offering.id, str(row["member_id"])))
                 units.add(str(row["unit"]))
 
@@ -212,16 +253,10 @@ class ChronosIngestionEngine:
                         "at all or a whole day and the row does not say which"
                     )
 
-                slot = (
-                    self.db.query(StructuralMasterSlot)
-                    .filter(
-                        StructuralMasterSlot.activity_id == offering.id,
-                        StructuralMasterSlot.day_of_week_index == int(row["day_of_week_index"]),
-                        StructuralMasterSlot.time_window_start == t_start,
-                    )
-                    .first()
-                )
-                room = get_or_create_room(str(row["room"]), self.db)
+                slot = slots.get((offering.id, int(row["day_of_week_index"]), t_start))
+                room = rooms.get(str(row["room"]))
+                if room is None:
+                    room = rooms[str(row["room"])] = get_or_create_room(str(row["room"]), self.db)
                 # Only when the row would put this class somewhere it is not
                 # already: a re-upload of an unchanged file must not start
                 # failing because something was put on a room the timetable
@@ -301,12 +336,8 @@ class ChronosIngestionEngine:
                         )
                 # A lead who has left would be put in front of a class they can
                 # no longer sign in to run.
-                lead = (
-                    self.db.query(User.deactivated_at)
-                    .filter(User.id == str(row["lead_id"]))
-                    .first()
-                )
-                if lead is not None and lead[0] is not None:
+                lead = users.get(str(row["lead_id"]))
+                if lead is not None and lead.deactivated_at is not None:
                     raise ValueError(
                         f"activity '{row['activity_code']}': lead '{row['lead_id']}' is "
                         "deactivated; name another lead or reactivate them"
@@ -322,6 +353,7 @@ class ChronosIngestionEngine:
                         target_room_identifier=room.code,
                     )
                     self.db.add(slot)
+                    slots[(offering.id, int(row["day_of_week_index"]), t_start)] = slot
                 elif (
                     slot.time_window_end != t_end
                     or slot.primary_lead_id != str(row["lead_id"])
@@ -346,10 +378,11 @@ class ChronosIngestionEngine:
                     corrected[slot.id] = slot
 
                 records_processed += 1
-                # The session runs with autoflush=False, so without this flush
-                # the dedup queries above cannot see rows added for earlier CSV
-                # lines: every member sharing a class would add a duplicate
-                # registration and master slot.
+                # The session runs with autoflush=False. Rows are matched
+                # against the maps above, but the room checks are queries, and
+                # without this flush they cannot see a slot added for an
+                # earlier CSV line. It also keeps a row the database refuses
+                # failing on its own line rather than on a later one.
                 self.db.flush()
                 # After the flush, so a slot this row created has an id.
                 seen_slots.add(slot.id)
