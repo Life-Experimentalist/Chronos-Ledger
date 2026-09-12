@@ -10,6 +10,48 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.11.0](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.10.0...v0.11.0) (2026-09-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* **security:** DB_PASSWORD is required and compose refuses to start without it. A deployment already running on the old default has a postgres volume initialised with that password, and POSTGRES_PASSWORD only applies at initdb, so setting a fresh DB_PASSWORD on its own leaves the backend unable to authenticate. Rotate inside the database first: set DB_PASSWORD to the new value, start the database alone with `docker compose up -d chronos-db`, run `docker compose exec chronos-db psql -U chronos_admin -d chronos_ledger -c "ALTER USER chronos_admin PASSWORD 'the new value'"` (if it asks for a password, it is the old published default), then bring the rest of the stack up. Wiping the volume is the other option and loses the data.
+
+### Features
+
+* **api:** the list routes returned every row with no way to page ([958d0d3](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/958d0d39daf6fd1655ea2633439db5bb6cfda834))
+* **resources:** a room could not be registered before a timetable named it ([2200965](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/220096579b8c904a82cca7ca2467571bda057130)), closes [#24](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/24)
+* **users:** somebody who left could only be deleted, attendance and all ([282617d](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/282617d14b6da91019d04c2f1936662c22424377))
+
+
+### Bug Fixes
+
+* **alembic:** running a migration in-process silenced the app's loggers ([9f67b89](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/9f67b8906ac29463b139bc36d1590e45d2bc6938))
+* **api:** the published OpenAPI spec had drifted from the app ([8ab23de](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/8ab23de1a5eee384182f7e0e914908f6dda90690))
+* **attendance:** a batch wrote to whichever session each record named ([2380bb7](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/2380bb724f3407bffce441039c55e5f3b55f48d4))
+* **attendance:** a coarse location fix could pass the fence ([2172374](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/217237447faeeb17ec79336b1ad225d97b3d1f08))
+* **auth:** a reused refresh token looked the same as an expired one ([302a345](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/302a34533204a34c5e215803a0b6a52e7bcb5c41))
+* **auth:** a service account's key was held at the first-login gate ([ca50ad2](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/ca50ad29c39de6494575d1e0cd47f08f3c9b9fee)), closes [#24](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/24)
+* **ci:** the compose file attached to a release was never stamped ([5a22574](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/5a22574688e0d7ba00773070dcb369a55e149102))
+* **compose:** the prod stack could not start while the dev stack was running ([32f5147](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/32f5147ed097eacb6c7e464a5ce711b863532994))
+* **docker:** the web image reported unhealthy while serving normally ([75df460](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/75df460a6c9601d62936dd9cecf5ae0c30506208))
+* **guest:** visitor check-ins were kept forever ([81e5fe1](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/81e5fe1f51f89ab20c859af6da1b98de31c50359))
+* **ingestion:** a CSV upload was read whole into memory ([c3b6072](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/c3b60727bac365ce980cc3a5b52185f207ddad38))
+* **ingestion:** a missing lead or a reused address failed without a reason ([7245ceb](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/7245ceb228eb5d8d238082c5d19c99253647683e))
+* **ledger:** a cycle's slots ran on dates outside the cycle ([8308e52](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/8308e52b20b5ce8f7b2dca03eebfd83dc1a89323))
+* **schedule:** a closed cycle kept its rooms and a clone had no slots ([1dd5de4](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/1dd5de4635fd5e593d2be111778d0978d6bd3e11))
+* **schedule:** the ledger PATCH wrote whatever its schema carried ([a8be698](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/a8be6989ff91625b852864ac07cd558ad5d7d8ea))
+* **security:** a published database password passed the production guard ([33226dc](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/33226dc5e3d1c0c8062ffe688d0e8faea58c16e6))
+* **users:** a manager was never checked and a changed email could 500 ([b3a6bc3](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/b3a6bc388070a408d7015b300d2d2725e1846148))
+* **web:** the wizard's cycle step read "an planning cycle" ([da09a73](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/da09a7311382f9f1970da28e26d25372658dbdff))
+* **ws:** an event reached only the instance that raised it ([86e9d65](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/86e9d65ae08aea57370d82a65361a37aadebafda))
+
+
+### Performance
+
+* **ingestion:** an import queried the database several times per row ([fe345e7](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/fe345e7b6ea3c7e33441154189e3e67d55e88277))
+* **schedule:** the staff locator queried once per person per tier ([1bd9635](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/1bd9635e268092b1a6dd31af9aea966daceebc77))
+
 ## [0.10.0](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.9.0...v0.10.0) (2026-09-10)
 
 
