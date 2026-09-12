@@ -89,7 +89,7 @@ def create_api_key(
             expires_at = expires_at.replace(tzinfo=UTC)
         if expires_at <= datetime.now(UTC):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="expires_at is in the past; the key would be dead on arrival",
             )
     raw = generate_api_key()

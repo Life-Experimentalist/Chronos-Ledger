@@ -148,8 +148,8 @@ Drop a member-centric CSV on the Admin dashboard. One upload creates/updates use
 
 | Layer          | Technology                                                          |
 | -------------- | ------------------------------------------------------------------- |
-| Backend        | Python 3.11 · FastAPI 0.115 · SQLAlchemy 2 · Alembic · APScheduler  |
-| Auth           | PyJWT 2.10 · bcrypt 4.2 (no CVE-affected packages)                  |
+| Backend        | Python 3.11 · FastAPI 0.141 · SQLAlchemy 2 · Alembic · APScheduler  |
+| Auth           | PyJWT 2.14 · bcrypt 5.0 (no CVE-affected packages)                  |
 | Database       | PostgreSQL 17                                                       |
 | Cache / PubSub | Redis 7.4                                                           |
 | Frontend       | Next.js 14 App Router · TypeScript · Tailwind CSS                   |
