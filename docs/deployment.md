@@ -12,7 +12,7 @@
 
 For local development additionally:
 - Python 3.11+ with [uv](https://github.com/astral-sh/uv)
-- Node.js 20 LTS
+- Node.js 24 LTS
 
 ---
 

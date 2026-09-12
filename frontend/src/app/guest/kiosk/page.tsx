@@ -8,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { motion, AnimatePresence } from 'framer-motion'
 import { isAxiosError } from 'axios'
+import Link from 'next/link'
 import { Search, User, Phone, Building2, MessageSquare, Loader2, CheckCircle2, CircleX, ArrowLeft, KeyRound } from 'lucide-react'
 import { guestApi, kioskKey } from '@/lib/api'
 import { useVocabulary } from '@/hooks/useVocabulary'
@@ -399,7 +400,7 @@ export default function GuestKioskPage() {
 
       {step !== 'pending' && step !== 'done' && (
         <p className="mt-8 text-xs text-chronos-muted text-center relative">
-          <a href="/" className="hover:text-chronos-text transition-colors">{`${vocab.staff} Sign In`}</a>
+          <Link href="/" className="hover:text-chronos-text transition-colors">{`${vocab.staff} Sign In`}</Link>
           {' · '}
           Organization Visitor Kiosk
         </p>

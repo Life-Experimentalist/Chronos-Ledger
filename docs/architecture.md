@@ -250,5 +250,5 @@ graph TD
 
 - **Static export** (`output: 'export'`): The entire frontend is pre-built into static HTML/JS at Docker image build time. Nginx serves it from a shared volume, no Node.js runtime in production, no cold-start latency.
 - **Zustand over Redux**: Minimal boilerplate. Auth state and notification inbox are the only global stores; everything else is local component state or server state via Axios.
-- **`useSearchParams` Suspense**: Next.js 14 static export requires any component calling `useSearchParams()` to be wrapped in a `<Suspense>` boundary. All three dashboards use an outer default-export wrapper + inner content component pattern.
+- **`useSearchParams` Suspense**: Next.js static export requires any component calling `useSearchParams()` to be wrapped in a `<Suspense>` boundary. All three dashboards use an outer default-export wrapper + inner content component pattern.
 - **Offline notifications**: Two-layer design: `setTimeout` timers while the page is open (via `useScheduleNotifications`), and `periodicsync` in the service worker for when the device is locked. Both layers deduplicate via the `notified-classes` IndexedDB store.
