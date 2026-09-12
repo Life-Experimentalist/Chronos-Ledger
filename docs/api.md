@@ -770,7 +770,8 @@ deactivated account, gets `404`.
 }
 ```
 
-`resolved_location` is a room, `OFF_SITE` for somebody on approved leave, the
+`resolved_location` is a room, `OFF_SITE` for somebody on approved leave that
+day, the
 base station (or `Unassigned`) when nothing is scheduled, or `UNKNOWN` when a
 status override answered. `status` is a sentence for display, not an enum.
 Somebody covering a class is in its room with a status saying they are

@@ -24,7 +24,9 @@ from app.models.db import (
     DailyLedger,
     DynamicState,
     InstitutionalRole,
+    LogVerificationState,
     PlanningCycle,
+    ReverseRsvpLog,
     StructuralMasterSlot,
     User,
 )
@@ -354,6 +356,55 @@ def test_a_night_shift_on_the_cycles_last_day_runs_past_it(db, seed_users, at):
     db.commit()
     at(TUESDAY, 2, 0)
     assert _state(db)["resolved_location"] == "W-1"
+
+
+# -- Approved leave the day rows have not caught up with -----------------------
+
+
+def _absence(db, day: datetime.date, state=LogVerificationState.VERIFIED_APPROVED):
+    db.add(
+        ReverseRsvpLog(
+            submitting_user_id="FAC001",
+            target_absence_date=day,
+            context_justification="Unwell",
+            approval_state=state,
+        )
+    )
+    db.commit()
+
+
+def test_leave_on_a_day_not_generated_yet_is_leave(db, seed_users, at):
+    """The timetable answered here and put them in the room they had leave
+    from. The nightly job would have written the day as ON_LEAVE."""
+    _slot(db, 1, DAY)
+    _absence(db, MONDAY)
+    at(MONDAY, 9, 30)
+    assert _state(db)["resolved_location"] == "OFF_SITE"
+
+
+def test_leave_holds_between_classes(db, seed_users, at):
+    _ledger(db, _slot(db, 1, DAY), MONDAY, DynamicState.ON_LEAVE, "W-1")
+    _absence(db, MONDAY)
+    at(MONDAY, 13, 0)
+    assert _state(db) == {"resolved_location": "OFF_SITE", "status": "On Approved Leave"}
+
+
+def test_a_pending_absence_is_not_leave(db, seed_users, at):
+    _absence(db, MONDAY, LogVerificationState.PENDING_VERIFICATION)
+    at(MONDAY, 13, 0)
+    assert _state(db)["status"] == "Available / Unassigned"
+
+
+def test_leave_is_for_its_own_date(db, seed_users, at):
+    """Leave on Tuesday does not take somebody off the Monday night shift
+    still running at two on Tuesday morning, and does from the moment it
+    ends."""
+    _slot(db, 1, NIGHT)
+    _absence(db, TUESDAY)
+    at(TUESDAY, 2, 0)
+    assert _state(db)["resolved_location"] == "W-1"
+    at(TUESDAY, 9, 0)
+    assert _state(db)["resolved_location"] == "OFF_SITE"
 
 
 # -- Several people at once ----------------------------------------------------

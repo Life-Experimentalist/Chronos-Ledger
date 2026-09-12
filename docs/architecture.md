@@ -128,18 +128,18 @@ flowchart TD
     R2 -->|No, or it says<br/>nothing about them| R3
 
     R3{A weekly slot they lead, running now,<br/>in an open cycle, on a date<br/>with no generated day?}
-    R3 -->|Yes| RET3[Return the slot's room]
+    R3 -->|Yes| RET3[Return the slot's room,<br/>or OFF_SITE on a date of leave]
     R3 -->|No| R4
 
-    R4[Return base station<br/>assigned_base_station, or Unassigned]
+    R4[Return OFF_SITE on a day of leave,<br/>else the base station<br/>assigned_base_station, or Unassigned]
 ```
 
 **Each tier explained:**
 
 1. **Redis override**: If Redis holds `state_override:<staff_id>`, its value is returned as the status and the location as `UNKNOWN`, since an override says what somebody is doing rather than where. No route in Chronos writes this key. `PUT /users/{user_id}/status` sets the account's `current_occupancy_index` instead, which the location routes report as `occupancy_index` next to whatever the tiers resolve.
 2. **Generated day**: The `DailyLedger` rows the person leads or covers, today's and yesterday's for a shift that runs past midnight, each compared on its own window. Somebody named as `substitute_lead_id` on a running `SCHEDULED`, `PROXY_SUBSTITUTE` or `ON_LEAVE` row is in its room, substituting. The lead is answered only by a row that is still theirs to run: `ON_LEAVE`, which is what an approved absence sets, gives `OFF_SITE`, and `SCHEDULED` with nobody covering gives the room. A covered row, a lunch or a meeting says nothing about the lead, and a later row can still answer for them.
-3. **Master timetable**: The weekly `StructuralMasterSlot` rows the person leads, filtered the way the nightly job filters them: the cycle is open and the date the slot runs on is inside the cycle's bounds. A slot that already has a `DailyLedger` row for that date is left to the row, so the timetable answers only on a day the nightly job has not written yet and never contradicts one it has. A lead whose running row is a lunch, a meeting or covered by someone else therefore reads as their base station.
-4. **Base station fallback**: The `assigned_base_station` field on the `User` record (e.g., "Front Desk") is the last-resort answer. The column has no default, so a user with none recorded resolves to `Unassigned` rather than to a named place.
+3. **Master timetable**: The weekly `StructuralMasterSlot` rows the person leads, filtered the way the nightly job filters them: the cycle is open and the date the slot runs on is inside the cycle's bounds. A slot that already has a `DailyLedger` row for that date is left to the row, so the timetable answers only on a day the nightly job has not written yet and never contradicts one it has. A lead whose running row is a lunch, a meeting or covered by someone else therefore reads as their base station. A slot on a date its lead has an approved absence for answers `OFF_SITE`, which is what the nightly job writes for it.
+4. **Base station fallback**: Somebody with an approved absence for today whom nothing above placed is `OFF_SITE` for the rest of the day, between classes or on a day with none. Otherwise the `assigned_base_station` field on the `User` record (e.g., "Front Desk") is the last-resort answer. The column has no default, so a user with none recorded resolves to `Unassigned` rather than to a named place.
 
 ---
 

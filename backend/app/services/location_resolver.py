@@ -12,7 +12,9 @@ from app.models.db import (
     Activity,
     DailyLedger,
     DynamicState,
+    LogVerificationState,
     PlanningCycle,
+    ReverseRsvpLog,
     StructuralMasterSlot,
     User,
 )
@@ -190,6 +192,21 @@ def determine_staff_current_states(
             DailyLedger.target_date.in_((yesterday, today)),
         )
     }
+    # Leave used to reach this function only through the rows an approval
+    # marks ON_LEAVE, so it answered only while one of them was running.
+    # Before and after somebody's classes, or on a day with none, they read
+    # as available, and on a date the nightly job had not written yet the
+    # timetable put them in the room they had leave from.
+    absent = {
+        (person, day)
+        for person, day in db.query(
+            ReverseRsvpLog.submitting_user_id, ReverseRsvpLog.target_absence_date
+        ).filter(
+            ReverseRsvpLog.submitting_user_id.in_(unresolved),
+            ReverseRsvpLog.target_absence_date.in_(list(days.values())),
+            ReverseRsvpLog.approval_state == LogVerificationState.VERIFIED_APPROVED,
+        )
+    }
     candidates.sort(key=lambda found: (found[0], found[1].time_window_start))
     for day, slot, offering in candidates:
         if (slot.id, day) in generated:
@@ -197,10 +214,23 @@ def determine_staff_current_states(
         if slot.primary_lead_id not in resolved and _covers(
             day, slot.time_window_start, slot.time_window_end, instant
         ):
+            if (slot.primary_lead_id, day) in absent:
+                # What the nightly job writes for this slot on this date.
+                resolved[slot.primary_lead_id] = {
+                    "resolved_location": "OFF_SITE",
+                    "status": "On Approved Leave",
+                }
+                continue
             resolved[slot.primary_lead_id] = {
                 "resolved_location": slot.target_room_identifier,
                 "status": f"Leading {offering.activity_code} in Room {slot.target_room_identifier}",
             }
+
+    # The rest of a day of leave. Only today's: yesterday's leave is over,
+    # and a night shift from yesterday still running has answered above.
+    for lead in unresolved:
+        if lead not in resolved and (lead, today) in absent:
+            resolved[lead] = {"resolved_location": "OFF_SITE", "status": "On Approved Leave"}
 
     # Tier 4: Base station fallback
     #
