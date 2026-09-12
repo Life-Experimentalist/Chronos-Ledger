@@ -3,7 +3,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 
 from app.core.passwords import AcceptablePassword
 from app.models.db import AccessReadiness, InstitutionalRole
@@ -33,6 +33,16 @@ class UserUpdate(BaseModel):
     unit_code: str | None = None
     assigned_base_station: str | None = None
     reporting_line_manager: str | None = None
+
+    @field_validator("full_name", "email_address")
+    @classmethod
+    def _cannot_be_cleared(cls, value):
+        # Every account has a name, and its email is what it signs in with.
+        # A default is never validated, so a field left out does not get
+        # here, only a null somebody sent.
+        if value is None:
+            raise ValueError("cannot be null")
+        return value
 
 
 class UserStatusUpdate(BaseModel):

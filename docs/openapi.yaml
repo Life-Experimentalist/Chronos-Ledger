@@ -216,14 +216,15 @@ components:
 
     UserUpdate:
       type: object
+      description: >
+        A field left out keeps its value and a null clears it, except
+        full_name and email_address, which cannot be null (422).
       properties:
         full_name:
           type: string
-          nullable: true
         email_address:
           type: string
           format: email
-          nullable: true
         unit_code:
           type: string
           nullable: true
@@ -915,6 +916,8 @@ components:
       type: object
       description: >
         Every field is optional and only the fields present are changed.
+        Only primary_lead_id may be null, which takes the lead off the slot;
+        a null for any other field is a 422.
         activity_id is absent on purpose: every day the slot has produced
         carries its own copy of the activity, so pointing the slot at
         another one is a delete and a create, not an edit.
@@ -994,16 +997,17 @@ components:
 
     DailyLedgerUpdate:
       type: object
+      description: >
+        A field left out keeps its value and a null clears it, except
+        operational_state and delivery_format, which cannot be null (422).
       properties:
         operational_state:
           $ref: "#/components/schemas/DynamicState"
-          nullable: true
         substitute_lead_id:
           type: string
           nullable: true
         delivery_format:
           $ref: "#/components/schemas/ExecutionMode"
-          nullable: true
         virtual_connection_string:
           type: string
           nullable: true

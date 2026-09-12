@@ -3,7 +3,7 @@
 
 from datetime import date, time
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.db import DynamicState, ExecutionMode
 from app.schemas.resources import BusyInterval
@@ -111,6 +111,18 @@ class MasterSlotUpdate(BaseModel):
     primary_lead_id: str | None = None
     target_room_identifier: str | None = None
 
+    @field_validator(
+        "day_of_week_index", "time_window_start", "time_window_end", "target_room_identifier"
+    )
+    @classmethod
+    def _cannot_be_cleared(cls, value):
+        # Only the lead may be taken off a slot: it cannot run without a
+        # weekday, both times and a room. A default is never validated, so a
+        # field left out does not get here, only a null somebody sent.
+        if value is None:
+            raise ValueError("cannot be null")
+        return value
+
 
 class DailyLedgerUpdate(BaseModel):
     operational_state: DynamicState | None = None
@@ -121,6 +133,16 @@ class DailyLedgerUpdate(BaseModel):
     longitude_target: float | None = None
     altitude_target: float | None = None
     precision_radius_meters: int | None = None
+
+    @field_validator("operational_state", "delivery_format")
+    @classmethod
+    def _cannot_be_cleared(cls, value):
+        # Every read of a day returns both, so a day without one could not be
+        # read back. A default is never validated, so a field left out does
+        # not get here, only a null somebody sent.
+        if value is None:
+            raise ValueError("cannot be null")
+        return value
 
 
 class DailyLedgerResponse(BaseModel):

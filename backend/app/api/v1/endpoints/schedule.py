@@ -706,9 +706,9 @@ def update_ledger_entry(
         "altitude_target",
         "precision_radius_meters",
     ):
-        value = getattr(payload, field)
-        if value is not None:
-            setattr(entry, field, value)
+        # Left out keeps the value, a null clears it.
+        if field in payload.model_fields_set:
+            setattr(entry, field, getattr(payload, field))
     db.commit()
     return {"message": "Updated"}
 

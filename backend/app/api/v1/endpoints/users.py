@@ -190,8 +190,9 @@ def update_user(
     if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Only a super-admin can modify admin accounts")
     ensure_unit_scope(current_user, user.unit_code)
-    if payload.unit_code is not None:
-        # A unit admin cannot move a user into or out of another unit.
+    if "unit_code" in payload.model_fields_set:
+        # A unit admin cannot move a user into or out of another unit, and
+        # clearing the unit moves the user out of theirs.
         ensure_unit_scope(current_user, payload.unit_code)
     if payload.email_address is not None:
         taken = (
@@ -203,7 +204,7 @@ def update_user(
             raise HTTPException(status_code=409, detail="Email already registered")
     if payload.reporting_line_manager is not None:
         _check_manager(user.id, payload.reporting_line_manager, db)
-    for field, value in payload.model_dump(exclude_none=True).items():
+    for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(user, field, value)
     db.commit()
     db.refresh(user)

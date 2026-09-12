@@ -356,6 +356,12 @@ this; it searches by name through `GET /guest/directory`.
 ### GET /users/{user_id}
 ### PATCH /users/{user_id} `[ADMIN]`
 
+A field left out keeps its current value, and `null` clears `unit_code`,
+`assigned_base_station` or `reporting_line_manager`. `full_name` and
+`email_address` cannot be cleared (`422`). A `UNIT_ADMIN` can edit only the
+non-admin accounts of their own unit and cannot move one to another unit.
+Clearing `unit_code` counts as moving it out (`403`).
+
 ### POST /users/{user_id}/reset-password `[ADMIN]`
 
 Issues a new random password for someone who cannot sign in, and returns it
@@ -759,9 +765,14 @@ Returns today's `DailyLedger` entries scoped to the caller's role:
 ### PATCH /schedule/ledger/{ledger_id} `[SUPER_ADMIN, UNIT_ADMIN]`
 
 A unit admin can edit only the days of their own unit's activities. A field
-left out, or sent as `null`, keeps its current value, and
-`substitute_lead_id` has to name an existing user (`404` otherwise) who has
-not been deactivated (`422`). The response is `{"message": "Updated"}`.
+left out keeps its current value, and one sent as `null` is cleared, except
+`operational_state` and `delivery_format`, which cannot be (`422`). Clearing
+`substitute_lead_id` takes the substitute off. The day's own `latitude_target`
+and `longitude_target` are used only while both are set, so clearing either
+puts the day back on its room's location, and a day without
+`precision_radius_meters` is fenced at 15 m. `substitute_lead_id` has to name
+an existing user (`404` otherwise) who has not been deactivated (`422`). The
+response is `{"message": "Updated"}`.
 
 ```json
 // Patch to switch to online delivery
@@ -989,6 +1000,10 @@ checked before any day the slot has already produced is withdrawn.
 
 `primary_lead_id` has to name an existing user (`404`, `Lead not found`) who
 has not been deactivated (`422`, `Lead is deactivated`).
+
+On `PATCH`, a field left out keeps its current value. Only `primary_lead_id`
+may be sent as `null`, which takes the lead off the slot and off the days that
+are still plans. A `null` for any other field is refused (`422`).
 
 ---
 

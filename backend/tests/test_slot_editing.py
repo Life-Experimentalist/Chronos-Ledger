@@ -13,6 +13,8 @@ what has already happened is never rewritten to match what is planned now.
 
 import datetime
 
+import pytest
+
 from app.core.time import org_today
 from app.cron.ledger_generator import generate_daily_ledger_entries
 from app.models.db import (
@@ -281,6 +283,46 @@ def test_patching_a_slot_that_is_not_there_is_a_404(client, db, seed_users):
         "/api/v1/schedule/slots/9999", headers=headers, json={"primary_lead_id": "ADM001"}
     )
     assert r.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "field", ["day_of_week_index", "time_window_start", "time_window_end", "target_room_identifier"]
+)
+def test_a_slot_cannot_be_patched_out_of_a_field_it_needs(client, db, seed_users, field):
+    """Only the lead may be taken off a slot. It cannot run without a
+    weekday, a start, an end or a room, so a null for any of them is refused
+    before anything is touched."""
+    headers, slot = _timetable(client, db, seed_users)
+    assert generate_daily_ledger_entries(TOMORROW, db) == 1
+
+    r = client.patch(f"/api/v1/schedule/slots/{slot.id}", headers=headers, json={field: None})
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"][0]["loc"][-1] == field
+
+    db.expire_all()
+    kept = _slots(db)[0]
+    assert (kept.day_of_week_index, kept.time_window_start, kept.time_window_end) == (
+        TOMORROW.isoweekday(),
+        datetime.time(9, 0),
+        datetime.time(10, 0),
+    )
+    assert kept.target_room_identifier == "LH-201"
+    assert db.query(DailyLedger).count() == 1
+
+
+def test_a_null_lead_takes_the_lead_off_the_slot_and_its_plans(client, db, seed_users):
+    headers, slot = _timetable(client, db, seed_users)
+    assert slot.primary_lead_id is not None
+    assert generate_daily_ledger_entries(TOMORROW, db) == 1
+
+    r = client.patch(
+        f"/api/v1/schedule/slots/{slot.id}", headers=headers, json={"primary_lead_id": None}
+    )
+    assert r.status_code == 200, r.text
+
+    db.expire_all()
+    assert _slots(db)[0].primary_lead_id is None
+    assert db.query(DailyLedger).one().active_lead_id is None
 
 
 # ── DELETE ────────────────────────────────────────────────────────────────────
