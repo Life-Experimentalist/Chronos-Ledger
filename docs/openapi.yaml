@@ -383,6 +383,11 @@ components:
         reporting_line_manager:
           type: string
           nullable: true
+        deactivated_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the account was deactivated, or null while it is active.
 
     # ── API keys ─────────────────────────────
     ApiKeyCreate:
@@ -1541,6 +1546,12 @@ paths:
           schema:
             type: string
           description: Filter by unit code.
+        - name: include_deactivated
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Include deactivated accounts, which are left out otherwise.
       responses:
         "200":
           description: User list.
@@ -1589,7 +1600,8 @@ paths:
         "422":
           description: >
             A malformed body, or a `reporting_line_manager` that names the
-            user or someone who already reports to them.
+            user, someone who already reports to them, or someone who has been
+            deactivated.
           content:
             application/json:
               schema:
@@ -1677,7 +1689,8 @@ paths:
         "422":
           description: >
             A malformed body, or a `reporting_line_manager` that names the
-            user or someone who already reports to them.
+            user, someone who already reports to them, or someone who has been
+            deactivated.
           content:
             application/json:
               schema:
@@ -1707,6 +1720,87 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PasswordResetResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/users/{user_id}/deactivate:
+    post:
+      tags: [Users]
+      summary: Stop an account without deleting it
+      description: >
+        For somebody who has left. Every record against the account stays,
+        and every way in closes: signing in, refreshing, an access token
+        already issued, an API key bound to the account, the calendar feed
+        and an open WebSocket. The account drops out of `GET /users/` unless
+        `include_deactivated=true`, out of the staff directory and staff
+        locations, and cannot be named as a manager, lead or substitute, sent
+        a guest, issued a new API key or enrolled by a CSV import. Its refresh
+        tokens are dropped and its calendar feed URL is rotated. API keys are
+        held rather than deleted, and the email address stays taken.
+
+
+        What already names the account is left alone. A slot it leads keeps
+        producing days with it as the lead, and an absence request already
+        sent to it stays pending, since only the manager a request went to can
+        decide it; the requester submits it again once they have a new manager.
+
+
+        Calling it on an account that is already deactivated changes nothing.
+        A UNIT_ADMIN is limited to their own unit and may not deactivate an
+        admin account, and nobody may deactivate their own.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The account, with `deactivated_at` set.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: The caller named their own account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/users/{user_id}/reactivate:
+    post:
+      tags: [Users]
+      summary: Let a deactivated account back in
+      description: >
+        The password and API keys work again as they were. The calendar feed
+        URL does not: deactivating rotated it, so the person fetches the new
+        one. If the old password should not work again, a reset-password
+        afterwards issues a new one. Calling it on an active account changes
+        nothing. A UNIT_ADMIN has the same limits as for deactivating.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The account, with `deactivated_at` null.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -1791,6 +1885,12 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           description: No such user to bind the key to.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The user to bind the key to has been deactivated.
           content:
             application/json:
               schema:
@@ -2225,7 +2325,11 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: "#/components/responses/NotFound"
+          description: The activity, or the user named in `primary_lead_id`, does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: >
             The room is taken for part of that window, either by a booking or
@@ -2242,7 +2346,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/ReservationConflict"
         "422":
-          $ref: "#/components/responses/UnprocessableEntity"
+          description: A malformed body, or a `primary_lead_id` naming somebody who has been deactivated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/schedule/slots/{slot_id}:
     patch:
@@ -2306,7 +2414,11 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: "#/components/responses/NotFound"
+          description: The slot, or the user named in `primary_lead_id`, does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: >
             Either a day the slot has already produced has been marked, and
@@ -2323,7 +2435,13 @@ paths:
                   - $ref: "#/components/schemas/ErrorResponse"
                   - $ref: "#/components/schemas/ReservationConflict"
         "422":
-          $ref: "#/components/responses/UnprocessableEntity"
+          description: >
+            A malformed body, a window that starts and ends at the same time,
+            or a `primary_lead_id` naming somebody who has been deactivated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
     delete:
       tags: [Schedule]
@@ -2416,6 +2534,12 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           description: The ledger entry, or the user named in `substitute_lead_id`, does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: A malformed body, or a `substitute_lead_id` naming somebody who has been deactivated.
           content:
             application/json:
               schema:
@@ -3032,7 +3156,8 @@ paths:
             The file was refused and nothing was saved. `detail` says why, and
             names the line where the file is at fault: a missing column, an
             unparseable time, an address already belonging to somebody else, a
-            room already taken for that window. Where the failure is the
+            room already taken for that window, a member or lead who has been
+            deactivated. Where the failure is the
             server's rather than the file's, `detail` says only that the import
             failed and that the reason is in the server log.
           content:

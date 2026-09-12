@@ -134,6 +134,13 @@ class ChronosIngestionEngine:
                         }
                     )
                 else:
+                    if member.deactivated_at is not None:
+                        # Enrolling them would put somebody who has left back
+                        # on a roster without anyone deciding they came back.
+                        raise ValueError(
+                            f"member '{row['member_id']}' is deactivated; reactivate "
+                            "them or take their rows out of the file"
+                        )
                     member.full_name = str(row["member_name"])
                     member.unit_code = str(row["unit"])
                     if member.email_address != str(row["member_email"]):
@@ -292,6 +299,18 @@ class ChronosIngestionEngine:
                             f"from {taken['start']} to {taken['end']}, "
                             "so it cannot be put there"
                         )
+                # A lead who has left would be put in front of a class they can
+                # no longer sign in to run.
+                lead = (
+                    self.db.query(User.deactivated_at)
+                    .filter(User.id == str(row["lead_id"]))
+                    .first()
+                )
+                if lead is not None and lead[0] is not None:
+                    raise ValueError(
+                        f"activity '{row['activity_code']}': lead '{row['lead_id']}' is "
+                        "deactivated; name another lead or reactivate them"
+                    )
                 if not slot:
                     slot = StructuralMasterSlot(
                         day_of_week_index=int(row["day_of_week_index"]),

@@ -1,6 +1,7 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
+from datetime import datetime
 
 from pydantic import BaseModel, EmailStr
 
@@ -47,5 +48,6 @@ class UserResponse(BaseModel):
     assigned_base_station: str | None
     current_occupancy_index: AccessReadiness
     reporting_line_manager: str | None
+    deactivated_at: datetime | None
 
     model_config = {"from_attributes": True}

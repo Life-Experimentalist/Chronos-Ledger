@@ -87,9 +87,10 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     user = db.query(User).filter(User.email_address == payload.email).first()
     # An address that matches no account still pays for a bcrypt comparison,
     # against a hash of a string nobody holds. `not user` comes second so the
-    # comparison actually runs; short-circuiting past it is the leak.
+    # comparison actually runs; short-circuiting past it is the leak. A
+    # deactivated account gets the same answer after the same comparison.
     stored = user.credential_secure_hash if user else ABSENT_ACCOUNT_HASH
-    if not verify_password(payload.password, stored) or not user:
+    if not verify_password(payload.password, stored) or not user or user.deactivated_at is not None:
         # Counted on the way out, so that getting your own password right
         # never costs you a slice of your own budget. The account budget is
         # spent whether or not the account exists, because a 429 that only
@@ -170,7 +171,7 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
         )
 
     user = db.get(User, row.user_id)
-    if user is None:
+    if user is None or user.deactivated_at is not None:
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"

@@ -155,7 +155,12 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
     rate_limit.guard("calendar-feed", feed_token, budget, window, "calendar feed requests")
     rate_limit.spend("calendar-feed", feed_token, budget, window)
 
-    user = db.query(User).filter(User.calendar_feed_token == feed_token).first()
+    # A deactivated account's feed stops with it.
+    user = (
+        db.query(User)
+        .filter(User.calendar_feed_token == feed_token, User.deactivated_at.is_(None))
+        .first()
+    )
     if not user:
         raise HTTPException(status_code=404, detail="Feed not found")
 

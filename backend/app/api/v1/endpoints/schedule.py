@@ -383,6 +383,20 @@ def list_master_slots(
     ]
 
 
+def _refuse_unless_active(db: Session, user_id: str, role: str) -> None:
+    """Refuse somebody who does not exist or has been deactivated.
+
+    For a person being put in charge of a slot or a day. Left to the foreign
+    key, an unknown id is a 500 on PostgreSQL, and a deactivated one would be
+    scheduled to run a class they can no longer sign in to.
+    """
+    found = db.query(User.deactivated_at).filter(User.id == user_id).first()
+    if found is None:
+        raise HTTPException(status_code=404, detail=f"{role} not found")
+    if found[0] is not None:
+        raise HTTPException(status_code=422, detail=f"{role} is deactivated")
+
+
 @router.post("/slots", responses={409: {"model": ReservationConflict}})
 def create_master_slot(
     payload: MasterSlotCreate,
@@ -393,6 +407,8 @@ def create_master_slot(
     if not offering:
         raise HTTPException(status_code=404, detail="Activity offering not found")
     ensure_unit_scope(current_user, offering.unit_code)
+    if payload.primary_lead_id is not None:
+        _refuse_unless_active(db, payload.primary_lead_id, "Lead")
     room = get_or_create_room(payload.target_room_identifier, db)
     _refuse_if_held(
         db,
@@ -463,6 +479,8 @@ def update_master_slot(
     ensure_unit_scope(current_user, slot.activity.unit_code)
 
     fields = payload.model_dump(exclude_unset=True)
+    if fields.get("primary_lead_id") is not None:
+        _refuse_unless_active(db, fields["primary_lead_id"], "Lead")
     start = fields.get("time_window_start", slot.time_window_start)
     end = fields.get("time_window_end", slot.time_window_end)
     if end == start:
@@ -666,9 +684,8 @@ def update_ledger_entry(
     if not entry:
         raise HTTPException(status_code=404, detail="Ledger entry not found")
     ensure_unit_scope(current_user, entry.activity.unit_code)
-    substitute = payload.substitute_lead_id
-    if substitute is not None and not db.query(User.id).filter(User.id == substitute).first():
-        raise HTTPException(status_code=404, detail="Substitute not found")
+    if payload.substitute_lead_id is not None:
+        _refuse_unless_active(db, payload.substitute_lead_id, "Substitute")
     # Named rather than taken from model_dump: the unit check above holds only
     # while the day stays on its activity, so a field added to DailyLedgerUpdate
     # later has to be listed here before it is written.
@@ -699,7 +716,7 @@ def get_staff_location(
     _=Depends(get_current_user),
 ):
     staff = db.query(User).filter(User.id == staff_id).first()
-    if not staff:
+    if not staff or staff.deactivated_at is not None:
         raise HTTPException(status_code=404, detail="Staff not found")
 
     redis = get_redis()
@@ -716,7 +733,11 @@ def get_staff_location(
 def get_all_staff_locations(db: Session = Depends(get_db), _=Depends(get_current_user)):
     from app.models.db import InstitutionalRole
 
-    staff_list = db.query(User).filter(User.role_type == InstitutionalRole.STAFF).all()
+    staff_list = (
+        db.query(User)
+        .filter(User.role_type == InstitutionalRole.STAFF, User.deactivated_at.is_(None))
+        .all()
+    )
     redis = get_redis()
     results = []
     for f in staff_list:

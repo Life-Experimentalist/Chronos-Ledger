@@ -192,6 +192,12 @@ def get_current_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    # Ahead of the key check below, so a key bound to a deactivated account
+    # stops working with it. Deactivating drops the refresh tokens, which
+    # leaves an access token already issued as the only way in, and this is
+    # where it ends.
+    if user.deactivated_at is not None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account deactivated")
     # The gate moves a person off a password they were handed. A key never
     # uses that password, and issuing one already took a super admin who had
     # cleared the gate, so a request made with a key is not held. Holding it

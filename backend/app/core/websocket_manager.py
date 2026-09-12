@@ -1,6 +1,7 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
+import contextlib
 import json
 
 from fastapi import WebSocket
@@ -26,6 +27,21 @@ class OrganizationConnectionManager:
         if websocket is not None and self.active_sockets.get(user_id) is not websocket:
             return
         self.active_sockets.pop(user_id, None)
+
+    async def close_session(self, user_id: str, code: int):
+        """Close the socket this user has open here, for an account that lost it.
+
+        A socket is checked once, when it connects, so revoking the account
+        does not reach one already open until this closes it. Only the sockets
+        this instance holds: another instance's are out of reach until the
+        broker is shared between instances.
+        """
+        websocket = self.active_sockets.pop(user_id, None)
+        if websocket is None:
+            return
+        # Already closed from the other end is the outcome being asked for.
+        with contextlib.suppress(Exception):
+            await websocket.close(code=code)
 
     async def forward_direct_message(self, recipient_id: str, event_type: str, data_payload: dict):
         websocket = self.active_sockets.get(recipient_id)

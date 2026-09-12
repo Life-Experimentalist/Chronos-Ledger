@@ -13,7 +13,10 @@ def route_absence_declaration(
     submitting_user: str, absence_date: str, reasoning: str, db: Session
 ) -> dict:
     user = db.query(User).filter(User.id == submitting_user).first()
-    if not user or not user.reporting_line_manager:
+    # A deactivated manager cannot sign in to approve the request, so it would
+    # wait for nobody.
+    manager = user.manager if user else None
+    if manager is None or manager.deactivated_at is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Reporting hierarchy missing. Contact admin to set your manager.",

@@ -131,6 +131,10 @@ class User(Base):
     calendar_feed_token = Column(
         String(64), unique=True, index=True, nullable=True, default=generate_feed_token
     )
+    # Set by POST /users/{id}/deactivate and cleared by reactivate. Somebody who
+    # leaves is deactivated rather than deleted, so the attendance recorded
+    # against them stays; see migration 018.
+    deactivated_at = Column(DateTime(timezone=True), nullable=True)
 
     manager = relationship("User", remote_side="User.id", foreign_keys=[reporting_line_manager])
     activity_enrollments = relationship(
@@ -396,7 +400,7 @@ class VerificationLedger(Base):
     ledger_instance_id = Column(
         BigInteger, ForeignKey("daily_ledger.id", ondelete="CASCADE"), nullable=False
     )
-    member_id = Column(String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    member_id = Column(String(50), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     marking_status = Column(Enum(VerificationMetric, name="verification_metric"), nullable=False)
     authorizing_agent_id = Column(String(50), ForeignKey("users.id"), nullable=True)
     modification_timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))

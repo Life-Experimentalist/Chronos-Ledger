@@ -60,12 +60,11 @@ def _token_from_frame(raw: str) -> str | None:
 def _identify(open_session, token: str) -> str | None:
     """Whose socket this is, or None if that account may not connect.
 
-    A valid signature used to be the whole check. This applies the two tests
-    get_current_user applies as well: the account still exists, and an admin
-    who has never chosen a password of its own is not let past. The third,
-    revocation, has nothing to read yet because a user has no deactivated
-    state; when one lands, this is where it gets consulted, and deactivating
-    somebody should also close whatever socket they have open.
+    A valid signature used to be the whole check. This applies the three tests
+    get_current_user applies as well: the account still exists, it has not
+    been deactivated, and an admin who has never chosen a password of its own
+    is not let past. Deactivating somebody also closes a socket they already
+    have open, through socket_broker.close_session.
 
     Synchronous, and called through run_in_threadpool, because the ORM here is
     synchronous and the event loop should not wait on a database. The session
@@ -85,7 +84,7 @@ def _identify(open_session, token: str) -> str | None:
 
     with open_session() as db:
         user = db.query(User).filter(User.id == user_id).first()
-        if not user or first_login_blocks(user):
+        if not user or user.deactivated_at is not None or first_login_blocks(user):
             return None
         return user.id
 

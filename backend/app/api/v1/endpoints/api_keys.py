@@ -76,6 +76,11 @@ def create_api_key(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"User '{payload.user_id}' not found",
         )
+    if bound_user.deactivated_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"User '{payload.user_id}' is deactivated",
+        )
     # Normalised once and then stored, so the value the gate compares later is
     # the value this check passed, not a naive twin of it.
     expires_at = payload.expires_at

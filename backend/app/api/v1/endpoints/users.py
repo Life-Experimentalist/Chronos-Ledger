@@ -1,10 +1,12 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.api.v1.endpoints.websocket import CLOSE_UNAUTHENTICATED
 from app.core.database import get_db
 from app.core.security import (
     ensure_unit_scope,
@@ -13,6 +15,7 @@ from app.core.security import (
     hash_password,
     require_roles,
 )
+from app.core.websocket_manager import socket_broker
 from app.models.db import InstitutionalRole, RefreshToken, User, generate_feed_token
 from app.schemas.users import (
     PasswordResetResponse,
@@ -26,17 +29,24 @@ router = APIRouter()
 
 
 def _check_manager(user_id: str, manager_id: str, db: Session) -> None:
-    """Refuse a manager who does not exist or who already reports to the user.
+    """Refuse a manager who does not exist, is deactivated, or already reports to the user.
 
     Absence requests go to the manager for approval, so a user set as their
-    own manager approves their own, and a loop of any length is a reporting
-    line with nobody at the top of it.
+    own manager approves their own, a deactivated one cannot sign in to
+    approve anything, and a loop of any length is a reporting line with
+    nobody at the top of it.
     """
     if manager_id == user_id:
         raise HTTPException(status_code=422, detail="A user cannot be their own manager")
-    row = db.query(User.reporting_line_manager).filter(User.id == manager_id).first()
+    row = (
+        db.query(User.reporting_line_manager, User.deactivated_at)
+        .filter(User.id == manager_id)
+        .first()
+    )
     if row is None:
         raise HTTPException(status_code=404, detail="Manager not found")
+    if row[1] is not None:
+        raise HTTPException(status_code=422, detail="Manager is deactivated")
     above, seen = row[0], {manager_id}
     # A loop the user is not in can predate this check; stop rather than spin.
     while above is not None and above not in seen:
@@ -53,10 +63,13 @@ def _check_manager(user_id: str, manager_id: str, db: Session) -> None:
 def list_users(
     role: str | None = None,
     unit: str | None = None,
+    include_deactivated: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
 ):
     q = db.query(User)
+    if not include_deactivated:
+        q = q.filter(User.deactivated_at.is_(None))
     if role:
         q = q.filter(User.role_type == role)
     if unit:
@@ -108,7 +121,9 @@ def list_available_staff(
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    q = db.query(User).filter(User.role_type == InstitutionalRole.STAFF)
+    q = db.query(User).filter(
+        User.role_type == InstitutionalRole.STAFF, User.deactivated_at.is_(None)
+    )
     if unit:
         q = q.filter(User.unit_code == unit)
     staff = q.all()
@@ -213,6 +228,72 @@ def reset_user_password(
     user.initial_login_state = True
     db.commit()
     return PasswordResetResponse(user_id=user.id, initial_password=raw_password)
+
+
+def _managed_account(user_id: str, db: Session, current_user: User) -> User:
+    """The account an admin is about to change, once they are allowed to change it."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    admin_roles = (InstitutionalRole.SUPER_ADMIN, InstitutionalRole.UNIT_ADMIN)
+    if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="Only a super-admin can modify admin accounts")
+    ensure_unit_scope(current_user, user.unit_code)
+    return user
+
+
+@router.post("/{user_id}/deactivate", response_model=UserResponse)
+def deactivate_user(
+    user_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+):
+    """Stop an account without deleting it, for somebody who has left.
+
+    Deleting a user took the attendance recorded against them, and the
+    database now refuses to. This keeps every record and closes every way
+    in: signing in, refreshing, an access token already issued, an API key
+    bound to the account, the calendar feed and an open socket. The account
+    also drops out of the lists staff are picked from.
+
+    API keys are held rather than deleted, so reactivating brings them back.
+    The email address stays taken. Calling it again changes nothing.
+    """
+    user = _managed_account(user_id, db, current_user)
+    # Refusing this is also what keeps one super admin standing: whoever
+    # deactivates the others is still there.
+    if user.id == current_user.id:
+        raise HTTPException(status_code=422, detail="You cannot deactivate your own account")
+    if user.deactivated_at is None:
+        user.deactivated_at = datetime.now(UTC)
+        user.calendar_feed_token = generate_feed_token()
+        db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
+        db.commit()
+        db.refresh(user)
+        background_tasks.add_task(socket_broker.close_session, user.id, CLOSE_UNAUTHENTICATED)
+    return user
+
+
+@router.post("/{user_id}/reactivate", response_model=UserResponse)
+def reactivate_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+):
+    """Let a deactivated account back in, with its password and API keys as they were.
+
+    The calendar feed URL is not: deactivating rotated it, so the person
+    fetches the new one. If the old password should not work again, a
+    reset-password after this issues a new one. Calling it on an active
+    account changes nothing.
+    """
+    user = _managed_account(user_id, db, current_user)
+    if user.deactivated_at is not None:
+        user.deactivated_at = None
+        db.commit()
+        db.refresh(user)
+    return user
 
 
 @router.put("/{user_id}/status")

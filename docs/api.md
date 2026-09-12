@@ -77,6 +77,11 @@ changes, which is what two tabs refreshing together look like.
 An API key in `X-API-Key` is accepted anywhere a Bearer token is. See
 [API keys](#api-keys).
 
+A deactivated account (see `POST /users/{user_id}/deactivate` below) is
+refused everywhere. Signing in answers `401 Invalid credentials`, the same as
+a wrong password, and an access token or API key issued before the
+deactivation gets `401 Account deactivated`.
+
 ### Rate limits
 
 Three routes carry a budget per caller, counted over a fixed window:
@@ -280,6 +285,9 @@ Revokes immediately: the next request using it gets `401`.
 ## Users
 
 ### GET /users/ `[ADMIN]`
+
+Deactivated accounts are left out unless `?include_deactivated=true`.
+
 ### POST /users/ `[SUPER_ADMIN]`
 
 Create users individually. For bulk creation, use CSV import (`POST /ingestion/upload-csv`).
@@ -300,8 +308,8 @@ Create users individually. For bulk creation, use CSV import (`POST /ingestion/u
 
 `reporting_line_manager` is who the user's absence requests go to for
 approval. It has to name an existing user (`404` otherwise), and it cannot
-name the user themselves or anyone who already reports to them, directly or
-through others (`422`). The same checks run on `PATCH /users/{user_id}`, which
+name the user themselves, anyone who already reports to them, directly or
+through others, or somebody who has been deactivated (`422`). The same checks run on `PATCH /users/{user_id}`, which
 also refuses with `409` an email address already registered to another
 account, as create does.
 
@@ -331,6 +339,36 @@ A reset drops every refresh token the user holds and rotates their calendar
 feed URL, so it doubles as the response to a compromised account. A
 `UNIT_ADMIN` may only reset users inside their own unit, and may not reset an
 admin account.
+
+### POST /users/{user_id}/deactivate `[ADMIN]`
+
+For somebody who has left. The account and everything recorded against it
+stay, and every way in closes: signing in, refreshing, an access token
+already issued, an API key bound to the account, the calendar feed and an
+open WebSocket. Returns the user with `deactivated_at` set.
+
+From then on the account is left out of `GET /users/` unless
+`include_deactivated=true`, out of the staff directory and out of staff
+locations. It cannot be named as a manager, a slot's lead or a day's
+substitute, sent a guest, issued an API key or enrolled by a CSV import.
+What already names it is left alone. A slot it leads keeps producing days
+with it as the lead, so give the slot another lead. An absence request
+already sent to it stays pending, because only the manager a request went to
+can decide it: give the person a new manager and they submit it again.
+
+API keys bound to the account are held rather than revoked, and its email
+address stays taken. Calling it on an account already deactivated changes
+nothing, and nobody can deactivate their own account (`422`). A `UNIT_ADMIN`
+may only deactivate users inside their own unit, and may not deactivate an
+admin account.
+
+### POST /users/{user_id}/reactivate `[ADMIN]`
+
+Lets the account back in as it was: its password and any held API keys work
+again. Its calendar feed URL does not, because deactivating rotated it, so
+the new one comes from `GET /sync/feed-token`. Follow with a reset-password
+if the old password should not work again. The same `UNIT_ADMIN` limits
+apply.
 
 ### PUT /users/{user_id}/status
 
@@ -654,8 +692,8 @@ Returns today's `DailyLedger` entries scoped to the caller's role:
 
 A unit admin can edit only the days of their own unit's activities. A field
 left out, or sent as `null`, keeps its current value, and
-`substitute_lead_id` has to name an existing user (`404` otherwise). The
-response is `{"message": "Updated"}`.
+`substitute_lead_id` has to name an existing user (`404` otherwise) who has
+not been deactivated (`422`). The response is `{"message": "Updated"}`.
 
 ```json
 // Patch to switch to online delivery
@@ -869,6 +907,9 @@ replaces.
 A refused `PATCH` changes nothing. The room is resolved and the clashes are
 checked before any day the slot has already produced is withdrawn.
 
+`primary_lead_id` has to name an existing user (`404`, `Lead not found`) who
+has not been deactivated (`422`, `Lead is deactivated`).
+
 ---
 
 ## Attendance
@@ -1024,6 +1065,10 @@ disagreeing with the timetable on purpose, because they record what
 happened rather than what was planned. A member who already exists keeps
 their password, and somebody promoted to STAFF since the last import stays
 STAFF.
+
+A row naming a member or a lead who has been deactivated is refused with
+`422` and the whole file rolled back. Reactivate them, or take the member's
+rows out of the file or name another lead.
 
 A row that would put a class in a room already taken for that window, by a
 booking, by another class, or by a day already generated onto it, is refused

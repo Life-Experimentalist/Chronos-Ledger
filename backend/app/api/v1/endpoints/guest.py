@@ -54,10 +54,15 @@ async def process_guest_entry(
     rate_limit.spend("guest-checkin", caller.id, budget, window)
 
     staff = db.query(User).filter(User.id == payload.target_staff_id).first()
-    if not staff or staff.role_type not in (
-        InstitutionalRole.STAFF,
-        InstitutionalRole.SUPER_ADMIN,
-        InstitutionalRole.UNIT_ADMIN,
+    if (
+        not staff
+        or staff.deactivated_at is not None
+        or staff.role_type
+        not in (
+            InstitutionalRole.STAFF,
+            InstitutionalRole.SUPER_ADMIN,
+            InstitutionalRole.UNIT_ADMIN,
+        )
     ):
         raise HTTPException(status_code=404, detail="Staff member not found")
 
@@ -131,7 +136,9 @@ def get_staff_directory(
     # person's live presence, so it is not something to hand out anonymously.
     _caller: User = Depends(get_current_user),
 ):
-    q = db.query(User).filter(User.role_type == InstitutionalRole.STAFF)
+    q = db.query(User).filter(
+        User.role_type == InstitutionalRole.STAFF, User.deactivated_at.is_(None)
+    )
     if name:
         q = q.filter(User.full_name.ilike(f"%{name}%"))
     return [
