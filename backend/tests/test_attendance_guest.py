@@ -6,6 +6,7 @@ import datetime
 import json
 
 import pytest
+import redis
 from pydantic import ValidationError
 
 from app.core.config import Settings, get_settings
@@ -883,6 +884,24 @@ def test_staff_location_redis_override(client, seed_users, monkeypatch):
     assert res.status_code == 200
     assert res.json()["status"] == "In a meeting"
     assert res.json()["resolved_location"] == "UNKNOWN"
+
+
+class _DownRedis:
+    def mget(self, keys):
+        raise redis.ConnectionError("Connection refused.")
+
+
+@pytest.mark.parametrize(
+    "path", ["/api/v1/schedule/staff/FAC001/location", "/api/v1/schedule/staff/all/locations"]
+)
+def test_staff_location_answers_with_redis_down(client, seed_users, monkeypatch, path):
+    """Both routes read the override first and answered 500 when it failed."""
+    monkeypatch.setattr("app.api.v1.endpoints.schedule.get_redis", lambda: _DownRedis())
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    res = client.get(path, headers=headers)
+    assert res.status_code == 200
+    body = res.json()
+    assert (body[0] if isinstance(body, list) else body)["status"] == "Available / Unassigned"
 
 
 def test_all_staff_locations(client, seed_users, monkeypatch):

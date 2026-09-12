@@ -45,7 +45,7 @@ graph TB
 | **FastAPI app** | All REST endpoints + WebSocket hub. One uvicorn process per container with no state of its own beyond PostgreSQL and Redis, so several can run behind a load balancer; see [Scaling](deployment.md#scaling). |
 | **APScheduler** | Runs `ledger_generator` at 23:00 in `ORG_TIMEZONE` to materialize `DailyLedger` rows from `StructuralMasterSlot` for the next day, and once at startup for any day a stopped process missed. Also deletes expired refresh tokens at 03:00 and, when `GUEST_RETENTION_DAYS` is set, old visitor check-ins at 03:30. |
 | **PostgreSQL** | Source of truth for all persistent data: users, schedule, attendance, absence logs, guest transactions. |
-| **Redis** | Short-lived state: the rate-limit counters, the per-person status override the location resolver checks first, the channel instances relay WebSocket events and closes over, and each instance's set of connected users (TTL) for the connection count. |
+| **Redis** | Short-lived state: the rate-limit counters, the per-person status override the location resolver checks first, the channel instances relay WebSocket events and closes over, and each instance's set of connected users (TTL) for the connection count. The rate limiter and the location resolver carry on without it when it cannot be reached, logging a warning, rather than failing the request. |
 
 ---
 
@@ -119,7 +119,7 @@ flowchart TD
 
     R1{Redis override<br/>state_override:id?}
     R1 -->|Yes| RET1[Return the override as status<br/>location UNKNOWN]
-    R1 -->|No| R2
+    R1 -->|No, or Redis<br/>unreachable| R2
 
     R2{A generated day running right now<br/>that they lead or cover?}
     R2 -->|They cover it| RET2C[Return the day's room<br/>Substituting]
@@ -136,7 +136,7 @@ flowchart TD
 
 **Each tier explained:**
 
-1. **Redis override**: If Redis holds `state_override:<staff_id>`, its value is returned as the status and the location as `UNKNOWN`, since an override says what somebody is doing rather than where. No route in Chronos writes this key. `PUT /users/{user_id}/status` sets the account's `current_occupancy_index` instead, which the location routes report as `occupancy_index` next to whatever the tiers resolve.
+1. **Redis override**: If Redis holds `state_override:<staff_id>`, its value is returned as the status and the location as `UNKNOWN`, since an override says what somebody is doing rather than where. No route in Chronos writes this key. `PUT /users/{user_id}/status` sets the account's `current_occupancy_index` instead, which the location routes report as `occupancy_index` next to whatever the tiers resolve. When Redis cannot be reached this tier is skipped with a warning in the log and the tiers below answer, since they read PostgreSQL.
 2. **Generated day**: The `DailyLedger` rows the person leads or covers, today's and yesterday's for a shift that runs past midnight, each compared on its own window. Somebody named as `substitute_lead_id` on a running `SCHEDULED`, `PROXY_SUBSTITUTE` or `ON_LEAVE` row is in its room, substituting. The lead is answered only by a row that is still theirs to run: `ON_LEAVE`, which is what an approved absence sets, gives `OFF_SITE`, and `SCHEDULED` with nobody covering gives the room. A covered row, a lunch or a meeting says nothing about the lead, and a later row can still answer for them.
 3. **Master timetable**: The weekly `StructuralMasterSlot` rows the person leads, filtered the way the nightly job filters them: the cycle is open and the date the slot runs on is inside the cycle's bounds. A slot that already has a `DailyLedger` row for that date is left to the row, so the timetable answers only on a day the nightly job has not written yet and never contradicts one it has. A lead whose running row is a lunch, a meeting or covered by someone else therefore reads as their base station. A slot on a date its lead has an approved absence for answers `OFF_SITE`, which is what the nightly job writes for it.
 4. **Base station fallback**: Somebody with an approved absence for today whom nothing above placed is `OFF_SITE` for the rest of the day, between classes or on a day with none. Otherwise the `assigned_base_station` field on the `User` record (e.g., "Front Desk") is the last-resort answer. The column has no default, so a user with none recorded resolves to `Unassigned` rather than to a named place.

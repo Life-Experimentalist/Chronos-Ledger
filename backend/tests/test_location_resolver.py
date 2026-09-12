@@ -17,6 +17,7 @@ weekday it happens to be run.
 import datetime
 
 import pytest
+import redis
 
 from app.core.time import org_timezone
 from app.models.db import (
@@ -454,4 +455,26 @@ def test_everybody_asked_about_at_once_gets_their_own_answer(db, seed_users, at)
         "FAC003": {"resolved_location": "W-3", "status": "Leading WARD-A in Room W-3"},
         "FAC004": {"resolved_location": "UNKNOWN", "status": "In a meeting"},
         "FAC005": {"resolved_location": "Desk 5", "status": "Available / Unassigned"},
+    }
+
+
+# -- Without Redis -------------------------------------------------------------
+
+
+class DownRedis:
+    """A Redis that cannot be reached, raising the way redis-py does."""
+
+    def mget(self, keys):
+        raise redis.ConnectionError("Error 111 connecting to redis:6379. Connection refused.")
+
+
+def test_the_other_tiers_answer_when_redis_is_down(db, seed_users, at):
+    """The override is the only thing here kept in Redis. Losing it is no
+    reason to lose the timetable too, and the lookup used to raise."""
+    _slot(db, 1, DAY)
+    at(MONDAY, 9, 30)
+    staff = db.query(User).filter(User.id == "FAC001").one()
+    assert determine_staff_current_states([staff], db, DownRedis())["FAC001"] == {
+        "resolved_location": "W-1",
+        "status": "Leading WARD-A in Room W-1",
     }

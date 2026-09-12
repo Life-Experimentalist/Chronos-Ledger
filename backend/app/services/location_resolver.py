@@ -2,8 +2,9 @@
 # Licensed under the Apache License, Version 2.0
 
 import datetime
+import logging
 
-from redis import Redis
+import redis
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
@@ -18,6 +19,8 @@ from app.models.db import (
     StructuralMasterSlot,
     User,
 )
+
+log = logging.getLogger(__name__)
 
 # The states a named cover is in the room for. A lunch or a meeting with a
 # substitute on it is not a class anybody is running.
@@ -51,7 +54,7 @@ def _covers(
 
 
 def determine_staff_current_states(
-    staff: list[User], db: Session, redis_cache: Redis
+    staff: list[User], db: Session, redis_cache: redis.Redis
 ) -> dict[str, dict]:
     """Where each of these people is right now, keyed by their id.
 
@@ -76,7 +79,17 @@ def determine_staff_current_states(
 
     # Tier 1: Redis manual status override (TTL-based, e.g. "in meeting", "out for lunch")
     # redis-py returns bytes; decode before use.
-    overrides = redis_cache.mget([f"state_override:{person.id}" for person in staff])
+    #
+    # Skipped when Redis cannot be reached, the way the rate limiter carries
+    # on without it. The override is the only thing here that lives in Redis
+    # and every tier below reads PostgreSQL, but a connection error used to
+    # go straight up as a 500, so every location lookup failed along with the
+    # cache, over the one part of the answer that can do without it.
+    try:
+        overrides = redis_cache.mget([f"state_override:{person.id}" for person in staff])
+    except redis.RedisError as unreachable:
+        log.warning("status overrides not read: %s", unreachable)
+        overrides = [None] * len(staff)
     for person, cached_raw in zip(staff, overrides, strict=True):
         if cached_raw:
             cached = cached_raw.decode("utf-8") if isinstance(cached_raw, bytes) else cached_raw
