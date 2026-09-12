@@ -11,7 +11,7 @@
 #     -t chronos-ledger-web:local .
 
 # ── Stage 1: Build Next.js ────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 

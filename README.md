@@ -152,7 +152,7 @@ Drop a member-centric CSV on the Admin dashboard. One upload creates/updates use
 | Auth           | PyJWT 2.14 · bcrypt 5.0 (no CVE-affected packages)                  |
 | Database       | PostgreSQL 17                                                       |
 | Cache / PubSub | Redis 7.4                                                           |
-| Frontend       | Next.js 14 App Router · TypeScript · Tailwind CSS                   |
+| Frontend       | Next.js 16 App Router · React 19 · TypeScript · Tailwind CSS        |
 | State          | Zustand · React Hook Form · Zod                                     |
 | PWA            | @ducanh2912/next-pwa (Workbox) · IndexedDB (idb) · Web Push (VAPID) |
 | Reverse proxy  | Nginx 1.27                                                          |
@@ -187,7 +187,7 @@ chronos-ledger/
 │       ├── api/v1/         # Route handlers per domain
 │       ├── services/       # Business logic (geo-fence, RSVP, ingestion)
 │       └── cron/           # Nightly ledger generator (APScheduler)
-├── frontend/               # Next.js 14 PWA (npm managed)
+├── frontend/               # Next.js 16 PWA (npm managed)
 │   ├── public/
 │   │   ├── manifest.webmanifest
 │   │   └── sw-custom.js    # Background sync + push + periodicsync

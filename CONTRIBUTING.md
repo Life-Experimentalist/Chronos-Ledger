@@ -24,7 +24,7 @@ Be respectful. Treat other contributors the way you would want to be treated. Is
 
 - Docker 24+ and Docker Compose 2.20+
 - Python 3.11+ and [uv](https://github.com/astral-sh/uv)
-- Node.js 20+ and npm
+- Node.js 24+ and npm
 
 ### Backend
 

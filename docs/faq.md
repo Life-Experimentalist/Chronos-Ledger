@@ -496,7 +496,7 @@ so it does not matter that only the GHCR copy carries it as a registry referrer.
 Check if the CVE affects Chronos Ledger's actual usage (many CVEs in base images are in code paths that are never executed). If it does:
 
 1. Open an issue on GitHub with the CVE ID.
-2. If it's in the base image (`node:20-alpine`, `python:3.11-slim`, or `nginx:1.27-alpine`), we will update the `FROM` line once the upstream image is patched.
+2. If it's in the base image (`node:24-alpine`, `python:3.11-slim`, or `nginx:1.27-alpine`), we will update the `FROM` line once the upstream image is patched.
 3. If it's in a dependency, update via `uv add <package>@<fixed-version>` or `npm install <package>@<fixed-version>`.
 
 A HIGH is reported and does not stop the build. A CRITICAL with a published fix
