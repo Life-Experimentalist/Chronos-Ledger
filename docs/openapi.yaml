@@ -1808,8 +1808,11 @@ paths:
         `include_deactivated=true`, out of the staff directory and staff
         locations, and cannot be named as a manager, lead or substitute, sent
         a guest, issued a new API key or enrolled by a CSV import. Its refresh
-        tokens are dropped and its calendar feed URL is rotated. API keys are
-        held rather than deleted, and the email address stays taken.
+        tokens are dropped, its calendar feed URL is rotated and its API keys
+        are deleted; reactivating does not bring the keys back. The email
+        address stays taken, since the account can come back: to reuse it,
+        change it on the deactivated account with `PATCH /users/{user_id}`
+        first.
 
 
         What already names the account is left alone. A slot it leads keeps
@@ -1852,11 +1855,12 @@ paths:
       tags: [Users]
       summary: Let a deactivated account back in
       description: >
-        The password and API keys work again as they were. The calendar feed
-        URL does not: deactivating rotated it, so the person fetches the new
-        one. If the old password should not work again, a reset-password
-        afterwards issues a new one. Calling it on an active account changes
-        nothing. A UNIT_ADMIN has the same limits as for deactivating.
+        The password works again as it was. The API keys do not come back,
+        since deactivating deleted them, and neither does the calendar feed
+        URL: deactivating rotated it, so the person fetches the new one. If
+        the old password should not work again, a reset-password afterwards
+        issues a new one. Calling it on an active account changes nothing. A
+        UNIT_ADMIN has the same limits as for deactivating.
       parameters:
         - name: user_id
           in: path

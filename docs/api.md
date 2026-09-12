@@ -79,8 +79,9 @@ An API key in `X-API-Key` is accepted anywhere a Bearer token is. See
 
 A deactivated account (see `POST /users/{user_id}/deactivate` below) is
 refused everywhere. Signing in answers `401 Invalid credentials`, the same as
-a wrong password, and an access token or API key issued before the
-deactivation gets `401 Account deactivated`.
+a wrong password, and an access token issued before the deactivation gets
+`401 Account deactivated`. Its API keys are deleted, so one of those gets
+`401 Invalid API key`.
 
 ### Rate limits
 
@@ -391,19 +392,23 @@ with it as the lead, so give the slot another lead. An absence request
 already sent to it stays pending, because only the manager a request went to
 can decide it: give the person a new manager and they submit it again.
 
-API keys bound to the account are held rather than revoked, and its email
-address stays taken. Calling it on an account already deactivated changes
-nothing, and nobody can deactivate their own account (`422`). A `UNIT_ADMIN`
-may only deactivate users inside their own unit, and may not deactivate an
-admin account.
+API keys bound to the account are deleted, and reactivating does not bring
+them back: an integration that signs in as the account is issued a new key.
+The email address stays taken, because a deactivated account can come back.
+To give the address to somebody else, change it on the deactivated account
+with `PATCH /users/{user_id}` first; no route deletes an account. Calling it
+on an account already deactivated changes nothing, and nobody can deactivate
+their own account (`422`). A `UNIT_ADMIN` may only deactivate users inside
+their own unit, and may not deactivate an admin account.
 
 ### POST /users/{user_id}/reactivate `[ADMIN]`
 
-Lets the account back in as it was: its password and any held API keys work
-again. Its calendar feed URL does not, because deactivating rotated it, so
-the new one comes from `GET /sync/feed-token`. Follow with a reset-password
-if the old password should not work again. The same `UNIT_ADMIN` limits
-apply.
+Lets the account back in with its password as it was. Its API keys do not
+come back, since deactivating deleted them, so issue new ones with
+`POST /api-keys/`. Its calendar feed URL does not work either, because
+deactivating rotated it, so the new one comes from `GET /sync/feed-token`.
+Follow with a reset-password if the old password should not work again. The
+same `UNIT_ADMIN` limits apply.
 
 ### PUT /users/{user_id}/status
 

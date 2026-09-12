@@ -17,7 +17,7 @@ from app.core.security import (
     require_roles,
 )
 from app.core.websocket_manager import socket_broker
-from app.models.db import InstitutionalRole, RefreshToken, User, generate_feed_token
+from app.models.db import ApiKey, InstitutionalRole, RefreshToken, User, generate_feed_token
 from app.schemas.users import (
     PasswordResetResponse,
     UserCreate,
@@ -260,8 +260,10 @@ def deactivate_user(
     bound to the account, the calendar feed and an open socket. The account
     also drops out of the lists staff are picked from.
 
-    API keys are held rather than deleted, so reactivating brings them back.
-    The email address stays taken. Calling it again changes nothing.
+    API keys are deleted, not held, and reactivating does not bring them
+    back. The email address stays taken, because the account can come back;
+    changing it on the deactivated account frees it. Calling it again
+    changes nothing.
     """
     user = _managed_account(user_id, db, current_user)
     # Refusing this is also what keeps one super admin standing: whoever
@@ -272,6 +274,10 @@ def deactivate_user(
         user.deactivated_at = datetime.now(UTC)
         user.calendar_feed_token = generate_feed_token()
         db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
+        # Deleted rather than held. A key kept on an account nobody answers
+        # for is a working credential nobody is accountable for, and whoever
+        # takes the integration over is issued a key of their own.
+        db.query(ApiKey).filter(ApiKey.user_id == user.id).delete()
         db.commit()
         db.refresh(user)
         background_tasks.add_task(socket_broker.close_session, user.id, CLOSE_UNAUTHENTICATED)
@@ -284,12 +290,13 @@ def reactivate_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
 ):
-    """Let a deactivated account back in, with its password and API keys as they were.
+    """Let a deactivated account back in, with its password as it was.
 
-    The calendar feed URL is not: deactivating rotated it, so the person
-    fetches the new one. If the old password should not work again, a
-    reset-password after this issues a new one. Calling it on an active
-    account changes nothing.
+    Its API keys are not: deactivating deleted them, so an integration that
+    signs in as the account is issued a new one. Nor is the calendar feed
+    URL, which deactivating rotated, so the person fetches the new one. If
+    the old password should not work again, a reset-password after this
+    issues a new one. Calling it on an active account changes nothing.
     """
     user = _managed_account(user_id, db, current_user)
     if user.deactivated_at is not None:

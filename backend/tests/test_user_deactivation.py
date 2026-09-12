@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from app.api.v1.endpoints import websocket as ws_module
 from app.core.time import org_today
 from app.core.websocket_manager import OrganizationConnectionManager, socket_broker
-from app.models.db import User
+from app.models.db import ApiKey, User
 from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, login
 from tests.test_attendance_guest import _GUEST, _FakeRedis
 from tests.test_ingestion import HEADER, _make_cycle, _upload
@@ -86,17 +86,27 @@ def test_a_refresh_looks_at_the_account_as_well_as_the_token(client, db, seed_us
     assert res.status_code == 401
 
 
-def test_a_key_bound_to_the_account_is_held_and_comes_back(client, db, seed_users, kiosk_key):
+def test_a_key_bound_to_the_account_is_deleted_and_stays_gone(client, db, seed_users, kiosk_key):
+    """A held key came back with the account, having answered to nobody in between."""
     admin = _admin(client)
     assert client.get("/api/v1/guest/directory", headers=kiosk_key).status_code == 200
 
     assert _deactivate(client, admin, "KIOSK01").status_code == 200
     res = client.get("/api/v1/guest/directory", headers=kiosk_key)
     assert res.status_code == 401
-    assert res.json()["detail"] == "Account deactivated"
+    assert res.json()["detail"] == "Invalid API key"
+    db.expire_all()
+    assert db.query(ApiKey).filter(ApiKey.user_id == "KIOSK01").count() == 0
 
+    # Coming back does not bring the key with it. A new one is issued, and works.
     assert _reactivate(client, admin, "KIOSK01").status_code == 200
-    assert client.get("/api/v1/guest/directory", headers=kiosk_key).status_code == 200
+    assert client.get("/api/v1/guest/directory", headers=kiosk_key).status_code == 401
+    issued = client.post(
+        "/api/v1/api-keys/", json={"label": "Lobby kiosk", "user_id": "KIOSK01"}, headers=admin
+    )
+    assert issued.status_code == 201, issued.text
+    fresh = {"X-API-Key": issued.json()["api_key"]}
+    assert client.get("/api/v1/guest/directory", headers=fresh).status_code == 200
 
 
 def test_the_calendar_feed_stops_and_comes_back_under_a_new_url(client, db, seed_users):
@@ -132,6 +142,30 @@ def test_reactivating_lets_the_old_password_back_in(client, db, seed_users):
     login(client, "member@test.internal", MEMBER_PASSWORD)
     # Reactivating an active account changes nothing.
     assert _reactivate(client, admin, "STU001").status_code == 200
+
+
+def test_the_address_stays_taken_until_it_is_changed_on_the_old_account(client, db, seed_users):
+    """Deactivating can be undone, so the account keeps its address until an admin moves it."""
+    admin = _admin(client)
+    assert _deactivate(client, admin, "STU001").status_code == 200
+    newcomer = {
+        "id": "STU777",
+        "full_name": "New Member",
+        "email_address": "member@test.internal",
+        "password": MEMBER_PASSWORD,
+        "role_type": "MEMBER",
+        "unit_code": "CSE",
+    }
+    taken = client.post("/api/v1/users/", json=newcomer, headers=admin)
+    assert taken.status_code == 409
+    assert taken.json()["detail"] == "Email already registered"
+
+    moved = client.patch(
+        "/api/v1/users/STU001", json={"email_address": "stu001.left@test.internal"}, headers=admin
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["deactivated_at"] is not None
+    assert client.post("/api/v1/users/", json=newcomer, headers=admin).status_code == 201
 
 
 # -- Who may do it ------------------------------------------------------------
