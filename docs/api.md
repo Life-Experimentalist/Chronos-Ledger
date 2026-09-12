@@ -1092,6 +1092,8 @@ approval, every `DailyLedger` row the submitter leads on that date flips to
 `ON_LEAVE` back to `SCHEDULED`. See [`docs/flows.md`](flows.md) for the full
 state machine.
 
+A date already past is accepted, so an absence can be recorded afterwards.
+
 Somebody with no manager set, or whose manager has been deactivated, gets `400`
 rather than a request waiting on nobody.
 
