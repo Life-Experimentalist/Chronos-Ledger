@@ -31,15 +31,15 @@
     "zustand": "5.0.15"
   },
   "devDependencies": {
-    "@types/node": "24.13.4",
+    "@types/node": "26.5.0",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "autoprefixer": "10.5.0",
-    "eslint": "9.39.5",
+    "eslint": "10.10.0",
     "eslint-config-next": "16.3.4",
     "postcss": "8.5.28",
     "tailwindcss": "3.4.17",
-    "typescript": "5.7.3"
+    "typescript": "7.0.2"
   },
   "overrides": {
     "serialize-javascript": "7.0.5"
