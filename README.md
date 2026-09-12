@@ -110,10 +110,12 @@ Members mark attendance via GPS. The server runs a Haversine distance check, plu
 
 ### 4-Tier Staff Location Resolution
 Always know where staff are, in priority order:
-1. **Redis manual override** (e.g., "In meeting, back at 15:00")
-2. **Approved absence** from the daily exception log
-3. **Active master slot** room from the live timetable
-4. **Base station fallback** (their configured office/staffroom)
+1. **Override**: a `state_override:<id>` value an integration writes to Redis. Chronos never writes one itself, and the tier is skipped when Redis is down.
+2. **The generated day**: the room of a slot they cover, or of their own slot when nobody else covers it. OFF_SITE when that day marks them on leave.
+3. **Weekly timetable**: the room of a slot they lead, on a date the nightly job has not generated yet.
+4. **Base station**: OFF_SITE on a day of approved leave, otherwise their assigned base station.
+
+The full rules are in [docs/architecture.md](docs/architecture.md#4-tier-staff-location-resolution).
 
 ### Reverse RSVP Absence System
 Presence is the default state. Staff *file* absences rather than *confirming* presence. Requests route to the line manager for approval. Approved absences cascade `ON_LEAVE` to every affected ledger entry and fire a WebSocket notification to the staff member.

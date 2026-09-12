@@ -435,7 +435,7 @@ export default function LandingPage() {
 const FEATURES = [
   {
     title: 'Live Staff Locator',
-    desc: '4-tier resolution: Redis manual override → daily exception → master timetable → base station fallback. Always know where staff are.',
+    desc: '4-tier resolution: an override set by an integration → the generated day, with cover and leave → weekly timetable → base station. Always know where staff are.',
     icon: Navigation,
     iconBg: 'bg-chronos-teal/10',
     iconColor: 'text-chronos-teal',

@@ -6,7 +6,7 @@
 
   Standalone landing page for GitHub Pages.
   Self-contained: no build step, no framework.
-  Dark Reader aware: all colours via CSS variables + color-scheme meta.
+  Dark Reader aware: all colors via CSS variables + color-scheme meta.
 -->
 <head>
   <meta charset="UTF-8" />
@@ -21,6 +21,10 @@
   <meta property="og:title" content="Chronos Ledger" />
   <meta property="og:description" content="Schedule &amp; attendance that works offline." />
   <meta property="og:type" content="website" />
+  <meta property="og:url" content="http://chronos.vkrishna04.me/" />
+  <meta property="og:image" content="http://chronos.vkrishna04.me/icon.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="canonical" href="http://chronos.vkrishna04.me/" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -28,7 +32,7 @@
 
   <style>
     /* ── Theme variables ─────────────────────────────────────────────────────
-       All colour tokens live here.  Dark Reader overrides these variables
+       All color tokens live here.  Dark Reader overrides these variables
        directly instead of inverting bitmaps, so the page stays readable in
        every mode.                                                            */
     :root {
@@ -663,7 +667,7 @@
   </div>
 
   <div class="nav-actions">
-    <button id="theme-toggle" aria-label="Toggle colour theme">
+    <button id="theme-toggle" aria-label="Toggle color theme">
       <i data-lucide="sun" id="icon-light" style="width:14px;height:14px;display:none;"></i>
       <i data-lucide="moon" id="icon-dark" style="width:14px;height:14px;"></i>
       <span id="theme-label">Light</span>
@@ -877,7 +881,7 @@
 <!-- ── Data ──────────────────────────────────────────────────────────────────── -->
 <script>
 const FEATURES = [
-  { icon:'navigation', title:'Live Staff Locator', desc:'4-tier resolution: Redis override → daily exception → master timetable → base station fallback. Always know where staff are.', bg:'rgba(20,184,166,.1)', color:'var(--teal)' },
+  { icon:'navigation', title:'Live Staff Locator', desc:'4-tier resolution: an override set by an integration → the generated day, with cover and leave → weekly timetable → base station. Always know where staff are.', bg:'rgba(20,184,166,.1)', color:'var(--teal)' },
   { icon:'map-pin', title:'Geofenced Attendance', desc:'Haversine distance, plus a 4 m altitude check when the device and the room both report one, so a floor above does not count. Marking is refused when GPS accuracy is worse than 30 m.', bg:'rgba(16,185,129,.1)', color:'var(--emerald)' },
   { icon:'user-check', title:'Reverse RSVP Absences', desc:'Presence is the default. Staff file absence requests; their manager approves. Approved absences auto-cascade ON_LEAVE to the daily ledger.', bg:'rgba(129,140,248,.1)', color:'var(--accent)' },
   { icon:'zap', title:'Real-Time WebSocket', desc:'JWT-authenticated persistent connections. Instant guest handshake requests, absence approvals, and organization-wide broadcasts, no polling.', bg:'rgba(245,158,11,.1)', color:'var(--warning)' },
