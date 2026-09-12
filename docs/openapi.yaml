@@ -389,6 +389,42 @@ components:
           nullable: true
           description: When the account was deactivated, or null while it is active.
 
+    OpenItems:
+      type: object
+      description: >
+        What still names a deactivated account. Deactivating changes none of
+        it and is never refused because of it; calling deactivate again
+        counts afresh.
+      required:
+        - pending_absence_requests
+        - direct_reports
+        - slots_led
+        - ledger_rows_ahead
+      properties:
+        pending_absence_requests:
+          type: integer
+          description: >
+            Absence requests sent to the account that nobody has decided. An
+            admin decides them from `GET /attendance/absence/pending`.
+        direct_reports:
+          type: integer
+          description: Active accounts that name it as their manager.
+        slots_led:
+          type: integer
+          description: Slots it leads in a cycle that has not ended, drafts included.
+        ledger_rows_ahead:
+          type: integer
+          description: Ledger rows dated today or later that it leads or covers.
+
+    DeactivatedUserResponse:
+      allOf:
+        - $ref: "#/components/schemas/UserResponse"
+        - type: object
+          required: [open_items]
+          properties:
+            open_items:
+              $ref: "#/components/schemas/OpenItems"
+
     # ── API keys ─────────────────────────────
     ApiKeyCreate:
       type: object
@@ -1815,10 +1851,11 @@ paths:
         first.
 
 
-        What already names the account is left alone. A slot it leads keeps
-        producing days with it as the lead, and an absence request already
-        sent to it stays pending, since only the manager a request went to can
-        decide it; the requester submits it again once they have a new manager.
+        What already names the account is left alone, and none of it stops
+        the account being deactivated. The response counts it under
+        `open_items`, and calling again counts afresh. An absence request
+        sent to the account is decided by an admin instead; see
+        `GET /attendance/absence/pending`.
 
 
         Calling it on an account that is already deactivated changes nothing.
@@ -1832,11 +1869,11 @@ paths:
             type: string
       responses:
         "200":
-          description: The account, with `deactivated_at` set.
+          description: The account, with `deactivated_at` set and what it leaves behind.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserResponse"
+                $ref: "#/components/schemas/DeactivatedUserResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -3032,8 +3069,11 @@ paths:
       tags: [Attendance]
       summary: List absence requests pending the caller's approval
       description: >
-        Any signed-in user. Returns the undecided requests routed to the
-        caller as the submitter's line manager; being an admin adds nothing.
+        Any signed-in user. Returns the undecided requests the caller may
+        decide: those routed to them as the submitter's line manager and,
+        for an admin, those whose manager has since been deactivated. A
+        SUPER_ADMIN gets every one of those, a UNIT_ADMIN those from the
+        non-admin accounts of their own unit, and nobody gets their own.
       responses:
         "200":
           description: Pending requests.
@@ -3048,6 +3088,10 @@ paths:
     patch:
       tags: [Attendance]
       summary: Approve or deny an absence request
+      description: >
+        The manager the request went to decides it or, once that manager is
+        deactivated, an admin by the rules of the pending list. Whoever
+        decides becomes `authorized_by_user_id` and can revisit the decision.
       parameters:
         - name: log_id
           in: path
@@ -3076,7 +3120,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
-          description: No such request, or it was sent to somebody else.
+          description: No such request, or not one the caller may decide.
           content:
             application/json:
               schema:

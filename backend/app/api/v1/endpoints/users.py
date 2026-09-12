@@ -4,6 +4,7 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.v1.endpoints.websocket import CLOSE_UNAUTHENTICATED
@@ -16,9 +17,24 @@ from app.core.security import (
     hash_password,
     require_roles,
 )
+from app.core.time import org_today
 from app.core.websocket_manager import socket_broker
-from app.models.db import ApiKey, InstitutionalRole, RefreshToken, User, generate_feed_token
+from app.models.db import (
+    Activity,
+    ApiKey,
+    DailyLedger,
+    InstitutionalRole,
+    LogVerificationState,
+    PlanningCycle,
+    RefreshToken,
+    ReverseRsvpLog,
+    StructuralMasterSlot,
+    User,
+    generate_feed_token,
+)
 from app.schemas.users import (
+    DeactivatedUserResponse,
+    OpenItems,
     PasswordResetResponse,
     UserCreate,
     UserResponse,
@@ -245,7 +261,44 @@ def _managed_account(user_id: str, db: Session, current_user: User) -> User:
     return user
 
 
-@router.post("/{user_id}/deactivate", response_model=UserResponse)
+def _open_items(user_id: str, db: Session) -> OpenItems:
+    """What still names an account, counted for whoever is handing it over.
+
+    Deactivating changes none of it. Requests waiting on the account are
+    decided by an admin from the pending list; the rest is reassigned
+    through the usual routes.
+    """
+    today = org_today()
+    pending = db.query(ReverseRsvpLog).filter(
+        ReverseRsvpLog.authorized_by_user_id == user_id,
+        ReverseRsvpLog.approval_state == LogVerificationState.PENDING_VERIFICATION,
+    )
+    reports = db.query(User).filter(
+        User.reporting_line_manager == user_id, User.deactivated_at.is_(None)
+    )
+    # Drafts included: a cycle not yet published runs the slot once it is.
+    slots = (
+        db.query(StructuralMasterSlot)
+        .join(Activity, StructuralMasterSlot.activity_id == Activity.id)
+        .join(PlanningCycle, Activity.cycle_id == PlanningCycle.id)
+        .filter(
+            StructuralMasterSlot.primary_lead_id == user_id,
+            PlanningCycle.date_bounds_end >= today,
+        )
+    )
+    rows = db.query(DailyLedger).filter(
+        DailyLedger.target_date >= today,
+        or_(DailyLedger.active_lead_id == user_id, DailyLedger.substitute_lead_id == user_id),
+    )
+    return OpenItems(
+        pending_absence_requests=pending.count(),
+        direct_reports=reports.count(),
+        slots_led=slots.count(),
+        ledger_rows_ahead=rows.count(),
+    )
+
+
+@router.post("/{user_id}/deactivate", response_model=DeactivatedUserResponse)
 def deactivate_user(
     user_id: str,
     background_tasks: BackgroundTasks,
@@ -264,6 +317,12 @@ def deactivate_user(
     back. The email address stays taken, because the account can come back;
     changing it on the deactivated account frees it. Calling it again
     changes nothing.
+
+    Work still assigned to the account never blocks this. Refusing would
+    keep the account open for as long as the handover takes, which is what
+    deactivating is meant to end. The response counts what is left instead,
+    and calling again counts afresh, so it doubles as the check that the
+    handover is done.
     """
     user = _managed_account(user_id, db, current_user)
     # Refusing this is also what keeps one super admin standing: whoever
@@ -281,7 +340,10 @@ def deactivate_user(
         db.commit()
         db.refresh(user)
         background_tasks.add_task(socket_broker.close_session, user.id, CLOSE_UNAUTHENTICATED)
-    return user
+    return DeactivatedUserResponse(
+        **UserResponse.model_validate(user).model_dump(),
+        open_items=_open_items(user.id, db),
+    )
 
 
 @router.post("/{user_id}/reactivate", response_model=UserResponse)

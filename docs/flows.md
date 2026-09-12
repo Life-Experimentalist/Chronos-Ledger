@@ -88,7 +88,7 @@ sequenceDiagram
 
 1. Staff submits an absence request via the **Absence Requests** tab. The `ReverseRsvpLog` row is created with `approval_state = PENDING_VERIFICATION`.
 2. The API resolves the staff's `reporting_line_manager` user ID and, once the response is out, sends a `ABSENCE_APPROVAL_REQUIRED` WebSocket event. If the manager is connected, they see a notification badge in real time.
-3. The manager opens **Pending Approvals** and approves or denies.
+3. The manager opens **Pending Approvals** and approves or denies. If the manager has since been deactivated, the request appears instead under **Proxy Management** on an admin's dashboard (any `SUPER_ADMIN`, or a `UNIT_ADMIN` for the non-admin accounts of their unit), and whoever decides becomes the approver on record.
 4. On approval, `services/reverse_rsvp.py` updates every `DailyLedger` entry on the target date where the staff is `active_lead_id` to `operational_state = ON_LEAVE`. This cascades the absence into the live schedule.
 5. A `ABSENCE_DECISION` WebSocket event is sent to the staff member so they see the outcome immediately without polling.
 

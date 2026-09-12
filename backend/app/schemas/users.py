@@ -51,3 +51,16 @@ class UserResponse(BaseModel):
     deactivated_at: datetime | None
 
     model_config = {"from_attributes": True}
+
+
+class OpenItems(BaseModel):
+    """What still names a deactivated account, for somebody else to pick up."""
+
+    pending_absence_requests: int
+    direct_reports: int
+    slots_led: int
+    ledger_rows_ahead: int
+
+
+class DeactivatedUserResponse(UserResponse):
+    open_items: OpenItems

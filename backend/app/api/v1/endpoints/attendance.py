@@ -5,6 +5,7 @@ from collections import Counter
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -14,6 +15,7 @@ from app.core.websocket_manager import socket_broker
 from app.models.db import (
     DailyLedger,
     ExecutionMode,
+    InstitutionalRole,
     LedgerAnnotation,
     LogVerificationState,
     ReverseRsvpLog,
@@ -291,6 +293,45 @@ def submit_absence(
     return log
 
 
+def _decidable_by(current_user: User):
+    """The absence requests this user may decide, as a filter.
+
+    A request goes to the submitter's manager, who decides it. Once that
+    manager was deactivated nobody could, and the request waited on an
+    account that can no longer sign in. An admin decides those instead: a
+    super admin any of them, a unit admin those from the non-admin accounts
+    of their own unit. Nobody decides their own. Deciding makes the admin
+    the approver on record, so the decision is theirs to revisit.
+    """
+    mine = ReverseRsvpLog.authorized_by_user_id == current_user.id
+    role = current_user.role_type.value
+    if role not in ("SUPER_ADMIN", "UNIT_ADMIN"):
+        return mine
+    left_behind = and_(
+        or_(
+            # The column is SET NULL, so a manager whose row was removed
+            # outright leaves the request pointing at nobody.
+            ReverseRsvpLog.authorized_by_user_id.is_(None),
+            ReverseRsvpLog.authorized_by_user_id.in_(
+                select(User.id).where(User.deactivated_at.isnot(None))
+            ),
+        ),
+        ReverseRsvpLog.submitting_user_id != current_user.id,
+    )
+    if role == "UNIT_ADMIN":
+        admin_roles = (InstitutionalRole.SUPER_ADMIN, InstitutionalRole.UNIT_ADMIN)
+        left_behind = and_(
+            left_behind,
+            ReverseRsvpLog.submitting_user_id.in_(
+                select(User.id).where(
+                    User.unit_code == current_user.unit_code,
+                    User.role_type.notin_(admin_roles),
+                )
+            ),
+        )
+    return or_(mine, left_behind)
+
+
 @router.get("/absence/pending", response_model=list[ReverseRsvpResponse])
 def get_pending_absences(
     db: Session = Depends(get_db),
@@ -299,7 +340,7 @@ def get_pending_absences(
     return (
         db.query(ReverseRsvpLog)
         .filter(
-            ReverseRsvpLog.authorized_by_user_id == current_user.id,
+            _decidable_by(current_user),
             ReverseRsvpLog.approval_state == LogVerificationState.PENDING_VERIFICATION,
         )
         .all()
@@ -316,10 +357,7 @@ def decide_absence(
 ):
     log = (
         db.query(ReverseRsvpLog)
-        .filter(
-            ReverseRsvpLog.id == log_id,
-            ReverseRsvpLog.authorized_by_user_id == current_user.id,
-        )
+        .filter(ReverseRsvpLog.id == log_id, _decidable_by(current_user))
         .first()
     )
     if not log:

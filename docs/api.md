@@ -381,16 +381,40 @@ admin account.
 For somebody who has left. The account and everything recorded against it
 stay, and every way in closes: signing in, refreshing, an access token
 already issued, an API key bound to the account, the calendar feed and an
-open WebSocket. Returns the user with `deactivated_at` set.
+open WebSocket. Returns the user with `deactivated_at` set, and with the
+`open_items` described below.
 
 From then on the account is left out of `GET /users/` unless
 `include_deactivated=true`, out of the staff directory and out of staff
 locations. It cannot be named as a manager, a slot's lead or a day's
 substitute, sent a guest, issued an API key or enrolled by a CSV import.
-What already names it is left alone. A slot it leads keeps producing days
-with it as the lead, so give the slot another lead. An absence request
-already sent to it stays pending, because only the manager a request went to
-can decide it: give the person a new manager and they submit it again.
+What already names it is left alone, and none of it stops the account being
+deactivated, since refusing would keep it open for as long as the handover
+takes. The response counts what is left, alongside the usual user fields, and
+calling again counts afresh, so it doubles as the check that the handover is
+done:
+
+```json
+{
+  "deactivated_at": "2026-06-15T09:00:00Z",
+  "open_items": {
+    "pending_absence_requests": 1,
+    "direct_reports": 2,
+    "slots_led": 3,
+    "ledger_rows_ahead": 14
+  }
+}
+```
+
+- `pending_absence_requests`: requests sent to it that nobody has decided.
+  An admin decides them instead; see `GET /attendance/absence/pending`.
+- `direct_reports`: active accounts naming it as their manager. Their next
+  absence request is refused until they are given a new one.
+- `slots_led`: slots it leads in a cycle that has not ended, drafts included.
+  Each keeps producing days with it as the lead until given another.
+- `ledger_rows_ahead`: rows dated today or later that it leads or covers.
+  Giving a slot another lead moves its rows after today that are still
+  plans; for today's row, or one it covers, name a substitute on the row.
 
 API keys bound to the account are deleted, and reactivating does not bring
 them back: an integration that signs in as the account is issued a new key.
@@ -1058,8 +1082,12 @@ rather than a request waiting on nobody.
 
 ### GET /attendance/absence/pending
 
-Returns the requests routed to you that nobody has decided yet. Being an admin
-adds nothing: only requests whose submitter names you as their manager appear.
+Returns the undecided requests that are yours to decide: those sent to you as
+the submitter's manager and, for an admin, those whose manager has since been
+deactivated. A `SUPER_ADMIN` gets every one of those, a `UNIT_ADMIN` those
+from the non-admin accounts of their own unit, and nobody gets their own. The
+`ABSENCE_APPROVAL_REQUIRED` frame went to the manager, so this list is where
+an admin finds them.
 
 ### PATCH /attendance/absence/{id}/decide
 
@@ -1069,9 +1097,11 @@ adds nothing: only requests whose submitter names you as their manager appear.
 { "decision": "VERIFIED_DENIED" }
 ```
 
-Only the manager the request went to can decide it; anyone else gets `404`. The
-response is `{"status": "VERIFIED_APPROVED"}`, and the submitter is sent an
-`ABSENCE_DECISION` frame.
+The manager the request went to decides it or, once that manager is
+deactivated, an admin by the same rules as the pending list; anyone else gets
+`404`. Whoever decides is recorded as `authorized_by_user_id` and can revisit
+the decision later. The response is `{"status": "VERIFIED_APPROVED"}`, and the
+submitter is sent an `ABSENCE_DECISION` frame.
 
 ### POST /attendance/annotations `[LEAD, ADMIN]`
 ### GET /attendance/annotations/{ledger_id} `[LEAD, ADMIN]`

@@ -8,12 +8,21 @@ way in, and takes the account out of the lists people are picked from.
 """
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
 
 from app.api.v1.endpoints import websocket as ws_module
 from app.core.time import org_today
 from app.core.websocket_manager import OrganizationConnectionManager, socket_broker
-from app.models.db import ApiKey, User
+from app.models.db import (
+    Activity,
+    ApiKey,
+    DailyLedger,
+    LogVerificationState,
+    PlanningCycle,
+    ReverseRsvpLog,
+    StructuralMasterSlot,
+    User,
+)
 from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, login
 from tests.test_attendance_guest import _GUEST, _FakeRedis
 from tests.test_ingestion import HEADER, _make_cycle, _upload
@@ -262,6 +271,152 @@ def test_no_new_key_is_issued_to_them(client, db, seed_users):
         "/api/v1/api-keys/", json={"label": "Left", "user_id": "FAC001"}, headers=_admin(client)
     )
     assert res.status_code == 409
+
+
+# -- What they leave behind -----------------------------------------------------
+
+
+def _request(db, submitter, approver="FAC001", state=LogVerificationState.PENDING_VERIFICATION):
+    """An absence request already sent, straight into the table."""
+    log = ReverseRsvpLog(
+        submitting_user_id=submitter,
+        target_absence_date=org_today(),
+        context_justification="Conference",
+        approval_state=state,
+        authorized_by_user_id=approver,
+    )
+    db.add(log)
+    db.commit()
+    return log.id
+
+
+def _pending_ids(client, headers):
+    res = client.get("/api/v1/attendance/absence/pending", headers=headers)
+    assert res.status_code == 200, res.text
+    return {row["id"] for row in res.json()}
+
+
+def _decide(client, headers, log_id, decision="VERIFIED_APPROVED"):
+    url = f"/api/v1/attendance/absence/{log_id}/decide"
+    return client.patch(url, json={"decision": decision}, headers=headers)
+
+
+def test_an_admin_decides_a_request_left_with_a_manager_who_has_gone(client, db, seed_users):
+    """It waited on somebody who could no longer sign in, and nothing moved it on."""
+    log_id = _request(db, "STU001")
+    admin = _admin(client)
+    # While the manager is there, the request is theirs alone.
+    assert log_id not in _pending_ids(client, admin)
+    assert _decide(client, admin, log_id).status_code == 404
+
+    r = _deactivate(client, admin, "FAC001")
+    assert r.status_code == 200, r.text
+    assert r.json()["open_items"]["pending_absence_requests"] == 1
+    assert log_id in _pending_ids(client, admin)
+    assert _decide(client, admin, log_id).status_code == 200
+    db.expire_all()
+    log = db.get(ReverseRsvpLog, log_id)
+    assert log.approval_state == LogVerificationState.VERIFIED_APPROVED
+    assert log.authorized_by_user_id == "ADM001"
+    # The decision is the admin's now, and theirs to revisit.
+    assert _decide(client, admin, log_id, "VERIFIED_DENIED").status_code == 200
+    again = _deactivate(client, admin, "FAC001")
+    assert again.json()["open_items"]["pending_absence_requests"] == 0
+
+
+def test_a_unit_admin_decides_those_from_their_own_unit(client, db, seed_users):
+    _seed_unit_world(db)
+    own_unit = _request(db, "STU001")
+    other_unit = _request(db, "STU900")
+    an_admins = _request(db, "DAD001")
+    _mark_deactivated(db, "FAC001")
+
+    unit_admin = _unit_admin(client)
+    assert _pending_ids(client, unit_admin) == {own_unit}
+    assert _decide(client, unit_admin, other_unit).status_code == 404
+    assert _decide(client, unit_admin, an_admins).status_code == 404
+    assert _decide(client, unit_admin, own_unit).status_code == 200
+    # A super admin reaches the rest, the unit admin's own included.
+    assert _pending_ids(client, _admin(client)) == {other_unit, an_admins}
+
+
+def test_nobody_decides_their_own_and_a_member_decides_none(client, db, seed_users):
+    their_own = _request(db, "ADM001")
+    # The approver column is SET NULL, so a manager removed outright leaves nobody.
+    unrouted = _request(db, "STU001", approver=None)
+    _mark_deactivated(db, "FAC001")
+
+    admin = _admin(client)
+    assert _pending_ids(client, admin) == {unrouted}
+    assert _decide(client, admin, their_own).status_code == 404
+    member = login(client, "member@test.internal", MEMBER_PASSWORD)
+    assert _pending_ids(client, member) == set()
+    assert _decide(client, member, unrouted).status_code == 404
+
+
+def test_the_response_counts_what_is_left_to_hand_over(client, db, seed_users):
+    offerings, ledgers = _seed_unit_world(db)
+    today = org_today()
+    ended = PlanningCycle(
+        cycle_label="Ended",
+        date_bounds_start=today - timedelta(days=200),
+        date_bounds_end=today - timedelta(days=31),
+        operational_status=True,
+    )
+    db.add(ended)
+    db.flush()
+    old = Activity(
+        activity_code="CS100", activity_title="Ended Activity", unit_code="CSE", cycle_id=ended.id
+    )
+    db.add(old)
+    db.flush()
+    # A slot in the running cycle counts; one in a cycle that has ended does not.
+    for activity_id in (offerings["CSE"].id, old.id):
+        db.add(
+            StructuralMasterSlot(
+                day_of_week_index=3,
+                time_window_start=time(14),
+                time_window_end=time(15),
+                activity_id=activity_id,
+                primary_lead_id="FAC001",
+            )
+        )
+    # Today's rows count whether it leads or covers; yesterday's does not.
+    ledgers["CSE"].active_lead_id = "FAC001"
+    ledgers["ECE"].substitute_lead_id = "FAC001"
+    db.add(
+        DailyLedger(
+            target_date=today - timedelta(days=1),
+            activity_id=offerings["CSE"].id,
+            active_lead_id="FAC001",
+        )
+    )
+    # A report who has also left is nobody's to reassign.
+    seed_users["member"].reporting_line_manager = "FAC001"
+    db.query(User).filter(User.id == "STU900").update(
+        {"reporting_line_manager": "FAC001", "deactivated_at": datetime.now(UTC)}
+    )
+    db.commit()
+    _request(db, "STU001")
+    _request(db, "STU900", state=LogVerificationState.VERIFIED_APPROVED)
+
+    admin = _admin(client)
+    first = _deactivate(client, admin, "FAC001")
+    assert first.status_code == 200, first.text
+    assert first.json()["open_items"] == {
+        "pending_absence_requests": 1,
+        "direct_reports": 1,
+        "slots_led": 1,
+        "ledger_rows_ahead": 2,
+    }
+    # The handover goes through the usual routes, and calling again counts afresh.
+    moved = client.patch(
+        "/api/v1/users/STU001", json={"reporting_line_manager": "ADM001"}, headers=admin
+    )
+    assert moved.status_code == 200, moved.text
+    again = _deactivate(client, admin, "FAC001")
+    assert again.json()["open_items"]["direct_reports"] == 0
+    assert again.json()["deactivated_at"] == first.json()["deactivated_at"]
 
 
 # -- Leads and substitutes ------------------------------------------------------
