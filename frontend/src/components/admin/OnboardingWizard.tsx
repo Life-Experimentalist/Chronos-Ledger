@@ -260,9 +260,9 @@ export function OnboardingWizard({ fromDashboard = false, initialStep = 0 }: Pro
           {step.id === 'cycle' && (
             <div className="glass-card p-8 space-y-6">
               <div>
-                <h2 className="text-xl font-bold text-chronos-text">Create an planning cycle</h2>
+                <h2 className="text-xl font-bold text-chronos-text">Create a planning cycle</h2>
                 <p className="text-sm text-chronos-muted mt-1">
-                  An planning cycle defines the term/trimester boundaries. Schedules and attendance records are scoped to it.
+                  A planning cycle defines the term/trimester boundaries. Schedules and attendance records are scoped to it.
                 </p>
               </div>
               <form onSubmit={submitCycle} className="space-y-4">
