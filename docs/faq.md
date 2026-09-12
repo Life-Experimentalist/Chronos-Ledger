@@ -246,7 +246,7 @@ The ingestion engine expects a member-centric format with these exact column nam
 | `lead_id` | `FAC001` |
 | `room` | `LH-3` |
 
-Column names are case-sensitive. Extra columns are ignored. Times accept `HH:MM` or `HH:MM:SS` (24-hour).
+Column names are case-sensitive. Extra columns are ignored. Times accept `HH:MM` or `HH:MM:SS` (24-hour). Every column needs a value on every row. Values are taken as typed, less any spaces around them, so an id like `007` keeps its zeros.
 
 ---
 
@@ -261,12 +261,14 @@ Yes. An import matches what already exists and reuses it: a slot is matched on a
 The import is all-or-nothing: any bad row rolls back the whole upload, and the response `detail` field (POST `/api/v1/ingestion/upload-csv`) explains the failure. Common causes:
 
 - `Missing columns: {...}`: the CSV header lacks one of the required columns listed above
+- `... cannot be blank`: the row has no value in the columns named, and every column needs one
+- `day_of_week_index must be a whole number ...`: the day is not a number from 1 to 7
 - `Cannot parse time value ...`: a time is not `HH:MM` or `HH:MM:SS` 24-hour format
 - `email ... already belongs to ...`: the row gives a member an address another account already has
 - `lead '...' does not exist`: `lead_id` names nobody; the lead needs an account before a file can name them
 - `... is deactivated`: the row names a member or lead who has been deactivated; reactivate them or change the file
 - a message naming a room: the row puts a class in a room something else holds at that hour
-- `the import failed and nothing was saved`: the database refused a row, for example a `day_of_week_index` outside 1 to 7, and the server log has the reason
+- `the import failed and nothing was saved`: the database refused a row for a reason none of the checks above covers, and the server log has it
 
 Fix the offending rows and re-upload; re-running a corrected file is safe.
 

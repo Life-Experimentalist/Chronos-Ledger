@@ -1240,6 +1240,11 @@ Upload a `multipart/form-data` CSV file. Required columns:
 | `lead_id` | FAC001 |
 | `room` | Room 204 |
 
+Every column needs a value on every row, and a blank cell is refused with
+`422`, naming the column. Values are taken as the text they were typed as,
+less any spaces around them, so an id like `007` keeps its zeros.
+`day_of_week_index` has to be a whole number from 1 to 7.
+
 The file can be at most `CSV_UPLOAD_MAX_MB` (25 MB unless the instance sets
 it). A bigger one is refused with `413` before anything is imported. Behind
 the bundled nginx, a request over 25 MB is refused by nginx itself, also

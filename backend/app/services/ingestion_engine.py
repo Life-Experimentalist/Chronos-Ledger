@@ -54,6 +54,25 @@ def _parse_time(raw: str) -> datetime.time:
     raise ValueError(f"Cannot parse time value '{raw}', expected HH:MM or HH:MM:SS")
 
 
+def _parse_day(raw: str) -> int:
+    """day_of_week_index as the number it stands for, 1 (Monday) to 7 (Sunday).
+
+    Left to int(), a typo came back as Python's own complaint, and a number
+    outside the week reached the database's check and was reported as a
+    failure whose reason only the server log had. 2.0 is taken as 2, which is
+    how a spreadsheet can write it.
+    """
+    try:
+        day = float(raw)
+    except ValueError:
+        day = 0.0
+    if not day.is_integer() or not 1 <= day <= 7:
+        raise ValueError(
+            f"day_of_week_index must be a whole number from 1 (Monday) to 7 (Sunday), not '{raw}'"
+        )
+    return int(day)
+
+
 def _where(line: int) -> str:
     """Name the file line a failure came from, when it came from one at all."""
     return f"line {line}: " if line else ""
@@ -71,7 +90,12 @@ class ChronosIngestionEngine:
 
     def process_member_centric_matrix(self, file_path: str, cycle_id: int) -> dict[str, Any]:
         try:
-            df = pd.read_csv(file_path)
+            # Every cell as the text it was typed as. Left to guess, pandas read
+            # a blank cell as NaN, which str() turned into the word "nan", so a
+            # blank room made a room called nan. It read a column of digits as
+            # numbers, which dropped an id's leading zeros, and one blank in
+            # that column made them floats, so 1001 was looked up as 1001.0.
+            df = pd.read_csv(file_path, dtype=str, keep_default_na=False)
         except Exception as e:
             # What pandas says names the line it choked on, which is worth
             # passing back, but it can also name the server-side temp file the
@@ -84,6 +108,10 @@ class ChronosIngestionEngine:
         missing = REQUIRED_COLUMNS - set(df.columns)
         if missing:
             return {"status": "FAILED", "error_log": f"Missing columns: {missing}"}
+        # A cell of spaces is as blank as an empty one, and a stray space around
+        # an id or an address would otherwise become part of it.
+        for column in REQUIRED_COLUMNS:
+            df[column] = df[column].str.strip()
 
         records_processed = 0
         # Raw passwords for the members this import creates. Handed back once,
@@ -119,9 +147,7 @@ class ChronosIngestionEngine:
             # What the rows are matched against, fetched once for the whole
             # file instead of queried for again on every line of it. Each map
             # is kept up to date as the loop adds to it, so a row finds what an
-            # earlier row created just as it would in the database. The keys
-            # go through the same str() the loop puts each value through, or a
-            # numeric id pandas read as an integer would never match.
+            # earlier row created just as it would in the database.
             users = {
                 user.id: user
                 for ids in _chunked(
@@ -165,6 +191,11 @@ class ChronosIngestionEngine:
 
             for index, row in rows:
                 line = int(index) + 2
+                # Named by column here, rather than failing further down as a
+                # lead called nothing or a time that will not parse.
+                blank = [name for name in df.columns if name in REQUIRED_COLUMNS and not row[name]]
+                if blank:
+                    raise ValueError(f"{', '.join(blank)} cannot be blank")
                 # 1. Upsert member user
                 member = users.get(str(row["member_id"]))
                 if not member:
@@ -253,6 +284,7 @@ class ChronosIngestionEngine:
                 units.add(str(row["unit"]))
 
                 # 4. Upsert master slot (deduplicate by activity + day + start time)
+                day = _parse_day(row["day_of_week_index"])
                 t_start = _parse_time(row["time_window_start"])
                 t_end = _parse_time(row["time_window_end"])
                 if t_end == t_start:
@@ -262,7 +294,7 @@ class ChronosIngestionEngine:
                         "at all or a whole day and the row does not say which"
                     )
 
-                slot = slots.get((offering.id, int(row["day_of_week_index"]), t_start))
+                slot = slots.get((offering.id, day, t_start))
                 room = rooms.get(str(row["room"]))
                 if room is None:
                     room = rooms[str(row["room"])] = get_or_create_room(str(row["room"]), self.db)
@@ -280,7 +312,7 @@ class ChronosIngestionEngine:
                         held = held_against_slot(
                             self.db,
                             room.id,
-                            int(row["day_of_week_index"]),
+                            day,
                             t_start,
                             t_end,
                             cycle=cycle,
@@ -302,7 +334,7 @@ class ChronosIngestionEngine:
                         booked = slots_against_slot(
                             self.db,
                             room.id,
-                            int(row["day_of_week_index"]),
+                            day,
                             t_start,
                             t_end,
                             slot.id if slot else None,
@@ -328,7 +360,7 @@ class ChronosIngestionEngine:
                     days = days_against_slot(
                         self.db,
                         room.id,
-                        int(row["day_of_week_index"]),
+                        day,
                         t_start,
                         t_end,
                         slot.id if slot else None,
@@ -361,7 +393,7 @@ class ChronosIngestionEngine:
                     )
                 if not slot:
                     slot = StructuralMasterSlot(
-                        day_of_week_index=int(row["day_of_week_index"]),
+                        day_of_week_index=day,
                         time_window_start=t_start,
                         time_window_end=t_end,
                         activity_id=offering.id,
@@ -370,7 +402,7 @@ class ChronosIngestionEngine:
                         target_room_identifier=room.code,
                     )
                     self.db.add(slot)
-                    slots[(offering.id, int(row["day_of_week_index"]), t_start)] = slot
+                    slots[(offering.id, day, t_start)] = slot
                 elif (
                     slot.time_window_end != t_end
                     or slot.primary_lead_id != str(row["lead_id"])

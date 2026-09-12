@@ -13,6 +13,7 @@ from app.models.db import (
     Activity,
     ActivityEnrollment,
     PlanningCycle,
+    Resource,
     StructuralMasterSlot,
     User,
 )
@@ -270,9 +271,9 @@ def test_a_member_on_several_rows_is_created_once(client, db, seed_users):
 
 
 def test_numeric_ids_are_found_again_on_a_reupload(client, db, seed_users):
-    """pandas reads a column of digits as integers. What the rows are matched
-    against is keyed by the same str() each row goes through, or every
-    re-upload of a file with numeric ids would try to create its members again.
+    """An id made of digits is looked up as the text it was typed as, the same
+    on the second upload as on the first, or every re-upload of a file with
+    numeric ids would try to create its members again.
     """
     cycle = _make_cycle(db)
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
@@ -427,3 +428,75 @@ def test_an_internal_failure_does_not_hand_back_the_sql(client, db, seed_users, 
 
     db.expire_all()
     assert db.query(User).filter(User.id == "STU907").first() is None
+
+
+# -- Cells taken as typed ------------------------------------------------------
+
+_ROW = "STU900,Ada Newling,ada@test.internal,MA201,Linear Algebra,CSE,2,09:00,10:00,FAC001,LH-201"
+
+
+def _row_with(**cells):
+    values = dict(zip(HEADER.split(","), _ROW.split(","), strict=True))
+    values.update(cells)
+    return HEADER + "\n" + ",".join(values.values()) + "\n"
+
+
+@pytest.mark.parametrize("column, cell", [("member_email", ""), ("lead_id", "   "), ("room", "")])
+def test_a_blank_cell_is_refused_by_its_column(client, db, seed_users, column, cell):
+    """pandas read a blank cell as NaN, and str() made it the word nan: a blank
+    room was created as a room called nan, and a blank lead was looked for as
+    somebody called nan."""
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    r = _upload(client, headers, cycle.id, _row_with(**{column: cell}))
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"] == f"line 2: {column} cannot be blank"
+
+    db.expire_all()
+    assert db.query(User).filter(User.id == "STU900").first() is None
+    assert db.query(Resource).filter(Resource.code == "nan").first() is None
+
+
+def test_a_short_row_is_blank_where_it_stops(client, db, seed_users):
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    csv_text = HEADER + "\n" + _ROW.rsplit(",", 1)[0] + "\n"
+    r = _upload(client, headers, cycle.id, csv_text)
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"] == "line 2: room cannot be blank"
+
+
+def test_cells_are_taken_as_typed(client, db, seed_users):
+    """A column of digits was read as numbers, so 0042 was created as 42. The
+    spaces around a value are not part of it, and a day a spreadsheet wrote as
+    2.0 is day 2."""
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    csv_text = _row_with(
+        member_id="0042", member_email=" ada@test.internal ", day_of_week_index="2.0"
+    )
+    r = _upload(client, headers, cycle.id, csv_text)
+    assert r.status_code == 200, r.text
+
+    db.expire_all()
+    assert db.query(User).filter(User.id == "0042").one().email_address == "ada@test.internal"
+    offering = db.query(Activity).filter(Activity.activity_code == "MA201").one()
+    slot = (
+        db.query(StructuralMasterSlot).filter(StructuralMasterSlot.activity_id == offering.id).one()
+    )
+    assert slot.day_of_week_index == 2
+
+
+@pytest.mark.parametrize("day", ["Mon", "0", "8", "2.5"])
+def test_a_day_outside_the_week_is_refused_readably(client, db, seed_users, day):
+    """int() on a typo answered with Python's own complaint, and a number
+    outside the week reached the database's check, which came back as a
+    failure whose reason only the server log had."""
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    r = _upload(client, headers, cycle.id, _row_with(day_of_week_index=day))
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"] == (
+        "line 2: day_of_week_index must be a whole number from 1 (Monday) to 7 (Sunday), "
+        f"not '{day}'"
+    )
