@@ -36,7 +36,20 @@ def _covers(
     return starts <= instant < ends
 
 
-def determine_staff_current_state(staff_id: str, db: Session, redis_cache: Redis) -> dict:
+def determine_staff_current_states(
+    staff: list[User], db: Session, redis_cache: Redis
+) -> dict[str, dict]:
+    """Where each of these people is right now, keyed by their id.
+
+    Each tier is asked about everybody at once and its rows are handed back
+    out by lead. The locator used to ask one person at a time, which was a
+    Redis round trip and up to four queries for every member of staff on
+    every poll. Looking up one person is this with a list of one, so the
+    locator and the single lookup cannot disagree.
+    """
+    if not staff:
+        return {}
+
     now = org_now()
     # The zone dropped, because a slot stores naive wall clock and carries
     # nothing saying which zone it means. Taking .time() off now used to do
@@ -45,16 +58,18 @@ def determine_staff_current_state(staff_id: str, db: Session, redis_cache: Redis
     instant = now.replace(tzinfo=None)
     today = now.date()
     yesterday = today - datetime.timedelta(days=1)
+    resolved: dict[str, dict] = {}
 
     # Tier 1: Redis manual status override (TTL-based, e.g. "in meeting", "out for lunch")
     # redis-py returns bytes; decode before use.
-    cached_raw = redis_cache.get(f"state_override:{staff_id}")
-    if cached_raw:
-        cached = cached_raw.decode("utf-8") if isinstance(cached_raw, bytes) else cached_raw
-        # An override says what somebody is doing, not where. No location was
-        # worked out at all on this path, and saying so is better than naming
-        # a place the override never claimed.
-        return {"resolved_location": "UNKNOWN", "status": cached}
+    overrides = redis_cache.mget([f"state_override:{person.id}" for person in staff])
+    for person, cached_raw in zip(staff, overrides, strict=True):
+        if cached_raw:
+            cached = cached_raw.decode("utf-8") if isinstance(cached_raw, bytes) else cached_raw
+            # An override says what somebody is doing, not where. No location was
+            # worked out at all on this path, and saying so is better than naming
+            # a place the override never claimed.
+            resolved[person.id] = {"resolved_location": "UNKNOWN", "status": cached}
 
     # Both tiers below fetch yesterday as well as today and then decide in
     # Python. A shift running 22:00 to 06:00 is dated the day it opened on,
@@ -75,75 +90,82 @@ def determine_staff_current_state(staff_id: str, db: Session, redis_cache: Redis
     # approved leave from a class later taken off the timetable was reported
     # as teaching it, because the tier that knew about the leave never saw the
     # row and tier 3 answered instead.
-    daily = next(
-        (
-            ledger
-            for ledger in db.query(DailyLedger)
-            .filter(
-                DailyLedger.active_lead_id == staff_id,
-                DailyLedger.target_date.in_((yesterday, today)),
-                DailyLedger.time_window_start.isnot(None),
-                DailyLedger.time_window_end.isnot(None),
-            )
-            .order_by(DailyLedger.target_date, DailyLedger.time_window_start)
-            .all()
-            if _covers(
-                ledger.target_date,
-                ledger.time_window_start,
-                ledger.time_window_end,
-                instant,
-            )
-        ),
-        None,
+    #
+    # The rows come back in the order they are tried in, so the first one
+    # running for a lead is the one that answers for them.
+    unresolved = [person.id for person in staff if person.id not in resolved]
+    daily: dict[str, DailyLedger] = {}
+    for ledger in (
+        db.query(DailyLedger)
+        .filter(
+            DailyLedger.active_lead_id.in_(unresolved),
+            DailyLedger.target_date.in_((yesterday, today)),
+            DailyLedger.time_window_start.isnot(None),
+            DailyLedger.time_window_end.isnot(None),
+        )
+        .order_by(DailyLedger.target_date, DailyLedger.time_window_start)
+        .all()
+    ):
+        if ledger.active_lead_id not in daily and _covers(
+            ledger.target_date, ledger.time_window_start, ledger.time_window_end, instant
+        ):
+            daily[ledger.active_lead_id] = ledger
+    scheduled = [
+        ledger.activity_id
+        for ledger in daily.values()
+        if ledger.operational_state == DynamicState.SCHEDULED
+    ]
+    codes = dict(
+        db.query(Activity.id, Activity.activity_code).filter(Activity.id.in_(scheduled)).all()
     )
-    if daily:
-        ledger = daily
+    for lead, ledger in daily.items():
         if ledger.operational_state == DynamicState.ON_LEAVE:
-            return {"resolved_location": "OFF_SITE", "status": "On Approved Leave"}
-        if ledger.operational_state == DynamicState.PROXY_SUBSTITUTE:
-            return {
+            resolved[lead] = {"resolved_location": "OFF_SITE", "status": "On Approved Leave"}
+        elif ledger.operational_state == DynamicState.PROXY_SUBSTITUTE:
+            resolved[lead] = {
                 "resolved_location": ledger.target_room_identifier,
                 "status": f"Substituting in Room {ledger.target_room_identifier}",
             }
-        if ledger.operational_state == DynamicState.SCHEDULED:
-            offering = db.query(Activity).filter(Activity.id == ledger.activity_id).first()
-            return {
+        elif ledger.operational_state == DynamicState.SCHEDULED:
+            code = codes.get(ledger.activity_id, "a session")
+            resolved[lead] = {
                 "resolved_location": ledger.target_room_identifier,
-                "status": f"Leading {offering.activity_code if offering else 'a session'} in Room {ledger.target_room_identifier}",
+                "status": f"Leading {code} in Room {ledger.target_room_identifier}",
             }
+        # Any other state, a lunch or a meeting, leaves them to the timetable.
 
     # Tier 3: Structural master timetable
     days = {yesterday.isoweekday(): yesterday, today.isoweekday(): today}
+    unresolved = [lead for lead in unresolved if lead not in resolved]
     candidates = [
         (days[slot.day_of_week_index], slot, offering)
         for slot, offering in db.query(StructuralMasterSlot, Activity)
         .join(Activity, StructuralMasterSlot.activity_id == Activity.id)
         .filter(
-            StructuralMasterSlot.primary_lead_id == staff_id,
+            StructuralMasterSlot.primary_lead_id.in_(unresolved),
             StructuralMasterSlot.day_of_week_index.in_(list(days)),
         )
         .all()
     ]
     candidates.sort(key=lambda found: (found[0], found[1].time_window_start))
-    master = next(
-        (
-            (slot, offering)
-            for day, slot, offering in candidates
-            if _covers(day, slot.time_window_start, slot.time_window_end, instant)
-        ),
-        None,
-    )
-    if master:
-        slot, offering = master
-        return {
-            "resolved_location": slot.target_room_identifier,
-            "status": f"Leading {offering.activity_code} in Room {slot.target_room_identifier}",
-        }
+    for day, slot, offering in candidates:
+        if slot.primary_lead_id not in resolved and _covers(
+            day, slot.time_window_start, slot.time_window_end, instant
+        ):
+            resolved[slot.primary_lead_id] = {
+                "resolved_location": slot.target_room_identifier,
+                "status": f"Leading {offering.activity_code} in Room {slot.target_room_identifier}",
+            }
 
     # Tier 4: Base station fallback
-    user = db.query(User).filter(User.id == staff_id).first()
+    #
     # No base station is the normal state now that the column has no default,
     # and the field is a plain string to every client, so it is filled in here
     # rather than handed out as null.
-    base = (user.assigned_base_station if user else None) or "Unassigned"
-    return {"resolved_location": base, "status": "Available / Unassigned"}
+    for person in staff:
+        if person.id not in resolved:
+            resolved[person.id] = {
+                "resolved_location": person.assigned_base_station or "Unassigned",
+                "status": "Available / Unassigned",
+            }
+    return resolved

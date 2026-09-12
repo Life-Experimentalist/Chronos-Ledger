@@ -23,11 +23,13 @@ from app.models.db import (
     Activity,
     DailyLedger,
     DynamicState,
+    InstitutionalRole,
     PlanningCycle,
     StructuralMasterSlot,
+    User,
 )
 from app.services import location_resolver
-from app.services.location_resolver import determine_staff_current_state
+from app.services.location_resolver import determine_staff_current_states
 
 MONDAY = datetime.date(2026, 3, 2)
 TUESDAY = MONDAY + datetime.timedelta(days=1)
@@ -39,8 +41,8 @@ DAY = (datetime.time(9, 0), datetime.time(10, 0))
 class NoOverride:
     """A Redis that has never been told anything, so tier 1 always misses."""
 
-    def get(self, key):
-        return None
+    def mget(self, keys):
+        return [None] * len(keys)
 
 
 @pytest.fixture()
@@ -63,7 +65,9 @@ def at(monkeypatch):
     return stand_at
 
 
-def _slot(db, weekday: int, window, room: str = "W-1") -> StructuralMasterSlot:
+def _slot(
+    db, weekday: int, window, room: str = "W-1", lead: str = "FAC001"
+) -> StructuralMasterSlot:
     cycle = db.query(PlanningCycle).first()
     if cycle is None:
         cycle = PlanningCycle(
@@ -90,7 +94,7 @@ def _slot(db, weekday: int, window, room: str = "W-1") -> StructuralMasterSlot:
         time_window_start=start,
         time_window_end=end,
         activity_id=activity.id,
-        primary_lead_id="FAC001",
+        primary_lead_id=lead,
         target_room_identifier=room,
     )
     db.add(slot)
@@ -107,7 +111,7 @@ def _ledger(db, slot: StructuralMasterSlot, day: datetime.date, state: DynamicSt
             time_window_end=slot.time_window_end,
             master_slot_id=slot.id,
             activity_id=slot.activity_id,
-            active_lead_id="FAC001",
+            active_lead_id=slot.primary_lead_id,
             target_room_identifier=room,
             operational_state=state,
         )
@@ -116,7 +120,8 @@ def _ledger(db, slot: StructuralMasterSlot, day: datetime.date, state: DynamicSt
 
 
 def _state(db):
-    return determine_staff_current_state("FAC001", db, NoOverride())
+    staff = db.query(User).filter(User.id == "FAC001").one()
+    return determine_staff_current_states([staff], db, NoOverride())["FAC001"]
 
 
 def test_the_dates_here_are_the_weekdays_they_claim():
@@ -258,3 +263,53 @@ def test_an_adhoc_day_with_no_window_is_not_reported(db, seed_users, at):
     at(MONDAY, 9, 30)
     # Tier 2 skips it and tier 3 answers off the slot, which still has a window.
     assert _state(db)["resolved_location"] == "W-1"
+
+
+# -- Several people at once ----------------------------------------------------
+
+
+class Overrides:
+    """A Redis holding a status override for some people and not others."""
+
+    def __init__(self, by_id: dict[str, str]):
+        self.by_id = by_id
+
+    def mget(self, keys):
+        return [self.by_id.get(key.removeprefix("state_override:")) for key in keys]
+
+
+def test_everybody_asked_about_at_once_gets_their_own_answer(db, seed_users, at):
+    """The locator asks about all staff in one call, and each tier fetches its
+    rows for the whole list and hands them back out by lead. Every test above
+    has one person in it, so a row handed to the wrong person would pass all
+    of them. Here each of five people is answered by a different tier.
+    """
+    for n, base in ((2, None), (3, None), (4, None), (5, "Desk 5")):
+        db.add(
+            User(
+                id=f"FAC00{n}",
+                full_name=f"Staff {n}",
+                email_address=f"staff{n}@test.internal",
+                credential_secure_hash="never-logs-in",
+                role_type=InstitutionalRole.STAFF,
+                unit_code="CSE",
+                assigned_base_station=base,
+            )
+        )
+    db.commit()
+
+    _ledger(db, _slot(db, 1, DAY), MONDAY, DynamicState.ON_LEAVE, "W-9")
+    _ledger(db, _slot(db, 1, DAY, "W-2", "FAC002"), MONDAY, DynamicState.SCHEDULED, "W-8")
+    _slot(db, 1, DAY, "W-3", "FAC003")
+    _slot(db, 1, DAY, "W-4", "FAC004")
+    at(MONDAY, 9, 30)
+
+    staff = db.query(User).filter(User.role_type == InstitutionalRole.STAFF).all()
+    states = determine_staff_current_states(staff, db, Overrides({"FAC004": "In a meeting"}))
+    assert states == {
+        "FAC001": {"resolved_location": "OFF_SITE", "status": "On Approved Leave"},
+        "FAC002": {"resolved_location": "W-8", "status": "Leading WARD-A in Room W-8"},
+        "FAC003": {"resolved_location": "W-3", "status": "Leading WARD-A in Room W-3"},
+        "FAC004": {"resolved_location": "UNKNOWN", "status": "In a meeting"},
+        "FAC005": {"resolved_location": "Desk 5", "status": "Available / Unassigned"},
+    }

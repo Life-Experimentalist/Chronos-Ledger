@@ -790,8 +790,8 @@ class _FakeRedis:
     def __init__(self, value=None):
         self.value = value
 
-    def get(self, key):
-        return self.value
+    def mget(self, keys):
+        return [self.value for _ in keys]
 
 
 def test_staff_location_base_fallback(client, seed_users, monkeypatch):

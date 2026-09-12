@@ -27,7 +27,7 @@ from app.services.availability import (
     held_against_slot,
     slots_against_slot,
 )
-from app.services.location_resolver import determine_staff_current_state
+from app.services.location_resolver import determine_staff_current_states
 from app.services.master_slot import propagate_slot_corrections, rows_in_use
 from app.services.resource import get_or_create_room
 
@@ -720,7 +720,7 @@ def get_staff_location(
         raise HTTPException(status_code=404, detail="Staff not found")
 
     redis = get_redis()
-    result = determine_staff_current_state(staff_id, db, redis)
+    result = determine_staff_current_states([staff], db, redis)[staff.id]
     return StaffLocationResponse(
         staff_id=staff_id,
         full_name=staff.full_name,
@@ -739,9 +739,10 @@ def get_all_staff_locations(db: Session = Depends(get_db), _=Depends(get_current
         .all()
     )
     redis = get_redis()
+    locations = determine_staff_current_states(staff_list, db, redis)
     results = []
     for f in staff_list:
-        location = determine_staff_current_state(f.id, db, redis)
+        location = locations[f.id]
         results.append(
             {
                 "staff_id": f.id,
