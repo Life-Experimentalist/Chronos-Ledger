@@ -282,6 +282,36 @@ Revokes immediately: the next request using it gets `401`.
 
 ---
 
+## Paging
+
+Six routes return a whole list: `GET /users/`, `GET /users/staff/available`,
+`GET /schedule/cycles`, `GET /schedule/slots`, `GET /schedule/ledger/today`
+and `GET /schedule/staff/all/locations`. Each takes two optional query
+parameters:
+
+- `limit`: at most this many rows, 1 or more.
+- `offset`: skip this many rows first, 0 or more.
+
+Leave both off and the route returns every row it matches, as it always has.
+Rows come back in id order (`staff_id` for the locator), and every response,
+paged or not, carries `X-Total-Count`: how many rows matched before the page
+was cut. A `limit` of 0 or a negative `offset` is refused with `422`, and an
+offset past the end is an empty list with the count still set.
+
+```http
+GET /api/v1/users/?role=MEMBER&limit=50&offset=100
+
+HTTP/1.1 200 OK
+X-Total-Count: 1240
+```
+
+The count follows every filter the list does, including the ones the caller
+does not choose: a unit admin's count is their own unit's, and a member's
+`ledger/today` count is their own days. CORS exposes the header, so a page
+on another allowed origin can read it.
+
+---
+
 ## Users
 
 ### GET /users/ `[ADMIN]`

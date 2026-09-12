@@ -1328,6 +1328,35 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
 
+  # Paging for the routes that return a whole list. Opt-in: with neither
+  # parameter a route returns every row, as it always has.
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: At most this many rows. Every matching row if omitted.
+      schema:
+        type: integer
+        minimum: 1
+    Offset:
+      name: offset
+      in: query
+      required: false
+      description: Skip this many rows first. Rows come in id order.
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+  headers:
+    XTotalCount:
+      description: >
+        How many rows matched the request's filters before limit and offset
+        cut the page. Sent whether or not the request paged.
+      schema:
+        type: integer
+
 # Either credential is accepted on every endpoint below.
 security:
   - BearerAuth: []
@@ -1551,9 +1580,14 @@ paths:
             type: boolean
             default: false
           description: Include deactivated accounts, which are left out otherwise.
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
       responses:
         "200":
           description: User list.
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/XTotalCount"
           content:
             application/json:
               schema:
@@ -1615,9 +1649,15 @@ paths:
         This route **must** appear before `GET /users/{user_id}` in the router
         to prevent "staff" being matched as a user_id path parameter.
       security: []
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
       responses:
         "200":
           description: Available staff.
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/XTotalCount"
           content:
             application/json:
               schema:
@@ -2268,9 +2308,14 @@ paths:
           required: false
           schema:
             type: integer
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
       responses:
         "200":
           description: Master slots.
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/XTotalCount"
           content:
             application/json:
               schema:
@@ -2485,9 +2530,15 @@ paths:
         Staff receive entries where they are the active or substitute lead.
         Members receive entries for their registered activities.
         Admins receive all entries.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
       responses:
         "200":
           description: Today's schedule.
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/XTotalCount"
           content:
             application/json:
               schema:
@@ -2568,9 +2619,15 @@ paths:
     get:
       tags: [Schedule]
       summary: Snapshot of all staff locations (Member Locator feed)
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
       responses:
         "200":
           description: All staff locations.
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/XTotalCount"
           content:
             application/json:
               schema:
@@ -2582,9 +2639,15 @@ paths:
     get:
       tags: [Schedule]
       summary: List planning cycles
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
       responses:
         "200":
           description: Cycle list.
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/XTotalCount"
           content:
             application/json:
               schema:

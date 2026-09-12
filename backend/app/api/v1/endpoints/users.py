@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.endpoints.websocket import CLOSE_UNAUTHENTICATED
 from app.core.database import get_db
+from app.core.pagination import Page
 from app.core.security import (
     ensure_unit_scope,
     generate_password,
@@ -64,6 +65,7 @@ def list_users(
     role: str | None = None,
     unit: str | None = None,
     include_deactivated: bool = False,
+    page: Page = Depends(),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
 ):
@@ -77,7 +79,7 @@ def list_users(
     # A unit admin only ever sees their own unit, whatever they ask for.
     if current_user.role_type == InstitutionalRole.UNIT_ADMIN:
         q = q.filter(User.unit_code == current_user.unit_code)
-    return q.all()
+    return page.rows(q, User.id)
 
 
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -118,6 +120,7 @@ def create_user(
 @router.get("/staff/available")
 def list_available_staff(
     unit: str | None = None,
+    page: Page = Depends(),
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
@@ -126,7 +129,7 @@ def list_available_staff(
     )
     if unit:
         q = q.filter(User.unit_code == unit)
-    staff = q.all()
+    staff = page.rows(q, User.id)
     return [
         {
             "id": f.id,

@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.pagination import Page
 from app.core.redis_client import get_redis
 from app.core.security import ensure_unit_scope, get_current_user, require_roles
 from app.core.time import org_today
@@ -137,8 +138,12 @@ def _refuse_if_a_day_is_there(
 
 
 @router.get("/cycles", response_model=list[PlanningCycleResponse])
-def list_cycles(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    return db.query(PlanningCycle).all()
+def list_cycles(
+    page: Page = Depends(),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    return page.rows(db.query(PlanningCycle), PlanningCycle.id)
 
 
 @router.post("/cycles", response_model=PlanningCycleResponse)
@@ -362,6 +367,7 @@ def clone_cycle_offerings(
 @router.get("/slots", response_model=list[dict])
 def list_master_slots(
     cycle_id: int | None = None,
+    page: Page = Depends(),
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
@@ -379,7 +385,7 @@ def list_master_slots(
             "resource_id": s.resource_id,
             "target_room_identifier": s.target_room_identifier,
         }
-        for s in q.all()
+        for s in page.rows(q, StructuralMasterSlot.id)
     ]
 
 
@@ -619,6 +625,7 @@ def _withdraw_planned_days(slot: StructuralMasterSlot, db: Session, why: str) ->
 
 @router.get("/ledger/today")
 def get_today_ledger(
+    page: Page = Depends(),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -641,7 +648,7 @@ def get_today_ledger(
         ]
         q = q.filter(DailyLedger.activity_id.in_(registered_ids))
 
-    entries = q.all()
+    entries = page.rows(q, DailyLedger.id)
     result = []
     for e in entries:
         offering = e.activity
@@ -730,14 +737,18 @@ def get_staff_location(
 
 
 @router.get("/staff/all/locations")
-def get_all_staff_locations(db: Session = Depends(get_db), _=Depends(get_current_user)):
+def get_all_staff_locations(
+    page: Page = Depends(),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
     from app.models.db import InstitutionalRole
 
-    staff_list = (
-        db.query(User)
-        .filter(User.role_type == InstitutionalRole.STAFF, User.deactivated_at.is_(None))
-        .all()
+    q = db.query(User).filter(
+        User.role_type == InstitutionalRole.STAFF, User.deactivated_at.is_(None)
     )
+    # Paged before resolving, so only the people on this page are looked up.
+    staff_list = page.rows(q, User.id)
     redis = get_redis()
     locations = determine_staff_current_states(staff_list, db, redis)
     results = []

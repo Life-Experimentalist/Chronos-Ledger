@@ -13,6 +13,7 @@ from app.api.v1.router import api_router
 from app.core.bootstrap import apply_initial_admin_password
 from app.core.config import docs_are_published, get_settings
 from app.core.database import SessionLocal
+from app.core.pagination import TOTAL_COUNT_HEADER
 from app.core.time import org_now, org_timezone, org_tomorrow
 from app.cron.ledger_generator import generate_daily_ledger_entries, missed_ledger_dates
 from app.cron.refresh_token_cleanup import purge_expired_refresh_tokens
@@ -143,6 +144,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # A browser hides every response header outside a short safe list from
+    # a cross-origin page unless it is named here.
+    expose_headers=[TOTAL_COUNT_HEADER],
 )
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
