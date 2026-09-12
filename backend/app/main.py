@@ -17,6 +17,7 @@ from app.core.database import SessionLocal
 from app.core.pagination import TOTAL_COUNT_HEADER
 from app.core.time import org_now, org_timezone, org_tomorrow
 from app.core.websocket_manager import socket_broker
+from app.cron.guest_retention import purge_old_guest_check_ins
 from app.cron.ledger_generator import generate_daily_ledger_entries, missed_ledger_dates
 from app.cron.refresh_token_cleanup import purge_expired_refresh_tokens
 
@@ -57,6 +58,15 @@ async def lifespan(_app: FastAPI):
         hour=3,
         minute=0,
         id="refresh_token_purge",
+        replace_existing=True,
+    )
+    # Daily, after the token purge. Deletes nothing while GUEST_RETENTION_DAYS is 0.
+    scheduler.add_job(
+        _purge_guest_check_ins,
+        "cron",
+        hour=3,
+        minute=30,
+        id="guest_retention_purge",
         replace_existing=True,
     )
     scheduler.start()
@@ -126,6 +136,14 @@ def _purge_refresh_tokens():
     db = SessionLocal()
     try:
         purge_expired_refresh_tokens(db)
+    finally:
+        db.close()
+
+
+def _purge_guest_check_ins():
+    db = SessionLocal()
+    try:
+        purge_old_guest_check_ins(db, settings.guest_retention_days)
     finally:
         db.close()
 

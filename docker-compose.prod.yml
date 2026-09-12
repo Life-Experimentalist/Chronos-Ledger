@@ -88,6 +88,9 @@ services:
       # How coarse a member's location fix may be, as a multiple of the
       # fence radius. 0 turns the check off.
       GEOFENCE_ACCURACY_FACTOR: ${GEOFENCE_ACCURACY_FACTOR:-2}
+      # Days a visitor check-in is kept before a daily job deletes it. 0
+      # keeps them forever.
+      GUEST_RETENTION_DAYS: ${GUEST_RETENTION_DAYS:-0}
       # Which upstream addresses uvicorn believes X-Forwarded-For from. This
       # service publishes no ports, so nginx is the only way in. Without it
       # every request looks like it came from the proxy and the sign-in

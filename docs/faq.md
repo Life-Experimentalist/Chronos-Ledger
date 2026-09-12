@@ -652,4 +652,4 @@ Then rebuild the frontend image. This removes all telemetry code paths at compil
 
 ### GDPR / data retention
 
-Chronos Ledger is designed for on-premises deployment, the deploying institution is the data controller. There is no built-in automated retention or purge schedule. Administrators are responsible for implementing any required retention policies directly on the PostgreSQL database.
+Chronos Ledger is designed for on-premises deployment, and the deploying institution is the data controller. Visitor check-ins have a retention setting of their own, since each one holds a visitor's name and phone number: set `GUEST_RETENTION_DAYS` to a number of days, such as 90, and a job at 03:30 in `ORG_TIMEZONE` deletes the check-ins older than that every day, whether or not anyone acted on them. It defaults to 0, which keeps them forever. Other records, attendance included, are kept until an administrator removes them, so any other retention policy is implemented directly on the PostgreSQL database.

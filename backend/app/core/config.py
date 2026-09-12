@@ -149,6 +149,12 @@ class Settings(BaseSettings):
     # accuracy at all is not refused for it.
     geofence_accuracy_factor: float = 2.0
 
+    # How many days a visitor check-in is kept. Each one holds the visitor's
+    # name and phone number, and nothing else ever deletes it. A job at 03:30
+    # deletes the older ones every day. 0 keeps them forever, which is how an
+    # instance behaved before this setting existed.
+    guest_retention_days: int = 0
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.app_cors_origins.split(",") if o.strip()]
@@ -184,6 +190,16 @@ class Settings(BaseSettings):
                 "accuracy check off, or leave it unset for 2."
             )
         return factor
+
+    @field_validator("guest_retention_days")
+    @classmethod
+    def _retention_is_not_negative(cls, days: int) -> int:
+        if days < 0:
+            raise ValueError(
+                f"GUEST_RETENTION_DAYS={days} is negative. Set 0 to keep visitor "
+                "check-ins forever, or a number of days such as 90."
+            )
+        return days
 
     @field_validator("org_timezone")
     @classmethod

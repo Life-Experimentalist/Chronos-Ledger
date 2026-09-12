@@ -43,7 +43,7 @@ graph TB
 |---|---|
 | **Nginx** | TLS termination, gzip, security headers, static file serving, proxy to FastAPI. Serves pre-built Next.js export from the shared `frontend_build` Docker volume. |
 | **FastAPI app** | All REST endpoints + WebSocket hub. Single process (uvicorn), stateless beyond DB/Redis. |
-| **APScheduler** | Runs `ledger_generator` at midnight UTC to materialise `DailyLedger` rows from `StructuralMasterSlot` for the next day. |
+| **APScheduler** | Runs `ledger_generator` at 23:00 in `ORG_TIMEZONE` to materialize `DailyLedger` rows from `StructuralMasterSlot` for the next day, and once at startup for any day a stopped process missed. Also deletes expired refresh tokens at 03:00 and, when `GUEST_RETENTION_DAYS` is set, old visitor check-ins at 03:30. |
 | **PostgreSQL** | Source of truth for all persistent data: users, schedule, attendance, absence logs, guest transactions. |
 | **Redis** | Short-lived state: staff status overrides (TTL), the channel instances relay WebSocket events and closes over, and each instance's set of connected users (TTL) for the connection count. |
 
