@@ -136,6 +136,11 @@ class Settings(BaseSettings):
     # and somebody with a phone and a laptop is two of those.
     rate_limit_calendar_feed: int = 60
 
+    # Largest CSV the timetable upload accepts, in MB. nginx refuses a
+    # request over 25 MB before it gets here (client_max_body_size), so
+    # raising this past 25 means raising that too.
+    csv_upload_max_mb: int = 25
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.app_cors_origins.split(",") if o.strip()]

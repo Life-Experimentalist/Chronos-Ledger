@@ -1096,6 +1096,11 @@ Upload a `multipart/form-data` CSV file. Required columns:
 | `lead_id` | FAC001 |
 | `room` | Room 204 |
 
+The file can be at most `CSV_UPLOAD_MAX_MB` (25 MB unless the instance sets
+it). A bigger one is refused with `413` before anything is imported. Behind
+the bundled nginx, a request over 25 MB is refused by nginx itself, also
+with `413` but with an HTML body.
+
 Import is idempotent, and a re-upload is how a timetable is corrected in
 bulk. A slot matching an existing one on activity, weekday and start time
 has its end time, lead and room brought into line, and the days already

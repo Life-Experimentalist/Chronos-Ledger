@@ -75,6 +75,8 @@ services:
       - RATE_LIMIT_LOGIN_PER_EMAIL=${RATE_LIMIT_LOGIN_PER_EMAIL:-5}
       - RATE_LIMIT_GUEST_CHECKIN=${RATE_LIMIT_GUEST_CHECKIN:-300}
       - RATE_LIMIT_CALENDAR_FEED=${RATE_LIMIT_CALENDAR_FEED:-60}
+      # Largest CSV upload in MB. nginx refuses anything over 25 MB first.
+      - CSV_UPLOAD_MAX_MB=${CSV_UPLOAD_MAX_MB:-25}
       # Which upstream addresses uvicorn believes X-Forwarded-For from. This
       # service publishes no ports, so nginx is the only way in. Without it
       # every request looks like it came from the proxy and the sign-in

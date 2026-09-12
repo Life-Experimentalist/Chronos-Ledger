@@ -5,6 +5,9 @@
 import datetime
 import io
 
+import pytest
+
+from app.core.config import get_settings
 from app.core.time import org_today
 from app.models.db import (
     Activity,
@@ -40,6 +43,30 @@ def _upload(client, headers, cycle_id, csv_text, filename="matrix.csv"):
         headers=headers,
         files={"file": (filename, io.BytesIO(csv_text.encode()), "text/csv")},
     )
+
+
+@pytest.fixture
+def upload_limit_of_1_mb(monkeypatch):
+    """CSV_UPLOAD_MAX_MB at 1 for one test, dropped from the cache both ways."""
+    monkeypatch.setenv("CSV_UPLOAD_MAX_MB", "1")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+def test_upload_over_the_size_limit_is_refused_and_imports_nothing(
+    client, db, seed_users, upload_limit_of_1_mb
+):
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    row = "STU900,Ada Newling,ada@test.internal,MA201,Linear Algebra,CSE,2,09:00,10:00,FAC001,LH-201\n"
+    csv_text = HEADER + "\n" + row * (1024 * 1024 // len(row) + 1)
+    r = _upload(client, headers, cycle.id, csv_text)
+    assert r.status_code == 413, r.text
+    assert r.json()["detail"] == "File is larger than the 1 MB upload limit"
+
+    db.expire_all()
+    assert db.query(User).filter(User.id == "STU900").first() is None
 
 
 def test_upload_happy_path_creates_everything(client, db, seed_users):

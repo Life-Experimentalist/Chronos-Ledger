@@ -3228,6 +3228,16 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "413":
+          description: >
+            The file is larger than `CSV_UPLOAD_MAX_MB` (25 MB unless the
+            instance sets it), and nothing was imported. Behind the bundled
+            nginx a request over 25 MB is refused by nginx itself, also with
+            413 but with an HTML body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "422":
           description: >
             The file was refused and nothing was saved. `detail` says why, and
