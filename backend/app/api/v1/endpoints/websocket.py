@@ -131,12 +131,12 @@ async def websocket_endpoint(
 
 
 @router.get("/ws/stats")
-def ws_stats(_=Depends(require_roles("SUPER_ADMIN"))):
-    """How many sockets are open right now.
+async def ws_stats(_=Depends(require_roles("SUPER_ADMIN"))):
+    """How many people have a socket open right now, on every instance.
 
     Unauthenticated, this told anybody how many people were signed in across
     the organization and let them watch that number over a day. SUPER_ADMIN
     rather than any admin because the count is org-wide, and there is nothing
     in it a unit admin could be shown only their own share of.
     """
-    return {"online_connections": socket_broker.online_count()}
+    return {"online_connections": await socket_broker.online_count()}

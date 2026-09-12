@@ -6,6 +6,8 @@ M-13, M-14 and M-15: the token arrived in the connect URL, a valid signature
 was the only thing checked about it, and the connected-user count was public.
 """
 
+import asyncio
+
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
@@ -59,7 +61,7 @@ def test_an_accepted_socket_is_nobody_until_it_says_so(client, seed_users):
     """The accept happens before the token arrives now, so this is the thing
     worth proving: being accepted is not being connected."""
     with client.websocket_connect(WS_PATH):
-        assert socket_broker.online_count() == 0
+        assert asyncio.run(socket_broker.online_count()) == 0
 
 
 def test_a_bad_token_is_refused(client, seed_users):

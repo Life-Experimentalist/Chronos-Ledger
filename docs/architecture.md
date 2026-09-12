@@ -26,7 +26,7 @@ graph TB
 
     subgraph Data["Data Layer"]
         PG[(PostgreSQL 17<br/>Relational store)]
-        RD[(Redis 7.4<br/>State cache &amp;<br/>WS session registry)]
+        RD[(Redis 7.4<br/>State cache &amp;<br/>WS event relay)]
     end
 
     S & F & A & G -->|HTTPS / WSS| NX
@@ -45,7 +45,7 @@ graph TB
 | **FastAPI app** | All REST endpoints + WebSocket hub. Single process (uvicorn), stateless beyond DB/Redis. |
 | **APScheduler** | Runs `ledger_generator` at midnight UTC to materialise `DailyLedger` rows from `StructuralMasterSlot` for the next day. |
 | **PostgreSQL** | Source of truth for all persistent data: users, schedule, attendance, absence logs, guest transactions. |
-| **Redis** | Short-lived state: staff status overrides (TTL), in-memory WebSocket connection registry serialised for pub/sub. |
+| **Redis** | Short-lived state: staff status overrides (TTL), the channel instances relay WebSocket events and closes over, and each instance's set of connected users (TTL) for the connection count. |
 
 ---
 
@@ -148,25 +148,30 @@ sequenceDiagram
     participant C as Client (browser/PWA)
     participant N as Nginx
     participant WS as FastAPI WebSocket
-    participant Reg as OrganizationConnectionManager<br/>(in-memory + Redis)
+    participant Reg as OrganizationConnectionManager<br/>(this instance's sockets)
+    participant RD as Redis
+    participant O as Other instances
 
-    C->>N: GET /ws?token=<jwt> (Upgrade)
+    C->>N: GET /ws (Upgrade)
     N->>WS: Proxy WebSocket handshake
-    WS->>WS: Validate JWT → extract user_id + role
-    WS->>Reg: register(user_id, socket)
-    Note over Reg: Stores {user_id → WebSocket} in<br/>process memory; user_id → pid<br/>key written to Redis for future<br/>multi-instance routing
+    C->>WS: AUTH frame carrying the JWT
+    WS->>WS: Validate JWT and the account → user_id
+    WS->>Reg: register_session(user_id, socket)
+    WS->>C: AUTHENTICATED frame
+    Note over Reg,RD: Stores {user_id → WebSocket} in<br/>process memory, and rewrites this<br/>instance's set of user ids in Redis<br/>every 15s for the connection count
 
     loop Event loop
-        Note over WS,Reg: Domain events trigger broadcast()
-        Reg->>C: JSON frame {event, payload}
+        Note over WS,Reg: A domain event calls forward_direct_message()
+        Reg->>C: JSON frame {event, payload}, if the socket is here
+        Reg->>RD: PUBLISH ws:events
+        RD->>O: Each delivers it if it holds the socket
     end
 
     C--xWS: Disconnect (tab closed / network drop)
-    WS->>Reg: unregister(user_id)
-    Reg-->>Redis: Delete user_id key
+    WS->>Reg: terminate_session(user_id)
 ```
 
-**Why WebSockets instead of polling:** Absence approvals and guest handshakes need sub-second delivery to the staff dashboard. Polling at any sane interval (≥5s) introduces noticeable lag in the two-party guest interaction flow. The connection registry is kept in process memory (fast path) with Redis as the index; this enables adding multi-process fanout later without changing client code.
+**Why WebSockets instead of polling:** Absence approvals and guest handshakes need sub-second delivery to the staff dashboard. Polling at any sane interval (≥5s) introduces noticeable lag in the two-party guest interaction flow. Each instance keeps the sockets it holds in process memory and relays events to the other instances through Redis, so a client connects to whichever instance the load balancer picks and needs no code of its own for it.
 
 ---
 

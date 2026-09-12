@@ -1,8 +1,9 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
@@ -15,6 +16,7 @@ from app.core.config import docs_are_published, get_settings
 from app.core.database import SessionLocal
 from app.core.pagination import TOTAL_COUNT_HEADER
 from app.core.time import org_now, org_timezone, org_tomorrow
+from app.core.websocket_manager import socket_broker
 from app.cron.ledger_generator import generate_daily_ledger_entries, missed_ledger_dates
 from app.cron.refresh_token_cleanup import purge_expired_refresh_tokens
 
@@ -58,8 +60,14 @@ async def lifespan(_app: FastAPI):
         replace_existing=True,
     )
     scheduler.start()
+    # Socket events and closes for people connected to another instance, and
+    # the presence the connection count reads. Harmless with one instance.
+    relay = asyncio.create_task(socket_broker.run_relay(settings.redis_url))
     yield
     scheduler.shutdown(wait=False)
+    relay.cancel()
+    with suppress(asyncio.CancelledError):
+        await relay
 
 
 def _open_the_admin_account():

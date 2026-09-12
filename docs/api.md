@@ -1302,6 +1302,9 @@ travels server to client.
 
 ### GET /ws/stats `[SUPER_ADMIN]`
 
-How many sockets are open right now: `{"online_connections": 4}`. Super admin
-only, because it is an organization-wide headcount and there is no unit-sized
-share of it to hand a unit admin.
+How many people have a socket open right now, on every instance:
+`{"online_connections": 4}`. A person counts once however many instances they
+are connected to. The other instances' figures can be up to 15 seconds old,
+and an instance that cannot reach Redis counts only its own sockets. Super
+admin only, because it is an organization-wide headcount and there is no
+unit-sized share of it to hand a unit admin.

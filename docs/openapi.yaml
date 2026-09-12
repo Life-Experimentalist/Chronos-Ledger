@@ -3438,10 +3438,13 @@ paths:
   /api/v1/ws/stats:
     get:
       tags: [WebSocket]
-      summary: Count of open websocket connections
+      summary: Count of people with an open websocket, on every instance
       description: >
         Requires `SUPER_ADMIN`. The count is organization-wide, and there is
-        nothing in it a unit admin could be shown only their own share of.
+        nothing in it a unit admin could be shown only their own share of. A
+        person counts once however many instances they are connected to. The
+        other instances' figures can be up to 15 seconds old, and an instance
+        that cannot reach Redis counts only its own sockets.
       responses:
         "200":
           description: Open connection count.

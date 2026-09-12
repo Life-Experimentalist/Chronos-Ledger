@@ -14,6 +14,12 @@ from fastapi.routing import APIRoute
 
 from app.main import app
 
+# Routes whose answer is itself something to await and which run no query of
+# their own. Their dependencies are plain defs, and FastAPI puts those on a
+# worker thread whatever the route is. The websocket count asks Redis through
+# the client the relay keeps on the event loop.
+AWAIT_THEIR_ANSWER = {"GET /api/v1/ws/stats"}
+
 
 def test_no_http_route_runs_on_the_event_loop():
     offenders = [
@@ -21,4 +27,4 @@ def test_no_http_route_runs_on_the_event_loop():
         for route in app.routes
         if isinstance(route, APIRoute) and inspect.iscoroutinefunction(route.endpoint)
     ]
-    assert offenders == []
+    assert [route for route in offenders if route not in AWAIT_THEIR_ANSWER] == []
