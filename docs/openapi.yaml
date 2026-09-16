@@ -112,9 +112,12 @@ components:
     # ── Auth ──────────────────────────────────
     LoginRequest:
       type: object
-      required: [email, password]
+      required: [email_address, password]
+      description: >
+        `email` is accepted in place of `email_address` through 0.14 and
+        removed in 0.15.
       properties:
-        email:
+        email_address:
           type: string
           format: email
           example: staff@org.internal
@@ -123,12 +126,28 @@ components:
           format: password
           example: "••••••••"
 
+    Readiness:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ready, not ready]
+        database:
+          type: string
+          enum: [ok, unavailable]
+        redis:
+          type: string
+          enum: [ok, unavailable]
+
     TokenResponse:
       type: object
       properties:
         access_token:
           type: string
           description: "Signed JWT. Include as `Authorization: Bearer <token>`."
+        refresh_token:
+          type: string
+          description: Exchange at `POST /auth/refresh` for a new pair when the access token expires.
         token_type:
           type: string
           example: bearer
@@ -1466,6 +1485,7 @@ paths:
   # ── Configuration ─────────────────────────
   /api/v1/config:
     get:
+      operationId: config.get
       tags: [Configuration]
       summary: Display vocabulary and password floor
       description: |
@@ -1510,6 +1530,7 @@ paths:
   # ── Authentication ────────────────────────
   /api/v1/auth/login:
     post:
+      operationId: auth.login
       tags: [Authentication]
       summary: Login and receive JWT
       security: []
@@ -1535,6 +1556,7 @@ paths:
 
   /api/v1/auth/refresh:
     post:
+      operationId: auth.refresh
       tags: [Authentication]
       summary: Exchange a refresh token for a new access token
       description: >
@@ -1571,6 +1593,7 @@ paths:
 
   /api/v1/auth/logout:
     post:
+      operationId: auth.logout
       tags: [Authentication]
       summary: Revoke a refresh token
       description: >
@@ -1602,6 +1625,7 @@ paths:
 
   /api/v1/auth/me:
     get:
+      operationId: auth.getMe
       tags: [Authentication]
       summary: Get current authenticated user profile
       responses:
@@ -1616,6 +1640,7 @@ paths:
 
   /api/v1/auth/change-password:
     post:
+      operationId: auth.changePassword
       tags: [Authentication]
       summary: Change own password
       requestBody:
@@ -1656,6 +1681,7 @@ paths:
   # ── Users ─────────────────────────────────
   /api/v1/users/:
     get:
+      operationId: users.list
       tags: [Users]
       summary: List all users
       description: Requires `SUPER_ADMIN` or `UNIT_ADMIN`.
@@ -1696,6 +1722,7 @@ paths:
           $ref: "#/components/responses/Forbidden"
 
     post:
+      operationId: users.create
       tags: [Users]
       summary: Create a new user
       description: >
@@ -1741,6 +1768,7 @@ paths:
 
   /api/v1/users/staff/available:
     get:
+      operationId: users.listAvailableStaff
       tags: [Users]
       summary: List active staff with their current status
       description: >
@@ -1784,6 +1812,7 @@ paths:
 
   /api/v1/users/{user_id}:
     get:
+      operationId: users.get
       tags: [Users]
       summary: Get a specific user
       parameters:
@@ -1803,6 +1832,7 @@ paths:
           $ref: "#/components/responses/NotFound"
 
     patch:
+      operationId: users.update
       tags: [Users]
       summary: Update a user
       description: >
@@ -1854,6 +1884,7 @@ paths:
 
   /api/v1/users/{user_id}/reset-password:
     post:
+      operationId: users.resetPassword
       tags: [Users]
       summary: Issue a new password for a user who cannot sign in
       description: >
@@ -1883,6 +1914,7 @@ paths:
 
   /api/v1/users/{user_id}/deactivate:
     post:
+      operationId: users.deactivate
       tags: [Users]
       summary: Stop an account without deleting it
       description: >
@@ -1938,6 +1970,7 @@ paths:
 
   /api/v1/users/{user_id}/reactivate:
     post:
+      operationId: users.reactivate
       tags: [Users]
       summary: Let a deactivated account back in
       description: >
@@ -1969,6 +2002,7 @@ paths:
 
   /api/v1/users/{user_id}/status:
     put:
+      operationId: users.updateStatus
       tags: [Users]
       summary: Update staff availability status
       description: >
@@ -2005,6 +2039,7 @@ paths:
   # ── API keys ─────────────────────────────
   /api/v1/api-keys/:
     get:
+      operationId: apiKeys.list
       tags: [API Keys]
       summary: List issued keys
       description: >
@@ -2026,6 +2061,7 @@ paths:
           $ref: "#/components/responses/Forbidden"
 
     post:
+      operationId: apiKeys.create
       tags: [API Keys]
       summary: Issue a key
       description: >
@@ -2070,6 +2106,7 @@ paths:
 
   /api/v1/api-keys/{key_id}:
     delete:
+      operationId: apiKeys.revoke
       tags: [API Keys]
       summary: Revoke a key
       description: >
@@ -2091,6 +2128,7 @@ paths:
   # ── Resources ─────────────────────────────
   /api/v1/resources/:
     get:
+      operationId: resources.list
       tags: [Resources]
       summary: List resources
       description: >
@@ -2127,6 +2165,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
 
     post:
+      operationId: resources.create
       tags: [Resources]
       summary: Create a room
       description: >
@@ -2176,6 +2215,7 @@ paths:
         schema:
           type: integer
     patch:
+      operationId: resources.update
       tags: [Resources]
       summary: Update a resource
       description: >
@@ -2212,6 +2252,7 @@ paths:
 
   /api/v1/resources/{resource_id}/availability:
     get:
+      operationId: resources.getAvailability
       tags: [Resources]
       summary: When a resource is already taken
       description: >
@@ -2286,6 +2327,7 @@ paths:
 
   /api/v1/resources/{resource_id}/reservations:
     post:
+      operationId: resources.createReservation
       tags: [Resources]
       summary: Hold a resource for one dated window
       description: >
@@ -2376,6 +2418,7 @@ paths:
 
   /api/v1/resources/{resource_id}/reservations/{reservation_id}:
     delete:
+      operationId: resources.cancelReservation
       tags: [Resources]
       summary: Let a hold go
       description: >
@@ -2422,6 +2465,7 @@ paths:
   # ── Schedule ──────────────────────────────
   /api/v1/schedule/slots:
     get:
+      operationId: schedule.listSlots
       tags: [Schedule]
       summary: List master slots
       description: >
@@ -2451,6 +2495,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
 
     post:
+      operationId: schedule.createSlot
       tags: [Schedule]
       summary: Add a master slot
       description: >
@@ -2523,6 +2568,7 @@ paths:
 
   /api/v1/schedule/slots/{slot_id}:
     patch:
+      operationId: schedule.updateSlot
       tags: [Schedule]
       summary: Change a master slot, and the days it has already produced
       description: >
@@ -2613,6 +2659,7 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
     delete:
+      operationId: schedule.deleteSlot
       tags: [Schedule]
       summary: Take a master slot off the timetable
       description: >
@@ -2649,6 +2696,7 @@ paths:
 
   /api/v1/schedule/ledger/today:
     get:
+      operationId: schedule.getTodayLedger
       tags: [Schedule]
       summary: Today's ledger entries for the authenticated user
       description: >
@@ -2675,6 +2723,7 @@ paths:
 
   /api/v1/schedule/ledger:
     get:
+      operationId: schedule.listLedger
       tags: [Schedule]
       summary: Ledger entries between two dates
       description: >
@@ -2720,6 +2769,7 @@ paths:
 
   /api/v1/schedule/ledger/{ledger_id}:
     patch:
+      operationId: schedule.updateLedgerEntry
       tags: [Schedule]
       summary: Update a ledger entry
       description: >
@@ -2767,6 +2817,7 @@ paths:
 
   /api/v1/schedule/staff/{staff_id}/location:
     get:
+      operationId: schedule.getStaffLocation
       tags: [Schedule]
       summary: Resolve a staff member's current location via 4-tier resolver
       parameters:
@@ -2787,6 +2838,7 @@ paths:
 
   /api/v1/schedule/staff/all/locations:
     get:
+      operationId: schedule.listStaffLocations
       tags: [Schedule]
       summary: Snapshot of all staff locations (Member Locator feed)
       parameters:
@@ -2807,6 +2859,7 @@ paths:
 
   /api/v1/schedule/cycles:
     get:
+      operationId: schedule.listCycles
       tags: [Schedule]
       summary: List planning cycles
       parameters:
@@ -2826,6 +2879,7 @@ paths:
                   $ref: "#/components/schemas/PlanningCycleResponse"
 
     post:
+      operationId: schedule.createCycle
       tags: [Schedule]
       summary: Create a new planning cycle
       description: >
@@ -2852,6 +2906,7 @@ paths:
 
   /api/v1/schedule/cycles/{cycle_id}/close:
     patch:
+      operationId: schedule.closeCycle
       tags: [Schedule]
       summary: Take a planning cycle out of service
       description: >
@@ -2892,6 +2947,7 @@ paths:
 
   /api/v1/schedule/cycles/{cycle_id}/open:
     patch:
+      operationId: schedule.openCycle
       tags: [Schedule]
       summary: Put a drafted planning cycle into service
       description: >
@@ -2940,6 +2996,7 @@ paths:
 
   /api/v1/schedule/cycles/{old_id}/clone-to/{new_id}:
     post:
+      operationId: schedule.cloneCycle
       tags: [Schedule]
       summary: Copy one cycle's activities and weekly slots into another
       description: >
@@ -2990,6 +3047,7 @@ paths:
   # ── Attendance ────────────────────────────
   /api/v1/attendance/mark:
     post:
+      operationId: attendance.mark
       tags: [Attendance]
       summary: Mark single member attendance
       description: >
@@ -3047,6 +3105,7 @@ paths:
 
   /api/v1/attendance/batch:
     post:
+      operationId: attendance.markBatch
       tags: [Attendance]
       summary: Batch mark attendance for multiple members
       description: >
@@ -3096,6 +3155,7 @@ paths:
 
   /api/v1/attendance/ledger/{ledger_id}:
     get:
+      operationId: attendance.listForLedger
       tags: [Attendance]
       summary: Get the roster for a ledger entry
       description: >
@@ -3125,6 +3185,7 @@ paths:
 
   /api/v1/attendance/absence:
     post:
+      operationId: attendance.submitAbsence
       tags: [Attendance]
       summary: Submit an absence request (Reverse RSVP)
       description: >
@@ -3160,6 +3221,7 @@ paths:
 
   /api/v1/attendance/absence/pending:
     get:
+      operationId: attendance.listPendingAbsences
       tags: [Attendance]
       summary: List absence requests pending the caller's approval
       description: >
@@ -3180,6 +3242,7 @@ paths:
 
   /api/v1/attendance/absence/{log_id}/decide:
     patch:
+      operationId: attendance.decideAbsence
       tags: [Attendance]
       summary: Approve or deny an absence request
       description: >
@@ -3222,6 +3285,7 @@ paths:
 
   /api/v1/attendance/annotations:
     post:
+      operationId: attendance.createAnnotation
       tags: [Attendance]
       summary: Create a ledger annotation
       description: >
@@ -3248,6 +3312,7 @@ paths:
 
   /api/v1/attendance/annotations/{ledger_id}:
     get:
+      operationId: attendance.listAnnotations
       tags: [Attendance]
       summary: Get all annotations for a ledger entry
       description: >
@@ -3277,6 +3342,7 @@ paths:
   # ── Guest Gate ────────────────────────────
   /api/v1/guest/register-checkin:
     post:
+      operationId: guest.checkIn
       tags: [Guest Gate]
       summary: Register an organization visitor (kiosk)
       description: >
@@ -3323,6 +3389,7 @@ paths:
 
   /api/v1/guest/directory:
     get:
+      operationId: guest.getDirectory
       tags: [Guest Gate]
       summary: Staff availability directory (kiosk)
       description: >
@@ -3365,6 +3432,7 @@ paths:
 
   /api/v1/guest/visit/{code}:
     get:
+      operationId: guest.getVisit
       tags: [Guest Gate]
       summary: Follow a visit by its code (visitor)
       description: >
@@ -3399,6 +3467,7 @@ paths:
 
   /api/v1/guest/pending:
     get:
+      operationId: guest.listPending
       tags: [Guest Gate]
       summary: List pending guest requests for authenticated staff
       description: Returns guests targeting the authenticated staff member with PENDING_VERIFICATION status.
@@ -3414,6 +3483,7 @@ paths:
 
   /api/v1/guest/{entry_id}/decide:
     patch:
+      operationId: guest.decide
       tags: [Guest Gate]
       summary: Accept or decline a guest visit
       parameters:
@@ -3453,6 +3523,7 @@ paths:
   # ── Ingestion ─────────────────────────────
   /api/v1/ingestion/upload-csv:
     post:
+      operationId: ingestion.uploadCsv
       tags: [Ingestion]
       summary: Bulk import schedule from CSV
       description: >
@@ -3509,6 +3580,7 @@ paths:
           multipart/form-data:
             schema:
               type: object
+              required: [file]
               properties:
                 file:
                   type: string
@@ -3556,6 +3628,7 @@ paths:
 
   /api/v1/ingestion/generate-ledger:
     post:
+      operationId: ingestion.generateLedger
       tags: [Ingestion]
       summary: Trigger daily ledger generation
       description: >
@@ -3599,6 +3672,7 @@ paths:
   # ── Calendar Sync ─────────────────────────
   /api/v1/audit/:
     get:
+      operationId: audit.list
       tags: [Audit]
       summary: Writes made through the API, newest first
       description: >
@@ -3647,6 +3721,7 @@ paths:
 
   /api/v1/sync/feed-token:
     get:
+      operationId: sync.getFeedToken
       tags: [Calendar Sync]
       summary: Get the caller's calendar feed token
       description: >
@@ -3666,6 +3741,7 @@ paths:
 
   /api/v1/sync/feed-token/rotate:
     post:
+      operationId: sync.rotateFeedToken
       tags: [Calendar Sync]
       summary: Replace the caller's calendar feed token
       description: >
@@ -3684,6 +3760,7 @@ paths:
 
   /api/v1/sync/user-feed/{feed_token}.ics:
     get:
+      operationId: sync.getFeed
       tags: [Calendar Sync]
       summary: iCalendar feed for a user (rolling 37-day window)
       description: >
@@ -3724,6 +3801,7 @@ paths:
   # ── WebSocket ─────────────────────────
   /api/v1/ws/stats:
     get:
+      operationId: ws.getStats
       tags: [WebSocket]
       summary: Count of people with an open websocket, on every instance
       description: >
@@ -3750,10 +3828,14 @@ paths:
   # ── Health ────────────────────────────────
   /health:
     get:
+      operationId: health.check
       tags: [System]
       summary: Health check
       security: []
-      description: Used by Docker healthcheck. Returns 200 when the app is ready.
+      description: >
+        Liveness: answers without touching the database. Also names the
+        running release and the migration the database was at when the
+        process started.
       responses:
         "200":
           description: Healthy.
@@ -3764,7 +3846,42 @@ paths:
                 properties:
                   status:
                     type: string
-                    example: ok
+                    example: healthy
+                  service:
+                    type: string
+                    example: chronos-ledger
+                  version:
+                    type: string
+                    example: "0.13.0"
+                  migration_revision:
+                    type: [string, "null"]
+                    example: "022"
+                    description: Null before the first migration.
+
+  /health/ready:
+    get:
+      operationId: health.ready
+      tags: [System]
+      summary: Readiness check
+      security: []
+      description: >
+        Runs `SELECT 1` against PostgreSQL and pings Redis. Fails with 503 only
+        when PostgreSQL does not answer: without Redis the app keeps working,
+        so Redis being down is reported but still ready. The container
+        healthchecks use this route.
+      responses:
+        "200":
+          description: Ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
+        "503":
+          description: PostgreSQL did not answer.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
 
 # ─────────────────────────────────────────────
 # WebSocket (informational, not an HTTP path)

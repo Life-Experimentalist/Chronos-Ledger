@@ -5,16 +5,20 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager, suppress
 
+import redis
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.api.v1.router import api_router
 from app.core.audit import AuditMiddleware
 from app.core.bootstrap import apply_initial_admin_password
 from app.core.config import docs_are_published, get_settings
-from app.core.database import SessionLocal
+from app.core.database import SessionLocal, engine
+from app.core.migrations import database_revision, unknown_revision_message
 from app.core.pagination import TOTAL_COUNT_HEADER
 from app.core.time import org_now, org_timezone, org_tomorrow
 from app.core.websocket_manager import socket_broker
@@ -36,10 +40,13 @@ settings = get_settings()
 # so it leans on this as well.
 scheduler = AsyncIOScheduler(timezone=org_timezone(), job_defaults={"misfire_grace_time": 1800})
 NIGHTLY_LEDGER_HOUR = 23
+# Read once at startup, so /health can report it without touching the database.
+migration_state: dict[str, str | None] = {"revision": None}
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    _check_the_database_revision()
     _open_the_admin_account()
     # Schedule nightly ledger generation at 23:00
     scheduler.add_job(
@@ -79,6 +86,21 @@ async def lifespan(_app: FastAPI):
     relay.cancel()
     with suppress(asyncio.CancelledError):
         await relay
+
+
+def _check_the_database_revision():
+    """Refuse to start on a database migrated by a newer release.
+
+    The container start command runs the same check before alembic, so this
+    matters for a process started some other way. Raising here stops uvicorn
+    with the message rather than serving requests against a schema this code
+    does not know.
+    """
+    message = unknown_revision_message(engine)
+    if message:
+        logging.getLogger(__name__).critical(message)
+        raise RuntimeError(message)
+    migration_state["revision"] = database_revision(engine)
 
 
 def _open_the_admin_account():
@@ -181,6 +203,42 @@ app.add_middleware(AuditMiddleware)
 app.include_router(api_router, prefix="/api/v1")
 
 
-@app.get("/health")
+@app.get("/health", operation_id="health.check")
 def health_check():
-    return {"status": "healthy", "service": "chronos-ledger"}
+    return {
+        "status": "healthy",
+        "service": "chronos-ledger",
+        "version": app.version,
+        "migration_revision": migration_state["revision"],
+    }
+
+
+@app.get("/health/ready", operation_id="health.ready")
+def readiness_check():
+    """Whether this instance can serve requests: PostgreSQL has to answer.
+
+    Redis is pinged and reported, but it being down does not fail readiness.
+    Everything that uses it falls back without it, so taking the app out of
+    rotation over it would turn a degraded instance into a missing one.
+    """
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        database = "ok"
+    except Exception:
+        logging.getLogger(__name__).exception("Readiness: PostgreSQL did not answer.")
+        database = "unavailable"
+    try:
+        redis.from_url(settings.redis_url, socket_connect_timeout=1, socket_timeout=1).ping()
+        cache = "ok"
+    except Exception:
+        cache = "unavailable"
+    ready = database == "ok"
+    return JSONResponse(
+        status_code=200 if ready else 503,
+        content={
+            "status": "ready" if ready else "not ready",
+            "database": database,
+            "redis": cache,
+        },
+    )

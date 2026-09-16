@@ -24,7 +24,7 @@ graph TB
         subgraph DC["Docker Compose, network: chronos_net (bridge)"]
             NX["chronos-proxy\nnginx:1.27-alpine\nPorts: 80, 443\n\nServes static files\nProxies /api/v1 + /ws"]
             FE["chronos-frontend\n(one-shot builder)\nNext.js → /app/out\nexit 0 on success"]
-            APP["chronos-app\nFastAPI + uvicorn\nPort 8000 (internal)\n\nHealthcheck: /health"]
+            APP["chronos-app\nFastAPI + uvicorn\nPort 8000 (internal)\n\nHealthcheck: /health/ready"]
             DB["chronos-db\npostgres:17-alpine\nPort 5432 (internal)"]
             CACHE["chronos-cache\nredis:7.4-alpine\nPort 6379 (internal)"]
 
@@ -50,7 +50,12 @@ graph TB
 **Startup order enforced by `depends_on`:**
 
 1. `chronos-db` starts and passes its healthcheck (`pg_isready`).
-2. `chronos-app` starts only after DB is healthy; passes its own `/health` check.
+2. `chronos-app` starts only after DB is healthy; passes its own `/health/ready` check.
+
+`/health` is liveness: it answers without touching anything. `/health/ready`
+is readiness: it fails with 503 when PostgreSQL does not answer, and reports
+Redis without failing on it, because the app keeps working while Redis is
+down. Point a load balancer or orchestrator probe at `/health/ready`.
 3. `chronos-frontend` build runs (exits 0, writes files to shared volume).
 4. `chronos-proxy` (nginx) starts only after both App is healthy **and** the frontend builder has exited successfully. This prevents nginx from serving an empty or partial build.
 
@@ -114,6 +119,24 @@ which default to 80 and 443. Set them in `.env` when something else on the
 host already owns those ports, or when Chronos is going behind an outer
 reverse proxy. The container itself always listens on 80 and 443, so
 nothing inside the stack changes.
+
+`/health` names the running release and the migration the database is at,
+which is the quickest way to confirm an upgrade landed:
+
+```json
+{"status": "healthy", "service": "chronos-ledger", "version": "0.13.0", "migration_revision": "022"}
+```
+
+Migrations only move forward. Going back to an older image after a newer one
+has migrated the database does not work, and the app container says so and
+exits instead of restarting in a loop:
+
+```
+The database is at migration 023, which this version of Chronos Ledger does not know (its newest is 022). ...
+```
+
+Restore the backup taken before the upgrade (see Database Backup), or run the
+newer release again.
 
 ### 4. First login
 
