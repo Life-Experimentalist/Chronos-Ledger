@@ -87,8 +87,13 @@ updates:
       include: "scope"
 
   # ── Docker / GitHub Actions ────────────────────────────────────────────
+  # The Dockerfiles live beside the code they build, not at the root, where
+  # this looked and failed every week finding none.
   - package-ecosystem: "docker"
-    directory: "/"
+    directories:
+      - "/backend"
+      - "/frontend"
+      - "/nginx"
     schedule:
       interval: "weekly"
       day: "tuesday"
