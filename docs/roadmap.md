@@ -88,7 +88,9 @@ certificate is issued and does not block the release.
 
 ### P-7. TypeScript and Python SDKs
 
-See [sdks.md](sdks.md). Depends on P-1.
+See [sdks.md](sdks.md). Depends on P-1. In 0.13: both libraries in `sdks/`,
+with token refresh, safe retries, paging and typed errors, checked in CI
+against the spec. Publishing to npm and PyPI is added on request.
 
 ### P-8. Ledger range queries
 

@@ -13,6 +13,10 @@
         { "type": "toml", "path": "backend/pyproject.toml", "jsonpath": "$.project.version" },
         { "type": "toml", "path": "cli/Cargo.toml",         "jsonpath": "$.package.version" },
         { "type": "toml", "path": "cli/Cargo.lock",         "jsonpath": "$.package[?(@.name.value=='chronos-ledger-cli')].version" },
+        { "type": "json", "path": "sdks/typescript/package.json", "jsonpath": "$.version" },
+        { "type": "toml", "path": "sdks/python/pyproject.toml",   "jsonpath": "$.project.version" },
+        "sdks/typescript/src/version.ts",
+        "sdks/python/src/chronos_ledger_client/__init__.py",
         "docs/openapi.yaml",
         "backend/app/main.py"
       ],

@@ -79,3 +79,11 @@ ui prommpts.md
 .devprune.json
 .devprune-ignore
 ignore.devprune.json
+
+# SDKs
+sdks/typescript/node_modules/
+sdks/typescript/dist/
+sdks/python/dist/
+sdks/python/.venv/
+.pytest_cache/
+.ruff_cache/

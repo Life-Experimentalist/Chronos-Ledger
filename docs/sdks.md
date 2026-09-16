@@ -2,7 +2,11 @@
 
 <!-- Copyright 2026 Chronos Ledger Contributors (Apache 2.0) -->
 
-Status: planned, not built. Until these ship, use the
+Status: TypeScript and Python are built in 0.13, in `sdks/`, and not yet
+published to npm or PyPI. See [sdks/typescript.md](sdks/typescript.md) and
+[sdks/python.md](sdks/python.md). Go and Rust come later. The shared scenario
+test in section 4 is not built; each library tests its hand-written layer
+against a mocked server. Until a language has a library, use the
 [REST quickstart](quickstart.md) or point any OpenAPI generator at
 [openapi.yaml](openapi.yaml).
 
@@ -76,9 +80,9 @@ Library versions match the server release they were generated from:
 against a newer server in the same minor series. While the server is `0.x`,
 a minor bump may break the API, and the libraries break with it.
 
-The release workflow regenerates all four on each `v*` tag, runs their tests,
-and publishes. A pull request that changes the spec regenerates them too and
-fails if the checked-in generated code is stale.
+release-please bumps each library's version along with the server's. CI
+regenerates the libraries on every pull request and fails if the checked-in
+generated code is stale. Publishing to the registries is not wired up yet.
 
 ## 4. Tests
 

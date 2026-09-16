@@ -147,7 +147,7 @@ it will sign.
 | Target | Method | Cost | Why this one |
 |---|---|---|---|
 | Container images | GitHub build provenance attestations (Sigstore, keyless). Already in `cd.yml`. Add `cosign sign` keyless for registries and tooling that expect cosign signatures | free | Identity is the workflow, no key to leak |
-| Release archives and binaries | `actions/attest-build-provenance`, verified with `gh attestation verify` | free | Same as dev-prune |
+| Release binaries | `actions/attest-build-provenance`, verified with `gh attestation verify` | free | Same as dev-prune |
 | npm, PyPI, crates.io, when added | Trusted publishing with provenance | free | No long-lived tokens |
 | Windows `chronos.exe` and any MSI | Certum Open Source Code Signing certificate, cloud key through SimplySign | about $50 for the certificate | Issued to an individual open source developer; no popularity requirement |
 | macOS prebuilt binaries | Apple Developer ID and notarization | $99 per year | Only needed if Gatekeeper warnings on direct downloads become a problem; Homebrew installs are not affected |

@@ -1,0 +1,6 @@
+# Settings for openapi-python-client. See docs/sdks/python.md for the command.
+project_name_override: chronos-ledger-client
+package_name_override: generated
+post_hooks:
+  - "uvx ruff@0.16.8 check . --fix-only --extend-select=I"
+  - "uvx ruff@0.16.8 format ."

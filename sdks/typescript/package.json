@@ -1,0 +1,42 @@
+{
+  "name": "@life-experimentalist/chronos",
+  "version": "0.12.0",
+  "description": "Typed client for the Chronos Ledger REST API",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Life-Experimentalist/Chronos-Ledger.git",
+    "directory": "sdks/typescript"
+  },
+  "homepage": "https://chronos.vkrishna04.me",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "generate": "openapi-typescript ../../docs/openapi.yaml -o src/generated/schema.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "openapi-fetch": "0.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.5",
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
+  }
+}
