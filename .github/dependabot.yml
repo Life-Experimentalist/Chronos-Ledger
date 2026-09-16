@@ -79,6 +79,24 @@ updates:
           - "@types/*"
           - "eslint*"
           - "@eslint*"
+    # Held back on purpose. Each of these fails the build or restyles the
+    # app, so the upgrade is planned work, not a weekly bump. Minor and patch
+    # releases still come through.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "tailwind-merge"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "framer-motion"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "lucide-react"
+        update-types: ["version-update:semver-major"]
     labels:
       - "dependencies"
       - "javascript"
@@ -100,6 +118,10 @@ updates:
       time: "06:00"
       timezone: "Asia/Kolkata"
     open-pull-requests-limit: 3
+    # Node stays on the LTS line the frontend is built and typed against.
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
     labels:
       - "dependencies"
       - "docker"
