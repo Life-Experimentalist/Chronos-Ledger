@@ -15,10 +15,10 @@ requirement model, the login field), and those are the reason `1.0` waits.
 
 | Release | Theme | Breaking |
 |---|---|---|
-| 0.13 | Platform: contract check, hardening, `chronos` CLI and channels, first SDKs | No |
-| 0.14 | Engine, part 1: resource modes, conflict report, rolling horizon, Go and Rust SDKs, Helm | Additive |
+| 0.13 | Platform: contract check, hardening, `chronos` CLI and channels, first SDKs, ledger range queries, audit log | No |
+| 0.14 | Engine, part 1: resource modes, conflict report, rolling horizon, leave ranges, Go and Rust SDKs, Helm | Additive |
 | 0.15 | Engine, part 2: recurrence rules, editable timetable, exclusion on instances | Yes |
-| Waiting on a decision | Audit log, webhooks, ledger range queries, leave ranges, activities CRUD | n/a |
+| Waiting on a decision | Webhooks, activities CRUD | n/a |
 
 Detailed designs: [distribution.md](distribution.md) for installers, channels,
 drift and signing; [sdks.md](sdks.md) for client libraries;
@@ -89,6 +89,36 @@ signing lands when the certificate is issued and does not block the release.
 
 See [sdks.md](sdks.md). Depends on P-1.
 
+### P-8. Ledger range queries
+
+- **Scope:** `GET /schedule/ledger?from=&to=` returns ledger rows between two
+  dates inclusive, with an optional `resource_id`, paged like the other list
+  routes and ordered by date, then start time. Rows have the same shape as
+  `/schedule/ledger/today`, and the same role filter applies: staff see the
+  rows they lead or cover, members the activities they are enrolled in.
+  `to` before `from` is a `422`.
+- **Touches:** `backend/app/api/v1/endpoints/schedule.py`, `docs/api.md`,
+  `docs/openapi.yaml`.
+- **Done when:** a week of rows comes back in date order with `X-Total-Count`;
+  `/ledger/today` returns exactly what it did before.
+
+### P-9. Audit log
+
+- **Scope:** every write under `/api/v1` (any method other than GET, HEAD and
+  OPTIONS) is recorded after it completes: time, the user, the API key if one
+  was used, method, path and status code. Request and response bodies are never
+  stored, since they carry passwords and uploaded files. A failed audit write
+  is logged and never fails the request. `GET /audit?from=&to=&actor_id=` pages
+  through the records, newest first, `SUPER_ADMIN` only; API keys need
+  `audit:read`.
+- **Not in scope:** before and after snapshots of the changed rows. The path
+  and status say what was done; the rows say what it is now.
+- **Touches:** a new model and migration, `backend/app/main.py` middleware,
+  `backend/app/core/security.py`, a new `audit` router, `docs/api.md`,
+  `docs/openapi.yaml`.
+- **Done when:** a login, a reservation and a refused write each leave one
+  record; a GET leaves none; a member gets `403` on `/audit`.
+
 ---
 
 ## 0.14: Engine, part 1
@@ -129,6 +159,17 @@ This release lets a resource be consumed in three ways.
   days materialized instead of only tomorrow. A newly imported cycle is filled
   immediately rather than at 23:00.
 - **Done when:** after import, the calendar feed shows the next four weeks; running the job twice creates no duplicates.
+
+### E-8. Leave ranges
+
+- **Scope:** an absence request takes an optional `end_date` beside
+  `target_absence_date`. Approving it marks the requester's ledger rows
+  `ON_LEAVE` on every day in the range, and reversing it restores them. A
+  request without `end_date` behaves as today.
+- **Touches:** `ReverseRsvpLog` model and a migration, the absence schema,
+  `backend/app/services/reverse_rsvp.py`, `docs/api.md`, `docs/openapi.yaml`.
+- **Done when:** approving a three-day request marks three days of rows and
+  reversing it restores them; single-day requests pass their existing tests.
 
 ### E-4. Go and Rust SDKs, Helm chart, deb/rpm
 
@@ -176,10 +217,7 @@ needs one should say so.
 
 | Item | Sketch |
 |---|---|
-| Audit log | Append-only table of who changed what (actor, route, entity, before/after hash, time); `GET /audit` with paging, `SUPER_ADMIN` only |
 | Webhooks | Subscriptions per event type (`reservation.created`, `ledger.updated`, ...), HMAC-signed bodies, retries with backoff, delivery log |
-| Ledger range queries | `GET /schedule/ledger?from=&to=&resource_id=` with paging, instead of only `today` |
-| Leave ranges | An absence request covering a date range rather than one day |
 | Activities CRUD | Create, edit and retire activities through the API instead of only through CSV import |
 
 ## Later
