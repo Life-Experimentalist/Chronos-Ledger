@@ -5,7 +5,6 @@ from typing import Any, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
-from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
@@ -56,7 +55,7 @@ class HealthCheckResponse200:
         return field_dict
 
     @classmethod
-    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
+    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
         status = d.pop("status", UNSET)
 
@@ -71,9 +70,7 @@ class HealthCheckResponse200:
                 return data
             return cast(None | str | Unset, data)
 
-        migration_revision = _parse_migration_revision(
-            d.pop("migration_revision", UNSET)
-        )
+        migration_revision = _parse_migration_revision(d.pop("migration_revision", UNSET))
 
         health_check_response_200 = cls(
             status=status,

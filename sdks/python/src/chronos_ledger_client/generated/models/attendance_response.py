@@ -6,7 +6,6 @@ from typing import Any, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
-from typing_extensions import Self
 
 from ..models.verification_metric import VerificationMetric
 from ..types import UNSET, Unset
@@ -74,7 +73,7 @@ class AttendanceResponse:
         return field_dict
 
     @classmethod
-    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
+    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
         id = d.pop("id", UNSET)
 
@@ -96,18 +95,14 @@ class AttendanceResponse:
                 return data
             return cast(None | str | Unset, data)
 
-        authorizing_agent_id = _parse_authorizing_agent_id(
-            d.pop("authorizing_agent_id", UNSET)
-        )
+        authorizing_agent_id = _parse_authorizing_agent_id(d.pop("authorizing_agent_id", UNSET))
 
         _modification_timestamp = d.pop("modification_timestamp", UNSET)
         modification_timestamp: datetime.datetime | Unset
         if isinstance(_modification_timestamp, Unset):
             modification_timestamp = UNSET
         else:
-            modification_timestamp = datetime.datetime.fromisoformat(
-                _modification_timestamp
-            )
+            modification_timestamp = datetime.datetime.fromisoformat(_modification_timestamp)
 
         attendance_response = cls(
             id=id,

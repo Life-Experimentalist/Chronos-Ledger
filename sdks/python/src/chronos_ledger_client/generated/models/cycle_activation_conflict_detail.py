@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
-from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
@@ -51,9 +50,9 @@ class CycleActivationConflictDetail:
         return field_dict
 
     @classmethod
-    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
+    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.cycle_activation_conflict_detail_conflicts_item import (
-            CycleActivationConflictDetailConflictsItem,
+            CycleActivationConflictDetailConflictsItem,  # noqa: PLC0415
         )
 
         d = dict(src_dict)
@@ -64,9 +63,7 @@ class CycleActivationConflictDetail:
         if _conflicts is not UNSET:
             conflicts = []
             for conflicts_item_data in _conflicts:
-                conflicts_item = CycleActivationConflictDetailConflictsItem.from_dict(
-                    conflicts_item_data
-                )
+                conflicts_item = CycleActivationConflictDetailConflictsItem.from_dict(conflicts_item_data)
 
                 conflicts.append(conflicts_item)
 

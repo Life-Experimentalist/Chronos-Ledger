@@ -6,9 +6,7 @@ import httpx
 from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
-from ...models.users_list_available_staff_response_200_item import (
-    UsersListAvailableStaffResponse200Item,
-)
+from ...models.users_list_available_staff_response_200_item import UsersListAvailableStaffResponse200Item
 from ...types import UNSET, Response, Unset
 
 
@@ -45,9 +43,7 @@ def _parse_response(
         response_200 = []
         _response_200 = response.json()
         for response_200_item_data in _response_200:
-            response_200_item = UsersListAvailableStaffResponse200Item.from_dict(
-                response_200_item_data
-            )
+            response_200_item = UsersListAvailableStaffResponse200Item.from_dict(response_200_item_data)
 
             response_200.append(response_200_item)
 

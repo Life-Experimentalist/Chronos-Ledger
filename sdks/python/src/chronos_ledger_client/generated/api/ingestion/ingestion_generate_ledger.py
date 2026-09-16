@@ -7,9 +7,7 @@ import httpx
 from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
-from ...models.ingestion_generate_ledger_response_200 import (
-    IngestionGenerateLedgerResponse200,
-)
+from ...models.ingestion_generate_ledger_response_200 import IngestionGenerateLedgerResponse200
 from ...types import UNSET, Response, Unset
 
 

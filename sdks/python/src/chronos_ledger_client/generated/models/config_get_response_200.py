@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
-from typing_extensions import Self
 
 from ..types import UNSET, Unset
 
@@ -47,10 +46,8 @@ class ConfigGetResponse200:
         return field_dict
 
     @classmethod
-    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.config_get_response_200_labels import (
-            ConfigGetResponse200Labels,
-        )
+    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.config_get_response_200_labels import ConfigGetResponse200Labels  # noqa: PLC0415
 
         d = dict(src_dict)
         _labels = d.pop("labels", UNSET)

@@ -5,7 +5,6 @@ from typing import Any, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
-from typing_extensions import Self
 
 from ..models.institutional_role import InstitutionalRole
 from ..types import UNSET, Unset
@@ -87,7 +86,7 @@ class UserCreate:
         return field_dict
 
     @classmethod
-    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
+    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
         id = d.pop("id")
 
@@ -115,9 +114,7 @@ class UserCreate:
                 return data
             return cast(None | str | Unset, data)
 
-        assigned_base_station = _parse_assigned_base_station(
-            d.pop("assigned_base_station", UNSET)
-        )
+        assigned_base_station = _parse_assigned_base_station(d.pop("assigned_base_station", UNSET))
 
         def _parse_reporting_line_manager(data: object) -> None | str | Unset:
             if data is None:
@@ -126,9 +123,7 @@ class UserCreate:
                 return data
             return cast(None | str | Unset, data)
 
-        reporting_line_manager = _parse_reporting_line_manager(
-            d.pop("reporting_line_manager", UNSET)
-        )
+        reporting_line_manager = _parse_reporting_line_manager(d.pop("reporting_line_manager", UNSET))
 
         user_create = cls(
             id=id,

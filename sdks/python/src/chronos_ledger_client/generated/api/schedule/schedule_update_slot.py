@@ -37,7 +37,7 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> ErrorResponse | ReservationConflict | SlotUpdateResult | None:
+) -> ErrorResponse | ErrorResponse | ReservationConflict | SlotUpdateResult | None:
     if response.status_code == 200:
         response_200 = SlotUpdateResult.from_dict(response.json())
 
@@ -87,7 +87,7 @@ def _parse_response(
 
 def _build_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[ErrorResponse | ReservationConflict | SlotUpdateResult]:
+) -> Response[ErrorResponse | ErrorResponse | ReservationConflict | SlotUpdateResult]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -101,7 +101,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: MasterSlotUpdate,
-) -> Response[ErrorResponse | ReservationConflict | SlotUpdateResult]:
+) -> Response[ErrorResponse | ErrorResponse | ReservationConflict | SlotUpdateResult]:
     """Change a master slot, and the days it has already produced
 
      Admin only. A new window, lead or room is copied onto the days that are still plans, while days
@@ -161,7 +161,7 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     body: MasterSlotUpdate,
-) -> ErrorResponse | ReservationConflict | SlotUpdateResult | None:
+) -> ErrorResponse | ErrorResponse | ReservationConflict | SlotUpdateResult | None:
     """Change a master slot, and the days it has already produced
 
      Admin only. A new window, lead or room is copied onto the days that are still plans, while days
@@ -216,7 +216,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: MasterSlotUpdate,
-) -> Response[ErrorResponse | ReservationConflict | SlotUpdateResult]:
+) -> Response[ErrorResponse | ErrorResponse | ReservationConflict | SlotUpdateResult]:
     """Change a master slot, and the days it has already produced
 
      Admin only. A new window, lead or room is copied onto the days that are still plans, while days
@@ -274,7 +274,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     body: MasterSlotUpdate,
-) -> ErrorResponse | ReservationConflict | SlotUpdateResult | None:
+) -> ErrorResponse | ErrorResponse | ReservationConflict | SlotUpdateResult | None:
     """Change a master slot, and the days it has already produced
 
      Admin only. A new window, lead or room is copied onto the days that are still plans, while days

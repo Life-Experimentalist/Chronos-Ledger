@@ -6,7 +6,6 @@ from typing import Any, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
-from typing_extensions import Self
 
 from ..models.dynamic_state import DynamicState
 from ..models.execution_mode import ExecutionMode
@@ -161,7 +160,7 @@ class DailyLedgerResponse:
         return field_dict
 
     @classmethod
-    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
+    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
         id = d.pop("id", UNSET)
 
@@ -190,9 +189,7 @@ class DailyLedgerResponse:
                 return data
             return cast(None | str | Unset, data)
 
-        substitute_lead_id = _parse_substitute_lead_id(
-            d.pop("substitute_lead_id", UNSET)
-        )
+        substitute_lead_id = _parse_substitute_lead_id(d.pop("substitute_lead_id", UNSET))
 
         def _parse_resource_id(data: object) -> int | None | Unset:
             if data is None:
@@ -210,9 +207,7 @@ class DailyLedgerResponse:
                 return data
             return cast(None | str | Unset, data)
 
-        target_room_identifier = _parse_target_room_identifier(
-            d.pop("target_room_identifier", UNSET)
-        )
+        target_room_identifier = _parse_target_room_identifier(d.pop("target_room_identifier", UNSET))
 
         _delivery_format = d.pop("delivery_format", UNSET)
         delivery_format: ExecutionMode | Unset

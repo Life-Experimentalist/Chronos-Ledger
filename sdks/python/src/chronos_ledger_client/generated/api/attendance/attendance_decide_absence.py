@@ -6,9 +6,7 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...models.attendance_decide_absence_response_200 import (
-    AttendanceDecideAbsenceResponse200,
-)
+from ...models.attendance_decide_absence_response_200 import AttendanceDecideAbsenceResponse200
 from ...models.error_response import ErrorResponse
 from ...models.rsvp_decision import RsvpDecision
 from ...types import Response

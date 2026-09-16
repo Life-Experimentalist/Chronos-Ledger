@@ -5,7 +5,6 @@ from typing import Any, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
-from typing_extensions import Self
 
 from ..models.dynamic_state import DynamicState
 from ..models.execution_mode import ExecutionMode
@@ -108,7 +107,7 @@ class DailyLedgerUpdate:
         return field_dict
 
     @classmethod
-    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
+    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
         _operational_state = d.pop("operational_state", UNSET)
         operational_state: DynamicState | Unset
@@ -124,9 +123,7 @@ class DailyLedgerUpdate:
                 return data
             return cast(None | str | Unset, data)
 
-        substitute_lead_id = _parse_substitute_lead_id(
-            d.pop("substitute_lead_id", UNSET)
-        )
+        substitute_lead_id = _parse_substitute_lead_id(d.pop("substitute_lead_id", UNSET))
 
         _delivery_format = d.pop("delivery_format", UNSET)
         delivery_format: ExecutionMode | Unset
@@ -180,9 +177,7 @@ class DailyLedgerUpdate:
                 return data
             return cast(int | None | Unset, data)
 
-        precision_radius_meters = _parse_precision_radius_meters(
-            d.pop("precision_radius_meters", UNSET)
-        )
+        precision_radius_meters = _parse_precision_radius_meters(d.pop("precision_radius_meters", UNSET))
 
         daily_ledger_update = cls(
             operational_state=operational_state,

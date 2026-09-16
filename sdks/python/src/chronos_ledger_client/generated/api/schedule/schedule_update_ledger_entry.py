@@ -8,9 +8,7 @@ from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.daily_ledger_update import DailyLedgerUpdate
 from ...models.error_response import ErrorResponse
-from ...models.schedule_update_ledger_entry_response_200 import (
-    ScheduleUpdateLedgerEntryResponse200,
-)
+from ...models.schedule_update_ledger_entry_response_200 import ScheduleUpdateLedgerEntryResponse200
 from ...types import Response
 
 

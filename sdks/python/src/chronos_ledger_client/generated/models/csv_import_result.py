@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
-from typing_extensions import Self
 
 from ..models.csv_import_result_status import CsvImportResultStatus
 from ..types import UNSET, Unset
@@ -64,9 +63,7 @@ class CsvImportResult:
         if not isinstance(self.provisioned_credentials, Unset):
             provisioned_credentials = []
             for provisioned_credentials_item_data in self.provisioned_credentials:
-                provisioned_credentials_item = (
-                    provisioned_credentials_item_data.to_dict()
-                )
+                provisioned_credentials_item = provisioned_credentials_item_data.to_dict()
                 provisioned_credentials.append(provisioned_credentials_item)
 
         slots_corrected = self.slots_corrected
@@ -106,11 +103,9 @@ class CsvImportResult:
         return field_dict
 
     @classmethod
-    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.import_orphans import ImportOrphans
-        from ..models.provisioned_credential import (
-            ProvisionedCredential,
-        )
+    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.import_orphans import ImportOrphans  # noqa: PLC0415
+        from ..models.provisioned_credential import ProvisionedCredential  # noqa: PLC0415
 
         d = dict(src_dict)
         status = CsvImportResultStatus(d.pop("status"))

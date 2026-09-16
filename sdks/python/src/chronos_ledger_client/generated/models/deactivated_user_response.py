@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
-from typing_extensions import Self
 
 from ..models.access_readiness import AccessReadiness
 from ..models.institutional_role import InstitutionalRole
@@ -120,8 +119,8 @@ class DeactivatedUserResponse:
         return field_dict
 
     @classmethod
-    def from_dict(cls, src_dict: Mapping[str, Any]) -> Self:
-        from ..models.open_items import OpenItems
+    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.open_items import OpenItems  # noqa: PLC0415
 
         d = dict(src_dict)
         open_items = OpenItems.from_dict(d.pop("open_items"))
@@ -155,9 +154,7 @@ class DeactivatedUserResponse:
                 return data
             return cast(None | str | Unset, data)
 
-        assigned_base_station = _parse_assigned_base_station(
-            d.pop("assigned_base_station", UNSET)
-        )
+        assigned_base_station = _parse_assigned_base_station(d.pop("assigned_base_station", UNSET))
 
         _current_occupancy_index = d.pop("current_occupancy_index", UNSET)
         current_occupancy_index: AccessReadiness | Unset
@@ -173,9 +170,7 @@ class DeactivatedUserResponse:
                 return data
             return cast(None | str | Unset, data)
 
-        reporting_line_manager = _parse_reporting_line_manager(
-            d.pop("reporting_line_manager", UNSET)
-        )
+        reporting_line_manager = _parse_reporting_line_manager(d.pop("reporting_line_manager", UNSET))
 
         def _parse_deactivated_at(data: object) -> datetime.datetime | None | Unset:
             if data is None:
