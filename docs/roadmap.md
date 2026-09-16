@@ -80,10 +80,11 @@ drift and signing; [sdks.md](sdks.md) for client libraries;
 
 ### P-6. `chronos` CLI and channels
 
-See [distribution.md](distribution.md), sections 1 to 3 and the order of work.
-In 0.13: the CLI, drift handling, GitHub Releases, install scripts, Homebrew
-tap, Scoop bucket, npm, PyPI, crates.io and a WinGet submission. Windows
-signing lands when the certificate is issued and does not block the release.
+See [distribution.md](distribution.md) and [cli.md](cli.md). In 0.13: the CLI
+(`cli/`), drift handling, GitHub Releases, install scripts, the Homebrew tap
+and the Scoop bucket. npm, PyPI, crates.io and WinGet moved out of 0.13 and
+are added on request, one at a time. Windows signing lands when the
+certificate is issued and does not block the release.
 
 ### P-7. TypeScript and Python SDKs
 
