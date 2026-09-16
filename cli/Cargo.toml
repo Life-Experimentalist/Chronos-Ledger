@@ -1,0 +1,39 @@
+[package]
+name = "chronos-ledger-cli"
+# Moves with the server: release-please writes this line (release-please-config.json),
+# and `chronos upgrade` refuses a server newer than the CLI running it.
+version = "0.12.0"
+edition = "2024"
+description = "Install, upgrade, back up and diagnose a Chronos Ledger server"
+license = "Apache-2.0"
+repository = "https://github.com/Life-Experimentalist/Chronos-Ledger"
+rust-version = "1.88"
+publish = false
+
+[[bin]]
+name = "chronos"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+dirs = "6"
+getrandom = "0.4"
+# Only `self update` and `upgrade` without --to open a socket. rustls with bundled
+# roots, so the static musl build links no OpenSSL.
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+sha2 = "0.11"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
