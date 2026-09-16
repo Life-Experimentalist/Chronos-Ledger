@@ -6,6 +6,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     api_keys,
     attendance,
+    audit,
     auth,
     calendar_sync,
     guest,
@@ -30,3 +31,4 @@ api_router.include_router(guest.router, prefix="/guest", tags=["Guest Gate"])
 api_router.include_router(ingestion.router, prefix="/ingestion", tags=["Data Ingestion"])
 api_router.include_router(websocket.router, tags=["WebSocket"])
 api_router.include_router(calendar_sync.router, prefix="/sync", tags=["Calendar Sync"])
+api_router.include_router(audit.router, prefix="/audit", tags=["Audit"])

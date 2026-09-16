@@ -4,14 +4,14 @@
 
 The user list, the staff directory, the cycle list, the slot list, today's
 ledger, the ledger over a range and the staff locator each return every row
-they match. That is fine
-for one department and heavy for an institution with thousands of members, so
-each takes an optional limit and offset. Leaving both off returns every row,
+they match. That is fine for one department and heavy for an institution with
+thousands of members, so each takes an optional limit and offset. Leaving both off returns every row,
 as these routes always have, so a client written against them keeps working.
 
 Paged or not, the response says in X-Total-Count how many rows matched, which
 is how a client knows how many pages there are without asking for all of them.
-Rows come back in id order. Without an order the database may return rows in
+Rows come back in the order the route names, id unless it says otherwise.
+Without an order the database may return rows in
 whatever order it likes, and the same offset could land somewhere different
 from one request to the next.
 """

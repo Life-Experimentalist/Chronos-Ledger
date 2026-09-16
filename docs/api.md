@@ -197,6 +197,7 @@ land open by nobody remembering to annotate it.
 | `guest` | the kiosk endpoints |
 | `ingestion` | CSV upload and ledger generation |
 | `sync` | the calendar feed |
+| `audit` | the audit log |
 
 A key holding `schedule:read` passes `GET /schedule/slots` and is refused
 `POST /schedule/slots` with `403` and a detail naming `schedule:write`. The
@@ -285,20 +286,20 @@ Revokes immediately: the next request using it gets `401`.
 
 ## Paging
 
-Seven routes return a whole list: `GET /users/`, `GET /users/staff/available`,
+Eight routes return a whole list: `GET /users/`, `GET /users/staff/available`,
 `GET /schedule/cycles`, `GET /schedule/slots`, `GET /schedule/ledger/today`,
-`GET /schedule/ledger` and `GET /schedule/staff/all/locations`. Each takes two optional query
-parameters:
+`GET /schedule/ledger`, `GET /schedule/staff/all/locations` and `GET /audit/`.
+Each takes two optional query parameters:
 
 - `limit`: at most this many rows, 1 or more.
 - `offset`: skip this many rows first, 0 or more.
 
 Leave both off and the route returns every row it matches, as it always has.
 Rows come back in id order (`staff_id` for the locator, date then start time
-for `GET /schedule/ledger`), and every response,
-paged or not, carries `X-Total-Count`: how many rows matched before the page
-was cut. A `limit` of 0 or a negative `offset` is refused with `422`, and an
-offset past the end is an empty list with the count still set.
+for `GET /schedule/ledger`, newest first for `GET /audit/`), and every
+response, paged or not, carries `X-Total-Count`: how many rows matched before
+the page was cut. A `limit` of 0 or a negative `offset` is refused with `422`,
+and an offset past the end is an empty list with the count still set.
 
 ```http
 GET /api/v1/users/?role=MEMBER&limit=50&offset=100
@@ -1378,6 +1379,43 @@ remembered. That catch-up never writes a date that has already passed.
 A slot gets a day only while its cycle is open and the date is inside the
 cycle's own dates. Running this again for a date is harmless: a slot has at
 most one day per date, and the database refuses a second (migration 017).
+
+---
+
+## Audit
+
+Every request under `/api/v1` that can change something (any method other
+than `GET`, `HEAD` and `OPTIONS`) leaves one record once it has been answered,
+refused ones included: a `401`, a `403` for role or key scope, a `422`. A
+record holds the time, the account (`actor_id`), the API key if one was used
+(`api_key_id`), the method, the path and the status code. Request and
+response bodies are never stored, so a login is recorded without its password
+and an upload without its file. A login's `actor_id` is null, since nobody is
+signed in yet when it arrives.
+
+Records point at no other table, so deleting an account or revoking a key
+leaves its history. If a record cannot be written the request still succeeds
+and the failure is logged.
+
+### GET /audit/ `[SUPER_ADMIN]`
+
+Records newest first, paged like the other lists. Optional filters: `from`
+and `to` (dates in the organization's timezone, both included; `to` before
+`from` is `422`) and `actor_id`. An API key needs `audit:read`.
+
+```json
+[
+  {
+    "id": 4812,
+    "at": "2026-01-06T08:31:02.114000+00:00",
+    "actor_id": "SVC001",
+    "api_key_id": 3,
+    "method": "POST",
+    "path": "/api/v1/resources/12/reservations",
+    "status_code": 201
+  }
+]
+```
 
 ---
 

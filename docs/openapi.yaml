@@ -1029,6 +1029,27 @@ components:
           nullable: true
           description: Geofence radius override for this specific session.
 
+    AuditRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        at:
+          type: string
+          format: date-time
+        actor_id:
+          type: [string, "null"]
+          description: The account, or null when the request carried no valid credentials.
+        api_key_id:
+          type: [integer, "null"]
+          description: The key used, or null for a signed-in person.
+        method:
+          type: string
+        path:
+          type: string
+        status_code:
+          type: integer
+
     DailyLedgerResponse:
       type: object
       properties:
@@ -3565,6 +3586,54 @@ paths:
           $ref: "#/components/responses/Forbidden"
 
   # ── Calendar Sync ─────────────────────────
+  /api/v1/audit/:
+    get:
+      tags: [Audit]
+      summary: Writes made through the API, newest first
+      description: >
+        Requires `SUPER_ADMIN`; an API key needs `audit:read`. One record per
+        request under `/api/v1` with a method other than GET, HEAD or OPTIONS,
+        including refused ones. Bodies are never stored. `from` and `to` are
+        dates in the organization's timezone, both included.
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: actor_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: The records.
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/XTotalCount"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditRecord"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
   /api/v1/sync/feed-token:
     get:
       tags: [Calendar Sync]

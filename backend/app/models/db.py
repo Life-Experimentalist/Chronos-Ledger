@@ -507,3 +507,23 @@ class ApiKey(Base):
     # this column existed was.
     expires_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class AuditRecord(Base):
+    """One write made through the API: who, with which key, what, and how it ended.
+
+    No foreign keys on purpose. A record has to outlive the account and the
+    key that made it, and a user deleted with ON DELETE CASCADE would take
+    their history with them. Bodies are never kept: a login carries a
+    password and an upload carries a whole file.
+    """
+
+    __tablename__ = "audit_records"
+
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    at = Column(DateTime(timezone=True), nullable=False, index=True)
+    actor_id = Column(String(50), nullable=True, index=True)
+    api_key_id = Column(Integer, nullable=True)
+    method = Column(String(10), nullable=False)
+    path = Column(String(500), nullable=False)
+    status_code = Column(Integer, nullable=False)

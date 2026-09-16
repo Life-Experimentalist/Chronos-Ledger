@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.v1.router import api_router
+from app.core.audit import AuditMiddleware
 from app.core.bootstrap import apply_initial_admin_password
 from app.core.config import docs_are_published, get_settings
 from app.core.database import SessionLocal
@@ -175,6 +176,7 @@ app.add_middleware(
     expose_headers=[TOTAL_COUNT_HEADER],
 )
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(AuditMiddleware)
 
 app.include_router(api_router, prefix="/api/v1")
 

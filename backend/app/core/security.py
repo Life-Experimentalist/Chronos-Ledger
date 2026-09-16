@@ -157,6 +157,8 @@ def get_current_user_id(
                 detail="Invalid or expired token",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+        # Read by the audit log once the response has gone out.
+        request.state.actor_id = payload["sub"]
         return payload["sub"]
 
     if api_key:
@@ -168,6 +170,12 @@ def get_current_user_id(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid API key",
             )
+        # Set before the expiry and scope checks, so the audit log can say
+        # which key a refused write came from. Also read by get_current_user,
+        # which holds a person at the first-login gate and has no reason to
+        # hold a key there.
+        request.state.api_key_id = row.id
+        request.state.actor_id = row.user_id
         # Expiry and scope are checked here, where the key is looked up, and
         # nowhere else. A second gate somewhere further in is a gate some
         # future endpoint forgets to stand behind.
@@ -186,9 +194,6 @@ def get_current_user_id(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"API key is not scoped for {needed or 'this request'}",
             )
-        # Read by get_current_user, which holds a person at the first-login
-        # gate and has no reason to hold a key there.
-        request.state.api_key_id = row.id
         return row.user_id
 
     raise HTTPException(
