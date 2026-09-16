@@ -44,7 +44,7 @@ CODE_TAKEN = "a resource with that code already exists"
 OVERLAP_CONSTRAINT = "ex_reservations_no_overlap"
 
 
-@router.get("/", response_model=list[ResourceResponse])
+@router.get("/", operation_id="resources.list", response_model=list[ResourceResponse])
 def list_resources(
     resource_type: ResourceType | None = None,
     active: bool | None = None,
@@ -68,7 +68,12 @@ def list_resources(
     return query.order_by(Resource.code).all()
 
 
-@router.post("/", response_model=ResourceResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    operation_id="resources.create",
+    response_model=ResourceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_resource(
     payload: ResourceCreate,
     db: Session = Depends(get_db),
@@ -103,7 +108,11 @@ def create_resource(
     return resource
 
 
-@router.get("/{resource_id}/availability", response_model=AvailabilityResponse)
+@router.get(
+    "/{resource_id}/availability",
+    operation_id="resources.getAvailability",
+    response_model=AvailabilityResponse,
+)
 def resource_availability(
     resource_id: int,
     from_: datetime.date = Query(alias="from"),
@@ -166,7 +175,7 @@ def resource_availability(
     }
 
 
-@router.patch("/{resource_id}", response_model=ResourceResponse)
+@router.patch("/{resource_id}", operation_id="resources.update", response_model=ResourceResponse)
 def update_resource(
     resource_id: int,
     payload: ResourceUpdate,
@@ -276,6 +285,7 @@ def _view(reservation: Reservation, resource: Resource) -> dict:
 
 @router.post(
     "/{resource_id}/reservations",
+    operation_id="resources.createReservation",
     response_model=ReservationResponse,
     status_code=status.HTTP_201_CREATED,
     responses={409: {"model": ReservationConflict}},
@@ -380,7 +390,11 @@ def create_reservation(
     return _view(reservation, resource)
 
 
-@router.delete("/{resource_id}/reservations/{reservation_id}", response_model=ReservationResponse)
+@router.delete(
+    "/{resource_id}/reservations/{reservation_id}",
+    operation_id="resources.cancelReservation",
+    response_model=ReservationResponse,
+)
 def cancel_reservation(
     resource_id: int,
     reservation_id: int,

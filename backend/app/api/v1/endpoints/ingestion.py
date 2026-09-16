@@ -20,7 +20,7 @@ router = APIRouter()
 _CHUNK_BYTES = 1024 * 1024
 
 
-@router.post("/upload-csv")
+@router.post("/upload-csv", operation_id="ingestion.uploadCsv")
 def upload_csv(
     cycle_id: int,
     file: UploadFile = File(...),
@@ -70,7 +70,7 @@ def upload_csv(
             os.remove(tmp_path)
 
 
-@router.post("/generate-ledger")
+@router.post("/generate-ledger", operation_id="ingestion.generateLedger")
 def trigger_ledger_generation(
     target_date: datetime.date | None = None,
     db: Session = Depends(get_db),

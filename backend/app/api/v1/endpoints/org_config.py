@@ -9,7 +9,7 @@ from app.core.vocabulary import labels_for
 router = APIRouter()
 
 
-@router.get("")
+@router.get("", operation_id="config.get")
 def read_org_config():
     """Public display config: what the UI needs before anyone has logged in.
 

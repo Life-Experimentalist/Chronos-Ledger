@@ -139,7 +139,9 @@ def _refuse_if_a_day_is_there(
 # ── Planning Cycles ──────────────────────────────────────────────────────────
 
 
-@router.get("/cycles", response_model=list[PlanningCycleResponse])
+@router.get(
+    "/cycles", operation_id="schedule.listCycles", response_model=list[PlanningCycleResponse]
+)
 def list_cycles(
     page: Page = Depends(),
     db: Session = Depends(get_db),
@@ -148,7 +150,7 @@ def list_cycles(
     return page.rows(db.query(PlanningCycle), PlanningCycle.id)
 
 
-@router.post("/cycles", response_model=PlanningCycleResponse)
+@router.post("/cycles", operation_id="schedule.createCycle", response_model=PlanningCycleResponse)
 def create_cycle(
     payload: PlanningCycleCreate,
     db: Session = Depends(get_db),
@@ -161,7 +163,7 @@ def create_cycle(
     return cycle
 
 
-@router.patch("/cycles/{cycle_id}/close")
+@router.patch("/cycles/{cycle_id}/close", operation_id="schedule.closeCycle")
 def close_cycle(
     cycle_id: int, db: Session = Depends(get_db), _=Depends(require_roles("SUPER_ADMIN"))
 ):
@@ -207,7 +209,11 @@ def close_cycle(
     }
 
 
-@router.patch("/cycles/{cycle_id}/open", responses={409: {"model": CycleActivationConflict}})
+@router.patch(
+    "/cycles/{cycle_id}/open",
+    operation_id="schedule.openCycle",
+    responses={409: {"model": CycleActivationConflict}},
+)
 def open_cycle(
     cycle_id: int, db: Session = Depends(get_db), _=Depends(require_roles("SUPER_ADMIN"))
 ):
@@ -292,7 +298,7 @@ def open_cycle(
     return {"message": f"Cycle {cycle_id} opened"}
 
 
-@router.post("/cycles/{old_id}/clone-to/{new_id}")
+@router.post("/cycles/{old_id}/clone-to/{new_id}", operation_id="schedule.cloneCycle")
 def clone_cycle_offerings(
     old_id: int,
     new_id: int,
@@ -366,7 +372,7 @@ def clone_cycle_offerings(
 # ── Master Slots ──────────────────────────────────────────────────────────────
 
 
-@router.get("/slots", response_model=list[dict])
+@router.get("/slots", operation_id="schedule.listSlots", response_model=list[dict])
 def list_master_slots(
     cycle_id: int | None = None,
     page: Page = Depends(),
@@ -405,7 +411,9 @@ def _refuse_unless_active(db: Session, user_id: str, role: str) -> None:
         raise HTTPException(status_code=422, detail=f"{role} is deactivated")
 
 
-@router.post("/slots", responses={409: {"model": ReservationConflict}})
+@router.post(
+    "/slots", operation_id="schedule.createSlot", responses={409: {"model": ReservationConflict}}
+)
 def create_master_slot(
     payload: MasterSlotCreate,
     db: Session = Depends(get_db),
@@ -456,7 +464,11 @@ def create_master_slot(
     return {"id": slot.id}
 
 
-@router.patch("/slots/{slot_id}", responses={409: {"model": ReservationConflict}})
+@router.patch(
+    "/slots/{slot_id}",
+    operation_id="schedule.updateSlot",
+    responses={409: {"model": ReservationConflict}},
+)
 def update_master_slot(
     slot_id: int,
     payload: MasterSlotUpdate,
@@ -554,7 +566,7 @@ def update_master_slot(
     return {**result, "ledger_rows_removed": removed}
 
 
-@router.delete("/slots/{slot_id}")
+@router.delete("/slots/{slot_id}", operation_id="schedule.deleteSlot")
 def delete_master_slot(
     slot_id: int,
     db: Session = Depends(get_db),
@@ -677,7 +689,7 @@ def _ledger_row(e: DailyLedger) -> dict:
     }
 
 
-@router.get("/ledger/today")
+@router.get("/ledger/today", operation_id="schedule.getTodayLedger")
 def get_today_ledger(
     page: Page = Depends(),
     db: Session = Depends(get_db),
@@ -689,7 +701,7 @@ def get_today_ledger(
     return [_ledger_row(e) for e in page.rows(q, DailyLedger.id)]
 
 
-@router.get("/ledger")
+@router.get("/ledger", operation_id="schedule.listLedger")
 def get_ledger_range(
     from_: datetime.date = Query(alias="from"),
     to: datetime.date = Query(),
@@ -716,7 +728,7 @@ def get_ledger_range(
     return [_ledger_row(e) for e in page.rows(q, *keys)]
 
 
-@router.patch("/ledger/{ledger_id}")
+@router.patch("/ledger/{ledger_id}", operation_id="schedule.updateLedgerEntry")
 def update_ledger_entry(
     ledger_id: int,
     payload: DailyLedgerUpdate,
@@ -752,7 +764,11 @@ def update_ledger_entry(
 # ── Staff Location Resolution ───────────────────────────────────────────────
 
 
-@router.get("/staff/{staff_id}/location", response_model=StaffLocationResponse)
+@router.get(
+    "/staff/{staff_id}/location",
+    operation_id="schedule.getStaffLocation",
+    response_model=StaffLocationResponse,
+)
 def get_staff_location(
     staff_id: str,
     db: Session = Depends(get_db),
@@ -772,7 +788,7 @@ def get_staff_location(
     )
 
 
-@router.get("/staff/all/locations")
+@router.get("/staff/all/locations", operation_id="schedule.listStaffLocations")
 def get_all_staff_locations(
     page: Page = Depends(),
     db: Session = Depends(get_db),

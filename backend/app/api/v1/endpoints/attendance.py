@@ -96,7 +96,7 @@ def _ensure_ledger_authority(current_user: User, ledger: DailyLedger) -> None:
         raise HTTPException(status_code=403, detail="Not authorized for this ledger")
 
 
-@router.post("/mark")
+@router.post("/mark", operation_id="attendance.mark")
 def mark_attendance(
     payload: AttendanceMarkRequest,
     db: Session = Depends(get_db),
@@ -155,7 +155,7 @@ def mark_attendance(
     }
 
 
-@router.post("/batch")
+@router.post("/batch", operation_id="attendance.markBatch")
 def batch_mark_attendance(
     payload: AttendanceBatchRequest,
     db: Session = Depends(get_db),
@@ -231,7 +231,11 @@ def _write_marks(
     db.commit()
 
 
-@router.get("/ledger/{ledger_id}", response_model=list[AttendanceResponse])
+@router.get(
+    "/ledger/{ledger_id}",
+    operation_id="attendance.listForLedger",
+    response_model=list[AttendanceResponse],
+)
 def get_attendance_for_ledger(
     ledger_id: int,
     db: Session = Depends(get_db),
@@ -262,7 +266,9 @@ def get_attendance_for_ledger(
 # ── Reverse RSVP (Absence System) ────────────────────────────────────────────
 
 
-@router.post("/absence", response_model=ReverseRsvpResponse)
+@router.post(
+    "/absence", operation_id="attendance.submitAbsence", response_model=ReverseRsvpResponse
+)
 def submit_absence(
     payload: ReverseRsvpCreate,
     background_tasks: BackgroundTasks,
@@ -336,7 +342,11 @@ def _decidable_by(current_user: User):
     return or_(mine, left_behind)
 
 
-@router.get("/absence/pending", response_model=list[ReverseRsvpResponse])
+@router.get(
+    "/absence/pending",
+    operation_id="attendance.listPendingAbsences",
+    response_model=list[ReverseRsvpResponse],
+)
 def get_pending_absences(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -351,7 +361,7 @@ def get_pending_absences(
     )
 
 
-@router.patch("/absence/{log_id}/decide")
+@router.patch("/absence/{log_id}/decide", operation_id="attendance.decideAbsence")
 def decide_absence(
     log_id: int,
     payload: RsvpDecision,
@@ -380,7 +390,9 @@ def decide_absence(
 # ── Annotations ───────────────────────────────────────────────────────────────
 
 
-@router.post("/annotations", response_model=AnnotationResponse)
+@router.post(
+    "/annotations", operation_id="attendance.createAnnotation", response_model=AnnotationResponse
+)
 def create_annotation(
     payload: AnnotationCreate,
     db: Session = Depends(get_db),
@@ -407,7 +419,11 @@ def create_annotation(
     return annotation
 
 
-@router.get("/annotations/{ledger_id}", response_model=list[AnnotationResponse])
+@router.get(
+    "/annotations/{ledger_id}",
+    operation_id="attendance.listAnnotations",
+    response_model=list[AnnotationResponse],
+)
 def get_annotations(
     ledger_id: int,
     db: Session = Depends(get_db),

@@ -16,7 +16,7 @@ from app.models.db import AuditRecord
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("/", operation_id="audit.list")
 def list_audit_records(
     from_: datetime.date | None = Query(None, alias="from"),
     to: datetime.date | None = None,

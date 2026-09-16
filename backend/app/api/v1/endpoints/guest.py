@@ -36,7 +36,7 @@ _AVAILABILITY_LABELS = {
 }
 
 
-@router.post("/register-checkin")
+@router.post("/register-checkin", operation_id="guest.checkIn")
 def process_guest_entry(
     payload: GuestCheckInRequest,
     background_tasks: BackgroundTasks,
@@ -103,7 +103,7 @@ def process_guest_entry(
     }
 
 
-@router.patch("/{entry_id}/decide")
+@router.patch("/{entry_id}/decide", operation_id="guest.decide")
 def decide_guest_entry(
     entry_id: int,
     payload: GuestDecisionRequest,
@@ -126,7 +126,7 @@ def decide_guest_entry(
     return {"status": payload.decision.value, "guest": entry.guest_name}
 
 
-@router.get("/visit/{code}", response_model=GuestVisitStatus)
+@router.get("/visit/{code}", operation_id="guest.getVisit", response_model=GuestVisitStatus)
 def get_visit_status(code: str, db: Session = Depends(get_db)):
     # No credential. The visitor has no account and the phone they follow the
     # check-in from holds no kiosk key, so the code is the credential, and it
@@ -145,7 +145,7 @@ def get_visit_status(code: str, db: Session = Depends(get_db)):
     return entry
 
 
-@router.get("/pending", response_model=list[GuestResponse])
+@router.get("/pending", operation_id="guest.listPending", response_model=list[GuestResponse])
 def get_pending_guests(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -160,7 +160,9 @@ def get_pending_guests(
     )
 
 
-@router.get("/directory", response_model=list[StaffAvailabilityResponse])
+@router.get(
+    "/directory", operation_id="guest.getDirectory", response_model=list[StaffAvailabilityResponse]
+)
 def get_staff_directory(
     response: Response,
     name: str | None = Query(default=None, min_length=2, max_length=100),

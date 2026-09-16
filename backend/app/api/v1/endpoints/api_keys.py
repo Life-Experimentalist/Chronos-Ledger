@@ -64,7 +64,12 @@ class ApiKeyCreated(ApiKeyResponse):
     api_key: str
 
 
-@router.post("/", response_model=ApiKeyCreated, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    operation_id="apiKeys.create",
+    response_model=ApiKeyCreated,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_api_key(
     payload: ApiKeyCreate,
     db: Session = Depends(get_db),
@@ -116,7 +121,7 @@ def create_api_key(
     )
 
 
-@router.get("/", response_model=list[ApiKeyResponse])
+@router.get("/", operation_id="apiKeys.list", response_model=list[ApiKeyResponse])
 def list_api_keys(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("SUPER_ADMIN")),
@@ -124,7 +129,7 @@ def list_api_keys(
     return db.query(ApiKey).order_by(ApiKey.id).all()
 
 
-@router.delete("/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{key_id}", operation_id="apiKeys.revoke", status_code=status.HTTP_204_NO_CONTENT)
 def revoke_api_key(
     key_id: int,
     db: Session = Depends(get_db),

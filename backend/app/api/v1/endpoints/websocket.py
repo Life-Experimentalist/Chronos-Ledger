@@ -130,7 +130,7 @@ async def websocket_endpoint(
         socket_broker.terminate_session(user_id, websocket)
 
 
-@router.get("/ws/stats")
+@router.get("/ws/stats", operation_id="ws.getStats")
 async def ws_stats(_=Depends(require_roles("SUPER_ADMIN"))):
     """How many people have a socket open right now, on every instance.
 

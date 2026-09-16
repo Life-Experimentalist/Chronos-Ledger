@@ -76,7 +76,7 @@ def _check_manager(user_id: str, manager_id: str, db: Session) -> None:
         above = db.query(User.reporting_line_manager).filter(User.id == above).scalar()
 
 
-@router.get("/", response_model=list[UserResponse])
+@router.get("/", operation_id="users.list", response_model=list[UserResponse])
 def list_users(
     role: str | None = None,
     unit: str | None = None,
@@ -98,7 +98,12 @@ def list_users(
     return page.rows(q, User.id)
 
 
-@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    operation_id="users.create",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_user(
     payload: UserCreate,
     db: Session = Depends(get_db),
@@ -133,7 +138,7 @@ def create_user(
 
 # NOTE: /staff/available MUST be declared before /{user_id} or FastAPI
 # will match the literal string "staff" as a user_id path param.
-@router.get("/staff/available")
+@router.get("/staff/available", operation_id="users.listAvailableStaff")
 def list_available_staff(
     unit: str | None = None,
     page: Page = Depends(),
@@ -157,7 +162,7 @@ def list_available_staff(
     ]
 
 
-@router.get("/{user_id}", response_model=UserResponse)
+@router.get("/{user_id}", operation_id="users.get", response_model=UserResponse)
 def get_user(
     user_id: str,
     db: Session = Depends(get_db),
@@ -176,7 +181,7 @@ def get_user(
     return user
 
 
-@router.patch("/{user_id}", response_model=UserResponse)
+@router.patch("/{user_id}", operation_id="users.update", response_model=UserResponse)
 def update_user(
     user_id: str,
     payload: UserUpdate,
@@ -211,7 +216,11 @@ def update_user(
     return user
 
 
-@router.post("/{user_id}/reset-password", response_model=PasswordResetResponse)
+@router.post(
+    "/{user_id}/reset-password",
+    operation_id="users.resetPassword",
+    response_model=PasswordResetResponse,
+)
 def reset_user_password(
     user_id: str,
     db: Session = Depends(get_db),
@@ -299,7 +308,9 @@ def _open_items(user_id: str, db: Session) -> OpenItems:
     )
 
 
-@router.post("/{user_id}/deactivate", response_model=DeactivatedUserResponse)
+@router.post(
+    "/{user_id}/deactivate", operation_id="users.deactivate", response_model=DeactivatedUserResponse
+)
 def deactivate_user(
     user_id: str,
     background_tasks: BackgroundTasks,
@@ -347,7 +358,7 @@ def deactivate_user(
     )
 
 
-@router.post("/{user_id}/reactivate", response_model=UserResponse)
+@router.post("/{user_id}/reactivate", operation_id="users.reactivate", response_model=UserResponse)
 def reactivate_user(
     user_id: str,
     db: Session = Depends(get_db),
@@ -369,7 +380,7 @@ def reactivate_user(
     return user
 
 
-@router.put("/{user_id}/status")
+@router.put("/{user_id}/status", operation_id="users.updateStatus")
 def update_user_status(
     user_id: str,
     payload: UserStatusUpdate,

@@ -18,16 +18,15 @@ how to authenticate, how to retry a write safely, and how to page.
 Generated clients are only as right as the spec. Three things have to hold
 before the first library is published.
 
-1. **The spec matches the server, enforced in CI.** `docs/openapi.yaml` is
-   written by hand and has drifted from the routes before. Add a CI job that
-   loads `app.openapi()` and fails when a method and path pair, a request
-   body, or a response schema differs from `docs/openapi.yaml`. Descriptions
-   may differ; shapes may not.
-2. **Every operation has a stable `operationId`.** The spec has none today,
-   so generators invent names like `post_api_v1_resources__id__reservations`.
-   Name them `<area>.<verb>` (for example `resources.createReservation`) in
-   both the FastAPI routes and the YAML, and make the CI job in step 1 check
-   they agree. Renaming one later is a breaking change for every SDK.
+1. **The spec matches the server, enforced in CI.** Done in 0.13:
+   `backend/tests/test_openapi_spec_matches_app.py` loads `app.openapi()` and
+   fails when a method and path pair, a request body, or a success response
+   schema differs from `docs/openapi.yaml`. Descriptions may differ; shapes
+   may not.
+2. **Every operation has a stable `operationId`.** Done in 0.13: every route
+   is named `<area>.<verb>` (for example `resources.createReservation`) in
+   both the FastAPI routes and the YAML, and the same test checks they agree.
+   Renaming one later is a breaking change for every SDK.
 3. **An OpenAPI 3.0 copy for tools that need it.** The spec is 3.1. Some Go
    and Rust generators only read 3.0, so CI also produces a down-converted
    `openapi-3.0.yaml` as a build artifact (not committed). Check each

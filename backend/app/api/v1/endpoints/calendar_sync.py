@@ -31,7 +31,7 @@ def _feed_payload(user: User) -> dict:
     }
 
 
-@router.get("/feed-token")
+@router.get("/feed-token", operation_id="sync.getFeedToken")
 def get_feed_token(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not current_user.calendar_feed_token:
         current_user.calendar_feed_token = generate_feed_token()
@@ -39,7 +39,7 @@ def get_feed_token(db: Session = Depends(get_db), current_user: User = Depends(g
     return _feed_payload(current_user)
 
 
-@router.post("/feed-token/rotate")
+@router.post("/feed-token/rotate", operation_id="sync.rotateFeedToken")
 def rotate_feed_token(
     db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
@@ -141,7 +141,7 @@ def _utc_stamp(day: datetime.date, wall: datetime.time) -> str:
     return local.astimezone(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
-@router.get("/user-feed/{feed_token}.ics")
+@router.get("/user-feed/{feed_token}.ics", operation_id="sync.getFeed")
 def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
     # The feed stays unauthenticated so calendar apps can subscribe, but the key
     # is an unguessable per-user token, never the user id.
