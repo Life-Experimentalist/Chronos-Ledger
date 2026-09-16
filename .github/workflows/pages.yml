@@ -33,10 +33,17 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # Only the landing page and what it loads. Uploading docs/ as a whole
+      # published the Markdown, the OpenAPI file and desktop.ini as raw files.
+      - name: Stage the landing page
+        run: |
+          mkdir -p _site
+          cp docs/index.html docs/logo.svg docs/icon.png docs/favicon-32.png              docs/apple-touch-icon.png docs/robots.txt docs/sitemap.xml _site/
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment
