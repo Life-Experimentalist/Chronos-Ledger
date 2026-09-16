@@ -93,7 +93,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Stamp release version into docker-compose.prod.yml
         run: |

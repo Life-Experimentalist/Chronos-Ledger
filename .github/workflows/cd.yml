@@ -57,7 +57,7 @@ jobs:
       attestations: write
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # ── Registry targets ───────────────────────────────────────────────────
       # Both the owner and the namespace are lowercased here rather than left
