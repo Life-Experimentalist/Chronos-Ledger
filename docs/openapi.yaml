@@ -2641,6 +2641,51 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/schedule/ledger:
+    get:
+      tags: [Schedule]
+      summary: Ledger entries between two dates
+      description: >
+        Both dates included, ordered by date, then start time. Rows and the
+        role filter are the same as `/schedule/ledger/today`. `to` before
+        `from` is refused with 422.
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: resource_id
+          in: query
+          required: false
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: The ledger over the range.
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/XTotalCount"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DailyLedgerResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
   /api/v1/schedule/ledger/{ledger_id}:
     patch:
       tags: [Schedule]

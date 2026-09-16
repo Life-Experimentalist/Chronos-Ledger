@@ -1,6 +1,6 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
-"""The six list routes page on request and always say how many rows matched.
+"""The seven list routes page on request and always say how many rows matched.
 
 Paging is opt-in: with no limit and no offset a route returns every row, as it
 always has, so clients written before it keep working. Pages are checked
@@ -36,8 +36,12 @@ LISTS = [
     ("/api/v1/schedule/cycles", "id"),
     ("/api/v1/schedule/slots", "id"),
     ("/api/v1/schedule/ledger/today", "id"),
+    ("/api/v1/schedule/ledger", "id"),
     ("/api/v1/schedule/staff/all/locations", "staff_id"),
 ]
+
+# Query parameters a list cannot be asked without.
+REQUIRED = {"/api/v1/schedule/ledger": {"from": "2000-01-01", "to": "2100-12-31"}}
 
 
 class _FakeRedis:
@@ -122,7 +126,7 @@ def _ids(res, key):
 @pytest.mark.parametrize(("path", "key"), LISTS)
 def test_an_unpaged_list_is_every_row_with_the_count(client, lists, path, key):
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
-    res = client.get(path, headers=headers)
+    res = client.get(path, headers=headers, params=REQUIRED.get(path))
     assert res.status_code == 200
     assert len(res.json()) >= 5
     assert res.headers["X-Total-Count"] == str(len(res.json()))
@@ -131,10 +135,12 @@ def test_an_unpaged_list_is_every_row_with_the_count(client, lists, path, key):
 @pytest.mark.parametrize(("path", "key"), LISTS)
 def test_the_pages_put_together_are_the_whole_list(client, lists, path, key):
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
-    whole = _ids(client.get(path, headers=headers), key)
+    whole = _ids(client.get(path, headers=headers, params=REQUIRED.get(path)), key)
     paged = []
     for offset in range(0, len(whole), 2):
-        res = client.get(path, headers=headers, params={"limit": 2, "offset": offset})
+        res = client.get(
+            path, headers=headers, params={**REQUIRED.get(path, {}), "limit": 2, "offset": offset}
+        )
         assert res.status_code == 200
         assert res.headers["X-Total-Count"] == str(len(whole))
         paged += _ids(res, key)
@@ -162,7 +168,8 @@ def test_an_offset_past_the_end_is_an_empty_page_that_keeps_the_count(client, li
 def test_a_limit_below_one_or_a_negative_offset_is_refused(client, lists, params):
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
     for path, _ in LISTS:
-        assert client.get(path, headers=headers, params=params).status_code == 422, path
+        query = {**REQUIRED.get(path, {}), **params}
+        assert client.get(path, headers=headers, params=query).status_code == 422, path
 
 
 def test_a_unit_admins_count_is_their_own_units(client, lists):

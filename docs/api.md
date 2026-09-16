@@ -285,16 +285,17 @@ Revokes immediately: the next request using it gets `401`.
 
 ## Paging
 
-Six routes return a whole list: `GET /users/`, `GET /users/staff/available`,
-`GET /schedule/cycles`, `GET /schedule/slots`, `GET /schedule/ledger/today`
-and `GET /schedule/staff/all/locations`. Each takes two optional query
+Seven routes return a whole list: `GET /users/`, `GET /users/staff/available`,
+`GET /schedule/cycles`, `GET /schedule/slots`, `GET /schedule/ledger/today`,
+`GET /schedule/ledger` and `GET /schedule/staff/all/locations`. Each takes two optional query
 parameters:
 
 - `limit`: at most this many rows, 1 or more.
 - `offset`: skip this many rows first, 0 or more.
 
 Leave both off and the route returns every row it matches, as it always has.
-Rows come back in id order (`staff_id` for the locator), and every response,
+Rows come back in id order (`staff_id` for the locator, date then start time
+for `GET /schedule/ledger`), and every response,
 paged or not, carries `X-Total-Count`: how many rows matched before the page
 was cut. A `limit` of 0 or a negative `offset` is refused with `422`, and an
 offset past the end is an empty list with the count still set.
@@ -761,6 +762,18 @@ Returns today's `DailyLedger` entries scoped to the caller's role:
 - **Staff** → sessions where they are active or substitute lead
 - **Member** → sessions for their registered activities
 - **Admin** → all sessions
+
+### GET /schedule/ledger?from=&to=
+
+The ledger between two dates, both included, ordered by date, then start
+time. Rows have the same fields as `ledger/today` and the same role filter
+applies. Both dates are required; `to` before `from` is `422`. An optional
+`resource_id` narrows to one resource. Pages with `limit` and `offset` like
+the other lists, and a long span should be paged.
+
+```http
+GET /api/v1/schedule/ledger?from=2026-01-05&to=2026-01-11&resource_id=12&limit=100
+```
 
 ### PATCH /schedule/ledger/{ledger_id} `[SUPER_ADMIN, UNIT_ADMIN]`
 

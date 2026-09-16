@@ -3,7 +3,8 @@
 """Paging for the routes that hand back a whole table.
 
 The user list, the staff directory, the cycle list, the slot list, today's
-ledger and the staff locator each return every row they match. That is fine
+ledger, the ledger over a range and the staff locator each return every row
+they match. That is fine
 for one department and heavy for an institution with thousands of members, so
 each takes an optional limit and offset. Leaving both off returns every row,
 as these routes always have, so a client written against them keeps working.
@@ -36,17 +37,17 @@ class Page:
         self.limit = limit
         self.offset = offset
 
-    def rows(self, q: OrmQuery, key) -> list:
-        """This page of q's rows in key order, with the number q matched set on the response.
+    def rows(self, q: OrmQuery, *keys) -> list:
+        """This page of q's rows in keys order, with the number q matched set on the response.
 
         q has to carry every filter already, since the count is taken from it
         as it stands, before the order and the slice go on.
         """
         if self.limit is None and self.offset == 0:
-            rows = q.order_by(key).all()
+            rows = q.order_by(*keys).all()
             total = len(rows)
         else:
             total = q.count()
-            rows = q.order_by(key).offset(self.offset).limit(self.limit).all()
+            rows = q.order_by(*keys).offset(self.offset).limit(self.limit).all()
         self.response.headers[TOTAL_COUNT_HEADER] = str(total)
         return rows

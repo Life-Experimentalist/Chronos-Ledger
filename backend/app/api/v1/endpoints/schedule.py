@@ -2,7 +2,9 @@
 # Licensed under the Apache License, Version 2.0
 
 
-from fastapi import APIRouter, Depends, HTTPException
+import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -623,15 +625,13 @@ def _withdraw_planned_days(slot: StructuralMasterSlot, db: Session, why: str) ->
 # ── Daily Ledger ──────────────────────────────────────────────────────────────
 
 
-@router.get("/ledger/today")
-def get_today_ledger(
-    page: Page = Depends(),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    today = org_today()
-    q = db.query(DailyLedger).filter(DailyLedger.target_date == today)
+def _visible_ledger(db: Session, current_user: User, q):
+    """q narrowed to the rows this user may see.
 
+    Staff see the days they lead or cover, members the activities they are
+    enrolled in, and everyone else every row. Shared by today's ledger and the
+    range, so the two can never disagree about who sees what.
+    """
     if current_user.role_type.value == "STAFF":
         q = q.filter(
             (DailyLedger.active_lead_id == current_user.id)
@@ -647,37 +647,73 @@ def get_today_ledger(
             .all()
         ]
         q = q.filter(DailyLedger.activity_id.in_(registered_ids))
+    return q
 
-    entries = page.rows(q, DailyLedger.id)
-    result = []
-    for e in entries:
-        offering = e.activity
-        result.append(
-            {
-                "id": e.id,
-                "target_date": str(e.target_date),
-                "activity_code": offering.activity_code if offering else None,
-                "activity_title": offering.activity_title if offering else None,
-                "resource_id": e.resource_id,
-                "target_room_identifier": e.target_room_identifier,
-                # The day's own window. It used to be read back off the slot,
-                # so a class taken off the timetable made every day it had
-                # already run report no time at all, and moving a class to a
-                # different hour moved the days it had already run with it.
-                "time_window_start": str(e.time_window_start) if e.time_window_start else None,
-                "time_window_end": str(e.time_window_end) if e.time_window_end else None,
-                "delivery_format": e.delivery_format.value,
-                "virtual_connection_string": e.virtual_connection_string,
-                "operational_state": e.operational_state.value,
-                "active_lead_id": e.active_lead_id,
-                "substitute_lead_id": e.substitute_lead_id,
-                "latitude_target": float(e.latitude_target) if e.latitude_target else None,
-                "longitude_target": float(e.longitude_target) if e.longitude_target else None,
-                "altitude_target": float(e.altitude_target) if e.altitude_target else None,
-                "precision_radius_meters": e.precision_radius_meters,
-            }
-        )
-    return result
+
+def _ledger_row(e: DailyLedger) -> dict:
+    offering = e.activity
+    return {
+        "id": e.id,
+        "target_date": str(e.target_date),
+        "activity_code": offering.activity_code if offering else None,
+        "activity_title": offering.activity_title if offering else None,
+        "resource_id": e.resource_id,
+        "target_room_identifier": e.target_room_identifier,
+        # The day's own window. It used to be read back off the slot,
+        # so a class taken off the timetable made every day it had
+        # already run report no time at all, and moving a class to a
+        # different hour moved the days it had already run with it.
+        "time_window_start": str(e.time_window_start) if e.time_window_start else None,
+        "time_window_end": str(e.time_window_end) if e.time_window_end else None,
+        "delivery_format": e.delivery_format.value,
+        "virtual_connection_string": e.virtual_connection_string,
+        "operational_state": e.operational_state.value,
+        "active_lead_id": e.active_lead_id,
+        "substitute_lead_id": e.substitute_lead_id,
+        "latitude_target": float(e.latitude_target) if e.latitude_target else None,
+        "longitude_target": float(e.longitude_target) if e.longitude_target else None,
+        "altitude_target": float(e.altitude_target) if e.altitude_target else None,
+        "precision_radius_meters": e.precision_radius_meters,
+    }
+
+
+@router.get("/ledger/today")
+def get_today_ledger(
+    page: Page = Depends(),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    today = org_today()
+    q = db.query(DailyLedger).filter(DailyLedger.target_date == today)
+    q = _visible_ledger(db, current_user, q)
+    return [_ledger_row(e) for e in page.rows(q, DailyLedger.id)]
+
+
+@router.get("/ledger")
+def get_ledger_range(
+    from_: datetime.date = Query(alias="from"),
+    to: datetime.date = Query(),
+    resource_id: int | None = None,
+    page: Page = Depends(),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The ledger between two dates inclusive, in date and start time order.
+
+    Rows have the shape /ledger/today returns and are filtered by role the
+    same way, so a client reading one day and a client reading a month parse
+    the same thing.
+    """
+    if to < from_:
+        raise HTTPException(status_code=422, detail="to is before from")
+    q = db.query(DailyLedger).filter(
+        DailyLedger.target_date >= from_, DailyLedger.target_date <= to
+    )
+    if resource_id is not None:
+        q = q.filter(DailyLedger.resource_id == resource_id)
+    q = _visible_ledger(db, current_user, q)
+    keys = (DailyLedger.target_date, DailyLedger.time_window_start, DailyLedger.id)
+    return [_ledger_row(e) for e in page.rows(q, *keys)]
 
 
 @router.patch("/ledger/{ledger_id}")
