@@ -362,11 +362,12 @@ def test_a_night_shift_on_the_cycles_last_day_runs_past_it(db, seed_users, at):
 # -- Approved leave the day rows have not caught up with -----------------------
 
 
-def _absence(db, day: datetime.date, state=LogVerificationState.VERIFIED_APPROVED):
+def _absence(db, day: datetime.date, state=LogVerificationState.VERIFIED_APPROVED, last=None):
     db.add(
         ReverseRsvpLog(
             submitting_user_id="FAC001",
             target_absence_date=day,
+            end_date=last,
             context_justification="Unwell",
             approval_state=state,
         )
@@ -406,6 +407,20 @@ def test_leave_is_for_its_own_date(db, seed_users, at):
     assert _state(db)["resolved_location"] == "W-1"
     at(TUESDAY, 9, 0)
     assert _state(db)["resolved_location"] == "OFF_SITE"
+
+
+def test_leave_that_began_days_ago_covers_today(db, seed_users, at):
+    _slot(db, 1, DAY)
+    _absence(db, MONDAY - datetime.timedelta(3), last=MONDAY + datetime.timedelta(2))
+    at(MONDAY, 9, 30)
+    assert _state(db)["resolved_location"] == "OFF_SITE"
+
+
+def test_leave_that_ended_before_today_does_not(db, seed_users, at):
+    _slot(db, 1, DAY)
+    _absence(db, MONDAY - datetime.timedelta(5), last=MONDAY - datetime.timedelta(2))
+    at(MONDAY, 9, 30)
+    assert _state(db)["resolved_location"] == "W-1"
 
 
 # -- Several people at once ----------------------------------------------------

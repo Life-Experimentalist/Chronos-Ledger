@@ -143,3 +143,64 @@ def test_denial_does_not_reach_another_day(db, seed_users):
 
     db.refresh(entry)
     assert entry.operational_state == DynamicState.ON_LEAVE
+
+
+def _mondays(db, seed_users, weeks):
+    """The Monday class materialized on each of the given weeks, in order."""
+    first = _materialized_day(db, seed_users)
+    for week in range(1, weeks):
+        generate_daily_ledger_entries(MONDAY + datetime.timedelta(days=7 * week), db)
+    rows = db.query(DailyLedger).order_by(DailyLedger.target_date).all()
+    assert rows[0].id == first.id and len(rows) == weeks
+    return rows
+
+
+def _range_request(db, seed_users, last):
+    log = ReverseRsvpLog(
+        submitting_user_id=seed_users["staff"].id,
+        target_absence_date=MONDAY,
+        end_date=last,
+        context_justification="Sabbatical",
+        approval_state=LogVerificationState.PENDING_VERIFICATION,
+        authorized_by_user_id=seed_users["admin"].id,
+    )
+    db.add(log)
+    db.commit()
+    return log
+
+
+def test_approving_a_range_marks_every_day_in_it_and_no_other(db, seed_users):
+    rows = _mondays(db, seed_users, 4)
+    log = _range_request(db, seed_users, MONDAY + datetime.timedelta(days=14))
+
+    commit_absence_override(log.id, seed_users["admin"].id, "VERIFIED_APPROVED", db)
+
+    for row in rows:
+        db.refresh(row)
+    states = [row.operational_state for row in rows]
+    assert states == [DynamicState.ON_LEAVE] * 3 + [DynamicState.SCHEDULED]
+
+
+def test_reversing_a_range_puts_every_day_back(db, seed_users):
+    rows = _mondays(db, seed_users, 3)
+    log = _range_request(db, seed_users, MONDAY + datetime.timedelta(days=14))
+    commit_absence_override(log.id, seed_users["admin"].id, "VERIFIED_APPROVED", db)
+
+    commit_absence_override(log.id, seed_users["admin"].id, "VERIFIED_DENIED", db)
+
+    for row in rows:
+        db.refresh(row)
+    assert {row.operational_state for row in rows} == {DynamicState.SCHEDULED}
+
+
+def test_a_day_generated_inside_an_approved_range_starts_on_leave(db, seed_users):
+    _materialized_day(db, seed_users)
+    log = _range_request(db, seed_users, MONDAY + datetime.timedelta(days=7))
+    commit_absence_override(log.id, seed_users["admin"].id, "VERIFIED_APPROVED", db)
+
+    for week in (1, 2):
+        generate_daily_ledger_entries(MONDAY + datetime.timedelta(days=7 * week), db)
+
+    rows = db.query(DailyLedger).order_by(DailyLedger.target_date).all()
+    states = [row.operational_state for row in rows]
+    assert states == [DynamicState.ON_LEAVE, DynamicState.ON_LEAVE, DynamicState.SCHEDULED]

@@ -68,6 +68,7 @@ export interface AbsenceRequest {
   id: number
   submitting_user_id: string
   target_absence_date: string
+  end_date: string | null
   context_justification: string
   approval_state: LogVerificationState
   authorized_by_user_id: string | null

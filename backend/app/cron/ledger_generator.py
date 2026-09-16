@@ -26,6 +26,7 @@ lost, the day it lost, the room, and the days that were already there.
 import datetime
 import logging
 
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -71,7 +72,9 @@ def generate_daily_ledger_entries(target_date: datetime.date, db: Session) -> in
             db.query(ReverseRsvpLog)
             .filter(
                 ReverseRsvpLog.submitting_user_id == slot.primary_lead_id,
-                ReverseRsvpLog.target_absence_date == target_date,
+                ReverseRsvpLog.target_absence_date <= target_date,
+                func.coalesce(ReverseRsvpLog.end_date, ReverseRsvpLog.target_absence_date)
+                >= target_date,
                 ReverseRsvpLog.approval_state == LogVerificationState.VERIFIED_APPROVED,
             )
             .first()

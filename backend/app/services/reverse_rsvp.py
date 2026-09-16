@@ -10,7 +10,11 @@ from app.models.db import DailyLedger, DynamicState, LogVerificationState, Rever
 
 
 def route_absence_declaration(
-    submitting_user: str, absence_date: str, reasoning: str, db: Session
+    submitting_user: str,
+    absence_date: str,
+    reasoning: str,
+    db: Session,
+    end_date: datetime.date | None = None,
 ) -> dict:
     user = db.query(User).filter(User.id == submitting_user).first()
     # A deactivated manager cannot sign in to approve the request, so it would
@@ -26,6 +30,7 @@ def route_absence_declaration(
         submitting_user_id=submitting_user,
         # The column is a Date; SQLite's dialect rejects a bare ISO string.
         target_absence_date=datetime.date.fromisoformat(absence_date),
+        end_date=end_date,
         context_justification=reasoning,
         approval_state=LogVerificationState.PENDING_VERIFICATION,
         authorized_by_user_id=user.reporting_line_manager,
@@ -45,11 +50,16 @@ def commit_absence_override(log_id: int, execution_agent: str, target_state: str
     log.approval_state = new_state
     log.authorized_by_user_id = execution_agent
 
+    # Every day from the first to the last, both included.
+    in_range = (
+        DailyLedger.active_lead_id == log.submitting_user_id,
+        DailyLedger.target_date >= log.target_absence_date,
+        DailyLedger.target_date <= (log.end_date or log.target_absence_date),
+    )
     if new_state == LogVerificationState.VERIFIED_APPROVED:
-        db.query(DailyLedger).filter(
-            DailyLedger.active_lead_id == log.submitting_user_id,
-            DailyLedger.target_date == log.target_absence_date,
-        ).update({"operational_state": DynamicState.ON_LEAVE, "substitute_lead_id": None})
+        db.query(DailyLedger).filter(*in_range).update(
+            {"operational_state": DynamicState.ON_LEAVE, "substitute_lead_id": None}
+        )
     else:
         # A decision can be revisited: an approval reversed, a request denied
         # after someone already approved it. Without this the day stays
@@ -59,8 +69,7 @@ def commit_absence_override(log_id: int, execution_agent: str, target_state: str
         # became PROXY_SUBSTITUTE has a cover assigned and is no longer this
         # request's business; anything else was set deliberately by an admin.
         db.query(DailyLedger).filter(
-            DailyLedger.active_lead_id == log.submitting_user_id,
-            DailyLedger.target_date == log.target_absence_date,
+            *in_range,
             DailyLedger.operational_state == DynamicState.ON_LEAVE,
         ).update({"operational_state": DynamicState.SCHEDULED})
 

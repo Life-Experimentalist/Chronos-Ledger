@@ -1099,9 +1099,19 @@ Submit a Reverse RSVP (absence request):
 { "target_absence_date": "2026-06-15", "context_justification": "National seminar." }
 ```
 
+For more than one day, add `end_date`, the last day of the absence, inclusive:
+
+```json
+{ "target_absence_date": "2026-06-15", "end_date": "2026-06-19", "context_justification": "Conference week." }
+```
+
+Without `end_date` the request covers the one day. An `end_date` before
+`target_absence_date` gets `422`. The response echoes `end_date`, `null` for a
+single day.
+
 Anyone signed in can submit one. It goes to their `reporting_line_manager` for
 approval, and that manager is sent an `ABSENCE_APPROVAL_REQUIRED` frame. On
-approval, every `DailyLedger` row the submitter leads on that date flips to
+approval, every `DailyLedger` row the submitter leads on any day in the range flips to
 `ON_LEAVE` and loses any substitute; a denial puts any of those rows still
 `ON_LEAVE` back to `SCHEDULED`. See [`docs/flows.md`](flows.md) for the full
 state machine.
@@ -1466,7 +1476,7 @@ Events are delivered as JSON frames:
 
 | Event | Who receives | Payload |
 |---|---|---|
-| `ABSENCE_APPROVAL_REQUIRED` | Line manager | `{log_id, from, date}` |
+| `ABSENCE_APPROVAL_REQUIRED` | Line manager | `{log_id, from, date}`, plus `end_date` for a request over several days |
 | `ABSENCE_DECISION` | Staff who submitted | `{log_id, decision}` |
 | `GUEST_HANDSHAKE_REQ` | Target staff | `{transaction_reference, guest_name, organization, intent}` |
 

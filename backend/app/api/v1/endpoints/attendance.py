@@ -274,21 +274,25 @@ def submit_absence(
         absence_date=str(payload.target_absence_date),
         reasoning=payload.context_justification,
         db=db,
+        end_date=payload.end_date,
     )
     log = db.query(ReverseRsvpLog).filter(ReverseRsvpLog.id == result["tracking_reference"]).first()
     # A plain def, so the database work above runs on a worker thread instead
     # of holding the event loop, and every other request and socket with it,
     # while PostgreSQL answers. The socket belongs to the loop, so the notice
     # is sent from there once the response is out.
+    notice = {
+        "log_id": log.id,
+        "from": current_user.full_name,
+        "date": str(payload.target_absence_date),
+    }
+    if payload.end_date is not None:
+        notice["end_date"] = str(payload.end_date)
     background_tasks.add_task(
         socket_broker.forward_direct_message,
         log.authorized_by_user_id,
         "ABSENCE_APPROVAL_REQUIRED",
-        {
-            "log_id": log.id,
-            "from": current_user.full_name,
-            "date": str(payload.target_absence_date),
-        },
+        notice,
     )
     return log
 

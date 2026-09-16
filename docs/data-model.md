@@ -106,6 +106,7 @@ erDiagram
         int id PK
         string submitting_user_id FK "→ User.id"
         date target_absence_date
+        date end_date "last day, inclusive (nullable)"
         string context_justification
         string approval_state "LogVerificationState enum"
         string authorized_by_user_id FK "→ User.id (nullable)"
@@ -233,7 +234,7 @@ One row per member per ledger entry. `authorizing_agent_id` is whoever set the c
 `member_id` is `ON DELETE RESTRICT` since migration 018, so a user with attendance on file cannot be deleted and is deactivated instead. Before 018 it cascaded, and deleting a user took their attendance with it.
 
 ### `ReverseRsvpLog`
-The Reverse RSVP state machine. Starts at `PENDING_VERIFICATION` and is routed to the submitter's `reporting_line_manager`, who decides it. If that manager is later deactivated an admin decides it instead (any `SUPER_ADMIN`, or a `UNIT_ADMIN` for the non-admin accounts of their unit), and whoever decides becomes `authorized_by_user_id`. `services/reverse_rsvp.py` applies the decision: `VERIFIED_APPROVED` sets `operational_state` to `ON_LEAVE` and clears the substitute on every `DailyLedger` row the submitter leads on that date, and `VERIFIED_DENIED` puts any of those rows still `ON_LEAVE` back to `SCHEDULED`. The endpoint, not the service, sends the WebSocket frames: `ABSENCE_APPROVAL_REQUIRED` to the manager on submission and `ABSENCE_DECISION` to the submitter on a decision.
+The Reverse RSVP state machine. Starts at `PENDING_VERIFICATION` and is routed to the submitter's `reporting_line_manager`, who decides it. If that manager is later deactivated an admin decides it instead (any `SUPER_ADMIN`, or a `UNIT_ADMIN` for the non-admin accounts of their unit), and whoever decides becomes `authorized_by_user_id`. `services/reverse_rsvp.py` applies the decision: `VERIFIED_APPROVED` sets `operational_state` to `ON_LEAVE` and clears the substitute on every `DailyLedger` row the submitter leads from `target_absence_date` through `end_date` (the one day when `end_date` is null), and `VERIFIED_DENIED` puts any of those rows still `ON_LEAVE` back to `SCHEDULED`. The endpoint, not the service, sends the WebSocket frames: `ABSENCE_APPROVAL_REQUIRED` to the manager on submission and `ABSENCE_DECISION` to the submitter on a decision.
 
 ### `GuestGateRegistry`
 Records each organization visitor interaction. `handshake_status` transitions from `PENDING_VERIFICATION` → `VERIFIED_APPROVED | VERIFIED_DENIED` when the target staff member acts via the Interaction Desk. `visit_code_hash` is the SHA-256 of the code the check-in hands the visitor, and `GET /guest/visit/{code}` finds the row by it; the code itself is stored nowhere. Rows from before migration 020 have none. When `GUEST_RETENTION_DAYS` is set, a daily job deletes the rows older than that many days, whatever their status; 0, the default, keeps them forever.

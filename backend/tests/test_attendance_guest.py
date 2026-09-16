@@ -675,6 +675,40 @@ def test_absence_flow_submit_pending_decide(client, db, seed_users):
     assert db.query(DailyLedger).filter_by(id=ledger.id).one().operational_state.value == "ON_LEAVE"
 
 
+def test_absence_over_several_days_keeps_its_end_date(client, db, seed_users):
+    seed_users["staff"].reporting_line_manager = "ADM001"
+    db.commit()
+    fac = login(client, "staff@test.internal", STAFF_PASSWORD)
+    last = TODAY + datetime.timedelta(days=4)
+    res = client.post(
+        "/api/v1/attendance/absence",
+        json={
+            "target_absence_date": str(TODAY),
+            "end_date": str(last),
+            "context_justification": "Conference",
+        },
+        headers=fac,
+    )
+    assert res.status_code == 200
+    assert res.json()["end_date"] == str(last)
+
+
+def test_absence_ending_before_it_starts_is_refused(client, db, seed_users):
+    seed_users["staff"].reporting_line_manager = "ADM001"
+    db.commit()
+    fac = login(client, "staff@test.internal", STAFF_PASSWORD)
+    res = client.post(
+        "/api/v1/attendance/absence",
+        json={
+            "target_absence_date": str(TODAY),
+            "end_date": str(TODAY - datetime.timedelta(days=1)),
+            "context_justification": "Conference",
+        },
+        headers=fac,
+    )
+    assert res.status_code == 422
+
+
 def test_absence_decide_requires_the_named_approver(client, db, seed_users):
     seed_users["staff"].reporting_line_manager = "ADM001"
     db.commit()

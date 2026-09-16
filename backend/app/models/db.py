@@ -375,6 +375,8 @@ class ReverseRsvpLog(Base):
         String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     target_absence_date = Column(Date, nullable=False)
+    # The last day of a longer absence, inclusive. Null means the one day.
+    end_date = Column(Date, nullable=True)
     context_justification = Column(Text, nullable=False)
     approval_state = Column(
         Enum(LogVerificationState, name="log_verification_state"),

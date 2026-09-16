@@ -62,7 +62,7 @@ sequenceDiagram
     participant WS as WebSocket Hub
     participant DB as PostgreSQL
 
-    Fac->>API: POST /attendance/absence<br/>{target_absence_date, context_justification}
+    Fac->>API: POST /attendance/absence<br/>{target_absence_date, end_date?, context_justification}
     API->>DB: INSERT ReverseRsvpLog<br/>approval_state = PENDING_VERIFICATION
     API->>DB: SELECT User WHERE id = fac.reporting_line_manager
     API-->>Fac: 200 ReverseRsvpResponse
@@ -74,7 +74,7 @@ sequenceDiagram
 
     alt VERIFIED_APPROVED
         RSVP->>DB: UPDATE ReverseRsvpLog<br/>approval_state = VERIFIED_APPROVED
-        RSVP->>DB: UPDATE DailyLedger<br/>operational_state = ON_LEAVE<br/>(for target_absence_date slots)
+        RSVP->>DB: UPDATE DailyLedger<br/>operational_state = ON_LEAVE<br/>(slots from target_absence_date<br/>through end_date)
     else VERIFIED_DENIED
         RSVP->>DB: UPDATE ReverseRsvpLog<br/>approval_state = VERIFIED_DENIED
     end

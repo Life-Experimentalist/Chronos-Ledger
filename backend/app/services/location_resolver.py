@@ -5,7 +5,7 @@ import datetime
 import logging
 
 import redis
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.time import org_now, window_span
@@ -210,15 +210,19 @@ def determine_staff_current_states(
     # Before and after somebody's classes, or on a day with none, they read
     # as available, and on a date the nightly job had not written yet the
     # timetable put them in the room they had leave from.
+    last_day = func.coalesce(ReverseRsvpLog.end_date, ReverseRsvpLog.target_absence_date)
     absent = {
         (person, day)
-        for person, day in db.query(
-            ReverseRsvpLog.submitting_user_id, ReverseRsvpLog.target_absence_date
+        for person, first, last in db.query(
+            ReverseRsvpLog.submitting_user_id, ReverseRsvpLog.target_absence_date, last_day
         ).filter(
             ReverseRsvpLog.submitting_user_id.in_(unresolved),
-            ReverseRsvpLog.target_absence_date.in_(list(days.values())),
+            ReverseRsvpLog.target_absence_date <= today,
+            last_day >= yesterday,
             ReverseRsvpLog.approval_state == LogVerificationState.VERIFIED_APPROVED,
         )
+        for day in days.values()
+        if first <= day <= last
     }
     candidates.sort(key=lambda found: (found[0], found[1].time_window_start))
     for day, slot, offering in candidates:

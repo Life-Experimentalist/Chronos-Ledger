@@ -3,7 +3,7 @@
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.db import LogVerificationState, VerificationMetric
 
@@ -38,13 +38,21 @@ class AttendanceResponse(BaseModel):
 
 class ReverseRsvpCreate(BaseModel):
     target_absence_date: date
+    end_date: date | None = None
     context_justification: str
+
+    @model_validator(mode="after")
+    def _end_is_not_before_start(self):
+        if self.end_date is not None and self.end_date < self.target_absence_date:
+            raise ValueError("end_date is before target_absence_date")
+        return self
 
 
 class ReverseRsvpResponse(BaseModel):
     id: int
     submitting_user_id: str
     target_absence_date: date
+    end_date: date | None
     context_justification: str
     approval_state: LogVerificationState
     authorized_by_user_id: str | None

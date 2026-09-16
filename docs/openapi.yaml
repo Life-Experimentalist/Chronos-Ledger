@@ -1203,6 +1203,13 @@ components:
           type: string
           format: date
           example: "2026-06-15"
+        end_date:
+          type: string
+          format: date
+          description: >
+            Last day of the absence, inclusive. Omit for a single day. Must not
+            be before target_absence_date, or the request gets 422.
+          example: "2026-06-19"
         context_justification:
           type: string
           example: Attending national staff development seminar.
@@ -1217,6 +1224,10 @@ components:
         target_absence_date:
           type: string
           format: date
+        end_date:
+          type: string
+          format: date
+          nullable: true
         context_justification:
           type: string
         approval_state:
