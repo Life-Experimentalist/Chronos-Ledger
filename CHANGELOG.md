@@ -10,6 +10,30 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.12.0](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.11.0...v0.12.0) (2026-09-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** PATCH /schedule/ledger/{id} and PATCH /users/{id} now treat an explicit null as clearing the field instead of keeping it, and a null on a field that cannot be empty is a 422 on those two routes and on PATCH /schedule/slots/{id}. A client that sends every field and uses null to mean "no change" has to leave those fields out instead.
+
+### Features
+
+* **guest:** a visitor can follow their check-in with a code ([a6ae897](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/a6ae897854def228bcf1c1ab8cac0139515cdb05))
+
+
+### Bug Fixes
+
+* **api:** a PATCH could not clear a field once it was set ([cb0e0ad](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/cb0e0ad193b318e5477f2fc94ee585b8b0f98b60))
+* **attendance:** an absence request waited forever on a manager who had left ([72421b4](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/72421b4bc89c39caf0f1f829bff2dcf8c5c8d444))
+* **deps:** six backend packages had published security advisories ([5fd65f1](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/5fd65f1f98db23259c59dc658ae7b112436b53ec))
+* **deps:** the frontend ran on Next.js 14, which had published advisories ([eacb83d](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/eacb83dddeb847461f22395a3902a8a0ec007aa7))
+* **ingestion:** a blank cell was imported as the word nan ([a208da3](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/a208da3471c86af736e0a6ed2ccbbace5259889f))
+* **schedule:** a class somebody covered still put its lead in the room ([952cb8c](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/952cb8ce356326b6b23a15a1db0db1e4fea897f4))
+* **schedule:** somebody on leave read as available between classes ([ab1d464](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/ab1d464322a6a777ea658ecfe94709e6dacfdc46))
+* **schedule:** the staff locator failed outright whenever Redis was down ([93bd54b](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/93bd54be9731e94ef27546732858417634c19392))
+* **users:** a deactivated account's API keys came back with it ([e42f99a](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/e42f99aba9af6938054325f65a4f702dc03d5d29))
+
 ## [0.11.0](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.10.0...v0.11.0) (2026-09-12)
 
 

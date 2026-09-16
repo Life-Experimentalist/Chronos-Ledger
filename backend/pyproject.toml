@@ -3,7 +3,7 @@
 
 [project]
 name = "chronos-ledger-backend"
-version = "0.11.0"
+version = "0.12.0"
 description = "Chronos Ledger: Organization Schedule & Attendance Management Backend"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.11"
