@@ -41,7 +41,7 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
 RUN npm run build
 
 # ── Stage 2: Serve with nginx ─────────────────────────────────────────────────
-FROM nginx:1.27-alpine AS server
+FROM nginx:1.31-alpine AS server
 
 # Copy pre-built static export
 COPY --from=builder /app/out /usr/share/nginx/html
