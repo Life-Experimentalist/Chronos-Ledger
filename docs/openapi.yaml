@@ -3249,8 +3249,9 @@ paths:
       tags: [Guest Gate]
       summary: Staff availability directory (kiosk)
       description: >
-        Returns up to 20 active staff whose name matches, busy ones included,
-        each with an availability label for kiosk display.
+        Returns active staff whose name matches, busy ones included, each with
+        an availability label for kiosk display. Twenty at a time by default,
+        in name order; X-Total-Count says how many matched.
         Requires a credential: this response carries the staff roster and each
         person's live presence.
       parameters:
@@ -3263,9 +3264,21 @@ paths:
           description: >
             Case-insensitive search by staff name. Two characters minimum, so
             the roster cannot be walked one letter at a time.
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: At most this many staff.
+        - $ref: "#/components/parameters/Offset"
       responses:
         "200":
           description: Matching staff.
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/XTotalCount"
           content:
             application/json:
               schema:

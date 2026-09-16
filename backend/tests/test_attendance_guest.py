@@ -733,6 +733,38 @@ def test_guest_directory_works_with_a_kiosk_credential(client, seed_users, kiosk
     assert seed_users["staff"].full_name in names
 
 
+def test_guest_directory_pages_and_reports_the_total(client, db, seed_users, kiosk_key):
+    """It used to stop at 20 with no total, so a big search looked complete."""
+    from app.models.db import InstitutionalRole, User
+
+    reused = seed_users["staff"].credential_secure_hash
+    for i in range(25):
+        db.add(
+            User(
+                id=f"page-staff-{i:02d}",
+                full_name=f"Pagetest Person {i:02d}",
+                email_address=f"pagetest{i:02d}@example.test",
+                credential_secure_hash=reused,
+                role_type=InstitutionalRole.STAFF,
+            )
+        )
+    db.commit()
+
+    first = client.get("/api/v1/guest/directory", params={"name": "Pagetest"}, headers=kiosk_key)
+    assert first.status_code == 200, first.text
+    assert first.headers["X-Total-Count"] == "25"
+    assert len(first.json()) == 20
+
+    rest = client.get(
+        "/api/v1/guest/directory",
+        params={"name": "Pagetest", "offset": 20},
+        headers=kiosk_key,
+    )
+    assert rest.headers["X-Total-Count"] == "25"
+    names = [f["full_name"] for f in first.json() + rest.json()]
+    assert names == sorted(names) and len(set(names)) == 25
+
+
 def test_guest_directory_refuses_a_one_character_search(client, seed_users, kiosk_key):
     """A single letter walks the whole roster alphabetically."""
     res = client.get("/api/v1/guest/directory", params={"name": "a"}, headers=kiosk_key)

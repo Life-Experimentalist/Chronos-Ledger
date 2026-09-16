@@ -2,12 +2,13 @@
 # Licensed under the Apache License, Version 2.0
 
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core import rate_limit
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.pagination import TOTAL_COUNT_HEADER
 from app.core.security import generate_visit_code, get_current_user, hash_visit_code
 from app.core.websocket_manager import socket_broker
 from app.models.db import (
@@ -161,7 +162,13 @@ def get_pending_guests(
 
 @router.get("/directory", response_model=list[StaffAvailabilityResponse])
 def get_staff_directory(
+    response: Response,
     name: str | None = Query(default=None, min_length=2, max_length=100),
+    # A kiosk shows one screen of names, so a page stays short by default. The
+    # total goes back in X-Total-Count, so a search that matched more than one
+    # screen says so instead of quietly stopping at the first 20.
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     # Same kiosk credential. This response is the staff roster plus each
     # person's live presence, so it is not something to hand out anonymously.
@@ -172,6 +179,7 @@ def get_staff_directory(
     )
     if name:
         q = q.filter(User.full_name.ilike(f"%{name}%"))
+    response.headers[TOTAL_COUNT_HEADER] = str(q.count())
     return [
         StaffAvailabilityResponse(
             staff_id=f.id,
@@ -179,5 +187,5 @@ def get_staff_directory(
             unit_code=f.unit_code,
             availability_label=_AVAILABILITY_LABELS.get(f.current_occupancy_index, "Unknown"),
         )
-        for f in q.limit(20).all()
+        for f in q.order_by(User.full_name, User.id).offset(offset).limit(limit).all()
     ]

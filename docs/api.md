@@ -1181,10 +1181,11 @@ answer through [`GET /guest/visit/{code}`](#get-guestvisitcode-public).
 ### GET /guest/directory `[KIOSK KEY]`
 
 `?name=<string>`, case-insensitive name search, minimum two characters so the
-roster cannot be walked one letter at a time. Returns up to 20 active staff
-whose name matches, busy ones included, each with `staff_id`, `full_name`,
-`unit_code` and an `availability_label` of `Available`, `Very Available`,
-`Occupied` or `Do Not Disturb`.
+roster cannot be walked one letter at a time. Returns active staff whose name
+matches, busy ones included, each with `staff_id`, `full_name`, `unit_code` and
+an `availability_label` of `Available`, `Very Available`, `Occupied` or
+`Do Not Disturb`. Rows come in name order, `?limit=` (default 20, at most 100)
+and `?offset=` page through them, and `X-Total-Count` says how many matched.
 
 ### GET /guest/pending `[STAFF]`
 
