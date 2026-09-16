@@ -17,7 +17,7 @@ WORKDIR /app
 
 # Dependency layer, cached unless package files change
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --legacy-peer-deps --ignore-scripts
+RUN npm ci --ignore-scripts
 
 COPY frontend/ ./
 
