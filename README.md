@@ -364,6 +364,10 @@ the first login is the only thing it can do: use Admin Portal → Profile
 | [`docs/deployment.md`](docs/deployment.md)     | Deployment guide, cycle rollover, TLS, scaling                         |
 | [`docs/vocabulary.md`](docs/vocabulary.md)     | What an instance calls things, and which value sets are closed         |
 | [`docs/faq.md`](docs/faq.md)                   | FAQ & troubleshooting, setup, auth, CSV import, geofencing, CI/CD     |
+| [`docs/quickstart.md`](docs/quickstart.md)     | Call the REST API from any language: auth, keys, paging, idempotency |
+| [`docs/roadmap.md`](docs/roadmap.md)           | Planned releases 0.13 to 0.15 with scope and acceptance checks       |
+| [`docs/distribution.md`](docs/distribution.md) | Planned installer, channels, drift handling and signing              |
+| [`docs/sdks.md`](docs/sdks.md)                 | Planned TypeScript, Python, Go and Rust client libraries             |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md)           | Development setup, commit conventions, PR checklist                    |
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)     | Community standards and enforcement                                    |
 | [`SECURITY.md`](SECURITY.md)                   | Vulnerability reporting and disclosure policy                          |
