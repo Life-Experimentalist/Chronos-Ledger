@@ -362,6 +362,7 @@ the first login is the only thing it can do: use Admin Portal → Profile
 | [`docs/flows.md`](docs/flows.md)               | Sequence diagrams: attendance, RSVP, guest handshake, ledger cron      |
 | [`docs/api.md`](docs/api.md)                   | Human-readable API reference with examples                             |
 | [`docs/deployment.md`](docs/deployment.md)     | Deployment guide, cycle rollover, TLS, scaling                         |
+| [`docs/hardware.md`](docs/hardware.md)         | Hardware requirements, load test results, when to add replicas         |
 | [`docs/vocabulary.md`](docs/vocabulary.md)     | What an instance calls things, and which value sets are closed         |
 | [`docs/faq.md`](docs/faq.md)                   | FAQ & troubleshooting, setup, auth, CSV import, geofencing, CI/CD     |
 | [`docs/quickstart.md`](docs/quickstart.md)     | Call the REST API from any language: auth, keys, paging, idempotency |

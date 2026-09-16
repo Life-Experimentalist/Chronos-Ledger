@@ -314,6 +314,8 @@ absolute paths (`/usr/bin/docker`, `/usr/bin/certbot`) or set
 
 ## Scaling
 
+How far one machine goes, with load test numbers, is in [hardware.md](hardware.md).
+
 The FastAPI layer is stateless beyond DB/Redis. To scale horizontally:
 
 1. Point every instance at the same Redis. Each relays its WebSocket events, and the close that follows a deactivation, through a Redis channel, so a socket gets them whichever instance it is connected to. An instance that cannot reach Redis still reaches its own sockets; the other instances' sockets miss what it sends until Redis is back.
