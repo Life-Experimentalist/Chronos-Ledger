@@ -245,8 +245,10 @@ fn remove_windows_user_path(entry: &str) {
     };
     let units: Vec<u16> = raw
         .bytes
-        .chunks_exact(2)
-        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_le_bytes(*c))
         .collect();
     let path = String::from_utf16_lossy(&units)
         .trim_end_matches('\0')
