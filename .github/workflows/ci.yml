@@ -200,13 +200,40 @@ jobs:
             NEXT_PUBLIC_TELEMETRY_ENABLED=false
             NEXT_PUBLIC_TELEMETRY_ENDPOINT=
 
+  # ── CLI: format, lint, test on each OS it ships for ───────────────────────
+  cli-check:
+    name: CLI, cargo test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: cli
+
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
+
   # ── Publish: only reachable once every gate above is green ────────────────
   publish:
     name: Publish images to GHCR and Docker Hub
     # This is the CI gate the registry never had. The build workflow used to
     # carry its own push-to-main trigger, so it raced this one and a commit
     # that failed its tests still shipped :latest to a public registry.
-    needs: [backend-lint, backend-test, frontend-check, security-scan, docker-build-check]
+    needs: [backend-lint, backend-test, frontend-check, security-scan, docker-build-check, cli-check]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
@@ -225,7 +252,7 @@ jobs:
     # own push-to-main trigger and reached the build workflow without waiting
     # for anything here. Smaller, since a release commit is a version file and
     # a changelog over code this has already seen, but the same shape.
-    needs: [backend-lint, backend-test, frontend-check, security-scan, docker-build-check]
+    needs: [backend-lint, backend-test, frontend-check, security-scan, docker-build-check, cli-check]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write

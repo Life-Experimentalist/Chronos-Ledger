@@ -11,6 +11,7 @@
       "extra-files": [
         { "type": "json", "path": "frontend/package.json",  "jsonpath": "$.version" },
         { "type": "toml", "path": "backend/pyproject.toml", "jsonpath": "$.project.version" },
+        { "type": "toml", "path": "cli/Cargo.toml",         "jsonpath": "$.package.version" },
         "docs/openapi.yaml",
         "backend/app/main.py"
       ],

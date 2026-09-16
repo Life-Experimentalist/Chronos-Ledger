@@ -117,3 +117,184 @@ jobs:
           asset_name: docker-compose.prod.yml
           tag: ${{ needs.release-please.outputs.tag_name }}
           overwrite: true
+
+  # ── Step 4: Build the chronos CLI for each platform ──────────────────────
+  # Native runners throughout, so no cross linker is involved and every binary
+  # is run once before it is published.
+  cli-build:
+    name: CLI, build ${{ matrix.asset }}
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-musl,  runner: ubuntu-latest,    asset: linux-x64,     run: true }
+          - { target: aarch64-unknown-linux-musl, runner: ubuntu-24.04-arm, asset: linux-arm64,   run: true }
+          - { target: x86_64-apple-darwin,        runner: macos-latest,     asset: darwin-x64,    run: false }
+          - { target: aarch64-apple-darwin,       runner: macos-latest,     asset: darwin-arm64,  run: true }
+          - { target: x86_64-pc-windows-msvc,     runner: windows-latest,   asset: windows-x64,   run: true }
+          - { target: aarch64-pc-windows-msvc,    runner: windows-11-arm,   asset: windows-arm64, run: true }
+    defaults:
+      run:
+        shell: bash
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Install musl tools
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Name the binary for the release
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          ext=""; case "${{ matrix.target }}" in *windows*) ext=".exe" ;; esac
+          mkdir -p ../dist
+          cp "target/${{ matrix.target }}/release/chronos$ext" "../dist/chronos-$TAG-${{ matrix.asset }}$ext"
+          ls -l ../dist
+
+      # A musl binary that still links dynamically would fail on Alpine and on
+      # older glibc systems, which is the reason to build it this way at all.
+      - name: Check the Linux binary is static
+        if: contains(matrix.target, 'musl')
+        run: |
+          file ../dist/chronos-*
+          file ../dist/chronos-* | grep -Eq 'statically linked|static-pie linked'
+
+      # Cargo.toml's version is stamped by release-please, so a mismatch means
+      # the extra-files entry broke and self update would loop forever.
+      - name: Run it once
+        if: matrix.run
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          out=$(../dist/chronos-* --version)
+          echo "$out"
+          [ "$out" = "chronos ${TAG#v}" ]
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cli-${{ matrix.asset }}
+          path: dist/*
+          if-no-files-found: error
+
+  # ── Step 5: Publish the CLI binaries, checksums, formula and manifest ────
+  cli-publish:
+    name: CLI, attach to release
+    needs: [release-please, cli-build]
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: cli-*
+          path: dist
+          merge-multiple: true
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: 'dist/chronos-v*'
+
+      - name: Write checksum files
+        working-directory: dist
+        run: |
+          for f in chronos-*; do sha256sum "$f" > "$f.sha256"; done
+          cat *.sha256
+
+      # The Homebrew tap and the Scoop bucket fetch these two files from the
+      # latest release on their own schedule, so no token here reaches into
+      # another repository.
+      - name: Render the Homebrew formula and the Scoop manifest
+        working-directory: dist
+        run: |
+          V="${TAG#v}"
+          BASE="https://github.com/${GH_REPO}/releases/download/${TAG}"
+          sum() { cut -d' ' -f1 "chronos-${TAG}-$1.sha256"; }
+
+          cat > chronos.rb <<EOF
+          class Chronos < Formula
+            desc "Set up, upgrade, back up and check a Chronos Ledger server"
+            homepage "https://chronos.vkrishna04.me"
+            version "${V}"
+            license "Apache-2.0"
+
+            on_macos do
+              on_arm do
+                url "${BASE}/chronos-${TAG}-darwin-arm64"
+                sha256 "$(sum darwin-arm64)"
+              end
+              on_intel do
+                url "${BASE}/chronos-${TAG}-darwin-x64"
+                sha256 "$(sum darwin-x64)"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "${BASE}/chronos-${TAG}-linux-arm64"
+                sha256 "$(sum linux-arm64)"
+              end
+              on_intel do
+                url "${BASE}/chronos-${TAG}-linux-x64"
+                sha256 "$(sum linux-x64)"
+              end
+            end
+
+            def install
+              bin.install Dir["chronos-v*"].first => "chronos"
+            end
+
+            test do
+              assert_equal "chronos #{version}", shell_output("#{bin}/chronos --version").strip
+            end
+          end
+          EOF
+
+          jq -n --arg v "$V" --arg base "$BASE" --arg tag "$TAG" --arg repo "https://github.com/${GH_REPO}" \
+            --arg x64 "$(sum windows-x64.exe)" --arg arm64 "$(sum windows-arm64.exe)" '{
+              version: $v,
+              description: "Set up, upgrade, back up and check a Chronos Ledger server",
+              homepage: "https://chronos.vkrishna04.me",
+              license: "Apache-2.0",
+              architecture: {
+                "64bit": { url: "\($base)/chronos-\($tag)-windows-x64.exe#/chronos.exe", hash: $x64 },
+                arm64:   { url: "\($base)/chronos-\($tag)-windows-arm64.exe#/chronos.exe", hash: $arm64 }
+              },
+              bin: "chronos.exe",
+              checkver: { github: $repo },
+              autoupdate: { architecture: {
+                "64bit": { url: "\($repo)/releases/download/v$version/chronos-v$version-windows-x64.exe#/chronos.exe",
+                           hash: { url: "\($repo)/releases/download/v$version/chronos-v$version-windows-x64.exe.sha256" } },
+                arm64:   { url: "\($repo)/releases/download/v$version/chronos-v$version-windows-arm64.exe#/chronos.exe",
+                           hash: { url: "\($repo)/releases/download/v$version/chronos-v$version-windows-arm64.exe.sha256" } }
+              } }
+            }' > chronos.json
+
+          cat chronos.rb chronos.json
+          ! grep -n 'sha256 ""\|"hash": ""' chronos.rb chronos.json
+
+      - name: Upload to release
+        run: gh release upload "$TAG" dist/* --clobber
