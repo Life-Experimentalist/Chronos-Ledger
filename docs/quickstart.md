@@ -39,7 +39,7 @@ the API the integration calls.
 ```bash
 TOKEN=$(curl -s -X POST "$CHRONOS/auth/login" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"you@org.internal","password":"'"$CHRONOS_PASSWORD"'"}' \
+  -d '{"email_address":"you@org.internal","password":"'"$CHRONOS_PASSWORD"'"}' \
   | jq -r .access_token)
 
 curl -s "$CHRONOS/auth/me" -H "Authorization: Bearer $TOKEN"

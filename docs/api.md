@@ -122,7 +122,7 @@ Higher roles inherit the permissions of all roles below them. Role is embedded i
 
 ```json
 // Request
-{ "email": "user@org.internal", "password": "…" }
+{ "email_address": "user@org.internal", "password": "…" }
 
 // Response 200
 {
@@ -136,6 +136,9 @@ Higher roles inherit the permissions of all roles below them. Role is embedded i
 ```
 
 `initial_login_state: true` on first login, the client should redirect to the change-password flow.
+
+The field was called `email` before 0.13. `email` is still accepted in place
+of `email_address` through 0.14 and is removed in 0.15.
 
 ### POST /auth/change-password
 

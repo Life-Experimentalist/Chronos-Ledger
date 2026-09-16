@@ -175,6 +175,6 @@ def client(db):
 
 def login(client, email, password):
     """Log in through the real endpoint and return Authorization headers."""
-    res = client.post("/api/v1/auth/login", json={"email": email, "password": password})
+    res = client.post("/api/v1/auth/login", json={"email_address": email, "password": password})
     assert res.status_code == 200, res.text
     return {"Authorization": f"Bearer {res.json()['access_token']}"}

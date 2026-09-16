@@ -7,7 +7,7 @@ from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, logi
 def test_login_returns_token_and_profile(client, seed_users):
     res = client.post(
         "/api/v1/auth/login",
-        json={"email": "admin@test.internal", "password": ADMIN_PASSWORD},
+        json={"email_address": "admin@test.internal", "password": ADMIN_PASSWORD},
     )
     assert res.status_code == 200
     body = res.json()
@@ -15,6 +15,20 @@ def test_login_returns_token_and_profile(client, seed_users):
     assert body["user_id"] == "ADM001"
     assert body["role"] == "SUPER_ADMIN"
     assert body["initial_login_state"] is False
+
+
+def test_login_still_accepts_the_deprecated_email_field(client, seed_users):
+    res = client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@test.internal", "password": ADMIN_PASSWORD},
+    )
+    assert res.status_code == 200
+    assert res.json()["user_id"] == "ADM001"
+
+
+def test_login_with_neither_field_is_422(client, seed_users):
+    res = client.post("/api/v1/auth/login", json={"password": ADMIN_PASSWORD})
+    assert res.status_code == 422
 
 
 def test_login_wrong_password_is_401(client, seed_users):

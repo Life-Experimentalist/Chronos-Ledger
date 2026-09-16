@@ -66,14 +66,14 @@ def _mint_refresh_token(db: Session, user_id: str, family_id: str | None = None)
     return raw
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", operation_id="auth.login", response_model=TokenResponse)
 def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
     # Read at call time rather than off the module-level binding above, so
     # that changing a limit does not need a restart to take effect anywhere
     # the settings cache is cleared.
     limits = get_settings()
     address = rate_limit.caller_address(request)
-    account = payload.email.lower()
+    account = payload.email_address.lower()
     window = rate_limit.LOGIN_WINDOW_SECONDS
     per_address = limits.rate_limit_login_per_ip
     per_account = limits.rate_limit_login_per_email
@@ -84,7 +84,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
         "login-email", account, per_account, window, "sign-in attempts for this account"
     )
 
-    user = db.query(User).filter(User.email_address == payload.email).first()
+    user = db.query(User).filter(User.email_address == payload.email_address).first()
     # An address that matches no account still pays for a bcrypt comparison,
     # against a hash of a string nobody holds. `not user` comes second so the
     # comparison actually runs; short-circuiting past it is the leak. A
@@ -112,7 +112,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     )
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh", operation_id="auth.refresh", response_model=TokenResponse)
 def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
     row = (
         db.query(RefreshToken)
@@ -189,7 +189,7 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
     )
 
 
-@router.post("/logout")
+@router.post("/logout", operation_id="auth.logout")
 def logout(payload: RefreshRequest, db: Session = Depends(get_db)):
     # The refresh token is the only credential this takes. Holding it is a
     # stronger claim than holding an access token, and asking for an access
@@ -209,7 +209,9 @@ def logout(payload: RefreshRequest, db: Session = Depends(get_db)):
     return {"message": "Logged out"}
 
 
-@router.post("/change-password", response_model=ChangePasswordResponse)
+@router.post(
+    "/change-password", operation_id="auth.changePassword", response_model=ChangePasswordResponse
+)
 def change_password(
     payload: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
@@ -243,7 +245,7 @@ def change_password(
     )
 
 
-@router.get("/me")
+@router.get("/me", operation_id="auth.getMe")
 def get_me(current_user: User = Depends(get_current_user)):
     return {
         "id": current_user.id,

@@ -83,7 +83,7 @@ export const api = createApiClient()
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authApi = {
   login: (email: string, password: string) =>
-    api.post('/auth/login', { email, password }),
+    api.post('/auth/login', { email_address: email, password }),
   me: () => api.get('/auth/me'),
   changePassword: async (current_password: string, new_password: string) => {
     const res = await api.post('/auth/change-password', { current_password, new_password })

@@ -1,13 +1,15 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
-from pydantic import BaseModel, EmailStr
+from pydantic import AliasChoices, BaseModel, EmailStr, Field
 
 from app.core.passwords import AcceptablePassword
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    # `email_address` is the name every other schema uses. `email` is still
+    # read, deprecated, until 0.15 removes it.
+    email_address: EmailStr = Field(validation_alias=AliasChoices("email_address", "email"))
     password: str
 
 
