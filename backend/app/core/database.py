@@ -10,11 +10,18 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
+POOL_SIZE = 10
+MAX_OVERFLOW = 20
+# The most connections one process can hold, and so the most API requests it
+# works on at once (see app.core.concurrency).
+POOL_CAPACITY = POOL_SIZE + MAX_OVERFLOW
+
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
+    pool_size=POOL_SIZE,
+    max_overflow=MAX_OVERFLOW,
+    pool_timeout=10,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

@@ -17,8 +17,9 @@ from app.main import app
 # Routes whose answer is itself something to await and which run no query of
 # their own. Their dependencies are plain defs, and FastAPI puts those on a
 # worker thread whatever the route is. The websocket count asks Redis through
-# the client the relay keeps on the event loop.
-AWAIT_THEIR_ANSWER = {"GET /api/v1/ws/stats"}
+# the client the relay keeps on the event loop. /health touches nothing, and
+# stays on the event loop so it still answers when every worker thread is busy.
+AWAIT_THEIR_ANSWER = {"GET /api/v1/ws/stats", "GET /health"}
 
 
 def test_no_http_route_runs_on_the_event_loop():

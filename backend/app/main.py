@@ -12,12 +12,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import TimeoutError as PoolTimeout
 
 from app.api.v1.router import api_router
 from app.core.audit import AuditMiddleware
 from app.core.bootstrap import apply_initial_admin_password
+from app.core.concurrency import ConcurrencyGate
 from app.core.config import docs_are_published, get_settings
-from app.core.database import SessionLocal, engine
+from app.core.database import POOL_CAPACITY, SessionLocal, engine
 from app.core.migrations import database_revision, unknown_revision_message
 from app.core.pagination import TOTAL_COUNT_HEADER
 from app.core.time import org_now, org_timezone, org_tomorrow
@@ -187,6 +189,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(AuditMiddleware)
+# The last middleware added runs first. The gate wraps the audit write, which
+# takes a connection of its own, and CORS wraps the gate, so a 503 still
+# carries the headers a browser needs to read it.
+app.add_middleware(ConcurrencyGate, limit=POOL_CAPACITY)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -197,14 +205,21 @@ app.add_middleware(
     # a cross-origin page unless it is named here.
     expose_headers=[TOTAL_COUNT_HEADER],
 )
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-app.add_middleware(AuditMiddleware)
 
 app.include_router(api_router, prefix="/api/v1")
 
 
+@app.exception_handler(PoolTimeout)
+async def pool_exhausted(_request, _exc):
+    return JSONResponse(
+        status_code=503,
+        headers={"Retry-After": "1"},
+        content={"detail": "Server busy, try again shortly."},
+    )
+
+
 @app.get("/health", operation_id="health.check")
-def health_check():
+async def health_check():
     return {
         "status": "healthy",
         "service": "chronos-ledger",
