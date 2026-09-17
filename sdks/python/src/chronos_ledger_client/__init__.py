@@ -20,7 +20,7 @@ from .generated import Client
 from .generated.api.resources import resources_create_reservation
 from .generated.models import ReservationCreate, ReservationResponse
 
-__version__ = "0.12.0"  # x-release-please-version
+__version__ = "0.13.0"  # x-release-please-version
 
 __all__ = [
     "ChronosError",

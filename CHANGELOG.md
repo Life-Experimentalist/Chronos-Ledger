@@ -10,6 +10,31 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.13.0](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.12.0...v0.13.0) (2026-09-17)
+
+
+### Features
+
+* **absence:** an absence request can cover a range of days with end_date ([ef4dace](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/ef4dace9ace6e1d46a74cd8d2fd77d6c8122e970))
+* **api:** an operationId on every route, and a test that the spec matches the app ([596b219](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/596b2195dfc354d264ff8827b9eb4f42d9743f54))
+* **audit:** record every write through the API and read it back at GET /audit/ ([ab6346f](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/ab6346f4c55a99b67cde48f2249db4f5d527c9ca))
+* **auth:** login takes email_address, email stays accepted through 0.14 ([ad705e4](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/ad705e4d4385fbca24bd8d17a48e5371411a5245))
+* **cli:** add the chronos CLI for init, upgrade, backup, restore and doctor ([65983b3](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/65983b3761f08c76bd784e4cf2213336d44ea769))
+* **health:** report version and migration revision, add /health/ready ([b711a6d](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/b711a6d9b455ee711c82fe55d23b25f5164e6e43))
+* **schedule:** GET /schedule/ledger reads the ledger between two dates ([da991b6](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/da991b6e0a8df24bf9f342a4ba1d58c19d1eb8f7))
+* **sdk:** add TypeScript and Python clients generated from the spec ([2379341](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/2379341041a63e65104a90df238abebc77c964f9))
+
+
+### Bug Fixes
+
+* **api:** shed load with 503 instead of stalling past the pool size ([d0bfe8a](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/d0bfe8a79290aa4c3ee2a404ad8f7416d0fa71cb))
+* **ci:** Dependabot looked for Dockerfiles at the root and failed every week ([2099c0c](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/2099c0cb1901201eb83566c81c938ce4fc79ab93))
+* **cli:** use as_chunks for the registry PATH decode, as clippy 1.98 asks ([f97759c](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/f97759c6958cfbeebd03353b8f1d0853f00ba0a4))
+* **guest:** the staff directory stopped at 20 names and never said so ([1871fba](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/1871fba5e80a6340f83de7ca773430653c8cf898))
+* **nginx:** raise worker_connections so live dashboards are not capped near 510 ([32ffe80](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/32ffe80fcac726dde336b4894e849035693f63a5))
+* **pages:** the landing page loaded a 1.5 MB favicon and published all of docs/ ([557a212](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/557a212c0cd78c581347318d2787e54df5c3dc3d))
+* **sdk:** commit the Python client as the pinned generator writes it ([45513a1](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/45513a13ca712c865129de64b3b9ef25b70f3b2b))
+
 ## [0.12.0](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.11.0...v0.12.0) (2026-09-12)
 
 
