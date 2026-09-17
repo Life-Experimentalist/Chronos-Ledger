@@ -53,7 +53,7 @@ Throughput is requests per second. "Users" means concurrent virtual users sendin
 Other checks:
 
 - Double booking: 25 users hammered one room and one already-booked 30-minute slot for 30 seconds. All 489 attempts got `409`, and none got through.
-- Past its capacity, a process does not slow down further. It works on at most 30 API requests at once (its connection pool), holds the rest for up to 10 seconds, and answers `503` with `Retry-After` for anything still waiting. At 200 users about 0.3% of mixed requests and 2% of bookings got `503`. `/health` kept answering throughout, and the app was back to normal a second after the load stopped.
+- Past its capacity, a process does not slow down further. It works on at most 30 API requests at once (its connection pool), holds the rest for up to 10 seconds, and answers `503` with `Retry-After` for anything still waiting. With 200 users sending requests back to back, requests queued for about 3.5 seconds and none got `503`. `/health` kept answering throughout, and the app was back to normal a second after the load stopped.
 - WebSockets: 500 authenticated sockets held open for a minute with no failures. nginx allows 16,384 connections per worker, about 8,000 proxied sockets. In a 5,000-socket burst on the test laptop, 81% connected; every socket authenticates through the app, so a burst that size queues behind it.
 - Kiosk check-in: without a kiosk key the endpoint answers `401`. With a key, the per-account rate limit starts returning `429` as designed.
 - Memory when idle: app about 175 MB, PostgreSQL about 70 MB, nginx and Redis under 5 MB each. Plan for about 250 MB idle and 1 GB under load.
@@ -70,7 +70,7 @@ Real people pause between actions. With each simulated person doing one read or 
 
 | People | Req/s | p50 | Turned away with 503 |
 |---|---|---|---|
-| 1,000 | 26 | 24 ms | 0.6% |
+| 1,000 | 26 | 24 ms | 0% |
 | 3,000 | 59 | 10 s | 31% |
 
 One process handles about 1,000 people who are all active at the same moment, and the limit is the 50 to 60 requests per second it can serve, not the number of connections. Everyone started in the same second in these runs, which is harsher than a real morning.
