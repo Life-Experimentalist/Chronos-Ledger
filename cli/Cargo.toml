@@ -2,7 +2,7 @@
 name = "chronos-ledger-cli"
 # Moves with the server: release-please writes this line (release-please-config.json),
 # and `chronos upgrade` refuses a server newer than the CLI running it.
-version = "0.12.0"
+version = "0.13.0"
 edition = "2024"
 description = "Install, upgrade, back up and diagnose a Chronos Ledger server"
 license = "Apache-2.0"

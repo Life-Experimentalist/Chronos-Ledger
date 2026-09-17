@@ -1,6 +1,6 @@
 [project]
 name = "chronos-ledger-client"
-version = "0.12.0"
+version = "0.13.0"
 description = "Typed client for the Chronos Ledger REST API"
 readme = "README.md"
 license = "Apache-2.0"
