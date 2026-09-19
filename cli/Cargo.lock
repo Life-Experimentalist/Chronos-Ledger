@@ -135,7 +135,7 @@ dependencies = [
 
 [[package]]
 name = "chronos-ledger-cli"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "anyhow",
  "chrono",

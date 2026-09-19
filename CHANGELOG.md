@@ -10,6 +10,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.13.1](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.13.0...v0.13.1) (2026-09-19)
+
+
+### Features
+
+* **api:** the room list pages, and /config carries the version ([9c20840](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/9c2084081736b233dd9c60f05d400503e24ad9eb))
+
+
+### Bug Fixes
+
+* **deps:** anyio 4.14.2, which closes CVE-2026-63374 ([37e7be8](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/37e7be8ba80f1ddfd90da3e724b1cec1cc1bc8e4))
+
 ## [0.13.0](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.12.0...v0.13.0) (2026-09-17)
 
 
