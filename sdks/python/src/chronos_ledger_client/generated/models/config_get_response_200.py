@@ -22,10 +22,14 @@ class ConfigGetResponse200:
         labels (ConfigGetResponse200Labels | Unset):
         password_min_length (int | Unset): PASSWORD_MIN_LENGTH on this deployment. The onboarding wizard states it in a
             placeholder and refuses a shorter password before sending it. Example: 12.
+        version (str | Unset): The API version, the same string GET /health reports. It is here so a client that pins a
+            version can read it without leaving the /api/v1 prefix it builds its URLs from. The database revision stays on
+            /health. Example: 0.14.0.
     """
 
     labels: ConfigGetResponse200Labels | Unset = UNSET
     password_min_length: int | Unset = UNSET
+    version: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -35,6 +39,8 @@ class ConfigGetResponse200:
 
         password_min_length = self.password_min_length
 
+        version = self.version
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({})
@@ -42,6 +48,8 @@ class ConfigGetResponse200:
             field_dict["labels"] = labels
         if password_min_length is not UNSET:
             field_dict["password_min_length"] = password_min_length
+        if version is not UNSET:
+            field_dict["version"] = version
 
         return field_dict
 
@@ -59,9 +67,12 @@ class ConfigGetResponse200:
 
         password_min_length = d.pop("password_min_length", UNSET)
 
+        version = d.pop("version", UNSET)
+
         config_get_response_200 = cls(
             labels=labels,
             password_min_length=password_min_length,
+            version=version,
         )
 
         config_get_response_200.additional_properties = d

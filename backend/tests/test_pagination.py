@@ -1,6 +1,6 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
-"""The seven list routes page on request and always say how many rows matched.
+"""The eight list routes page on request and always say how many rows matched.
 
 Paging is opt-in: with no limit and no offset a route returns every row, as it
 always has, so clients written before it keep working. Pages are checked
@@ -21,6 +21,7 @@ from app.models.db import (
     DailyLedger,
     InstitutionalRole,
     PlanningCycle,
+    Resource,
     StructuralMasterSlot,
     User,
 )
@@ -32,6 +33,7 @@ _UNIT_ADMIN_HASH = hash_password(UNIT_ADMIN_PASSWORD)
 # Each list route, and the field that identifies one of its rows.
 LISTS = [
     ("/api/v1/users/", "id"),
+    ("/api/v1/resources/", "id"),
     ("/api/v1/users/staff/available", "id"),
     ("/api/v1/schedule/cycles", "id"),
     ("/api/v1/schedule/slots", "id"),
@@ -80,6 +82,7 @@ def lists(db, seed_users, monkeypatch):
             initial_login_state=False,
         )
     )
+    db.add_all([Resource(code=f"R{n:03}", label=f"Room {n}") for n in range(6)])
     cycles = [
         PlanningCycle(
             cycle_label=f"Cycle {n}",

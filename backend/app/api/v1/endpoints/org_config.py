@@ -1,7 +1,7 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from app.core.config import get_settings, label_overrides
 from app.core.vocabulary import labels_for
@@ -10,10 +10,17 @@ router = APIRouter()
 
 
 @router.get("", operation_id="config.get")
-def read_org_config():
+def read_org_config(request: Request):
     """Public display config: what the UI needs before anyone has logged in.
 
     Unauthenticated on purpose; the login page already needs it.
+
+    `version` is the same string `GET /health` reports. It is here too because
+    an integrator that pins a version has to read the one it is talking to,
+    and `/health` sits outside the `/api/v1` prefix a client builds its URLs
+    from, so reading it there costs a second base path for one field. The
+    database revision stays on `/health`: that is an operator's number, and
+    this route answers before anyone has signed in.
 
     `password_min_length` is here rather than in the auth schema because the
     onboarding wizard has to state the rule in a placeholder and refuse a short
@@ -25,4 +32,5 @@ def read_org_config():
     return {
         "labels": labels_for(label_overrides(settings)),
         "password_min_length": settings.password_min_length,
+        "version": request.app.version,
     }

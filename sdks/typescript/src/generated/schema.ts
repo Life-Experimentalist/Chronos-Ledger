@@ -12,11 +12,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Display vocabulary and password floor
+         * Display vocabulary, password floor and version
          * @description Public. Returns the display labels the UI should render for the
          *     engine's six neutral nouns (staff, member, activity, unit, lead,
-         *     cycle) and the shortest password this deployment accepts. The client
-         *     needs both before anyone has logged in.
+         *     cycle), the shortest password this deployment accepts and the API
+         *     version. The client needs the first two before anyone has logged in.
          *
          *     Each label is set on its own with `LABEL_STAFF`, `LABEL_MEMBER`,
          *     `LABEL_ACTIVITY`, `LABEL_UNIT`, `LABEL_LEAD` or `LABEL_CYCLE`, and
@@ -1942,6 +1942,11 @@ export interface operations {
                          * @example 12
                          */
                         password_min_length?: number;
+                        /**
+                         * @description The API version, the same string GET /health reports. It is here so a client that pins a version can read it without leaving the /api/v1 prefix it builds its URLs from. The database revision stays on /health.
+                         * @example 0.14.0
+                         */
+                        version?: string;
                     };
                 };
             };
@@ -2507,6 +2512,10 @@ export interface operations {
                 resource_type?: "ROOM" | "PERSON";
                 active?: boolean;
                 code?: string;
+                /** @description At most this many rows. Every matching row if omitted. */
+                limit?: components["parameters"]["Limit"];
+                /** @description Skip this many rows first. Rows come in id order. */
+                offset?: components["parameters"]["Offset"];
             };
             header?: never;
             path?: never;
@@ -2517,6 +2526,7 @@ export interface operations {
             /** @description Resources, ordered by code. */
             200: {
                 headers: {
+                    "X-Total-Count": components["headers"]["XTotalCount"];
                     [name: string]: unknown;
                 };
                 content: {

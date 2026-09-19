@@ -16,6 +16,8 @@ def _get_kwargs(
     resource_type: ResourcesListResourceType | Unset = UNSET,
     active: bool | Unset = UNSET,
     code: str | Unset = UNSET,
+    limit: int | Unset = UNSET,
+    offset: int | Unset = 0,
 ) -> dict[str, Any]:
 
     params: dict[str, Any] = {}
@@ -29,6 +31,10 @@ def _get_kwargs(
     params["active"] = active
 
     params["code"] = code
+
+    params["limit"] = limit
+
+    params["offset"] = offset
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
@@ -82,6 +88,8 @@ def sync_detailed(
     resource_type: ResourcesListResourceType | Unset = UNSET,
     active: bool | Unset = UNSET,
     code: str | Unset = UNSET,
+    limit: int | Unset = UNSET,
+    offset: int | Unset = 0,
 ) -> Response[ErrorResponse | list[ResourceResponse]]:
     """List resources
 
@@ -92,6 +100,8 @@ def sync_detailed(
         resource_type (ResourcesListResourceType | Unset):
         active (bool | Unset):
         code (str | Unset):
+        limit (int | Unset):
+        offset (int | Unset):  Default: 0.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -105,6 +115,8 @@ def sync_detailed(
         resource_type=resource_type,
         active=active,
         code=code,
+        limit=limit,
+        offset=offset,
     )
 
     response = client.get_httpx_client().request(
@@ -120,6 +132,8 @@ def sync(
     resource_type: ResourcesListResourceType | Unset = UNSET,
     active: bool | Unset = UNSET,
     code: str | Unset = UNSET,
+    limit: int | Unset = UNSET,
+    offset: int | Unset = 0,
 ) -> ErrorResponse | list[ResourceResponse] | None:
     """List resources
 
@@ -130,6 +144,8 @@ def sync(
         resource_type (ResourcesListResourceType | Unset):
         active (bool | Unset):
         code (str | Unset):
+        limit (int | Unset):
+        offset (int | Unset):  Default: 0.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -144,6 +160,8 @@ def sync(
         resource_type=resource_type,
         active=active,
         code=code,
+        limit=limit,
+        offset=offset,
     ).parsed
 
 
@@ -153,6 +171,8 @@ async def asyncio_detailed(
     resource_type: ResourcesListResourceType | Unset = UNSET,
     active: bool | Unset = UNSET,
     code: str | Unset = UNSET,
+    limit: int | Unset = UNSET,
+    offset: int | Unset = 0,
 ) -> Response[ErrorResponse | list[ResourceResponse]]:
     """List resources
 
@@ -163,6 +183,8 @@ async def asyncio_detailed(
         resource_type (ResourcesListResourceType | Unset):
         active (bool | Unset):
         code (str | Unset):
+        limit (int | Unset):
+        offset (int | Unset):  Default: 0.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -176,6 +198,8 @@ async def asyncio_detailed(
         resource_type=resource_type,
         active=active,
         code=code,
+        limit=limit,
+        offset=offset,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -189,6 +213,8 @@ async def asyncio(
     resource_type: ResourcesListResourceType | Unset = UNSET,
     active: bool | Unset = UNSET,
     code: str | Unset = UNSET,
+    limit: int | Unset = UNSET,
+    offset: int | Unset = 0,
 ) -> ErrorResponse | list[ResourceResponse] | None:
     """List resources
 
@@ -199,6 +225,8 @@ async def asyncio(
         resource_type (ResourcesListResourceType | Unset):
         active (bool | Unset):
         code (str | Unset):
+        limit (int | Unset):
+        offset (int | Unset):  Default: 0.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -214,5 +242,7 @@ async def asyncio(
             resource_type=resource_type,
             active=active,
             code=code,
+            limit=limit,
+            offset=offset,
         )
     ).parsed

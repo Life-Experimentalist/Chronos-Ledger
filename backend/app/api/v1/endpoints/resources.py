@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.pagination import Page
 from app.core.security import get_current_user, require_roles
 from app.models.db import Reservation, ReservationStatus, Resource, ResourceType
 from app.schemas.resources import (
@@ -49,6 +50,7 @@ def list_resources(
     resource_type: ResourceType | None = None,
     active: bool | None = None,
     code: str | None = None,
+    page: Page = Depends(),
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
@@ -57,6 +59,10 @@ def list_resources(
     Readable by anyone signed in. A resource is a place and a capacity, not
     a secret, and an external system that has to book one needs to be able
     to find it first.
+
+    Rows come back in code order, and the page is optional: with no limit and
+    no offset this is every row, as it always was. A building with hundreds of
+    rooms is a list a settings screen should be able to ask for a page of.
     """
     query = db.query(Resource)
     if resource_type is not None:
@@ -65,7 +71,7 @@ def list_resources(
         query = query.filter(Resource.active == active)
     if code is not None:
         query = query.filter(Resource.code == code.strip())
-    return query.order_by(Resource.code).all()
+    return page.rows(query, Resource.code)
 
 
 @router.post(

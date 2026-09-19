@@ -4,6 +4,7 @@
 from app.api.v1.endpoints import org_config
 from app.core.config import Settings
 from app.core.vocabulary import DEFAULT_LABELS
+from app.main import app
 
 
 def test_config_is_public_and_returns_the_engines_own_words(client):
@@ -42,3 +43,11 @@ def test_the_published_floor_follows_the_setting(client, monkeypatch):
     monkeypatch.setattr(org_config, "get_settings", lambda: Settings(password_min_length=20))
     res = client.get("/api/v1/config")
     assert res.json()["password_min_length"] == 20
+
+
+def test_the_version_is_published_so_an_integrator_need_not_leave_the_api_prefix(client):
+    """A client that pins a Chronos version reads it from the prefix it already
+    uses, rather than fetching /health on a different base path for one field."""
+    res = client.get("/api/v1/config")
+    assert res.json()["version"] == app.version
+    assert "migration_revision" not in res.json()

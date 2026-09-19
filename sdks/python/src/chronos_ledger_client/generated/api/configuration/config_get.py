@@ -48,12 +48,12 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
 ) -> Response[ConfigGetResponse200]:
-    """Display vocabulary and password floor
+    """Display vocabulary, password floor and version
 
      Public. Returns the display labels the UI should render for the
     engine's six neutral nouns (staff, member, activity, unit, lead,
-    cycle) and the shortest password this deployment accepts. The client
-    needs both before anyone has logged in.
+    cycle), the shortest password this deployment accepts and the API
+    version. The client needs the first two before anyone has logged in.
 
     Each label is set on its own with `LABEL_STAFF`, `LABEL_MEMBER`,
     `LABEL_ACTIVITY`, `LABEL_UNIT`, `LABEL_LEAD` or `LABEL_CYCLE`, and
@@ -83,12 +83,12 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
 ) -> ConfigGetResponse200 | None:
-    """Display vocabulary and password floor
+    """Display vocabulary, password floor and version
 
      Public. Returns the display labels the UI should render for the
     engine's six neutral nouns (staff, member, activity, unit, lead,
-    cycle) and the shortest password this deployment accepts. The client
-    needs both before anyone has logged in.
+    cycle), the shortest password this deployment accepts and the API
+    version. The client needs the first two before anyone has logged in.
 
     Each label is set on its own with `LABEL_STAFF`, `LABEL_MEMBER`,
     `LABEL_ACTIVITY`, `LABEL_UNIT`, `LABEL_LEAD` or `LABEL_CYCLE`, and
@@ -114,12 +114,12 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
 ) -> Response[ConfigGetResponse200]:
-    """Display vocabulary and password floor
+    """Display vocabulary, password floor and version
 
      Public. Returns the display labels the UI should render for the
     engine's six neutral nouns (staff, member, activity, unit, lead,
-    cycle) and the shortest password this deployment accepts. The client
-    needs both before anyone has logged in.
+    cycle), the shortest password this deployment accepts and the API
+    version. The client needs the first two before anyone has logged in.
 
     Each label is set on its own with `LABEL_STAFF`, `LABEL_MEMBER`,
     `LABEL_ACTIVITY`, `LABEL_UNIT`, `LABEL_LEAD` or `LABEL_CYCLE`, and
@@ -147,12 +147,12 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
 ) -> ConfigGetResponse200 | None:
-    """Display vocabulary and password floor
+    """Display vocabulary, password floor and version
 
      Public. Returns the display labels the UI should render for the
     engine's six neutral nouns (staff, member, activity, unit, lead,
-    cycle) and the shortest password this deployment accepts. The client
-    needs both before anyone has logged in.
+    cycle), the shortest password this deployment accepts and the API
+    version. The client needs the first two before anyone has logged in.
 
     Each label is set on its own with `LABEL_STAFF`, `LABEL_MEMBER`,
     `LABEL_ACTIVITY`, `LABEL_UNIT`, `LABEL_LEAD` or `LABEL_CYCLE`, and

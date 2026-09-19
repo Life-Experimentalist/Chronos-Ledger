@@ -2,9 +2,9 @@
 # Licensed under the Apache License, Version 2.0
 """Paging for the routes that hand back a whole table.
 
-The user list, the staff directory, the cycle list, the slot list, today's
-ledger, the ledger over a range and the staff locator each return every row
-they match. That is fine for one department and heavy for an institution with
+The user list, the staff directory, the resource list, the cycle list, the
+slot list, today's ledger, the ledger over a range and the staff locator each
+return every row they match. That is fine for one department and heavy for an institution with
 thousands of members, so each takes an optional limit and offset. Leaving both off returns every row,
 as these routes always have, so a client written against them keeps working.
 

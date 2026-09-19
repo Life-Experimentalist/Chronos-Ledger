@@ -20,7 +20,9 @@ Base URL: `http://<server>/api/v1`
 ### GET /config `[public]`
 
 What a client needs before anyone has logged in: which vocabulary to render,
-and how short a password this deployment will accept.
+and how short a password this deployment will accept. It also carries the API
+version, so a client that pins one can read the version it is talking to
+without leaving the `/api/v1` prefix.
 
 ```json
 {
@@ -32,7 +34,8 @@ and how short a password this deployment will accept.
     "lead": "Instructor",
     "cycle": "Academic Year"
   },
-  "password_min_length": 12
+  "password_min_length": 12,
+  "version": "0.14.0"
 }
 ```
 
@@ -43,6 +46,10 @@ word: `Staff`, `Member`, `Activity`, `Unit`, `Lead`, `Cycle`. There is no
 domain preset behind them, so the words above are one deployment's choices and
 not a mode you can select. Labels are display only: no field name in this
 document changes with them.
+
+`version` is the same string `GET /health` reports. The database revision is
+not here: that is an operator's number, and this route answers before anyone
+has signed in.
 
 Labels change nothing else. The field names in this reference, the database
 columns and the CSV headers stay as they are whatever the interface calls them,
@@ -289,18 +296,19 @@ Revokes immediately: the next request using it gets `401`.
 
 ## Paging
 
-Eight routes return a whole list: `GET /users/`, `GET /users/staff/available`,
-`GET /schedule/cycles`, `GET /schedule/slots`, `GET /schedule/ledger/today`,
-`GET /schedule/ledger`, `GET /schedule/staff/all/locations` and `GET /audit/`.
+Nine routes return a whole list: `GET /users/`, `GET /users/staff/available`,
+`GET /resources/`, `GET /schedule/cycles`, `GET /schedule/slots`,
+`GET /schedule/ledger/today`, `GET /schedule/ledger`,
+`GET /schedule/staff/all/locations` and `GET /audit/`.
 Each takes two optional query parameters:
 
 - `limit`: at most this many rows, 1 or more.
 - `offset`: skip this many rows first, 0 or more.
 
 Leave both off and the route returns every row it matches, as it always has.
-Rows come back in id order (`staff_id` for the locator, date then start time
-for `GET /schedule/ledger`, newest first for `GET /audit/`), and every
-response, paged or not, carries `X-Total-Count`: how many rows matched before
+Rows come back in id order (`code` for `GET /resources/`, `staff_id` for the
+locator, date then start time for `GET /schedule/ledger`, newest first for
+`GET /audit/`), and every response, paged or not, carries `X-Total-Count`: how many rows matched before
 the page was cut. A `limit` of 0 or a negative `offset` is refused with `422`,
 and an offset past the end is an empty list with the count still set.
 
@@ -470,7 +478,8 @@ capacity and coordinates are filled in with `PATCH`.
 ### GET /resources/
 
 Optional filters: `resource_type` (`ROOM` or `PERSON`), `active`, `code`.
-Readable by anyone signed in.
+Readable by anyone signed in. Ordered by code, and pages with `limit` and
+`offset` like the other lists.
 
 ```json
 [

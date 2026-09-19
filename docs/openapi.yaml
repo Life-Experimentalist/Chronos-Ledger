@@ -1487,12 +1487,12 @@ paths:
     get:
       operationId: config.get
       tags: [Configuration]
-      summary: Display vocabulary and password floor
+      summary: Display vocabulary, password floor and version
       description: |
         Public. Returns the display labels the UI should render for the
         engine's six neutral nouns (staff, member, activity, unit, lead,
-        cycle) and the shortest password this deployment accepts. The client
-        needs both before anyone has logged in.
+        cycle), the shortest password this deployment accepts and the API
+        version. The client needs the first two before anyone has logged in.
 
         Each label is set on its own with `LABEL_STAFF`, `LABEL_MEMBER`,
         `LABEL_ACTIVITY`, `LABEL_UNIT`, `LABEL_LEAD` or `LABEL_CYCLE`, and
@@ -1526,6 +1526,14 @@ paths:
                       PASSWORD_MIN_LENGTH on this deployment. The onboarding
                       wizard states it in a placeholder and refuses a shorter
                       password before sending it.
+                  version:
+                    type: string
+                    example: "0.14.0"
+                    description: >-
+                      The API version, the same string GET /health reports. It
+                      is here so a client that pins a version can read it
+                      without leaving the /api/v1 prefix it builds its URLs
+                      from. The database revision stays on /health.
 
   # ── Authentication ────────────────────────
   /api/v1/auth/login:
@@ -2152,9 +2160,14 @@ paths:
           required: false
           schema:
             type: string
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
       responses:
         "200":
           description: Resources, ordered by code.
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/XTotalCount"
           content:
             application/json:
               schema:
