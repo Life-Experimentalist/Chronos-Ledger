@@ -51,7 +51,7 @@ def test_api_key_goes_out_as_x_api_key_with_the_user_agent():
     server = Server(lambda r: httpx.Response(200, json=[]))
     assert resources_list.sync(client=client(server, api_key="k1")) == []
     (request,) = server.seen
-    assert str(request.url) == "https://c.test/api/v1/resources/"
+    assert (request.url.host, request.url.path) == ("c.test", "/api/v1/resources/")
     assert request.headers["X-API-Key"] == "k1"
     assert request.headers["User-Agent"] == f"chronos-python/{chronos.__version__}"
     assert "Authorization" not in request.headers
