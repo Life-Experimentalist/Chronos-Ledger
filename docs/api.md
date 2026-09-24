@@ -1648,6 +1648,7 @@ Events are delivered as JSON frames:
 | `ABSENCE_APPROVAL_REQUIRED` | Line manager | `{log_id, from, date}`, plus `end_date` for a request over several days |
 | `ABSENCE_DECISION` | Staff who submitted | `{log_id, decision}` |
 | `GUEST_HANDSHAKE_REQ` | Target staff | `{transaction_reference, guest_name, organization, intent}` |
+| `GUEST_VISIT_EXPIRED` | Target staff, and whoever decided the visit if that was somebody else | `{transaction_reference, guest_name, visit_expires_at}` |
 
 The `AUTH` frame is the only thing a client sends. Everything after it
 travels server to client.

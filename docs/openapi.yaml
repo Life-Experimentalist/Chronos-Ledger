@@ -4209,4 +4209,11 @@ paths:
 #     "payload": { "transaction_reference": 5, "guest_name": "J. Smith",
 #                  "organization": "TechCorp", "intent": "..." } }
 #
+#   { "event": "GUEST_VISIT_EXPIRED",
+#     "payload": { "transaction_reference": 5, "guest_name": "J. Smith",
+#                  "visit_expires_at": "2026-09-12T07:31:07Z" } }
+#   Sent once per overrun, within five minutes of the end passing, to the
+#   target staff and to whoever decided the visit. GET /guest/overstays is
+#   the same list for a desk that had no socket open at the time.
+#
 # The AUTH frame is the only thing a client sends upstream.

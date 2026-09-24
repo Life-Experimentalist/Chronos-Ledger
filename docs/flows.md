@@ -122,11 +122,17 @@ sequenceDiagram
 
     loop Every 5 seconds until decided
         KI->>API: GET /guest/visit/{code}
-        API-->>KI: 200 {handshake_status, timestamp_marked}
+        API-->>KI: 200 {handshake_status, timestamp_marked, visit_expires_at}
     end
     KI-->>G: Approved, or declined
 
     Note over KI,G: The visitor can follow the same code<br/>from a phone at /guest/visit
+
+    Note over API,DB: Every 5 minutes: approved visits past visit_expires_at
+    API->>WS: broadcast(target, and the approver, GUEST_VISIT_EXPIRED)
+    WS-->>Fac: {event: GUEST_VISIT_EXPIRED,<br/>payload: {transaction_reference, guest_name, visit_expires_at}}
+    Fac->>API: PATCH /guest/{id}/extend<br/>{minutes: 30}
+    API->>DB: UPDATE visit_expires_at,<br/>overstay_notified_at = NULL
 ```
 
 **Step-by-step:**
@@ -135,6 +141,8 @@ sequenceDiagram
 2. The check-in POST carries that key rather than anyone's bearer token. The server creates a `GuestGateRegistry` row, answers with a visit code for the visitor and, once the response is out, pushes a `GUEST_HANDSHAKE_REQ` frame to the target staff's WebSocket connection.
 3. If the staff is connected, their **NotificationPanel** badge increments and the **Interaction Desk** tab shows the incoming request within milliseconds.
 4. Staff approves or declines, and the `GuestGateRegistry` row is updated. Nothing is pushed to the kiosk, which has nobody signed in to push to. It asks `GET /guest/visit/{code}` with the code the check-in returned, and the visitor can ask the same from a phone at `/guest/visit`. The row keeps only the code's hash.
+5. An approval gets an end, `GUEST_VISIT_LENGTH_MINUTES` after the decision, and the visitor reads that time from the same page their code opens. Zero, the default, leaves the visit open-ended and there is nothing more to this step.
+6. A job every five minutes finds approved visits whose end has passed and pushes `GUEST_VISIT_EXPIRED` once, to the target and to whoever decided the visit if that was somebody else. The **Interaction Desk** lists the same visits from `GET /guest/overstays`, for a desk that had no socket open when the notice went out, and `PATCH /guest/{id}/extend` gives one of them more time, up to `GUEST_VISIT_EXTENSION_MAX_MINUTES` at a go. An extension clears the record that anybody was told, so a second overrun announces itself as the first did.
 
 ---
 
