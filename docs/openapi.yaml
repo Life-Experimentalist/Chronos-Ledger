@@ -1338,6 +1338,20 @@ components:
         decision:
           $ref: "#/components/schemas/LogVerificationState"
 
+    GuestExtensionRequest:
+      type: object
+      required: [minutes]
+      properties:
+        minutes:
+          type: integer
+          minimum: 1
+          description: >
+            How much longer the visit gets. The ceiling is
+            GUEST_VISIT_EXTENSION_MAX_MINUTES, which defaults to 240 and is
+            checked in the route rather than here, because a schema is fixed at
+            import and the setting is an operator's to change.
+          example: 30
+
     GuestResponse:
       type: object
       properties:
@@ -1358,6 +1372,14 @@ components:
         timestamp_marked:
           type: string
           format: date-time
+        visit_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            When an approved visit is over. Null is one nobody has approved, one
+            approved while GUEST_VISIT_LENGTH_MINUTES was 0, and every visit
+            approved before the column existed.
 
     GuestVisitStatus:
       type: object
@@ -1371,6 +1393,14 @@ components:
           type: string
           format: date-time
           description: When the visitor checked in.
+        visit_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            When to leave, which is the one thing the visitor most needs from
+            this and gives away nothing about them: whoever reads the code over
+            a shoulder learns a time, not a name. Null is an open-ended visit.
 
     StaffAvailabilityResponse:
       type: object
@@ -3557,6 +3587,29 @@ paths:
                 items:
                   $ref: "#/components/schemas/GuestResponse"
 
+  /api/v1/guest/overstays:
+    get:
+      operationId: guest.listOverstays
+      tags: [Guest Gate]
+      summary: List the approved visits that have run past their end
+      description: >
+        Longest over first, which is the desk's other list: who was let in and
+        has not been dealt with since. The same reach as the decision, so for an
+        ORG_ADMIN with GUEST_ADMIN_CAN_DECIDE on it is the whole organization's.
+        Nothing here has been revoked; each row says the time is up, and a person
+        decides whether to extend it or to go and find them. Empty while
+        GUEST_VISIT_LENGTH_MINUTES is 0, since then no visit has an end.
+        Unpaginated, as /guest/pending is.
+      responses:
+        "200":
+          description: Approved visits past their end.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GuestResponse"
+
   /api/v1/guest/{entry_id}/decide:
     patch:
       operationId: guest.decide
@@ -3594,6 +3647,76 @@ paths:
             No such entry, or the visitor asked for somebody else. By default only the
             staff member the visitor named may decide; with GUEST_ADMIN_CAN_DECIDE on an
             ORG_ADMIN may decide any visit and a UNIT_ADMIN those meant for their own unit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/guest/{entry_id}/extend:
+    patch:
+      operationId: guest.extendVisit
+      tags: [Guest Gate]
+      summary: Give an approved visit longer
+      description: >
+        Whoever could have decided the visit can extend it, on the reasoning that
+        a desk which may let somebody in may also let them stay. The extension
+        runs from whichever is later, now or the end the visit already has, so a
+        visit half an hour over gets the full grant rather than a window that has
+        already gone. There is no limit on how many times: this bounds one grant,
+        and the audit record of each extension is what an organization gets in
+        place of a ceiling on the whole visit.
+      parameters:
+        - name: entry_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuestExtensionRequest"
+      responses:
+        "200":
+          description: The visit's new end.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: VISIT_EXTENDED
+                  guest:
+                    type: string
+                    description: The visitor's name.
+                  visit_expires_at:
+                    type: string
+                    format: date-time
+                    description: When the visit is now over.
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: >
+            No such entry, or one this account could not have decided either.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            The visit is not approved, or it is approved with no end to move,
+            which is any visit approved while GUEST_VISIT_LENGTH_MINUTES was 0.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            Longer than GUEST_VISIT_EXTENSION_MAX_MINUTES, refused rather than
+            quietly trimmed so that a desk which meant 30 and typed 300 hears
+            about it. Also every extension when that setting is 0.
           content:
             application/json:
               schema:

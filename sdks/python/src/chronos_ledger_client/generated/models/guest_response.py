@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -26,6 +26,9 @@ class GuestResponse:
         handshake_status (LogVerificationState | Unset): Approval workflow state for absence requests and guest
             handshakes.
         timestamp_marked (datetime.datetime | Unset):
+        visit_expires_at (datetime.datetime | None | Unset): When an approved visit is over. Null is one nobody has
+            approved, one approved while GUEST_VISIT_LENGTH_MINUTES was 0, and every visit approved before the column
+            existed.
     """
 
     id: int | Unset = UNSET
@@ -36,6 +39,7 @@ class GuestResponse:
     visitation_intent: str | Unset = UNSET
     handshake_status: LogVerificationState | Unset = UNSET
     timestamp_marked: datetime.datetime | Unset = UNSET
+    visit_expires_at: datetime.datetime | None | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -59,6 +63,14 @@ class GuestResponse:
         if not isinstance(self.timestamp_marked, Unset):
             timestamp_marked = self.timestamp_marked.isoformat()
 
+        visit_expires_at: None | str | Unset
+        if isinstance(self.visit_expires_at, Unset):
+            visit_expires_at = UNSET
+        elif isinstance(self.visit_expires_at, datetime.datetime):
+            visit_expires_at = self.visit_expires_at.isoformat()
+        else:
+            visit_expires_at = self.visit_expires_at
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({})
@@ -78,6 +90,8 @@ class GuestResponse:
             field_dict["handshake_status"] = handshake_status
         if timestamp_marked is not UNSET:
             field_dict["timestamp_marked"] = timestamp_marked
+        if visit_expires_at is not UNSET:
+            field_dict["visit_expires_at"] = visit_expires_at
 
         return field_dict
 
@@ -110,6 +124,23 @@ class GuestResponse:
         else:
             timestamp_marked = datetime.datetime.fromisoformat(_timestamp_marked)
 
+        def _parse_visit_expires_at(data: object) -> datetime.datetime | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, str):
+                    raise TypeError()
+                visit_expires_at_type_0 = datetime.datetime.fromisoformat(data)
+
+                return visit_expires_at_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(datetime.datetime | None | Unset, data)
+
+        visit_expires_at = _parse_visit_expires_at(d.pop("visit_expires_at", UNSET))
+
         guest_response = cls(
             id=id,
             guest_name=guest_name,
@@ -119,6 +150,7 @@ class GuestResponse:
             visitation_intent=visitation_intent,
             handshake_status=handshake_status,
             timestamp_marked=timestamp_marked,
+            visit_expires_at=visit_expires_at,
         )
 
         guest_response.additional_properties = d

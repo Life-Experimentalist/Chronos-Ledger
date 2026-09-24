@@ -24,6 +24,7 @@ from app.models.db import (
 from app.schemas.guest import (
     GuestCheckInRequest,
     GuestDecisionRequest,
+    GuestExtensionRequest,
     GuestResponse,
     GuestVisitStatus,
     StaffAvailabilityResponse,
@@ -37,6 +38,14 @@ _AVAILABILITY_LABELS = {
     AccessReadiness.BUSY: "Occupied",
     AccessReadiness.CRITICAL_DO_NOT_DISTURB: "Do Not Disturb",
 }
+
+
+def _as_utc(moment: datetime) -> datetime:
+    """A stored moment as UTC: naive on SQLite and already aware on Postgres.
+
+    The same two lines as auth.py::_as_utc, which they have no shared home for.
+    """
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
 
 
 @router.post("/register-checkin", operation_id="guest.checkIn")
@@ -162,8 +171,82 @@ def decide_guest_entry(
     # Whoever it was, including the person the visitor came to see, so that the
     # row answers who let this visitor in rather than who could have.
     entry.decided_by_id = current_user.id
+    # Written on every decision and not only on an approval, so a visit
+    # re-decided to denied keeps no expiry from the approval it had, and a
+    # re-approval starts the clock again rather than carrying an old end.
+    length = get_settings().guest_visit_length_minutes
+    approved = payload.decision == LogVerificationState.VERIFIED_APPROVED
+    entry.visit_expires_at = (
+        datetime.now(UTC) + timedelta(minutes=length) if approved and length > 0 else None
+    )
+    entry.overstay_notified_at = None
     db.commit()
     return {"status": payload.decision.value, "guest": entry.guest_name}
+
+
+@router.patch("/{entry_id}/extend", operation_id="guest.extendVisit")
+def extend_guest_visit(
+    entry_id: int,
+    payload: GuestExtensionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Give an approved visit longer.
+
+    Whoever could have decided the visit can extend it, on the reasoning that a
+    desk which may let somebody in may also let them stay. There is no limit on
+    how many times: this bounds one grant, so an organization that wants a hard
+    ceiling on a whole visit does not have one here, and the audit record of
+    each extension is what it gets instead.
+    """
+    maximum = get_settings().guest_visit_extension_max_minutes
+    if maximum == 0:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "This organization does not extend visits. The visitor checks in again "
+                "instead, or GUEST_VISIT_EXTENSION_MAX_MINUTES is raised above 0."
+            ),
+        )
+    # Refused rather than quietly trimmed, so a desk that meant 30 and typed
+    # 300 hears about it instead of wondering later why the visit ended early.
+    if payload.minutes > maximum:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"{payload.minutes} minutes is longer than a single extension may be "
+                f"here, which is {maximum}."
+            ),
+        )
+
+    entry = (
+        db.query(GuestGateRegistry)
+        .filter(GuestGateRegistry.id == entry_id, _decidable_by(current_user))
+        .first()
+    )
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found or not authorized")
+    if (
+        entry.handshake_status != LogVerificationState.VERIFIED_APPROVED
+        or entry.visit_expires_at is None
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Only an approved visit that has an end can be extended.",
+        )
+
+    # From the later of now and the end it already has, so a visit half an hour
+    # over gets the whole grant rather than a window that has already gone.
+    start = max(_as_utc(entry.visit_expires_at), datetime.now(UTC))
+    entry.visit_expires_at = start + timedelta(minutes=payload.minutes)
+    # So that running over a second time announces itself as the first did.
+    entry.overstay_notified_at = None
+    db.commit()
+    return {
+        "status": "VISIT_EXTENDED",
+        "guest": entry.guest_name,
+        "visit_expires_at": entry.visit_expires_at.isoformat(),
+    }
 
 
 @router.get("/visit/{code}", operation_id="guest.getVisit", response_model=GuestVisitStatus)
@@ -184,15 +267,10 @@ def get_visit_status(code: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="No visit with that code")
     # An expired code reads as one that was never issued. Saying "expired"
     # instead would confirm to whoever is trying codes that this one was real.
-    # Stored naive on SQLite and aware on Postgres, as in security.py.
-    if entry.visit_code_expires_at is not None:
-        expires_at = (
-            entry.visit_code_expires_at
-            if entry.visit_code_expires_at.tzinfo
-            else entry.visit_code_expires_at.replace(tzinfo=UTC)
-        )
-        if expires_at <= datetime.now(UTC):
-            raise HTTPException(status_code=404, detail="No visit with that code")
+    if entry.visit_code_expires_at is not None and _as_utc(
+        entry.visit_code_expires_at
+    ) <= datetime.now(UTC):
+        raise HTTPException(status_code=404, detail="No visit with that code")
     return entry
 
 
@@ -214,6 +292,33 @@ def get_pending_guests(
             _decidable_by(current_user),
             GuestGateRegistry.handshake_status == LogVerificationState.PENDING_VERIFICATION,
         )
+        .all()
+    )
+
+
+@router.get("/overstays", operation_id="guest.listOverstays", response_model=list[GuestResponse])
+def get_overstayed_visits(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Approved visits whose time has passed, longest over first.
+
+    Which is the desk's other list: who was let in and has not been dealt with
+    since. Nothing here has been revoked; the row says the time is up and a
+    person decides whether to extend it or to go and find them.
+
+    Unpaginated, as /pending is. An organization that leaves every visit
+    undecided at the end of the day will find this list as long as its day was.
+    """
+    return (
+        db.query(GuestGateRegistry)
+        .filter(
+            _decidable_by(current_user),
+            GuestGateRegistry.handshake_status == LogVerificationState.VERIFIED_APPROVED,
+            GuestGateRegistry.visit_expires_at.isnot(None),
+            GuestGateRegistry.visit_expires_at <= datetime.now(UTC),
+        )
+        .order_by(GuestGateRegistry.visit_expires_at)
         .all()
     )
 

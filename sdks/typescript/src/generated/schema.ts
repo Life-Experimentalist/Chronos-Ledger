@@ -923,6 +923,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/guest/overstays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the approved visits that have run past their end
+         * @description Longest over first, which is the desk's other list: who was let in and has not been dealt with since. The same reach as the decision, so for an ORG_ADMIN with GUEST_ADMIN_CAN_DECIDE on it is the whole organization's. Nothing here has been revoked; each row says the time is up, and a person decides whether to extend it or to go and find them. Empty while GUEST_VISIT_LENGTH_MINUTES is 0, since then no visit has an end. Unpaginated, as /guest/pending is.
+         */
+        get: operations["guest.listOverstays"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/guest/{entry_id}/decide": {
         parameters: {
             query?: never;
@@ -938,6 +958,26 @@ export interface paths {
         head?: never;
         /** Accept or decline a guest visit */
         patch: operations["guest.decide"];
+        trace?: never;
+    };
+    "/api/v1/guest/{entry_id}/extend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Give an approved visit longer
+         * @description Whoever could have decided the visit can extend it, on the reasoning that a desk which may let somebody in may also let them stay. The extension runs from whichever is later, now or the end the visit already has, so a visit half an hour over gets the full grant rather than a window that has already gone. There is no limit on how many times: this bounds one grant, and the audit record of each extension is what an organization gets in place of a ceiling on the whole visit.
+         */
+        patch: operations["guest.extendVisit"];
         trace?: never;
     };
     "/api/v1/ingestion/upload-csv": {
@@ -1838,6 +1878,13 @@ export interface components {
         GuestDecisionRequest: {
             decision: components["schemas"]["LogVerificationState"];
         };
+        GuestExtensionRequest: {
+            /**
+             * @description How much longer the visit gets. The ceiling is GUEST_VISIT_EXTENSION_MAX_MINUTES, which defaults to 240 and is checked in the route rather than here, because a schema is fixed at import and the setting is an operator's to change.
+             * @example 30
+             */
+            minutes: number;
+        };
         GuestResponse: {
             id?: number;
             guest_name?: string;
@@ -1848,6 +1895,11 @@ export interface components {
             handshake_status?: components["schemas"]["LogVerificationState"];
             /** Format: date-time */
             timestamp_marked?: string;
+            /**
+             * Format: date-time
+             * @description When an approved visit is over. Null is one nobody has approved, one approved while GUEST_VISIT_LENGTH_MINUTES was 0, and every visit approved before the column existed.
+             */
+            visit_expires_at?: string | null;
         };
         /** @description What a visit code opens. The name, phone and target are left out, because a code on a kiosk screen can be read over a shoulder. */
         GuestVisitStatus: {
@@ -1857,6 +1909,11 @@ export interface components {
              * @description When the visitor checked in.
              */
             timestamp_marked?: string;
+            /**
+             * Format: date-time
+             * @description When to leave, which is the one thing the visitor most needs from this and gives away nothing about them: whoever reads the code over a shoulder learns a time, not a name. Null is an open-ended visit.
+             */
+            visit_expires_at?: string | null;
         };
         StaffAvailabilityResponse: {
             staff_id?: string;
@@ -3650,6 +3707,26 @@ export interface operations {
             };
         };
     };
+    "guest.listOverstays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Approved visits past their end. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestResponse"][];
+                };
+            };
+        };
+    };
     "guest.decide": {
         parameters: {
             query?: never;
@@ -3681,6 +3758,70 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             /** @description No such entry, or the visitor asked for somebody else. By default only the staff member the visitor named may decide; with GUEST_ADMIN_CAN_DECIDE on an ORG_ADMIN may decide any visit and a UNIT_ADMIN those meant for their own unit. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    "guest.extendVisit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuestExtensionRequest"];
+            };
+        };
+        responses: {
+            /** @description The visit's new end. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VISIT_EXTENDED */
+                        status?: string;
+                        /** @description The visitor's name. */
+                        guest?: string;
+                        /**
+                         * Format: date-time
+                         * @description When the visit is now over.
+                         */
+                        visit_expires_at?: string;
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description No such entry, or one this account could not have decided either. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The visit is not approved, or it is approved with no end to move, which is any visit approved while GUEST_VISIT_LENGTH_MINUTES was 0. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Longer than GUEST_VISIT_EXTENSION_MAX_MINUTES, refused rather than quietly trimmed so that a desk which meant 30 and typed 300 hears about it. Also every extension when that setting is 0. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -22,6 +22,17 @@ class GuestDecisionRequest(BaseModel):
     decision: LogVerificationState
 
 
+class GuestExtensionRequest(BaseModel):
+    """How much longer a visit gets.
+
+    The upper bound is GUEST_VISIT_EXTENSION_MAX_MINUTES and is checked in the
+    route rather than here, because a schema is fixed at import and the setting
+    is an operator's to change.
+    """
+
+    minutes: int = Field(ge=1)
+
+
 class GuestResponse(BaseModel):
     id: int
     guest_name: str
@@ -31,6 +42,10 @@ class GuestResponse(BaseModel):
     visitation_intent: str
     handshake_status: LogVerificationState
     timestamp_marked: datetime
+    # When an approved visit is over. Null is one nobody has approved, one
+    # approved while GUEST_VISIT_LENGTH_MINUTES was 0, and every visit approved
+    # before the column existed.
+    visit_expires_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -45,6 +60,10 @@ class GuestVisitStatus(BaseModel):
 
     handshake_status: LogVerificationState
     timestamp_marked: datetime
+    # When to leave, which is the one thing the visitor most needs from this
+    # and gives away nothing about them: whoever reads the code over a shoulder
+    # learns a time, not a name. Null is an open-ended visit.
+    visit_expires_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 

@@ -457,6 +457,16 @@ class GuestGateRegistry(Base):
     # target_staff_id: deleting the account that decided must not delete the
     # visitor record it decided.
     decided_by_id = Column(String(50), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # When an approved visit is over. Written at the decision from
+    # GUEST_VISIT_LENGTH_MINUTES, so null is a visit nobody has approved, one
+    # approved while that setting was 0, or one approved before this column
+    # existed. Nothing enforces it: past this moment the visit reads as
+    # overstayed and the desk is told, and a person decides the rest.
+    visit_expires_at = Column(DateTime(timezone=True), nullable=True)
+    # When the sweep last told somebody this visit had run over, so that it
+    # tells them once rather than every five minutes. Cleared by an extension,
+    # which is what makes a second overrun announce itself again.
+    overstay_notified_at = Column(DateTime(timezone=True), nullable=True)
 
     target_staff = relationship("User", foreign_keys=[target_staff_id])
 

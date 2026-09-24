@@ -163,6 +163,23 @@ class Settings(BaseSettings):
     # an instance behaved before this setting existed.
     guest_visit_code_ttl_minutes: int = 0
 
+    # How long an approved visit lasts, in minutes, counted from the decision
+    # and not from the check-in: the clock starts when somebody was let in at
+    # the door, not when they arrived at it. Past it the visit shows as
+    # overstayed at GET /guest/overstays and a notice goes to the desk. Chronos
+    # revokes nothing and turns nobody out; the row says the time is up and a
+    # person decides what to do about it. 0 leaves an approved visit
+    # open-ended, which is how an instance behaved before this setting existed.
+    guest_visit_length_minutes: int = 0
+
+    # The largest single extension PATCH /guest/{entry_id}/extend will grant,
+    # in minutes. More than this is refused rather than quietly trimmed, so a
+    # desk that meant 30 and typed 300 hears about it. A visit can be extended
+    # again as often as somebody keeps deciding to, so this bounds one grant
+    # and not the total. 0 refuses every extension, for an organization that
+    # would rather the visitor checked in again.
+    guest_visit_extension_max_minutes: int = 240
+
     # Whether an admin may decide a visit that was not meant for them, at
     # PATCH /guest/{entry_id}/decide. Off, and with it off the person the
     # visitor came to see is the only one who can let them in, which stalls at
@@ -230,6 +247,26 @@ class Settings(BaseSettings):
                 "check-ins forever, or a number of days such as 90."
             )
         return days
+
+    @field_validator("guest_visit_length_minutes")
+    @classmethod
+    def _visit_length_is_not_negative(cls, minutes: int) -> int:
+        if minutes < 0:
+            raise ValueError(
+                f"GUEST_VISIT_LENGTH_MINUTES={minutes} is negative. Set 0 to leave an "
+                "approved visit open-ended, or a number of minutes such as 120."
+            )
+        return minutes
+
+    @field_validator("guest_visit_extension_max_minutes")
+    @classmethod
+    def _extension_max_is_not_negative(cls, minutes: int) -> int:
+        if minutes < 0:
+            raise ValueError(
+                f"GUEST_VISIT_EXTENSION_MAX_MINUTES={minutes} is negative. Set 0 to "
+                "refuse every extension, or a number of minutes such as 240."
+            )
+        return minutes
 
     @field_validator("guest_visit_code_ttl_minutes")
     @classmethod

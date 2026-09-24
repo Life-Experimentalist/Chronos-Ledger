@@ -1023,8 +1023,9 @@ def test_a_visit_code_follows_the_visit_without_a_credential(client, seed_users,
 
     res = client.get(url)
     assert res.status_code == 200, res.text
-    # Status only: whoever stands behind the visitor can read the code too.
-    assert set(res.json()) == {"handshake_status", "timestamp_marked"}
+    # Status and times only: whoever stands behind the visitor can read the code
+    # too, and a time tells them nothing about whom it belongs to.
+    assert set(res.json()) == {"handshake_status", "timestamp_marked", "visit_expires_at"}
     assert res.json()["handshake_status"] == "PENDING_VERIFICATION"
 
     fac = login(client, "staff@test.internal", STAFF_PASSWORD)

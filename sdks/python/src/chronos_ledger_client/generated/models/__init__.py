@@ -38,6 +38,8 @@ from .guest_check_in_request import GuestCheckInRequest
 from .guest_check_in_response_200 import GuestCheckInResponse200
 from .guest_decide_response_200 import GuestDecideResponse200
 from .guest_decision_request import GuestDecisionRequest
+from .guest_extend_visit_response_200 import GuestExtendVisitResponse200
+from .guest_extension_request import GuestExtensionRequest
 from .guest_response import GuestResponse
 from .guest_visit_status import GuestVisitStatus
 from .health_check_response_200 import HealthCheckResponse200
@@ -133,6 +135,8 @@ __all__ = (
     "GuestCheckInResponse200",
     "GuestDecideResponse200",
     "GuestDecisionRequest",
+    "GuestExtendVisitResponse200",
+    "GuestExtensionRequest",
     "GuestResponse",
     "GuestVisitStatus",
     "HealthCheckResponse200",

@@ -1253,6 +1253,54 @@ screen.
 The response is `{"status": "VERIFIED_APPROVED", "guest": "John Smith"}`.
 The kiosk and the visitor see the decision through `GET /guest/visit/{code}`.
 
+An approval also writes when the visit is over, `GUEST_VISIT_LENGTH_MINUTES`
+from the decision rather than from the check-in: the clock starts when somebody
+was let in at the door, not when they arrived at it. The setting defaults to 0,
+which leaves an approved visit open-ended as every instance behaved before it
+existed. Denying a visit gives it no end, and deciding again the other way takes
+away the end the earlier approval gave it.
+
+### PATCH /guest/{id}/extend `[STAFF]`
+
+```json
+{ "minutes": 30 }
+```
+
+Gives an approved visit longer. Whoever could have decided the visit can extend
+it, on the reasoning that a desk which may let somebody in may also let them
+stay, so `404` for a visit out of reach exactly as the decision gives. `409` for
+a visit nobody has approved and for an approved one with no end to move, which
+is any visit approved while `GUEST_VISIT_LENGTH_MINUTES` was 0.
+
+`minutes` is at least 1 and at most `GUEST_VISIT_EXTENSION_MAX_MINUTES`, which
+defaults to 240. More is `422` rather than quietly trimmed, so a desk that meant
+30 and typed 300 hears about it, and `GUEST_VISIT_EXTENSION_MAX_MINUTES=0`
+refuses every extension for an organization that would rather the visitor
+checked in again. There is no limit on how many times a visit is extended: this
+bounds one grant, and the audit record of each extension is what an organization
+gets in place of a ceiling on the whole visit.
+
+The extension runs from whichever is later, now or the end the visit already
+has, so a visit half an hour over gets the full grant rather than a window that
+has already gone. The response is
+`{"status": "VISIT_EXTENDED", "guest": "John Smith", "visit_expires_at": "2026-09-12T08:01:07Z"}`.
+
+### GET /guest/overstays `[STAFF]`
+
+The approved visits whose time has passed, longest over first, which is the
+desk's other list: who was let in and has not been dealt with since. The same
+reach as the decision, so an `ORG_ADMIN` with `GUEST_ADMIN_CAN_DECIDE` on reads
+the whole organization's. Nothing here has been revoked; each row says the time
+is up, and a person decides whether to extend it or to go and find them.
+
+Every five minutes a job in the app process also says so once over the
+websocket, as `GUEST_VISIT_EXPIRED` with the entry id, the visitor's name and
+the end that passed. It goes to the person the visitor came to see and, when
+that was somebody else, to whoever let them in. Once, not every five minutes: a
+desk that was logged out reads this list instead. An extension makes a second
+overrun announce itself as the first did. Unpaginated, as `GET /guest/pending`
+is.
+
 ### GET /guest/visit/{code} `[public]`
 
 What a visitor follows their check-in with. No credential: the code the
@@ -1263,8 +1311,16 @@ since a code on a kiosk screen can be read by whoever is standing behind the
 visitor:
 
 ```json
-{ "handshake_status": "VERIFIED_APPROVED", "timestamp_marked": "2026-09-12T05:31:07Z" }
+{
+  "handshake_status": "VERIFIED_APPROVED",
+  "timestamp_marked": "2026-09-12T05:31:07Z",
+  "visit_expires_at": "2026-09-12T07:31:07Z"
+}
 ```
+
+`visit_expires_at` is when to leave, which is the one thing the visitor most
+needs from this and gives away nothing about them: whoever reads the code over a
+shoulder learns a time, not a name. Null is an open-ended visit.
 
 `404` for a code that matches no visit, including one deleted under
 `GUEST_RETENTION_DAYS` and one past the window in

@@ -83,10 +83,16 @@ services:
       # Days a visitor check-in is kept before a daily job deletes it. 0
       # keeps them forever.
       - GUEST_RETENTION_DAYS=${GUEST_RETENTION_DAYS:-0}
+      - GUEST_ADMIN_CAN_DECIDE=${GUEST_ADMIN_CAN_DECIDE:-false}
       # Minutes a visit code keeps opening the visitor's own status
       # lookup. 0 leaves it working for as long as the check-in is kept.
-      - GUEST_ADMIN_CAN_DECIDE=${GUEST_ADMIN_CAN_DECIDE:-false}
       - GUEST_VISIT_CODE_TTL_MINUTES=${GUEST_VISIT_CODE_TTL_MINUTES:-0}
+      # Minutes an approved visit lasts, from the decision. Past it the
+      # visit shows as an overstay and the desk is told once; nothing is
+      # revoked. 0 leaves an approved visit open-ended. The second is the
+      # most one extension may add, and 0 there refuses every extension.
+      - GUEST_VISIT_LENGTH_MINUTES=${GUEST_VISIT_LENGTH_MINUTES:-0}
+      - GUEST_VISIT_EXTENSION_MAX_MINUTES=${GUEST_VISIT_EXTENSION_MAX_MINUTES:-240}
       # Whether a change to a room or a booking is written down for an
       # outside system to poll for. Off: nothing deletes those rows, and an
       # instance with no integrator has nobody to read them.
