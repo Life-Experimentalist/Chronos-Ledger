@@ -214,7 +214,7 @@ def first_login_blocks(user) -> bool:
     get_current_user lets two paths through regardless so the change can be
     made; a websocket has no equivalent exemption, so it asks this directly.
     """
-    return user.initial_login_state and user.role_type.value in ("SUPER_ADMIN", "UNIT_ADMIN")
+    return user.initial_login_state and user.role_type.value in ("ORG_ADMIN", "UNIT_ADMIN")
 
 
 def get_current_user(

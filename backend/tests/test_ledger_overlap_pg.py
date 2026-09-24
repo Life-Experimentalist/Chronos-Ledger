@@ -421,7 +421,7 @@ def test_the_endpoint_returns_409_when_the_database_refuses_the_propagate(
             full_name="Postgres Admin",
             email_address="pg-ledger@test.internal",
             credential_secure_hash=hash_password(ADMIN_PASSWORD),
-            role_type=InstitutionalRole.SUPER_ADMIN,
+            role_type=InstitutionalRole.ORG_ADMIN,
             initial_login_state=False,
         )
     )
@@ -499,7 +499,7 @@ def test_the_endpoint_refuses_the_move_before_it_writes_anything(db, room, cycle
             full_name="Postgres Admin",
             email_address="pg-ledger@test.internal",
             credential_secure_hash=hash_password(ADMIN_PASSWORD),
-            role_type=InstitutionalRole.SUPER_ADMIN,
+            role_type=InstitutionalRole.ORG_ADMIN,
             initial_login_state=False,
         )
     )

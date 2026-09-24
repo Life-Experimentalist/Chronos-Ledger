@@ -38,7 +38,7 @@ export default function LoginPage() {
     clearError()
     const user = await login(data.email, data.password).catch(() => null)
     if (!user) return
-    if (user.initial_login_state && (user.role === 'SUPER_ADMIN' || user.role === 'UNIT_ADMIN')) {
+    if (user.initial_login_state && (user.role === 'ORG_ADMIN' || user.role === 'UNIT_ADMIN')) {
       router.push('/admin/onboarding')
     } else {
       router.push(roleRedirectPath(user.role))

@@ -782,7 +782,7 @@ def test_a_service_account_works_through_its_key_without_a_sign_in(client, db, s
             "full_name": "Rooms integration",
             "email_address": "rooms@test.internal",
             "password": "set-once-and-never-used",
-            "role_type": "SUPER_ADMIN",
+            "role_type": "ORG_ADMIN",
         },
         headers=admin,
     )

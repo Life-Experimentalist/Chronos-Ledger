@@ -122,7 +122,7 @@ def test_a_reset_admin_must_choose_their_own_password(client, seed_users, db):
             full_name="Second Admin",
             email_address="admin2@test.internal",
             credential_secure_hash=hash_password(ADMIN_PASSWORD),
-            role_type=InstitutionalRole.SUPER_ADMIN,
+            role_type=InstitutionalRole.ORG_ADMIN,
             initial_login_state=False,
         )
     )

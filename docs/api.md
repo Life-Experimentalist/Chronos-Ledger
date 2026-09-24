@@ -116,7 +116,7 @@ stops applying the limits rather than refusing the requests.
 
 ```mermaid
 graph TD
-    SA[SUPER_ADMIN] --> DA[UNIT_ADMIN]
+    SA[ORG_ADMIN] --> DA[UNIT_ADMIN]
     DA --> FAC[STAFF]
     FAC --> STU[MEMBER]
 ```
@@ -237,13 +237,13 @@ An admin account signing in with a password is held at the first-login gate
 until it changes the password it was handed (see
 [POST /auth/change-password](#post-authchange-password)). A request made with a
 key is not held there: the gate exists to move a person off that password, and
-a key never uses it. Issuing a key already takes a `SUPER_ADMIN` who has cleared
+a key never uses it. Issuing a key already takes an `ORG_ADMIN` who has cleared
 the gate.
 
 So a service account takes two steps, and nobody signs in as it:
 
 1. `POST /users/` at the role the routes it calls require. Creating and editing
-   rooms needs `SUPER_ADMIN`; holding and releasing them needs `UNIT_ADMIN` or
+   rooms needs `ORG_ADMIN`; holding and releasing them needs `UNIT_ADMIN` or
    above.
 2. `POST /api-keys/` bound to that account, scoped to the areas it calls (for a
    room-booking integration, `resources:read` and `resources:write`), with an
@@ -252,7 +252,7 @@ So a service account takes two steps, and nobody signs in as it:
 The password set in step 1 is never used. Anyone who signs in with it still
 meets the gate.
 
-### POST /api-keys/ `[SUPER_ADMIN]`
+### POST /api-keys/ `[ORG_ADMIN]`
 
 ```json
 {
@@ -284,11 +284,11 @@ anybody wants.
 key is revoked and reissued, never recovered. Scopes come back sorted and
 deduplicated.
 
-### GET /api-keys/ `[SUPER_ADMIN]`
+### GET /api-keys/ `[ORG_ADMIN]`
 
 Every key, without its secret.
 
-### DELETE /api-keys/{key_id} `[SUPER_ADMIN]`
+### DELETE /api-keys/{key_id} `[ORG_ADMIN]`
 
 Revokes immediately: the next request using it gets `401`.
 
@@ -337,7 +337,7 @@ Deactivated accounts are left out unless `?include_deactivated=true`.
 Create users individually. For bulk creation, use CSV import (`POST /ingestion/upload-csv`).
 
 A `UNIT_ADMIN` can create users only in their own unit, and only a
-`SUPER_ADMIN` can create an admin account. Either is refused with `403`.
+`ORG_ADMIN` can create an admin account. Either is refused with `403`.
 
 ```json
 // POST body
@@ -456,7 +456,7 @@ same `UNIT_ADMIN` limits apply.
 ### PUT /users/{user_id}/status
 
 Update staff occupancy. Enum values: `OPEN_AD_HOC`, `BUSY`, `CRITICAL_DO_NOT_DISTURB`, `VERY_FREE`.
-Anyone signed in can set their own; only a `SUPER_ADMIN` can set somebody
+Anyone signed in can set their own; only an `ORG_ADMIN` can set somebody
 else's (`403`). This is the `current_occupancy_index` the staff list, the
 location routes and the kiosk directory's labels are read from. It does not
 change where somebody is resolved to be.
@@ -499,7 +499,7 @@ Readable by anyone signed in. Ordered by code, and pages with `limit` and
 ]
 ```
 
-### POST /resources/ `[SUPER_ADMIN]`
+### POST /resources/ `[ORG_ADMIN]`
 
 Register a room before any timetable names it.
 
@@ -619,7 +619,7 @@ retiring a room does not clear its calendar.
 366 days inclusive is `422` (`the range must not exceed 366 days`), which
 leaves room for the next twelve months from any date, leap years included.
 
-### PATCH /resources/{id} `[SUPER_ADMIN]`
+### PATCH /resources/{id} `[ORG_ADMIN]`
 
 ```json
 {
@@ -644,7 +644,7 @@ second row rather than find this one; change `label` instead, which is what
 gets shown. A room that becomes a person is not an edit, it is a different
 resource.
 
-### POST /resources/{id}/reservations `[SUPER_ADMIN, UNIT_ADMIN]`
+### POST /resources/{id}/reservations `[ORG_ADMIN, UNIT_ADMIN]`
 
 Hold a resource for one dated window. This is the route an outside system uses
 to take a room: a hospital system books a consulting room here the same way an
@@ -745,7 +745,7 @@ arrive in. When the constraint is what catches it, the window is looked up
 again and the `409` names the hold that won rather than only saying this
 one lost.
 
-### DELETE /resources/{id}/reservations/{reservation_id} `[SUPER_ADMIN, UNIT_ADMIN]`
+### DELETE /resources/{id}/reservations/{reservation_id} `[ORG_ADMIN, UNIT_ADMIN]`
 
 Let a hold go. Returns the reservation with `status` set to `CANCELLED` and
 `cancelled_at` filled in. The row stays: a deleted row cannot be told to
@@ -761,7 +761,7 @@ A hold is let go by whoever took it. A `UNIT_ADMIN` that did not make a
 reservation gets `403` with `"only the caller that took a hold may cancel it"`,
 which matters because more than one integration books through this route with
 the same role, and one dropping another's hold is how a room goes quietly free
-under a system that still believes it has it. A `SUPER_ADMIN` overrides: a hold
+under a system that still believes it has it. A `ORG_ADMIN` overrides: a hold
 taken by an account that has since been deleted has a null `requested_by_id`
 and nobody left to cancel it.
 
@@ -788,7 +788,7 @@ the other lists, and a long span should be paged.
 GET /api/v1/schedule/ledger?from=2026-01-05&to=2026-01-11&resource_id=12&limit=100
 ```
 
-### PATCH /schedule/ledger/{ledger_id} `[SUPER_ADMIN, UNIT_ADMIN]`
+### PATCH /schedule/ledger/{ledger_id} `[ORG_ADMIN, UNIT_ADMIN]`
 
 A unit admin can edit only the days of their own unit's activities. A field
 left out keeps its current value, and one sent as `null` is cleared, except
@@ -849,10 +849,10 @@ Snapshot of every active staff member's location, paged. Open to anyone signed
 in, like the single lookup. Polled by the Member Locator panel.
 
 ### GET /schedule/cycles
-### POST /schedule/cycles `[SUPER_ADMIN]`
-### PATCH /schedule/cycles/{id}/close `[SUPER_ADMIN]`
-### PATCH /schedule/cycles/{id}/open `[SUPER_ADMIN]`
-### POST /schedule/cycles/{old}/clone-to/{new} `[SUPER_ADMIN]`
+### POST /schedule/cycles `[ORG_ADMIN]`
+### PATCH /schedule/cycles/{id}/close `[ORG_ADMIN]`
+### PATCH /schedule/cycles/{id}/open `[ORG_ADMIN]`
+### POST /schedule/cycles/{old}/clone-to/{new} `[ORG_ADMIN]`
 
 A cycle can be created closed, filled in over as long as that takes, and put
 into service once it is ready, which is what `open` is for. It is the only
@@ -1137,7 +1137,7 @@ rather than a request waiting on nobody.
 
 Returns the undecided requests that are yours to decide: those sent to you as
 the submitter's manager and, for an admin, those whose manager has since been
-deactivated. A `SUPER_ADMIN` gets every one of those, a `UNIT_ADMIN` those
+deactivated. A `ORG_ADMIN` gets every one of those, a `UNIT_ADMIN` those
 from the non-admin accounts of their own unit, and nobody gets their own. The
 `ABSENCE_APPROVAL_REQUIRED` frame went to the manager, so this list is where
 an admin finds them.
@@ -1259,7 +1259,7 @@ unnamed visit was approved.
 
 ## Ingestion
 
-### POST /ingestion/upload-csv?cycle_id={id} `[SUPER_ADMIN]`
+### POST /ingestion/upload-csv?cycle_id={id} `[ORG_ADMIN]`
 
 Upload a `multipart/form-data` CSV file. Required columns:
 
@@ -1384,7 +1384,7 @@ regardless, so the accounts exist but nobody ever saw their passwords.
 Reset those members individually, or re-upload after raising both
 timeouts.
 
-### POST /ingestion/generate-ledger `[SUPER_ADMIN]`
+### POST /ingestion/generate-ledger `[ORG_ADMIN]`
 
 ```
 POST /api/v1/ingestion/generate-ledger?target_date=2026-09-01
@@ -1419,7 +1419,7 @@ Records point at no other table, so deleting an account or revoking a key
 leaves its history. If a record cannot be written the request still succeeds
 and the failure is logged.
 
-### GET /audit/ `[SUPER_ADMIN]`
+### GET /audit/ `[ORG_ADMIN]`
 
 Records newest first, paged like the other lists. Optional filters: `from`
 and `to` (dates in the organization's timezone, both included; `to` before
@@ -1495,7 +1495,7 @@ Events are delivered as JSON frames:
 The `AUTH` frame is the only thing a client sends. Everything after it
 travels server to client.
 
-### GET /ws/stats `[SUPER_ADMIN]`
+### GET /ws/stats `[ORG_ADMIN]`
 
 How many people have a socket open right now, on every instance:
 `{"online_connections": 4}`. A person counts once however many instances they

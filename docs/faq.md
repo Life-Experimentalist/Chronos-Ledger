@@ -196,7 +196,7 @@ docker compose exec chronos-db psql -U chronos_admin -d chronos_ledger -c \
 
 ### When does the Onboarding Wizard appear?
 
-Automatically on first login when `initial_login_state` is `true` for a `SUPER_ADMIN` or `UNIT_ADMIN` account. It can also be reopened at any time from Admin Dashboard → **Setup Guide** button (top-right of the tab bar).
+Automatically on first login when `initial_login_state` is `true` for an `ORG_ADMIN` or `UNIT_ADMIN` account. It can also be reopened at any time from Admin Dashboard → **Setup Guide** button (top-right of the tab bar).
 
 ---
 

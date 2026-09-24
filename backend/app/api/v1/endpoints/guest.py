@@ -63,7 +63,7 @@ def process_guest_entry(
         or staff.role_type
         not in (
             InstitutionalRole.STAFF,
-            InstitutionalRole.SUPER_ADMIN,
+            InstitutionalRole.ORG_ADMIN,
             InstitutionalRole.UNIT_ADMIN,
         )
     ):

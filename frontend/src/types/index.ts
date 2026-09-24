@@ -1,7 +1,7 @@
 // Copyright 2026 Chronos Ledger Contributors
 // Licensed under the Apache License, Version 2.0
 
-export type InstitutionalRole = 'SUPER_ADMIN' | 'UNIT_ADMIN' | 'STAFF' | 'MEMBER'
+export type InstitutionalRole = 'ORG_ADMIN' | 'UNIT_ADMIN' | 'STAFF' | 'MEMBER'
 export type DynamicState = 'SCHEDULED' | 'ON_LEAVE' | 'PROXY_SUBSTITUTE' | 'LUNCH' | 'INTERNAL_MEETING' | 'ADHOC_EVENT'
 export type VerificationMetric = 'PRESENT' | 'ABSENT' | 'LATE'
 export type ExecutionMode = 'PHYSICAL' | 'ONLINE_STREAM'

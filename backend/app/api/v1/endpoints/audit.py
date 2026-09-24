@@ -23,7 +23,7 @@ def list_audit_records(
     actor_id: str | None = None,
     page: Page = Depends(),
     db: Session = Depends(get_db),
-    _=Depends(require_roles("SUPER_ADMIN")),
+    _=Depends(require_roles("ORG_ADMIN")),
 ):
     """The writes made through the API, newest first.
 

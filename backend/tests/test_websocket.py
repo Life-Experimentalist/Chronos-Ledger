@@ -116,7 +116,7 @@ def test_an_admin_still_on_the_seeded_password_is_refused(client, db, seed_users
             full_name="Fresh Admin",
             email_address="fresh.admin@test.internal",
             credential_secure_hash=_FRESH_ADMIN_HASH,
-            role_type=InstitutionalRole.SUPER_ADMIN,
+            role_type=InstitutionalRole.ORG_ADMIN,
             initial_login_state=True,
         )
     )

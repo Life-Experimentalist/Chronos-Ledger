@@ -27,7 +27,7 @@ def upload_csv(
     db: Session = Depends(get_db),
     # The matrix rewrites offerings and registrations across every unit,
     # so no unit-scoped admin can upload it.
-    _=Depends(require_roles("SUPER_ADMIN")),
+    _=Depends(require_roles("ORG_ADMIN")),
 ):
     # A plain def, so the import and the password hash for every new member
     # run on a worker thread. As an async def they ran on the event loop and
@@ -74,7 +74,7 @@ def upload_csv(
 def trigger_ledger_generation(
     target_date: datetime.date | None = None,
     db: Session = Depends(get_db),
-    _=Depends(require_roles("SUPER_ADMIN")),
+    _=Depends(require_roles("ORG_ADMIN")),
 ):
     from app.cron.ledger_generator import generate_daily_ledger_entries
 

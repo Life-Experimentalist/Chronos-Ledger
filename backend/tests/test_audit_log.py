@@ -3,7 +3,7 @@
 """Every write through the API leaves one audit record, and nothing else does.
 
 The record says when, which account, which key, the method, the path and the
-status. It never holds a body. GET /audit reads them back for a SUPER_ADMIN.
+status. It never holds a body. GET /audit reads them back for an ORG_ADMIN.
 """
 
 import datetime

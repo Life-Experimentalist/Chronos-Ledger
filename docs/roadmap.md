@@ -112,7 +112,7 @@ against the spec. Publishing to npm and PyPI is added on request.
   was used, method, path and status code. Request and response bodies are never
   stored, since they carry passwords and uploaded files. A failed audit write
   is logged and never fails the request. `GET /audit?from=&to=&actor_id=` pages
-  through the records, newest first, `SUPER_ADMIN` only; API keys need
+  through the records, newest first, `ORG_ADMIN` only; API keys need
   `audit:read`.
 - **Not in scope:** before and after snapshots of the changed rows. The path
   and status say what was done; the rows say what it is now.

@@ -32,7 +32,7 @@ def generate_feed_token() -> str:
 
 
 class InstitutionalRole(enum.StrEnum):
-    SUPER_ADMIN = "SUPER_ADMIN"
+    ORG_ADMIN = "ORG_ADMIN"
     UNIT_ADMIN = "UNIT_ADMIN"
     STAFF = "STAFF"
     MEMBER = "MEMBER"

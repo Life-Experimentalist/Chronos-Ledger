@@ -32,7 +32,7 @@ export default function AdminDashboard() {
 }
 
 function AdminDashboardContent() {
-  const { user } = useAuth(['SUPER_ADMIN', 'UNIT_ADMIN'])
+  const { user } = useAuth(['ORG_ADMIN', 'UNIT_ADMIN'])
   const { isConnected } = useWebSocket()
   const router = useRouter()
   const searchParams = useSearchParams()

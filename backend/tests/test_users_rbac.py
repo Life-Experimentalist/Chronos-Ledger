@@ -83,7 +83,7 @@ def test_unit_admin_cannot_create_admin_accounts(client, seed_users):
     assert res.status_code == 200
     da_headers = login(client, "unitadmin@test.internal", "UnitAdmin789!")
 
-    for role in ("SUPER_ADMIN", "UNIT_ADMIN"):
+    for role in ("ORG_ADMIN", "UNIT_ADMIN"):
         payload = dict(
             NEW_USER,
             id=f"ESC_{role}",

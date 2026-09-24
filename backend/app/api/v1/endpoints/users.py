@@ -83,7 +83,7 @@ def list_users(
     include_deactivated: bool = False,
     page: Page = Depends(),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
 ):
     q = db.query(User)
     if not include_deactivated:
@@ -107,10 +107,10 @@ def list_users(
 def create_user(
     payload: UserCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
 ):
-    admin_roles = (InstitutionalRole.SUPER_ADMIN, InstitutionalRole.UNIT_ADMIN)
-    if payload.role_type in admin_roles and current_user.role_type != InstitutionalRole.SUPER_ADMIN:
+    admin_roles = (InstitutionalRole.ORG_ADMIN, InstitutionalRole.UNIT_ADMIN)
+    if payload.role_type in admin_roles and current_user.role_type != InstitutionalRole.ORG_ADMIN:
         raise HTTPException(status_code=403, detail="Only a super-admin can create admin accounts")
     ensure_unit_scope(current_user, payload.unit_code)
     if db.query(User).filter(User.id == payload.id).first():
@@ -169,7 +169,7 @@ def get_user(
     current_user: User = Depends(get_current_user),
 ):
     if current_user.id != user_id and current_user.role_type.value not in (
-        "SUPER_ADMIN",
+        "ORG_ADMIN",
         "UNIT_ADMIN",
     ):
         raise HTTPException(status_code=403, detail="Access denied")
@@ -186,13 +186,13 @@ def update_user(
     user_id: str,
     payload: UserUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
 ):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    admin_roles = (InstitutionalRole.SUPER_ADMIN, InstitutionalRole.UNIT_ADMIN)
-    if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.SUPER_ADMIN:
+    admin_roles = (InstitutionalRole.ORG_ADMIN, InstitutionalRole.UNIT_ADMIN)
+    if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.ORG_ADMIN:
         raise HTTPException(status_code=403, detail="Only a super-admin can modify admin accounts")
     ensure_unit_scope(current_user, user.unit_code)
     if "unit_code" in payload.model_fields_set:
@@ -224,7 +224,7 @@ def update_user(
 def reset_user_password(
     user_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
 ):
     """Issue a new random password for someone who cannot sign in.
 
@@ -240,8 +240,8 @@ def reset_user_password(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    admin_roles = (InstitutionalRole.SUPER_ADMIN, InstitutionalRole.UNIT_ADMIN)
-    if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.SUPER_ADMIN:
+    admin_roles = (InstitutionalRole.ORG_ADMIN, InstitutionalRole.UNIT_ADMIN)
+    if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.ORG_ADMIN:
         raise HTTPException(status_code=403, detail="Only a super-admin can modify admin accounts")
     ensure_unit_scope(current_user, user.unit_code)
 
@@ -264,8 +264,8 @@ def _managed_account(user_id: str, db: Session, current_user: User) -> User:
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    admin_roles = (InstitutionalRole.SUPER_ADMIN, InstitutionalRole.UNIT_ADMIN)
-    if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.SUPER_ADMIN:
+    admin_roles = (InstitutionalRole.ORG_ADMIN, InstitutionalRole.UNIT_ADMIN)
+    if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.ORG_ADMIN:
         raise HTTPException(status_code=403, detail="Only a super-admin can modify admin accounts")
     ensure_unit_scope(current_user, user.unit_code)
     return user
@@ -315,7 +315,7 @@ def deactivate_user(
     user_id: str,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
 ):
     """Stop an account without deleting it, for somebody who has left.
 
@@ -362,7 +362,7 @@ def deactivate_user(
 def reactivate_user(
     user_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
 ):
     """Let a deactivated account back in, with its password as it was.
 
@@ -387,7 +387,7 @@ def update_user_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.id != user_id and current_user.role_type.value not in ("SUPER_ADMIN",):
+    if current_user.id != user_id and current_user.role_type.value not in ("ORG_ADMIN",):
         raise HTTPException(status_code=403, detail="Can only update own status")
     user = db.query(User).filter(User.id == user_id).first()
     if not user:

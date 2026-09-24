@@ -13,7 +13,7 @@ def test_login_returns_token_and_profile(client, seed_users):
     body = res.json()
     assert body["access_token"]
     assert body["user_id"] == "ADM001"
-    assert body["role"] == "SUPER_ADMIN"
+    assert body["role"] == "ORG_ADMIN"
     assert body["initial_login_state"] is False
 
 

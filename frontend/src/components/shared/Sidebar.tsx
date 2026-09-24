@@ -24,9 +24,9 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/admin/dashboard', roles: ['SUPER_ADMIN', 'UNIT_ADMIN'] },
-  { icon: FileSpreadsheet, label: 'Import Data', href: '/admin/dashboard?tab=import', roles: ['SUPER_ADMIN', 'UNIT_ADMIN'] },
-  { icon: Users, label: 'Proxy Management', href: '/admin/dashboard?tab=proxy', roles: ['SUPER_ADMIN', 'UNIT_ADMIN'] },
+  { icon: LayoutDashboard, label: 'Dashboard', href: '/admin/dashboard', roles: ['ORG_ADMIN', 'UNIT_ADMIN'] },
+  { icon: FileSpreadsheet, label: 'Import Data', href: '/admin/dashboard?tab=import', roles: ['ORG_ADMIN', 'UNIT_ADMIN'] },
+  { icon: Users, label: 'Proxy Management', href: '/admin/dashboard?tab=proxy', roles: ['ORG_ADMIN', 'UNIT_ADMIN'] },
   { icon: LayoutDashboard, label: 'Dashboard', href: '/staff/dashboard', roles: ['STAFF'] },
   { icon: CheckSquare, label: 'Attendance', href: '/staff/dashboard?tab=attendance', roles: ['STAFF'] },
   { icon: UserCheck, label: 'Guests & Requests', href: '/staff/dashboard?tab=guests', roles: ['STAFF'] },
