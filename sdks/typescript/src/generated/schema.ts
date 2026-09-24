@@ -1010,6 +1010,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/changes/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What has changed about the rooms and the bookings
+         * @description Requires `ORG_ADMIN`; an API key needs `changes:read`. For a system that keeps its own copy of the rooms and the bookings: the websocket cannot tell it anything, because those notices go to a signed-in socket and a service behind another firewall has none, and re-reading every room on a timer costs the building rather than the change.
+         *
+         *     One entry per row, not one per change. A room renamed to Bedroom and then to Living Room is one entry saying Living Room, because a consumer catching up wants where things ended and not the walk. `full=true` returns the walk: every marker, oldest first, with no row state.
+         *
+         *     Send `next_cursor` back as `since`. An entry can arrive twice, after a crash between a write and the poll that read it, or because a row changed again while the page was being built; applying an entry is replacing a row with what the row already says, so no bookkeeping is needed for that.
+         *
+         *     An entry can also be missed, which is the one thing to plan around. The cursor is the marker's own id, handed out when the row is inserted and not when it commits, so two writes that commit in the other order leave a gap: a poll that reads the later id and stores it does not come back for the earlier one. So re-read the rooms and the bookings in full on a slow timer. That is needed anyway, because the feed records only from the moment it was switched on.
+         *
+         *     A page as long as `limit` means there is probably more, so poll again rather than waiting for the timer.
+         *
+         *     The role is higher than reading the rooms takes because a booking carries what it is for, which the availability calendar withholds from everyone but the account that made it. This hands the booking over whole, so it sits where the audit log sits.
+         */
+        get: operations["changes.list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/feed-token": {
         parameters: {
             query?: never;
@@ -1834,6 +1864,28 @@ export interface components {
             unit_code?: string | null;
             /** @description Human-readable availability derived from current_occupancy_index. */
             availability_label?: string;
+        };
+        /** @description One thing that changed, and what it now holds. `resource` and `reservation` are the row as it stands, one of them filled in according to `entity_kind`, so an entry can be applied without a second request. Both are null in the full log, which is the markers alone. */
+        Change: {
+            /** @description Send the last one back as `since`, or `next_cursor`, which is the same number. */
+            cursor?: number;
+            /** @description `resource` or `reservation`. Not a closed set: another part of the API gaining a feed adds a kind here, and a consumer should ignore one it does not know rather than fail on it. */
+            entity_kind?: string;
+            entity_id?: number;
+            /** @description `created` or `updated`, and likewise open. Measured against the cursor that was sent in, not against the row's whole history: a row created and then edited between two polls reads as `created`, because the caller has never seen it. There is no `deleted`: nothing this feed carries is deleted, and a cancelled booking keeps its row and reads as `updated`. */
+            change_kind?: string;
+            /**
+             * Format: date-time
+             * @description When the most recent of the collapsed changes was made.
+             */
+            at?: string;
+            resource?: components["schemas"]["ResourceResponse"] | null;
+            reservation?: components["schemas"]["ReservationResponse"] | null;
+        };
+        ChangeFeed: {
+            changes?: components["schemas"]["Change"][];
+            /** @description What the next poll sends as `since`. The cursor that was sent in when nothing changed, so storing it unconditionally keeps the caller's place. */
+            next_cursor?: number;
         };
         ErrorResponse: {
             /** @example Not authorized. */
@@ -3756,6 +3808,45 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    "changes.list": {
+        parameters: {
+            query?: {
+                /** @description The cursor the last poll returned. 0 is from the beginning. */
+                since?: number;
+                /** @description At most this many entries. */
+                limit?: number;
+                /** @description Every marker rather than one entry per row, and no row state. */
+                full?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The changes, oldest first, and the cursor to send next time. Empty with the cursor handed back unchanged when nothing has changed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeFeed"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["UnprocessableEntity"];
+            /** @description The feed is off, which is the default. `CHANGE_FEED_ENABLED=true` starts recording; changes made while it was off were not recorded. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     "sync.getFeedToken": {

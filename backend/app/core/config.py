@@ -163,6 +163,14 @@ class Settings(BaseSettings):
     # an instance behaved before this setting existed.
     guest_visit_code_ttl_minutes: int = 0
 
+    # Whether a change to a room or a booking is written down for an outside
+    # system to poll for, at GET /api/v1/changes/. Off, because it is a table
+    # that grows with every write and nothing deletes it, and an instance with
+    # no integrator has nobody to read it. Turning it on starts recording from
+    # that moment, so a consumer reads the rooms and the bookings once in full
+    # and polls from there: what happened while this was off was not recorded.
+    change_feed_enabled: bool = False
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.app_cors_origins.split(",") if o.strip()]

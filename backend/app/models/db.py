@@ -533,3 +533,43 @@ class AuditRecord(Base):
     method = Column(String(10), nullable=False)
     path = Column(String(500), nullable=False)
     status_code = Column(Integer, nullable=False)
+
+
+class ChangeMarker(Base):
+    """A note that one row changed, kept so an outside system can find out.
+
+    An integrator holding its own copy of the rooms and the bookings has no
+    way to learn that one moved. The websocket cannot tell it: a notice goes
+    to a signed-in socket, and a service behind somebody else's firewall has
+    none. Polling every room on a timer is the alternative, and it scales
+    with the building rather than with what happened.
+
+    Deliberately thin. It says what changed and when, and nothing about what
+    the row now holds or who touched it: the feed reads the current row back
+    out of its own table, so a marker cannot go stale or disagree with it,
+    and audit_records already answers who. A change that arrives twice is
+    therefore harmless, which is what lets the marker be written without a
+    lock.
+
+    No foreign keys, as with AuditRecord. A marker outlives what it points
+    at, and a cascade would quietly take the news of a deletion away with the
+    row it was about.
+    """
+
+    __tablename__ = "change_markers"
+
+    # The cursor a consumer holds on to. A sequence and not a timestamp:
+    # two markers written in the same millisecond are still ordered, and
+    # ordering is the whole of what a cursor needs.
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    # "resource" or "reservation". A string and not an enum so that a router
+    # gaining a feed does not need a migration to say so.
+    entity_kind = Column(String(20), nullable=False)
+    entity_id = Column(Integer, nullable=False)
+    # "created" or "updated". There is no "deleted": nothing the feed carries
+    # is deleted, a cancelled booking keeps its row on purpose, and a change
+    # nobody can read afterwards is one a consumer could not act on.
+    change_kind = Column(String(10), nullable=False)
+    # Not indexed. The feed reads by id and never by time, and this is here
+    # to be shown to a consumer rather than to be filtered on.
+    at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))

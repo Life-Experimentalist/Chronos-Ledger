@@ -17,6 +17,8 @@ from .auth_change_password_response_200 import AuthChangePasswordResponse200
 from .auth_logout_response_200 import AuthLogoutResponse200
 from .availability_response import AvailabilityResponse
 from .busy_interval import BusyInterval
+from .change import Change
+from .change_feed import ChangeFeed
 from .change_password_request import ChangePasswordRequest
 from .config_get_response_200 import ConfigGetResponse200
 from .config_get_response_200_labels import ConfigGetResponse200Labels
@@ -110,6 +112,8 @@ __all__ = (
     "AuthLogoutResponse200",
     "AvailabilityResponse",
     "BusyInterval",
+    "Change",
+    "ChangeFeed",
     "ChangePasswordRequest",
     "ConfigGetResponse200",
     "ConfigGetResponse200Labels",

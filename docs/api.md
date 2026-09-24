@@ -208,6 +208,7 @@ land open by nobody remembering to annotate it.
 | `ingestion` | CSV upload and ledger generation |
 | `sync` | the calendar feed |
 | `audit` | the audit log |
+| `changes` | the change feed |
 
 A key holding `schedule:read` passes `GET /schedule/slots` and is refused
 `POST /schedule/slots` with `403` and a detail naming `schedule:write`. The
@@ -1441,6 +1442,87 @@ and `to` (dates in the organization's timezone, both included; `to` before
     "status_code": 201
   }
 ]
+```
+
+---
+
+## Changes
+
+For a system that keeps its own copy of the rooms and the bookings. The
+websocket cannot tell it anything, because those notices go to a signed-in
+socket and a service behind another firewall has none, and re-reading every
+room on a timer costs the building rather than the change.
+
+Off by default. With `CHANGE_FEED_ENABLED` unset nothing is recorded and the
+route answers `503` naming the setting. Turning it on starts recording from
+that moment, so the first thing a consumer does is read the rooms and the
+bookings in full, then poll from there.
+
+### GET /changes/?since={cursor} `[ORG_ADMIN]`
+
+One entry per row that changed, oldest first, carrying the row as it now
+stands. `entity_kind` says which of `resource` and `reservation` is filled in.
+An API key needs `changes:read`.
+
+The role is higher than reading the rooms takes because a booking carries what
+it is for, which the availability calendar withholds from everyone but the
+account that made it. This hands the booking over whole, so it sits where the
+audit log sits.
+
+A row that changed several times is one entry showing where it ended: renamed
+to Bedroom and then to Living Room reads as Living Room. `change_kind` is
+measured against the cursor that was sent in rather than the row's whole
+history, so a room created and then edited between two polls reads as
+`created`, because the caller has never seen it. There is no `deleted`:
+nothing here is deleted, and a cancelled booking keeps its row and reads as
+`updated`.
+
+`full=true` returns the walk instead: every recorded change, oldest first,
+with no row state. That is the log to read when the question is what happened
+rather than what is.
+
+`limit` caps the page at 1000 and defaults to 200. A page that long means
+there is probably more, so poll again rather than waiting for the timer.
+
+Send `next_cursor` back as `since`. It comes back unchanged when nothing has
+changed, so a consumer that stores it every time keeps its place.
+
+An entry can arrive twice, after a crash between a write and the poll that
+read it, or because a row changed again while the page was being built.
+Applying an entry is replacing a row with what the row already says, so that
+needs no bookkeeping. An entry can also be **missed**, which does: the cursor
+is the marker's own id, handed out when the row is inserted and not when it
+commits, so two writes that commit in the other order leave a gap, and a poll
+that reads the later id does not come back for the earlier one. Re-read the
+rooms and the bookings in full on a slow timer, which is needed anyway.
+
+```json
+{
+  "changes": [
+    {
+      "cursor": 4193,
+      "entity_kind": "resource",
+      "entity_id": 12,
+      "change_kind": "updated",
+      "at": "2026-01-06T08:31:02.114000+00:00",
+      "resource": {
+        "id": 12,
+        "code": "LH-3",
+        "label": "Living Room",
+        "resource_type": "ROOM",
+        "unit_code": null,
+        "capacity": 90,
+        "user_id": null,
+        "latitude": 12.9716,
+        "longitude": 77.5946,
+        "altitude_target": 920.0,
+        "active": true
+      },
+      "reservation": null
+    }
+  ],
+  "next_cursor": 4193
+}
 ```
 
 ---

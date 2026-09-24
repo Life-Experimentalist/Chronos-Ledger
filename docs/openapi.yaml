@@ -61,7 +61,7 @@ components:
         cannot be. `scopes` is a comma separated list of `<area>:read` and
         `<area>:write`, where the area is the path segment after `/api/v1`:
         `schedule`, `resources`, `attendance`, `users`, `ingestion`, `guest`,
-        `sync`, `config`, `auth`, `api-keys`. `GET`, `HEAD` and `OPTIONS` are
+        `sync`, `config`, `auth`, `api-keys`, `audit`, `changes`. `GET`, `HEAD` and `OPTIONS` are
         reads and everything else is a write, so `schedule:read` passes
         `GET /schedule/slots` and is refused `POST /schedule/slots` with a 403
         naming `schedule:write`. The single scope `*` is every area, which is
@@ -1385,6 +1385,64 @@ components:
         availability_label:
           type: string
           description: Human-readable availability derived from current_occupancy_index.
+
+    # ── Changes ───────────────────────────────
+    Change:
+      type: object
+      description: >
+        One thing that changed, and what it now holds. `resource` and
+        `reservation` are the row as it stands, one of them filled in according
+        to `entity_kind`, so an entry can be applied without a second request.
+        Both are null in the full log, which is the markers alone.
+      properties:
+        cursor:
+          type: integer
+          description: >
+            Send the last one back as `since`, or `next_cursor`, which is the
+            same number.
+        entity_kind:
+          type: string
+          description: >
+            `resource` or `reservation`. Not a closed set: another part of the
+            API gaining a feed adds a kind here, and a consumer should ignore
+            one it does not know rather than fail on it.
+        entity_id:
+          type: integer
+        change_kind:
+          type: string
+          description: >
+            `created` or `updated`, and likewise open. Measured against the
+            cursor that was sent in, not against the row's whole history: a row
+            created and then edited between two polls reads as `created`,
+            because the caller has never seen it. There is no `deleted`:
+            nothing this feed carries is deleted, and a cancelled booking keeps
+            its row and reads as `updated`.
+        at:
+          type: string
+          format: date-time
+          description: When the most recent of the collapsed changes was made.
+        resource:
+          allOf:
+            - $ref: "#/components/schemas/ResourceResponse"
+          nullable: true
+        reservation:
+          allOf:
+            - $ref: "#/components/schemas/ReservationResponse"
+          nullable: true
+
+    ChangeFeed:
+      type: object
+      properties:
+        changes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Change"
+        next_cursor:
+          type: integer
+          description: >
+            What the next poll sends as `since`. The cursor that was sent in
+            when nothing changed, so storing it unconditionally keeps the
+            caller's place.
 
     # ── Common ────────────────────────────────
     ErrorResponse:
@@ -3733,6 +3791,99 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/v1/changes/:
+    get:
+      operationId: changes.list
+      tags: [Changes]
+      summary: What has changed about the rooms and the bookings
+      description: >
+        Requires `ORG_ADMIN`; an API key needs `changes:read`. For a system
+        that keeps its own copy of the rooms and the bookings: the websocket
+        cannot tell it anything, because those notices go to a signed-in socket
+        and a service behind another firewall has none, and re-reading every
+        room on a timer costs the building rather than the change.
+
+
+        One entry per row, not one per change. A room renamed to Bedroom and
+        then to Living Room is one entry saying Living Room, because a consumer
+        catching up wants where things ended and not the walk. `full=true`
+        returns the walk: every marker, oldest first, with no row state.
+
+
+        Send `next_cursor` back as `since`. An entry can arrive twice, after a
+        crash between a write and the poll that read it, or because a row
+        changed again while the page was being built; applying an entry is
+        replacing a row with what the row already says, so no bookkeeping is
+        needed for that.
+
+
+        An entry can also be missed, which is the one thing to plan around.
+        The cursor is the marker's own id, handed out when the row is inserted
+        and not when it commits, so two writes that commit in the other order
+        leave a gap: a poll that reads the later id and stores it does not come
+        back for the earlier one. So re-read the rooms and the bookings in full
+        on a slow timer. That is needed anyway, because the feed records only
+        from the moment it was switched on.
+
+
+        A page as long as `limit` means there is probably more, so poll again
+        rather than waiting for the timer.
+
+
+        The role is higher than reading the rooms takes because a booking
+        carries what it is for, which the availability calendar withholds from
+        everyone but the account that made it. This hands the booking over
+        whole, so it sits where the audit log sits.
+      parameters:
+        - name: since
+          in: query
+          required: false
+          description: The cursor the last poll returned. 0 is from the beginning.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          required: false
+          description: At most this many entries.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 200
+        - name: full
+          in: query
+          required: false
+          description: >
+            Every marker rather than one entry per row, and no row state.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: >
+            The changes, oldest first, and the cursor to send next time. Empty
+            with the cursor handed back unchanged when nothing has changed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChangeFeed"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "503":
+          description: >
+            The feed is off, which is the default. `CHANGE_FEED_ENABLED=true`
+            starts recording; changes made while it was off were not recorded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/sync/feed-token:
     get:
