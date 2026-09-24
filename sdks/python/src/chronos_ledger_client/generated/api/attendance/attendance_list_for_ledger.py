@@ -72,9 +72,9 @@ def sync_detailed(
 ) -> Response[ErrorResponse | list[AttendanceResponse]]:
     """Get the roster for a ledger entry
 
-     Whoever runs the session gets every row: the assigned lead, the substitute, a super admin, or a unit
-    admin inside that unit. A member gets their own row and nothing else. Anyone else is refused rather
-    than handed an empty list.
+     Whoever runs the session gets every row: the assigned lead, the substitute, an organization admin,
+    or a unit admin inside that unit. A member gets their own row and nothing else. Anyone else is
+    refused rather than handed an empty list.
 
     Args:
         ledger_id (int):
@@ -105,9 +105,9 @@ def sync(
 ) -> ErrorResponse | list[AttendanceResponse] | None:
     """Get the roster for a ledger entry
 
-     Whoever runs the session gets every row: the assigned lead, the substitute, a super admin, or a unit
-    admin inside that unit. A member gets their own row and nothing else. Anyone else is refused rather
-    than handed an empty list.
+     Whoever runs the session gets every row: the assigned lead, the substitute, an organization admin,
+    or a unit admin inside that unit. A member gets their own row and nothing else. Anyone else is
+    refused rather than handed an empty list.
 
     Args:
         ledger_id (int):
@@ -133,9 +133,9 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | list[AttendanceResponse]]:
     """Get the roster for a ledger entry
 
-     Whoever runs the session gets every row: the assigned lead, the substitute, a super admin, or a unit
-    admin inside that unit. A member gets their own row and nothing else. Anyone else is refused rather
-    than handed an empty list.
+     Whoever runs the session gets every row: the assigned lead, the substitute, an organization admin,
+    or a unit admin inside that unit. A member gets their own row and nothing else. Anyone else is
+    refused rather than handed an empty list.
 
     Args:
         ledger_id (int):
@@ -164,9 +164,9 @@ async def asyncio(
 ) -> ErrorResponse | list[AttendanceResponse] | None:
     """Get the roster for a ledger entry
 
-     Whoever runs the session gets every row: the assigned lead, the substitute, a super admin, or a unit
-    admin inside that unit. A member gets their own row and nothing else. Anyone else is refused rather
-    than handed an empty list.
+     Whoever runs the session gets every row: the assigned lead, the substitute, an organization admin,
+    or a unit admin inside that unit. A member gets their own row and nothing else. Anyone else is
+    refused rather than handed an empty list.
 
     Args:
         ledger_id (int):

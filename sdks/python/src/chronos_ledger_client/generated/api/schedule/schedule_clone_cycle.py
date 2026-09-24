@@ -75,7 +75,7 @@ def sync_detailed(
     records are **not** cloned. Re-import CSV after cloning to update enrollment.
 
     The target must be closed and have no activities. The copied slots are not checked against the rooms
-    here; opening the target runs those checks over all of them at once. Requires `SUPER_ADMIN`.
+    here; opening the target runs those checks over all of them at once. Requires `ORG_ADMIN`.
 
     Args:
         old_id (int):
@@ -114,7 +114,7 @@ def sync(
     records are **not** cloned. Re-import CSV after cloning to update enrollment.
 
     The target must be closed and have no activities. The copied slots are not checked against the rooms
-    here; opening the target runs those checks over all of them at once. Requires `SUPER_ADMIN`.
+    here; opening the target runs those checks over all of them at once. Requires `ORG_ADMIN`.
 
     Args:
         old_id (int):
@@ -148,7 +148,7 @@ async def asyncio_detailed(
     records are **not** cloned. Re-import CSV after cloning to update enrollment.
 
     The target must be closed and have no activities. The copied slots are not checked against the rooms
-    here; opening the target runs those checks over all of them at once. Requires `SUPER_ADMIN`.
+    here; opening the target runs those checks over all of them at once. Requires `ORG_ADMIN`.
 
     Args:
         old_id (int):
@@ -185,7 +185,7 @@ async def asyncio(
     records are **not** cloned. Re-import CSV after cloning to update enrollment.
 
     The target must be closed and have no activities. The copied slots are not checked against the rooms
-    here; opening the target runs those checks over all of them at once. Requires `SUPER_ADMIN`.
+    here; opening the target runs those checks over all of them at once. Requires `ORG_ADMIN`.
 
     Args:
         old_id (int):

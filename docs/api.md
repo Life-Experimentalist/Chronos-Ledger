@@ -1095,7 +1095,7 @@ batch writes nothing, and an accepted one is written in one transaction:
 ### GET /attendance/ledger/{ledger_id}
 
 The roster for one session. Whoever runs it gets every row: the assigned lead,
-the substitute, a super admin, or a unit admin inside that unit. A member gets
+the substitute, an organization admin, or a unit admin inside that unit. A member gets
 their own row and nothing else. Anyone else gets `403` rather than an empty
 list, because an empty list reads as "nobody came". A session id that matches
 nothing gets `404`.

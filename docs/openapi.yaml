@@ -1735,7 +1735,7 @@ paths:
       summary: Create a new user
       description: >
         Requires `ORG_ADMIN` or `UNIT_ADMIN`. A unit admin can create users
-        only in their own unit, and only a super-admin can create an admin
+        only in their own unit, and only an organization admin can create an admin
         account; either is refused with `403`.
       requestBody:
         required: true
@@ -1845,7 +1845,7 @@ paths:
       summary: Update a user
       description: >
         Requires `ORG_ADMIN` or `UNIT_ADMIN`, and a unit admin only within
-        their own unit. Only a super-admin can modify an account that is itself
+        their own unit. Only an organization admin can modify an account that is itself
         an admin. A user cannot update their own record here.
       parameters:
         - name: user_id
@@ -2014,7 +2014,7 @@ paths:
       tags: [Users]
       summary: Update staff availability status
       description: >
-        Anyone signed in can update their own. A super-admin can update
+        Anyone signed in can update their own. An organization admin can update
         anyone's. This is the occupancy index, and it does not change the
         location the location routes resolve.
       parameters:
@@ -3173,7 +3173,7 @@ paths:
       summary: Get the roster for a ledger entry
       description: >
         Whoever runs the session gets every row: the assigned lead, the
-        substitute, a super admin, or a unit admin inside that unit. A member
+        substitute, an organization admin, or a unit admin inside that unit. A member
         gets their own row and nothing else. Anyone else is refused rather
         than handed an empty list.
       parameters:
@@ -3304,7 +3304,7 @@ paths:
       description: >
         Freeform notes about a session: lab issues, late starts, a handover.
         Restricted to whoever runs it, meaning the assigned lead, the
-        substitute, a super admin, or a unit admin inside that unit.
+        substitute, an organization admin, or a unit admin inside that unit.
       requestBody:
         required: true
         content:

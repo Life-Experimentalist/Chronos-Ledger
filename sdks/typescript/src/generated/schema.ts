@@ -134,13 +134,13 @@ export interface paths {
         };
         /**
          * List all users
-         * @description Requires `SUPER_ADMIN` or `UNIT_ADMIN`.
+         * @description Requires `ORG_ADMIN` or `UNIT_ADMIN`.
          */
         get: operations["users.list"];
         put?: never;
         /**
          * Create a new user
-         * @description Requires `SUPER_ADMIN` or `UNIT_ADMIN`. A unit admin can create users only in their own unit, and only a super-admin can create an admin account; either is refused with `403`.
+         * @description Requires `ORG_ADMIN` or `UNIT_ADMIN`. A unit admin can create users only in their own unit, and only an organization admin can create an admin account; either is refused with `403`.
          */
         post: operations["users.create"];
         delete?: never;
@@ -185,7 +185,7 @@ export interface paths {
         head?: never;
         /**
          * Update a user
-         * @description Requires `SUPER_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Only a super-admin can modify an account that is itself an admin. A user cannot update their own record here.
+         * @description Requires `ORG_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Only an organization admin can modify an account that is itself an admin. A user cannot update their own record here.
          */
         patch: operations["users.update"];
         trace?: never;
@@ -264,7 +264,7 @@ export interface paths {
         get?: never;
         /**
          * Update staff availability status
-         * @description Anyone signed in can update their own. A super-admin can update anyone's. This is the occupancy index, and it does not change the location the location routes resolve.
+         * @description Anyone signed in can update their own. An organization admin can update anyone's. This is the occupancy index, and it does not change the location the location routes resolve.
          */
         put: operations["users.updateStatus"];
         post?: never;
@@ -283,13 +283,13 @@ export interface paths {
         };
         /**
          * List issued keys
-         * @description Requires `SUPER_ADMIN`. Shows what each key is scoped to and when it runs out, which is how an unrestricted key left over from before scopes existed becomes visible.
+         * @description Requires `ORG_ADMIN`. Shows what each key is scoped to and when it runs out, which is how an unrestricted key left over from before scopes existed becomes visible.
          */
         get: operations["apiKeys.list"];
         put?: never;
         /**
          * Issue a key
-         * @description Requires `SUPER_ADMIN`. The raw key is in the response and nowhere else. Bind it to a service account rather than to a person: the key acts as that user, so a person's key inherits everything they can do.
+         * @description Requires `ORG_ADMIN`. The raw key is in the response and nowhere else. Bind it to a service account rather than to a person: the key acts as that user, so a person's key inherits everything they can do.
          */
         post: operations["apiKeys.create"];
         delete?: never;
@@ -310,7 +310,7 @@ export interface paths {
         post?: never;
         /**
          * Revoke a key
-         * @description Requires `SUPER_ADMIN`. Takes effect on the next request that uses it.
+         * @description Requires `ORG_ADMIN`. Takes effect on the next request that uses it.
          */
         delete: operations["apiKeys.revoke"];
         options?: never;
@@ -333,7 +333,7 @@ export interface paths {
         put?: never;
         /**
          * Create a room
-         * @description Requires `SUPER_ADMIN`. Registers a room before any timetable names it, for a system that manages its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response reads the room back with `GET /api/v1/resources/?code=`: the code already identifies it, so no Idempotency-Key is taken.
+         * @description Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response reads the room back with `GET /api/v1/resources/?code=`: the code already identifies it, so no Idempotency-Key is taken.
          */
         post: operations["resources.create"];
         delete?: never;
@@ -399,7 +399,7 @@ export interface paths {
         put?: never;
         /**
          * Hold a resource for one dated window
-         * @description Requires `SUPER_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it refuses is exactly what GET availability calls busy, through the same queries and the same expansion, so a caller cannot read an hour as free and then be refused it.
+         * @description Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it refuses is exactly what GET availability calls busy, through the same queries and the same expansion, so a caller cannot read an hour as free and then be refused it.
          *
          *     The rule runs both ways. A class cannot be put on top of a hold either, so POST /schedule/slots, PATCH /schedule/slots/{slot_id} and a CSV upload are each refused where a booking already stands. A hold taken here holds against the timetable and not only against other holds.
          *
@@ -426,11 +426,11 @@ export interface paths {
         post?: never;
         /**
          * Let a hold go
-         * @description Requires `SUPER_ADMIN` or `UNIT_ADMIN`. Marks the reservation cancelled and leaves the row in place. A deleted row cannot be told to anybody, and a system that was informed the room was held has to be able to learn that it no longer is.
+         * @description Requires `ORG_ADMIN` or `UNIT_ADMIN`. Marks the reservation cancelled and leaves the row in place. A deleted row cannot be told to anybody, and a system that was informed the room was held has to be able to learn that it no longer is.
          *
          *     The freed window is bookable again immediately and stops appearing in availability. Cancelling twice is not an error and returns the same timestamp. Cancelling through the wrong resource id is a 404.
          *
-         *     A hold is let go by whoever took it. A `UNIT_ADMIN` that did not make the reservation gets a 403; a `SUPER_ADMIN` overrides, because a hold taken by an account that no longer exists has nobody left to cancel it.
+         *     A hold is let go by whoever took it. A `UNIT_ADMIN` that did not make the reservation gets a 403; an `ORG_ADMIN` overrides, because a hold taken by an account that no longer exists has nobody left to cancel it.
          */
         delete: operations["resources.cancelReservation"];
         options?: never;
@@ -555,7 +555,7 @@ export interface paths {
         head?: never;
         /**
          * Update a ledger entry
-         * @description Requires `SUPER_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Sets the substitute, the delivery format, or the day's own geofence. A field left out, or sent as null, keeps its current value.
+         * @description Requires `ORG_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Sets the substitute, the delivery format, or the day's own geofence. A field left out, or sent as null, keeps its current value.
          */
         patch: operations["schedule.updateLedgerEntry"];
         trace?: never;
@@ -606,7 +606,7 @@ export interface paths {
         put?: never;
         /**
          * Create a new planning cycle
-         * @description Requires `SUPER_ADMIN`. The two dates are the days the cycle's slots run on, both included. An end earlier than the start is refused with 422; equal dates are a cycle of one day.
+         * @description Requires `ORG_ADMIN`. The two dates are the days the cycle's slots run on, both included. An end earlier than the start is refused with 422; equal dates are a cycle of one day.
          */
         post: operations["schedule.createCycle"];
         delete?: never;
@@ -632,7 +632,7 @@ export interface paths {
          * Take a planning cycle out of service
          * @description Sets `operational_status = false`, so the nightly generator writes no more days for the cycle's slots, and removes the days it has already written from today onward, which are still only plans. A day that carries attendance or a note is kept rather than refused over. Days before today are not touched.
          *
-         *     Closing a cycle that is already closed runs the same sweep. Requires `SUPER_ADMIN`.
+         *     Closing a cycle that is already closed runs the same sweep. Requires `ORG_ADMIN`.
          */
         patch: operations["schedule.closeCycle"];
         trace?: never;
@@ -656,7 +656,7 @@ export interface paths {
          *
          *     Not a flag flip. A slot entered into a closed cycle is never checked against the bookings or against the rest of the timetable, because a closed cycle's slots occupy nothing, and every one of them starts occupying its room the moment the flag goes true. The checks `POST /schedule/slots` would have run are run here over every slot in the cycle at once, the cycle's own slots counting against each other, and the whole open is refused where any of them lands on a room that is taken. A refused open writes nothing.
          *
-         *     Opening a cycle that is already open changes nothing. Requires `SUPER_ADMIN`.
+         *     Opening a cycle that is already open changes nothing. Requires `ORG_ADMIN`.
          */
         patch: operations["schedule.openCycle"];
         trace?: never;
@@ -674,7 +674,7 @@ export interface paths {
          * Copy one cycle's activities and weekly slots into another
          * @description Copies every `Activity` in the old cycle and every `StructuralMasterSlot` under them, each slot pointed at its activity's copy with the same lead, room and window. Member enrollment and attendance records are **not** cloned. Re-import CSV after cloning to update enrollment.
          *
-         *     The target must be closed and have no activities. The copied slots are not checked against the rooms here; opening the target runs those checks over all of them at once. Requires `SUPER_ADMIN`.
+         *     The target must be closed and have no activities. The copied slots are not checked against the rooms here; opening the target runs those checks over all of them at once. Requires `ORG_ADMIN`.
          */
         post: operations["schedule.cloneCycle"];
         delete?: never;
@@ -732,7 +732,7 @@ export interface paths {
         };
         /**
          * Get the roster for a ledger entry
-         * @description Whoever runs the session gets every row: the assigned lead, the substitute, a super admin, or a unit admin inside that unit. A member gets their own row and nothing else. Anyone else is refused rather than handed an empty list.
+         * @description Whoever runs the session gets every row: the assigned lead, the substitute, an organization admin, or a unit admin inside that unit. A member gets their own row and nothing else. Anyone else is refused rather than handed an empty list.
          */
         get: operations["attendance.listForLedger"];
         put?: never;
@@ -772,7 +772,7 @@ export interface paths {
         };
         /**
          * List absence requests pending the caller's approval
-         * @description Any signed-in user. Returns the undecided requests the caller may decide: those routed to them as the submitter's line manager and, for an admin, those whose manager has since been deactivated. A SUPER_ADMIN gets every one of those, a UNIT_ADMIN those from the non-admin accounts of their own unit, and nobody gets their own.
+         * @description Any signed-in user. Returns the undecided requests the caller may decide: those routed to them as the submitter's line manager and, for an admin, those whose manager has since been deactivated. A ORG_ADMIN gets every one of those, a UNIT_ADMIN those from the non-admin accounts of their own unit, and nobody gets their own.
          */
         get: operations["attendance.listPendingAbsences"];
         put?: never;
@@ -814,7 +814,7 @@ export interface paths {
         put?: never;
         /**
          * Create a ledger annotation
-         * @description Freeform notes about a session: lab issues, late starts, a handover. Restricted to whoever runs it, meaning the assigned lead, the substitute, a super admin, or a unit admin inside that unit.
+         * @description Freeform notes about a session: lab issues, late starts, a handover. Restricted to whoever runs it, meaning the assigned lead, the substitute, an organization admin, or a unit admin inside that unit.
          */
         post: operations["attendance.createAnnotation"];
         delete?: never;
@@ -951,7 +951,7 @@ export interface paths {
         put?: never;
         /**
          * Bulk import schedule from CSV
-         * @description Requires `SUPER_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`.
+         * @description Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`.
          *     Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent, re-uploading the same CSV is safe: an existing member keeps their password.
          *
          *     Never removes. Slots and enrollments the cycle holds that the file does not mention come back in `not_in_file` for somebody to act on, which is what makes a partial upload safe.
@@ -979,7 +979,7 @@ export interface paths {
         put?: never;
         /**
          * Trigger daily ledger generation
-         * @description Requires `SUPER_ADMIN`. Generates `DailyLedger` rows from `StructuralMasterSlot` for a given date, tomorrow by default. The same job the nightly cron runs. Safe to re-run: a day already written for a slot is skipped.
+         * @description Requires `ORG_ADMIN`. Generates `DailyLedger` rows from `StructuralMasterSlot` for a given date, tomorrow by default. The same job the nightly cron runs. Safe to re-run: a day already written for a slot is skipped.
          *
          *     A day is skipped as well where the room is already taken for part of that window by another day. Two slots on one room at one hour is a state the API refuses to create, and a database holding one anyway materializes the slot that was put on the timetable first and drops the other. The dropped day is written to the server log naming the slot, the date and the room. It is not in this response.
          */
@@ -999,7 +999,7 @@ export interface paths {
         };
         /**
          * Writes made through the API, newest first
-         * @description Requires `SUPER_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
+         * @description Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
          */
         get: operations["audit.list"];
         put?: never;
@@ -1079,7 +1079,7 @@ export interface paths {
         };
         /**
          * Count of people with an open websocket, on every instance
-         * @description Requires `SUPER_ADMIN`. The count is organization-wide, and there is nothing in it a unit admin could be shown only their own share of. A person counts once however many instances they are connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis counts only its own sockets.
+         * @description Requires `ORG_ADMIN`. The count is organization-wide, and there is nothing in it a unit admin could be shown only their own share of. A person counts once however many instances they are connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis counts only its own sockets.
          */
         get: operations["ws.getStats"];
         put?: never;
@@ -1138,7 +1138,7 @@ export interface components {
          * @description Role assigned to a system user.
          * @enum {string}
          */
-        InstitutionalRole: "SUPER_ADMIN" | "UNIT_ADMIN" | "STAFF" | "MEMBER";
+        InstitutionalRole: "ORG_ADMIN" | "UNIT_ADMIN" | "STAFF" | "MEMBER";
         /**
          * @description Staff availability / occupancy index visible to members.
          * @enum {string}
@@ -3567,7 +3567,7 @@ export interface operations {
                     "application/json": components["schemas"]["GuestVisitStatus"];
                 };
             };
-            /** @description No visit with that code, including one deleted under `GUEST_RETENTION_DAYS`. */
+            /** @description No visit with that code, including one deleted under `GUEST_RETENTION_DAYS` and one past the window in `GUEST_VISIT_CODE_TTL_MINUTES`, which answers exactly as an unknown code does. */
             404: {
                 headers: {
                     [name: string]: unknown;

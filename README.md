@@ -138,7 +138,7 @@ Drop a member-centric CSV on the Admin dashboard. One upload creates/updates use
 
 | Role            | Path                 | Core capabilities                                                      |
 | --------------- | -------------------- | ---------------------------------------------------------------------- |
-| **Super Admin** | `/admin/dashboard`   | CSV import, cycle management, proxy assignment, user provisioning      |
+| **Organization Admin** | `/admin/dashboard`   | CSV import, cycle management, proxy assignment, user provisioning      |
 | **Unit Admin**  | `/admin/dashboard`   | Absence approvals, ledger overrides for own unit                 |
 | **Staff**     | `/staff/dashboard` | Availability switcher, attendance matrix, absence requests, guest desk |
 | **Member**     | `/member/dashboard` | Live timeline, geofenced self-mark, staff locator, offline queue     |
@@ -334,7 +334,7 @@ See [`.env.example`](.env.example) for the full template.
 
 ## First Boot Credentials
 
-The Alembic seed migration creates one super-admin. It seeds a hash of a
+The Alembic seed migration creates one organization admin. It seeds a hash of a
 random string it throws away, so the account exists, nothing can log into
 it, and this repository publishes no password for anyone to find. What the
 first password is comes from your `.env`:

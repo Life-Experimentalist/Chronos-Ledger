@@ -1144,7 +1144,7 @@ def test_substitute_lead_can_single_mark(client, db, seed_users):
     assert res.status_code == 200, res.text
 
 
-def test_super_admin_can_single_mark_any_ledger(client, db, seed_users):
+def test_org_admin_can_single_mark_any_ledger(client, db, seed_users):
     ledger = _make_ledger(db, lead_id="FAC999")
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
     res = client.post(

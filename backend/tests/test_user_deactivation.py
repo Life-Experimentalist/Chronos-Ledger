@@ -336,7 +336,7 @@ def test_a_unit_admin_decides_those_from_their_own_unit(client, db, seed_users):
     assert _decide(client, unit_admin, other_unit).status_code == 404
     assert _decide(client, unit_admin, an_admins).status_code == 404
     assert _decide(client, unit_admin, own_unit).status_code == 200
-    # A super admin reaches the rest, the unit admin's own included.
+    # An organization admin reaches the rest, the unit admin's own included.
     assert _pending_ids(client, _admin(client)) == {other_unit, an_admins}
 
 

@@ -65,7 +65,7 @@ def sync_detailed(
 ) -> Response[Any | ErrorResponse]:
     """Revoke a key
 
-     Requires `SUPER_ADMIN`. Takes effect on the next request that uses it.
+     Requires `ORG_ADMIN`. Takes effect on the next request that uses it.
 
     Args:
         key_id (int):
@@ -96,7 +96,7 @@ def sync(
 ) -> Any | ErrorResponse | None:
     """Revoke a key
 
-     Requires `SUPER_ADMIN`. Takes effect on the next request that uses it.
+     Requires `ORG_ADMIN`. Takes effect on the next request that uses it.
 
     Args:
         key_id (int):
@@ -122,7 +122,7 @@ async def asyncio_detailed(
 ) -> Response[Any | ErrorResponse]:
     """Revoke a key
 
-     Requires `SUPER_ADMIN`. Takes effect on the next request that uses it.
+     Requires `ORG_ADMIN`. Takes effect on the next request that uses it.
 
     Args:
         key_id (int):
@@ -151,7 +151,7 @@ async def asyncio(
 ) -> Any | ErrorResponse | None:
     """Revoke a key
 
-     Requires `SUPER_ADMIN`. Takes effect on the next request that uses it.
+     Requires `ORG_ADMIN`. Takes effect on the next request that uses it.
 
     Args:
         key_id (int):

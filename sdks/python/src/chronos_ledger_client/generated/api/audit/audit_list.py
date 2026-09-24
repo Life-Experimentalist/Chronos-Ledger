@@ -105,7 +105,7 @@ def sync_detailed(
 ) -> Response[ErrorResponse | list[AuditRecord]]:
     """Writes made through the API, newest first
 
-     Requires `SUPER_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a
+     Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a
     method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and
     `to` are dates in the organization's timezone, both included.
 
@@ -150,7 +150,7 @@ def sync(
 ) -> ErrorResponse | list[AuditRecord] | None:
     """Writes made through the API, newest first
 
-     Requires `SUPER_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a
+     Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a
     method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and
     `to` are dates in the organization's timezone, both included.
 
@@ -190,7 +190,7 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | list[AuditRecord]]:
     """Writes made through the API, newest first
 
-     Requires `SUPER_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a
+     Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a
     method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and
     `to` are dates in the organization's timezone, both included.
 
@@ -233,7 +233,7 @@ async def asyncio(
 ) -> ErrorResponse | list[AuditRecord] | None:
     """Writes made through the API, newest first
 
-     Requires `SUPER_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a
+     Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a
     method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and
     `to` are dates in the organization's timezone, both included.
 

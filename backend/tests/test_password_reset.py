@@ -165,7 +165,7 @@ def test_a_unit_admin_may_reset_inside_their_unit(client, seed_users, db):
 
 
 def test_a_unit_admin_may_not_reset_an_admin(client, seed_users, db):
-    """Otherwise a unit admin promotes themselves by taking the super-admin."""
+    """Otherwise a unit admin promotes themselves by taking the organization admin's role."""
     _seed_cse_unit_admin(db)
     headers = login(client, "cse.admin@test.internal", UNIT_ADMIN_PASSWORD)
     assert client.post(RESET % "ADM001", headers=headers).status_code == 403

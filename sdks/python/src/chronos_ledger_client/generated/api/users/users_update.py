@@ -87,8 +87,9 @@ def sync_detailed(
 ) -> Response[ErrorResponse | UserResponse]:
     """Update a user
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Only a super-
-    admin can modify an account that is itself an admin. A user cannot update their own record here.
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Only an
+    organization admin can modify an account that is itself an admin. A user cannot update their own
+    record here.
 
     Args:
         user_id (str):
@@ -123,8 +124,9 @@ def sync(
 ) -> ErrorResponse | UserResponse | None:
     """Update a user
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Only a super-
-    admin can modify an account that is itself an admin. A user cannot update their own record here.
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Only an
+    organization admin can modify an account that is itself an admin. A user cannot update their own
+    record here.
 
     Args:
         user_id (str):
@@ -154,8 +156,9 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | UserResponse]:
     """Update a user
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Only a super-
-    admin can modify an account that is itself an admin. A user cannot update their own record here.
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Only an
+    organization admin can modify an account that is itself an admin. A user cannot update their own
+    record here.
 
     Args:
         user_id (str):
@@ -188,8 +191,9 @@ async def asyncio(
 ) -> ErrorResponse | UserResponse | None:
     """Update a user
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Only a super-
-    admin can modify an account that is itself an admin. A user cannot update their own record here.
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Only an
+    organization admin can modify an account that is itself an admin. A user cannot update their own
+    record here.
 
     Args:
         user_id (str):

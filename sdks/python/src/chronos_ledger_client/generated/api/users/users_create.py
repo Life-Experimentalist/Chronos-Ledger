@@ -82,8 +82,8 @@ def sync_detailed(
 ) -> Response[ErrorResponse | UserResponse]:
     """Create a new user
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`. A unit admin can create users only in their own unit, and
-    only a super-admin can create an admin account; either is refused with `403`.
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`. A unit admin can create users only in their own unit, and only
+    an organization admin can create an admin account; either is refused with `403`.
 
     Args:
         body (UserCreate):
@@ -114,8 +114,8 @@ def sync(
 ) -> ErrorResponse | UserResponse | None:
     """Create a new user
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`. A unit admin can create users only in their own unit, and
-    only a super-admin can create an admin account; either is refused with `403`.
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`. A unit admin can create users only in their own unit, and only
+    an organization admin can create an admin account; either is refused with `403`.
 
     Args:
         body (UserCreate):
@@ -141,8 +141,8 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | UserResponse]:
     """Create a new user
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`. A unit admin can create users only in their own unit, and
-    only a super-admin can create an admin account; either is refused with `403`.
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`. A unit admin can create users only in their own unit, and only
+    an organization admin can create an admin account; either is refused with `403`.
 
     Args:
         body (UserCreate):
@@ -171,8 +171,8 @@ async def asyncio(
 ) -> ErrorResponse | UserResponse | None:
     """Create a new user
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`. A unit admin can create users only in their own unit, and
-    only a super-admin can create an admin account; either is refused with `403`.
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`. A unit admin can create users only in their own unit, and only
+    an organization admin can create an admin account; either is refused with `403`.
 
     Args:
         body (UserCreate):

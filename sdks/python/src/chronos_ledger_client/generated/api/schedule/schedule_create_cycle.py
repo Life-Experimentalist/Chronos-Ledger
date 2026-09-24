@@ -72,7 +72,7 @@ def sync_detailed(
 ) -> Response[ErrorResponse | PlanningCycleResponse]:
     """Create a new planning cycle
 
-     Requires `SUPER_ADMIN`. The two dates are the days the cycle's slots run on, both included. An end
+     Requires `ORG_ADMIN`. The two dates are the days the cycle's slots run on, both included. An end
     earlier than the start is refused with 422; equal dates are a cycle of one day.
 
     Args:
@@ -104,7 +104,7 @@ def sync(
 ) -> ErrorResponse | PlanningCycleResponse | None:
     """Create a new planning cycle
 
-     Requires `SUPER_ADMIN`. The two dates are the days the cycle's slots run on, both included. An end
+     Requires `ORG_ADMIN`. The two dates are the days the cycle's slots run on, both included. An end
     earlier than the start is refused with 422; equal dates are a cycle of one day.
 
     Args:
@@ -131,7 +131,7 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | PlanningCycleResponse]:
     """Create a new planning cycle
 
-     Requires `SUPER_ADMIN`. The two dates are the days the cycle's slots run on, both included. An end
+     Requires `ORG_ADMIN`. The two dates are the days the cycle's slots run on, both included. An end
     earlier than the start is refused with 422; equal dates are a cycle of one day.
 
     Args:
@@ -161,7 +161,7 @@ async def asyncio(
 ) -> ErrorResponse | PlanningCycleResponse | None:
     """Create a new planning cycle
 
-     Requires `SUPER_ADMIN`. The two dates are the days the cycle's slots run on, both included. An end
+     Requires `ORG_ADMIN`. The two dates are the days the cycle's slots run on, both included. An end
     earlier than the start is refused with 422; equal dates are a cycle of one day.
 
     Args:

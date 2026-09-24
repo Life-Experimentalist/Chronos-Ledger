@@ -309,8 +309,8 @@ def _decidable_by(current_user: User):
     A request goes to the submitter's manager, who decides it. Once that
     manager was deactivated nobody could, and the request waited on an
     account that can no longer sign in. An admin decides those instead: a
-    super admin any of them, a unit admin those from the non-admin accounts
-    of their own unit. Nobody decides their own. Deciding makes the admin
+    organization admin any of them, a unit admin those from the non-admin
+    accounts of their own unit. Nobody decides their own. Deciding makes the admin
     the approver on record, so the decision is theirs to revisit.
     """
     mine = ReverseRsvpLog.authorized_by_user_id == current_user.id

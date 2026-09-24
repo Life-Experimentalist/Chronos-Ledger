@@ -111,7 +111,9 @@ def create_user(
 ):
     admin_roles = (InstitutionalRole.ORG_ADMIN, InstitutionalRole.UNIT_ADMIN)
     if payload.role_type in admin_roles and current_user.role_type != InstitutionalRole.ORG_ADMIN:
-        raise HTTPException(status_code=403, detail="Only a super-admin can create admin accounts")
+        raise HTTPException(
+            status_code=403, detail="Only an organization admin can create admin accounts"
+        )
     ensure_unit_scope(current_user, payload.unit_code)
     if db.query(User).filter(User.id == payload.id).first():
         raise HTTPException(status_code=409, detail="User ID already exists")
@@ -193,7 +195,9 @@ def update_user(
         raise HTTPException(status_code=404, detail="User not found")
     admin_roles = (InstitutionalRole.ORG_ADMIN, InstitutionalRole.UNIT_ADMIN)
     if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.ORG_ADMIN:
-        raise HTTPException(status_code=403, detail="Only a super-admin can modify admin accounts")
+        raise HTTPException(
+            status_code=403, detail="Only an organization admin can modify admin accounts"
+        )
     ensure_unit_scope(current_user, user.unit_code)
     if "unit_code" in payload.model_fields_set:
         # A unit admin cannot move a user into or out of another unit, and
@@ -242,7 +246,9 @@ def reset_user_password(
         raise HTTPException(status_code=404, detail="User not found")
     admin_roles = (InstitutionalRole.ORG_ADMIN, InstitutionalRole.UNIT_ADMIN)
     if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.ORG_ADMIN:
-        raise HTTPException(status_code=403, detail="Only a super-admin can modify admin accounts")
+        raise HTTPException(
+            status_code=403, detail="Only an organization admin can modify admin accounts"
+        )
     ensure_unit_scope(current_user, user.unit_code)
 
     raw_password = generate_password()
@@ -266,7 +272,9 @@ def _managed_account(user_id: str, db: Session, current_user: User) -> User:
         raise HTTPException(status_code=404, detail="User not found")
     admin_roles = (InstitutionalRole.ORG_ADMIN, InstitutionalRole.UNIT_ADMIN)
     if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.ORG_ADMIN:
-        raise HTTPException(status_code=403, detail="Only a super-admin can modify admin accounts")
+        raise HTTPException(
+            status_code=403, detail="Only an organization admin can modify admin accounts"
+        )
     ensure_unit_scope(current_user, user.unit_code)
     return user
 
@@ -337,7 +345,8 @@ def deactivate_user(
     handover is done.
     """
     user = _managed_account(user_id, db, current_user)
-    # Refusing this is also what keeps one super admin standing: whoever
+    # Refusing this is also what keeps one organization admin standing:
+    # whoever
     # deactivates the others is still there.
     if user.id == current_user.id:
         raise HTTPException(status_code=422, detail="You cannot deactivate your own account")
