@@ -2,6 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 
 
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
@@ -70,6 +72,7 @@ def process_guest_entry(
         raise HTTPException(status_code=404, detail="Staff member not found")
 
     visit_code = generate_visit_code()
+    ttl_minutes = get_settings().guest_visit_code_ttl_minutes
     entry = GuestGateRegistry(
         guest_name=payload.guest_name,
         contact_phone=payload.contact_phone,
@@ -77,6 +80,9 @@ def process_guest_entry(
         target_staff_id=payload.target_staff_id,
         visitation_intent=payload.visitation_intent,
         visit_code_hash=hash_visit_code(visit_code),
+        visit_code_expires_at=(
+            datetime.now(UTC) + timedelta(minutes=ttl_minutes) if ttl_minutes > 0 else None
+        ),
     )
     db.add(entry)
     db.commit()
@@ -142,6 +148,17 @@ def get_visit_status(code: str, db: Session = Depends(get_db)):
     )
     if entry is None:
         raise HTTPException(status_code=404, detail="No visit with that code")
+    # An expired code reads as one that was never issued. Saying "expired"
+    # instead would confirm to whoever is trying codes that this one was real.
+    # Stored naive on SQLite and aware on Postgres, as in security.py.
+    if entry.visit_code_expires_at is not None:
+        expires_at = (
+            entry.visit_code_expires_at
+            if entry.visit_code_expires_at.tzinfo
+            else entry.visit_code_expires_at.replace(tzinfo=UTC)
+        )
+        if expires_at <= datetime.now(UTC):
+            raise HTTPException(status_code=404, detail="No visit with that code")
     return entry
 
 

@@ -155,6 +155,14 @@ class Settings(BaseSettings):
     # instance behaved before this setting existed.
     guest_retention_days: int = 0
 
+    # How long a visit code opens GET /guest/visit/{code}, in minutes. The code
+    # is the visitor's only credential and it is shown to them once, so a code
+    # printed or scanned today goes on working for as long as the row lives.
+    # Past the window the lookup reads as though the code never existed. 0
+    # leaves a code working for as long as the check-in is kept, which is how
+    # an instance behaved before this setting existed.
+    guest_visit_code_ttl_minutes: int = 0
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.app_cors_origins.split(",") if o.strip()]
@@ -200,6 +208,17 @@ class Settings(BaseSettings):
                 "check-ins forever, or a number of days such as 90."
             )
         return days
+
+    @field_validator("guest_visit_code_ttl_minutes")
+    @classmethod
+    def _ttl_is_not_negative(cls, minutes: int) -> int:
+        if minutes < 0:
+            raise ValueError(
+                f"GUEST_VISIT_CODE_TTL_MINUTES={minutes} is negative. Set 0 to leave "
+                "a visit code working for as long as the check-in is kept, or a number "
+                "of minutes such as 240."
+            )
+        return minutes
 
     @field_validator("org_timezone")
     @classmethod

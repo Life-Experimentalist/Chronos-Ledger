@@ -83,6 +83,9 @@ services:
       # Days a visitor check-in is kept before a daily job deletes it. 0
       # keeps them forever.
       - GUEST_RETENTION_DAYS=${GUEST_RETENTION_DAYS:-0}
+      # Minutes a visit code keeps opening the visitor's own status
+      # lookup. 0 leaves it working for as long as the check-in is kept.
+      - GUEST_VISIT_CODE_TTL_MINUTES=${GUEST_VISIT_CODE_TTL_MINUTES:-0}
       # Which upstream addresses uvicorn believes X-Forwarded-For from. This
       # service publishes no ports, so nginx is the only way in. Without it
       # every request looks like it came from the proxy and the sign-in

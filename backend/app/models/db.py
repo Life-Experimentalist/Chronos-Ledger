@@ -446,6 +446,10 @@ class GuestGateRegistry(Base):
     # shown to the visitor once and kept nowhere. Null on the check-ins made
     # before there were codes.
     visit_code_hash = Column(String(64), unique=True, index=True, nullable=True)
+    # When the code stops opening the status lookup. Null means it does not,
+    # which is every check-in made while GUEST_VISIT_CODE_TTL_MINUTES was 0 and
+    # every one made before the column existed.
+    visit_code_expires_at = Column(DateTime(timezone=True), nullable=True)
 
     target_staff = relationship("User", foreign_keys=[target_staff_id])
 

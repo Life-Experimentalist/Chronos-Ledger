@@ -3472,7 +3472,9 @@ paths:
         "404":
           description: >
             No visit with that code, including one deleted under
-            `GUEST_RETENTION_DAYS`.
+            `GUEST_RETENTION_DAYS` and one past the window in
+            `GUEST_VISIT_CODE_TTL_MINUTES`, which answers exactly as an
+            unknown code does.
           content:
             application/json:
               schema:

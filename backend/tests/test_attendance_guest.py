@@ -915,6 +915,63 @@ def test_a_purged_visit_code_is_a_404(client, db, seed_users, kiosk_key):
     assert client.get(f"/api/v1/guest/visit/{body['visit_code']}").status_code == 404
 
 
+@pytest.fixture()
+def visit_code_ttl(monkeypatch):
+    def set_minutes(value):
+        monkeypatch.setenv("GUEST_VISIT_CODE_TTL_MINUTES", value)
+        get_settings.cache_clear()
+
+    yield set_minutes
+    get_settings.cache_clear()
+
+
+def test_a_visit_code_never_expires_by_default(client, db, seed_users, kiosk_key):
+    """An instance that has not asked for a window behaves as it always did."""
+    body = _check_in(client, kiosk_key)
+    entry = db.get(GuestGateRegistry, body["reference_token"])
+    assert entry.visit_code_expires_at is None
+    assert client.get(f"/api/v1/guest/visit/{body['visit_code']}").status_code == 200
+
+
+def test_a_visit_code_inside_its_window_opens_the_status(
+    client, db, seed_users, kiosk_key, visit_code_ttl
+):
+    visit_code_ttl("240")
+    body = _check_in(client, kiosk_key)
+    entry = db.get(GuestGateRegistry, body["reference_token"])
+    # Minutes, not seconds or hours. Stored naive on SQLite, as in security.py.
+    expires_at = entry.visit_code_expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=datetime.UTC)
+    remaining = expires_at - datetime.datetime.now(datetime.UTC)
+    assert datetime.timedelta(minutes=239) < remaining < datetime.timedelta(minutes=241)
+    assert client.get(f"/api/v1/guest/visit/{body['visit_code']}").status_code == 200
+
+
+def test_a_visit_code_past_its_window_reads_as_one_that_never_existed(
+    client, db, seed_users, kiosk_key, visit_code_ttl
+):
+    visit_code_ttl("240")
+    body = _check_in(client, kiosk_key)
+    entry = db.get(GuestGateRegistry, body["reference_token"])
+    # Rather than holding the test open for four hours.
+    entry.visit_code_expires_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(
+        minutes=1
+    )
+    db.commit()
+
+    res = client.get(f"/api/v1/guest/visit/{body['visit_code']}")
+    assert res.status_code == 404
+    # Worded as an unknown code, so trying codes tells you nothing about which
+    # ones were ever real.
+    assert res.json()["detail"] == "No visit with that code"
+
+
+def test_a_negative_visit_code_ttl_is_refused_at_startup():
+    with pytest.raises(ValidationError, match="GUEST_VISIT_CODE_TTL_MINUTES"):
+        Settings(guest_visit_code_ttl_minutes=-1)
+
+
 # -- Notices over the socket ---------------------------------------------------
 
 

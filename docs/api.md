@@ -1251,7 +1251,11 @@ visitor:
 ```
 
 `404` for a code that matches no visit, including one deleted under
-`GUEST_RETENTION_DAYS`. It is not rate limited: a code is about 79 bits, so
+`GUEST_RETENTION_DAYS` and one past the window in
+`GUEST_VISIT_CODE_TTL_MINUTES`. An expired code answers exactly as an
+unknown one does, so trying codes says nothing about which ones were real.
+That setting defaults to 0, which leaves a code working for as long as the
+check-in is kept, and codes issued while it was 0 never expire. It is not rate limited: a code is about 79 bits, so
 guessing one is not a strategy, and a right guess shows only whether one
 unnamed visit was approved.
 
