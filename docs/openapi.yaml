@@ -3542,8 +3542,11 @@ paths:
     get:
       operationId: guest.listPending
       tags: [Guest Gate]
-      summary: List pending guest requests for authenticated staff
-      description: Returns guests targeting the authenticated staff member with PENDING_VERIFICATION status.
+      summary: List the pending guest requests this account may decide
+      description: >
+        Guests with PENDING_VERIFICATION status that this account may decide: the ones
+        targeting it, and with GUEST_ADMIN_CAN_DECIDE on also those an admin may decide,
+        which for an ORG_ADMIN is the whole organization's queue. Unpaginated.
       responses:
         "200":
           description: Pending guest requests.
@@ -3587,7 +3590,10 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
-          description: No such entry, or the visitor asked for somebody else.
+          description: >
+            No such entry, or the visitor asked for somebody else. By default only the
+            staff member the visitor named may decide; with GUEST_ADMIN_CAN_DECIDE on an
+            ORG_ADMIN may decide any visit and a UNIT_ADMIN those meant for their own unit.
           content:
             application/json:
               schema:

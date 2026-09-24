@@ -911,8 +911,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List pending guest requests for authenticated staff
-         * @description Returns guests targeting the authenticated staff member with PENDING_VERIFICATION status.
+         * List the pending guest requests this account may decide
+         * @description Guests with PENDING_VERIFICATION status that this account may decide: the ones targeting it, and with GUEST_ADMIN_CAN_DECIDE on also those an admin may decide, which for an ORG_ADMIN is the whole organization's queue. Unpaginated.
          */
         get: operations["guest.listPending"];
         put?: never;
@@ -3679,7 +3679,7 @@ export interface operations {
                 };
             };
             403: components["responses"]["Forbidden"];
-            /** @description No such entry, or the visitor asked for somebody else. */
+            /** @description No such entry, or the visitor asked for somebody else. By default only the staff member the visitor named may decide; with GUEST_ADMIN_CAN_DECIDE on an ORG_ADMIN may decide any visit and a UNIT_ADMIN those meant for their own unit. */
             404: {
                 headers: {
                     [name: string]: unknown;

@@ -5,6 +5,7 @@
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
+from sqlalchemy import or_, select, true
 from sqlalchemy.orm import Session
 
 from app.core import rate_limit
@@ -109,6 +110,39 @@ def process_guest_entry(
     }
 
 
+def _decidable_by(current_user: User):
+    """The check-ins this user may decide, as a filter.
+
+    The person the visitor came to see decides, and for a long time that was
+    the only way, which stalls at the door: the visitor is standing in the
+    lobby and the person they came for is in theatre or has gone home. With
+    GUEST_ADMIN_CAN_DECIDE on, an admin decides those as well, an organization
+    admin any of them and a unit admin those meant for their own unit.
+
+    Unlike the absence requests this mirrors, a unit admin is not held off the
+    admin accounts of their unit. An approved absence is something the person
+    gets; an approved visit is somebody let in at a door, and whose door it is
+    does not change the front desk's job.
+    """
+    mine = GuestGateRegistry.target_staff_id == current_user.id
+    role = current_user.role_type.value
+    if not get_settings().guest_admin_can_decide or role not in ("ORG_ADMIN", "UNIT_ADMIN"):
+        return mine
+    if role == "ORG_ADMIN":
+        return true()
+    # An admin account with no unit of its own reaches nothing this way.
+    # Compared with None the column reads IS NULL, which would be every
+    # account that has no unit rather than none of them.
+    if current_user.unit_code is None:
+        return mine
+    return or_(
+        mine,
+        GuestGateRegistry.target_staff_id.in_(
+            select(User.id).where(User.unit_code == current_user.unit_code)
+        ),
+    )
+
+
 @router.patch("/{entry_id}/decide", operation_id="guest.decide")
 def decide_guest_entry(
     entry_id: int,
@@ -118,16 +152,16 @@ def decide_guest_entry(
 ):
     entry = (
         db.query(GuestGateRegistry)
-        .filter(
-            GuestGateRegistry.id == entry_id,
-            GuestGateRegistry.target_staff_id == current_user.id,
-        )
+        .filter(GuestGateRegistry.id == entry_id, _decidable_by(current_user))
         .first()
     )
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found or not authorized")
 
     entry.handshake_status = payload.decision
+    # Whoever it was, including the person the visitor came to see, so that the
+    # row answers who let this visitor in rather than who could have.
+    entry.decided_by_id = current_user.id
     db.commit()
     return {"status": payload.decision.value, "guest": entry.guest_name}
 
@@ -167,10 +201,17 @@ def get_pending_guests(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """The visitors waiting on this user, which is what the desk lists.
+
+    The same reach as the decision itself, so an admin who may decide a visit
+    can see it waiting. With GUEST_ADMIN_CAN_DECIDE on that makes this the
+    whole organization's queue for an organization admin, which is the point of
+    a front desk and worth knowing before switching it on.
+    """
     return (
         db.query(GuestGateRegistry)
         .filter(
-            GuestGateRegistry.target_staff_id == current_user.id,
+            _decidable_by(current_user),
             GuestGateRegistry.handshake_status == LogVerificationState.PENDING_VERIFICATION,
         )
         .all()

@@ -163,6 +163,20 @@ class Settings(BaseSettings):
     # an instance behaved before this setting existed.
     guest_visit_code_ttl_minutes: int = 0
 
+    # Whether an admin may decide a visit that was not meant for them, at
+    # PATCH /guest/{entry_id}/decide. Off, and with it off the person the
+    # visitor came to see is the only one who can let them in, which stalls at
+    # the door when that person is in theatre or has gone home for the day. On,
+    # an organization admin decides any visit and a unit admin those meant for
+    # their own unit, and the row records which of them did.
+    #
+    # A front desk attendant is not an admin. Give the desk a guest-scoped key
+    # on an admin account rather than an admin's password: the scope keeps the
+    # key to the visitor log and the role is what this setting reads. The
+    # kiosk's own account is a member and stays unable to decide, which is why
+    # a lobby tablet does not become an approver when this is turned on.
+    guest_admin_can_decide: bool = False
+
     # Whether a change to a room or a booking is written down for an outside
     # system to poll for, at GET /api/v1/changes/. Off, because it is a table
     # that grows with every write and nothing deletes it, and an instance with

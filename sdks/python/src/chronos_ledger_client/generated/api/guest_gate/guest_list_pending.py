@@ -53,9 +53,11 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
 ) -> Response[list[GuestResponse]]:
-    """List pending guest requests for authenticated staff
+    """List the pending guest requests this account may decide
 
-     Returns guests targeting the authenticated staff member with PENDING_VERIFICATION status.
+     Guests with PENDING_VERIFICATION status that this account may decide: the ones targeting it, and
+    with GUEST_ADMIN_CAN_DECIDE on also those an admin may decide, which for an ORG_ADMIN is the whole
+    organization's queue. Unpaginated.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -78,9 +80,11 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
 ) -> list[GuestResponse] | None:
-    """List pending guest requests for authenticated staff
+    """List the pending guest requests this account may decide
 
-     Returns guests targeting the authenticated staff member with PENDING_VERIFICATION status.
+     Guests with PENDING_VERIFICATION status that this account may decide: the ones targeting it, and
+    with GUEST_ADMIN_CAN_DECIDE on also those an admin may decide, which for an ORG_ADMIN is the whole
+    organization's queue. Unpaginated.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -99,9 +103,11 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
 ) -> Response[list[GuestResponse]]:
-    """List pending guest requests for authenticated staff
+    """List the pending guest requests this account may decide
 
-     Returns guests targeting the authenticated staff member with PENDING_VERIFICATION status.
+     Guests with PENDING_VERIFICATION status that this account may decide: the ones targeting it, and
+    with GUEST_ADMIN_CAN_DECIDE on also those an admin may decide, which for an ORG_ADMIN is the whole
+    organization's queue. Unpaginated.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -122,9 +128,11 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
 ) -> list[GuestResponse] | None:
-    """List pending guest requests for authenticated staff
+    """List the pending guest requests this account may decide
 
-     Returns guests targeting the authenticated staff member with PENDING_VERIFICATION status.
+     Guests with PENDING_VERIFICATION status that this account may decide: the ones targeting it, and
+    with GUEST_ADMIN_CAN_DECIDE on also those an admin may decide, which for an ORG_ADMIN is the whole
+    organization's queue. Unpaginated.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.

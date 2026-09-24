@@ -450,6 +450,13 @@ class GuestGateRegistry(Base):
     # which is every check-in made while GUEST_VISIT_CODE_TTL_MINUTES was 0 and
     # every one made before the column existed.
     visit_code_expires_at = Column(DateTime(timezone=True), nullable=True)
+    # Whoever decided it, which with GUEST_ADMIN_CAN_DECIDE on is not
+    # necessarily the person the visitor came to see. Written at the decision
+    # whoever makes it, so null is a check-in nobody has decided yet, or one
+    # decided before this column existed. SET NULL rather than the CASCADE on
+    # target_staff_id: deleting the account that decided must not delete the
+    # visitor record it decided.
+    decided_by_id = Column(String(50), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     target_staff = relationship("User", foreign_keys=[target_staff_id])
 

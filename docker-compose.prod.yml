@@ -93,6 +93,7 @@ services:
       GUEST_RETENTION_DAYS: ${GUEST_RETENTION_DAYS:-0}
       # Minutes a visit code keeps opening the visitor's own status
       # lookup. 0 leaves it working for as long as the check-in is kept.
+      GUEST_ADMIN_CAN_DECIDE: ${GUEST_ADMIN_CAN_DECIDE:-false}
       GUEST_VISIT_CODE_TTL_MINUTES: ${GUEST_VISIT_CODE_TTL_MINUTES:-0}
       # Whether a change to a room or a booking is written down for an
       # outside system to poll for. Off: nothing deletes those rows, and an

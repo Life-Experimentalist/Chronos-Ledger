@@ -20,6 +20,7 @@ from app.models.db import (
     DailyLedger,
     GuestGateRegistry,
     InstitutionalRole,
+    LogVerificationState,
     PlanningCycle,
     Resource,
     ResourceType,
@@ -28,6 +29,7 @@ from app.models.db import (
     VerificationLedger,
 )
 from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, login
+from tests.test_reservations import _unit_admin
 
 TODAY = org_today()
 
@@ -849,6 +851,151 @@ def test_guest_decide_only_by_target_staff(client, db, seed_users, kiosk_key):
     assert res.status_code == 200
     assert res.json() == {"status": "VERIFIED_APPROVED", "guest": "Ravi Verma"}
     assert client.get("/api/v1/guest/pending", headers=fac).json() == []
+    # Whoever decided it, so the row answers who let this visitor in.
+    assert db.get(GuestGateRegistry, entry_id).decided_by_id == "FAC001"
+
+
+# -- Who else may decide a visit -------------------------------------------------
+
+
+@pytest.fixture()
+def admin_can_decide(monkeypatch):
+    monkeypatch.setenv("GUEST_ADMIN_CAN_DECIDE", "true")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+def _staff_in(db, unit_code, id_="FAC777"):
+    """Somebody for a visitor to come and see, in a named unit or in none."""
+    db.add(
+        User(
+            id=id_,
+            full_name="Staff Elsewhere",
+            email_address=f"{id_.lower()}@test.internal",
+            # Never signs in; it is only somebody for a visitor to come and see.
+            credential_secure_hash="not-a-real-hash",
+            role_type=InstitutionalRole.STAFF,
+            unit_code=unit_code,
+        )
+    )
+    db.commit()
+    return id_
+
+
+def _check_in_for(client, kiosk_key, staff_id):
+    res = client.post(
+        "/api/v1/guest/register-checkin",
+        json={**_GUEST, "target_staff_id": staff_id},
+        headers=kiosk_key,
+    )
+    assert res.status_code == 200, res.text
+    return res.json()["reference_token"]
+
+
+def _decide(client, headers, entry_id, decision="VERIFIED_APPROVED"):
+    return client.patch(
+        f"/api/v1/guest/{entry_id}/decide", json={"decision": decision}, headers=headers
+    )
+
+
+def test_an_admin_does_not_reach_another_persons_visit_by_default(
+    client, db, seed_users, kiosk_key
+):
+    """Off, an instance behaves exactly as it did: the target decides, nobody else."""
+    entry_id = _check_in_for(client, kiosk_key, "FAC001")
+
+    adm = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    assert _decide(client, adm, entry_id).status_code == 404
+    assert client.get("/api/v1/guest/pending", headers=adm).json() == []
+    assert db.get(GuestGateRegistry, entry_id).decided_by_id is None
+
+
+def test_an_org_admin_decides_any_visit_once_it_is_turned_on(
+    client, db, seed_users, kiosk_key, admin_can_decide
+):
+    """The visitor is in the lobby and the person they came for has gone home."""
+    entry_id = _check_in_for(client, kiosk_key, "FAC001")
+
+    adm = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    assert [g["id"] for g in client.get("/api/v1/guest/pending", headers=adm).json()] == [entry_id]
+    assert _decide(client, adm, entry_id).status_code == 200
+
+    entry = db.get(GuestGateRegistry, entry_id)
+    # Not the person the visitor came to see, which is the whole reason the
+    # row keeps this separately from target_staff_id.
+    assert entry.decided_by_id == "ADM001"
+    assert entry.target_staff_id == "FAC001"
+
+
+def test_a_unit_admin_reaches_their_own_unit_and_no_further(
+    client, db, seed_users, kiosk_key, admin_can_decide
+):
+    ours = _check_in_for(client, kiosk_key, _staff_in(db, "CSE", id_="FAC-CSE"))
+    theirs = _check_in_for(client, kiosk_key, _staff_in(db, "ECE", id_="FAC-ECE"))
+
+    # _unit_admin belongs to CSE.
+    headers = _unit_admin(db, client)
+    assert [g["id"] for g in client.get("/api/v1/guest/pending", headers=headers).json()] == [ours]
+    assert _decide(client, headers, theirs).status_code == 404
+    assert _decide(client, headers, ours).status_code == 200
+    assert db.get(GuestGateRegistry, ours).decided_by_id == "DAD001"
+
+
+def test_a_unit_admin_with_no_unit_reaches_only_their_own_visits(
+    client, db, seed_users, kiosk_key, admin_can_decide
+):
+    """An admin account with no unit of its own must not read as every unit.
+
+    Compared with None the column reads IS NULL, so the filter would hand this
+    account every staff member who has no unit rather than none of them.
+    """
+    entry_id = _check_in_for(client, kiosk_key, _staff_in(db, None, id_="FAC-NONE"))
+
+    headers = _unit_admin(db, client, id_="DAD002", email="unitless@test.internal")
+    db.get(User, "DAD002").unit_code = None
+    db.commit()
+
+    assert client.get("/api/v1/guest/pending", headers=headers).json() == []
+    assert _decide(client, headers, entry_id).status_code == 404
+
+
+def test_turning_it_on_does_not_make_a_staff_member_an_approver(
+    client, db, seed_users, kiosk_key, admin_can_decide
+):
+    """It is the two admin roles and nobody else, however many colleagues share a floor."""
+    entry_id = _check_in_for(client, kiosk_key, _staff_in(db, "CSE", id_="FAC-CSE"))
+
+    fac = login(client, "staff@test.internal", STAFF_PASSWORD)
+    assert _decide(client, fac, entry_id).status_code == 404
+    assert client.get("/api/v1/guest/pending", headers=fac).json() == []
+
+
+def test_turning_it_on_does_not_make_the_lobby_kiosk_an_approver(
+    client, db, seed_users, kiosk_key, admin_can_decide
+):
+    """The kiosk is an unattended public terminal, and its account is a member.
+
+    A front desk that should decide gets a guest-scoped key on an admin
+    account, deliberately, and not the tablet the visitors themselves use.
+    """
+    entry_id = _check_in_for(client, kiosk_key, "FAC001")
+
+    assert _decide(client, kiosk_key, entry_id).status_code == 404
+    assert client.get("/api/v1/guest/pending", headers=kiosk_key).json() == []
+
+
+def test_the_target_still_decides_their_own_visit(
+    client, db, seed_users, kiosk_key, admin_can_decide
+):
+    """Turning it on adds approvers; it does not move the decision away."""
+    entry_id = _check_in_for(client, kiosk_key, "FAC001")
+
+    fac = login(client, "staff@test.internal", STAFF_PASSWORD)
+    assert _decide(client, fac, entry_id, "VERIFIED_DENIED").status_code == 200
+    entry = db.get(GuestGateRegistry, entry_id)
+    assert entry.handshake_status == LogVerificationState.VERIFIED_DENIED
+    assert entry.decided_by_id == "FAC001"
 
 
 # -- The visitor's code ----------------------------------------------------------

@@ -1226,7 +1226,11 @@ and `?offset=` page through them, and `X-Total-Count` says how many matched.
 
 ### GET /guest/pending `[STAFF]`
 
-Pending guest requests targeting the authenticated staff member.
+The pending check-ins this account may decide, which is the ones the visitor
+asked for it by name. With `GUEST_ADMIN_CAN_DECIDE` on it is also every visit an
+admin may decide, so an `ORG_ADMIN` reads the whole organization's queue here.
+Unpaginated, which is worth knowing before turning that setting on in a building
+with a busy lobby.
 
 ### PATCH /guest/{id}/decide `[STAFF]`
 
@@ -1234,7 +1238,18 @@ Pending guest requests targeting the authenticated staff member.
 { "decision": "VERIFIED_APPROVED" }
 ```
 
-Only the staff member the visitor asked for can decide; anyone else gets `404`.
+By default only the staff member the visitor asked for can decide; anyone else
+gets `404`. That stalls at the door when the person the visitor came to see is
+in a meeting or has gone home, so `GUEST_ADMIN_CAN_DECIDE=true` adds the two
+admin roles: an `ORG_ADMIN` decides any visit and a `UNIT_ADMIN` those meant for
+somebody in their own unit. Nobody else is added, whatever their role, and a
+kiosk key on a member account stays unable to decide.
+
+The row records who decided, which is not always who the visitor came to see.
+No endpoint reads it back; it is for the operator holding the database, next to
+the audit log, since a visitor log is read after an incident rather than on a
+screen.
+
 The response is `{"status": "VERIFIED_APPROVED", "guest": "John Smith"}`.
 The kiosk and the visitor see the decision through `GET /guest/visit/{code}`.
 
