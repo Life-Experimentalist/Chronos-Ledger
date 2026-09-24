@@ -419,7 +419,7 @@ def cancel_reservation(
 
     A hold is let go by whoever took it. More than one system books through
     here, and one integration dropping another's hold is how a room goes
-    quietly free under something that still believes it has it. A ORG_ADMIN
+    quietly free under something that still believes it has it. An ORG_ADMIN
     is the exception, because a hold taken by an account that no longer
     exists has nobody left to cancel it.
     """
