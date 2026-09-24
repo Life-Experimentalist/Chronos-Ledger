@@ -69,6 +69,14 @@ export function useWebSocket() {
             message: `${p.guest_name} from ${p.organization} is waiting`,
             actionUrl: '/staff/dashboard?tab=guests',
           })
+        } else if (frame.event === 'GUEST_VISIT_EXPIRED') {
+          const p = frame.payload as { guest_name: string }
+          pushNotification({
+            type: 'warning',
+            title: 'Visit Time Is Up',
+            message: `${p.guest_name} is past the end of their visit`,
+            actionUrl: '/staff/dashboard?tab=guests',
+          })
         } else if (frame.event === 'ABSENCE_DECISION') {
           const p = frame.payload as { decision: string }
           pushNotification({

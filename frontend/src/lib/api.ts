@@ -162,6 +162,8 @@ export const guestApi = {
   decidePending: (id: number, decision: string) =>
     api.patch(`/guest/${id}/decide`, { decision }),
   getPendingGuests: () => api.get('/guest/pending'),
+  getOverstays: () => api.get('/guest/overstays'),
+  extendVisit: (id: number, minutes: number) => api.patch(`/guest/${id}/extend`, { minutes }),
   // Visitor-side, from the kiosk or the visitor's own phone: the code is the
   // only credential, so plain axios, with neither a token nor a device key.
   visitStatus: (code: string) =>
