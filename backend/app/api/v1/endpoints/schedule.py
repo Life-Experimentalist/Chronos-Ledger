@@ -214,9 +214,7 @@ def close_cycle(
     operation_id="schedule.openCycle",
     responses={409: {"model": CycleActivationConflict}},
 )
-def open_cycle(
-    cycle_id: int, db: Session = Depends(get_db), _=Depends(require_roles("ORG_ADMIN"))
-):
+def open_cycle(cycle_id: int, db: Session = Depends(get_db), _=Depends(require_roles("ORG_ADMIN"))):
     """Put a drafted cycle into service, with its slots checked first.
 
     Nothing set this flag back to true. A cycle could be closed and never
