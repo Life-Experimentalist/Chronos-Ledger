@@ -240,6 +240,8 @@ Central identity record. Role-based access is enforced at the API layer (`core/s
 
 Somebody who leaves is deactivated rather than deleted. `deactivated_at` is set, the account can no longer sign in or be named as a lead, substitute or manager, and every row recorded against it stays. Its API keys are deleted, and migration 019 deleted any still held by an account deactivated before it. The email address stays with the account while it is deactivated, since the account can be reactivated.
 
+An account provisioned by a federated sign-in is an ordinary row with two things worth knowing. Its `id` is minted as `FED-` plus eight random bytes in hex, because a note carries no id anybody here agreed to and the subject is an opaque string from another system that would otherwise end up in this system's URLs; the prefix answers, in a user list, why the account has no password. Its `credential_secure_hash` is a bcrypt hash of a string nobody kept, generated per account rather than shared, so no submitted password can match it and a database dump cannot pick the federated rows out by an identical hash. The column stays `NOT NULL`, and `initial_login_state` is false, since there is no initial password to move off. `services/federated_identity.py::account_for` is the only writer.
+
 ### `PlanningCycle`
 The scheduling container. Several cycles can be open (`operational_status = true`) at once. A slot gets a day only while its cycle is open and the date is inside the cycle's own bounds, so two open cycles covering different parts of the year can use the same room at the same hour, and opening a cycle is refused with `409` where its slots would land on a room already taken on a date both run. `cycle_label` is not unique.
 

@@ -40,16 +40,26 @@ docs/federated-identity.md is the design, threat model first.
 
 import hashlib
 import logging
+import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import jwt
 import redis
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.redis_client import get_redis
-from app.models.db import FederatedIssuer, FederatedIssuerKey
+from app.core.security import hash_password
+from app.models.db import (
+    FederatedIdentity,
+    FederatedIssuer,
+    FederatedIssuerKey,
+    FederatedRoleMap,
+    InstitutionalRole,
+    User,
+)
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +67,12 @@ log = logging.getLogger(__name__)
 # padding mode, so there is nothing about it for an operator to misconfigure,
 # and a second permitted algorithm is a second way to be wrong.
 SIGNING_ALGORITHM = "EdDSA"
+
+# What `users.full_name` and `users.email_address` hold. A claim longer than
+# the column is not a reason to raise an IntegrityError from inside a sign-in:
+# the name is cut to fit and an unusable address is refused before any write.
+NAME_COLUMN_LIMIT = 120
+EMAIL_COLUMN_LIMIT = 120
 
 # What a note must say. `aud` and `iss` are also checked by value below; they
 # are named here so a note missing them fails as a missing claim rather than
@@ -258,3 +274,161 @@ def verify_note(token: str, db: Session) -> VerifiedNote:
         full_name=name if isinstance(name, str) and name else None,
         groups=_groups_from(claims.get("groups")),
     )
+
+
+class NoEmailToProvisionWith(Exception):
+    """The note verified, and then could not be turned into an account.
+
+    A different thing from a bad note and worth a different answer: the route
+    says 422, because nothing the caller can do to the note fixes it. An
+    operator has to add the claim to what the issuer sends, or create the
+    account and link it by hand.
+    """
+
+
+class EmailAlreadyTaken(Exception):
+    """A first-time subject arrived with an address that is already somebody's.
+
+    Never linked, always refused, and this is the refusal the whole design
+    turns on. Linking on a matching address would let an issuer that never
+    checked the address it asserts take over any account whose address it can
+    guess, an administrator's included. The route says 409, and an
+    administrator who wants that person on the shortcut links them
+    deliberately through the registry.
+    """
+
+
+def resolve_role(
+    issuer: FederatedIssuer, groups: list[str], db: Session
+) -> tuple[InstitutionalRole, str | None]:
+    """What the groups a note asserts mean here.
+
+    No match is `MEMBER` with no unit, which is the least this instance can
+    grant and the right answer for an issuer that asserts nothing useful.
+
+    Several entries can match and only two roles are reachable, so the rule is
+    short: `STAFF` beats `MEMBER`. Two `STAFF` rows with different units cannot
+    both match, because the map refuses that pair when it is written rather
+    than leaving a sign-in to pick one; the ordering below is what makes the
+    answer the same either way if one ever got in through SQL.
+    """
+    if not groups:
+        return InstitutionalRole.MEMBER, None
+    matches = (
+        db.query(FederatedRoleMap)
+        .filter(
+            FederatedRoleMap.issuer_id == issuer.id,
+            FederatedRoleMap.group_claim_value.in_(groups),
+        )
+        .order_by(FederatedRoleMap.id)
+        .all()
+    )
+    for row in matches:
+        if row.role_type == InstitutionalRole.STAFF:
+            return InstitutionalRole.STAFF, row.unit_code
+    if matches:
+        return InstitutionalRole.MEMBER, matches[0].unit_code
+    return InstitutionalRole.MEMBER, None
+
+
+def _mint_user_id() -> str:
+    """An account id for somebody nobody typed in.
+
+    Every other way an account appears takes its id from outside: an
+    administrator fills it in, or a CSV column carries it. A note carries no
+    id anyone here agreed to, and the subject is not a candidate, since it is
+    an opaque string from another system that would end up in this system's
+    URLs and audit records.
+
+    So: a random id behind a prefix, in the shape the existing ids already
+    have. The prefix reveals only what the link table says plainly anyway, and
+    it earns its keep in an administrator's user list, where it answers at a
+    glance why an account has no password. Sixty-four bits against a primary
+    key, which is how `generate_feed_token` already treats a unique column.
+    """
+    return f"FED-{secrets.token_hex(8).upper()}"
+
+
+def account_for(note: VerifiedNote, db: Session) -> User:
+    """The account this note belongs to, provisioning one the first time.
+
+    `(issuer, subject)` is identity and the address is convenience. A note
+    whose pair is in the link table is that account, whatever address the note
+    now carries; a note whose pair is not is a stranger, whatever address it
+    carries.
+
+    Nothing here re-reads the role of an account that already exists. An
+    upstream demotion does not reach Chronos, which is stated in the design
+    rather than hidden: re-syncing on every sign-in would silently undo an
+    administrator's own change. `deactivated_at` is the lever, and it is
+    checked here.
+    """
+    link = (
+        db.query(FederatedIdentity)
+        .filter(
+            FederatedIdentity.issuer_id == note.issuer.id,
+            FederatedIdentity.subject == note.subject,
+        )
+        .first()
+    )
+    if link is not None:
+        user = db.get(User, link.user_id)
+        if user is None:
+            # The cascade should have taken the link with the account, so this
+            # is a database somebody edited by hand. Refusing beats provisioning
+            # a second account for a person an administrator deleted.
+            raise NoteRefused(f"the link for {note.subject!r} points at no account")
+        if user.deactivated_at is not None:
+            # The same answer password sign-in gives a deactivated account, and
+            # deliberately not a re-provision: signing in again upstream does
+            # not resurrect an account somebody here switched off.
+            raise NoteRefused(f"account {user.id!r} is deactivated")
+        return user
+
+    email = (note.email or "").strip().lower()
+    if not email or len(email) > EMAIL_COLUMN_LIMIT:
+        raise NoEmailToProvisionWith(
+            f"{note.issuer.issuer!r} vouched for {note.subject!r} with no usable email claim"
+        )
+    # Compared without case, which is stricter than the rest of the system:
+    # every other writer stores whatever case it was handed and compares
+    # exactly, so `Priya@example.internal` and `priya@example.internal` can
+    # both exist as separate accounts today. Matching exactly here would let an
+    # issuer walk past this refusal by choosing the case, and land a second
+    # account whose address reads the same as somebody else's. The scan this
+    # costs is one table of accounts, once, on a first sign-in only.
+    taken = db.query(User.id).filter(func.lower(User.email_address) == email).first() is not None
+    if taken:
+        raise EmailAlreadyTaken(f"{email} already belongs to an account")
+
+    role, unit_code = resolve_role(note.issuer, note.groups, db)
+    user = User(
+        id=_mint_user_id(),
+        # The note's name if it sent one, and the part before the @ if it did
+        # not. The column is NOT NULL and there is nobody to ask, so a readable
+        # placeholder an administrator can correct beats refusing a note that
+        # is otherwise complete.
+        full_name=(note.full_name or email.split("@")[0])[:NAME_COLUMN_LIMIT],
+        email_address=email,
+        # A bcrypt hash of a string nobody holds, which can never match a
+        # submitted password. Generated per account rather than shared, so a
+        # database dump does not pick the federated rows out by an identical
+        # hash. The link table is the record of federation; this column is not.
+        credential_secure_hash=hash_password(secrets.token_urlsafe(32)),
+        role_type=role,
+        unit_code=unit_code,
+        # There is no initial password to move off. `first_login_blocks` only
+        # holds the two admin roles and neither is reachable from outside, so
+        # this is about the field meaning what it says.
+        initial_login_state=False,
+    )
+    db.add(user)
+    db.add(
+        FederatedIdentity(
+            issuer_id=note.issuer.id,
+            subject=note.subject,
+            user_id=user.id,
+        )
+    )
+    db.flush()
+    return user

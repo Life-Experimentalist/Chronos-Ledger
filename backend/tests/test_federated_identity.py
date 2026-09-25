@@ -21,7 +21,15 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from app.core.config import get_settings
-from app.models.db import FederatedIssuer, FederatedIssuerKey
+from app.core.security import hash_password
+from app.models.db import (
+    FederatedIdentity,
+    FederatedIssuer,
+    FederatedIssuerKey,
+    FederatedRoleMap,
+    InstitutionalRole,
+    User,
+)
 from app.services import federated_identity as svc
 
 ISSUER = "https://sso.example.internal"
@@ -381,3 +389,370 @@ def test_a_refused_note_does_not_spend_the_jti_of_the_real_one(federation, db):
         svc.verify_note(_note(stranger, jti="shared"), db)
     assert not federation["redis"].keys, "a refused note recorded nothing"
     assert svc.verify_note(_note(federation["private"], jti="shared"), db).subject == "u-4417"
+
+
+# --------------------------------------------------------------------------
+# What the note turns into: the account, and the link that is the record of it.
+# --------------------------------------------------------------------------
+
+
+def _map(db, federation, group: str, role: InstitutionalRole, unit: str | None = None):
+    db.add(
+        FederatedRoleMap(
+            issuer_id=federation["issuer"].id,
+            group_claim_value=group,
+            role_type=role,
+            unit_code=unit,
+        )
+    )
+    db.flush()
+
+
+def _account(federation, db, **overrides):
+    """Sign in the way the route will: verify the note, then resolve the account."""
+    return svc.account_for(svc.verify_note(_note(federation["private"], **overrides), db), db)
+
+
+def test_a_first_note_provisions_an_account(federation, db):
+    user = _account(federation, db)
+
+    assert user.email_address == "priya@example.internal"
+    assert user.full_name == "Priya R"
+    assert user.role_type is InstitutionalRole.MEMBER, "an issuer that asserts nothing gets nothing"
+    assert user.unit_code is None
+    assert user.initial_login_state is False, "there is no initial password to move off"
+    assert user.deactivated_at is None
+    link = db.query(FederatedIdentity).one()
+    assert (link.issuer_id, link.subject, link.user_id) == (
+        federation["issuer"].id,
+        "u-4417",
+        user.id,
+    )
+
+
+def test_the_provisioned_account_holds_no_usable_password(federation, db):
+    """A hash of a string nobody kept, and a different one for each account.
+
+    Two accounts with the same hash would mark both as federated in a database
+    dump, which is the reason this is not one shared constant.
+    """
+    first = _account(federation, db)
+    second = _account(federation, db, sub="u-9002", email="dev@example.internal")
+
+    assert first.credential_secure_hash.startswith("$2b$"), "a real bcrypt hash, not a placeholder"
+    assert first.credential_secure_hash != second.credential_secure_hash
+
+
+def test_the_second_sign_in_reuses_the_first_account(federation, db):
+    first = _account(federation, db)
+    second = _account(federation, db)
+
+    assert second.id == first.id
+    assert db.query(User).count() == 1
+    assert db.query(FederatedIdentity).count() == 1, "one link, not one per sign-in"
+
+
+def test_the_pair_is_the_identity_and_the_address_is_not(federation, db):
+    """The property the whole design rests on, from the other direction.
+
+    The same subject arriving with a different address is still the same
+    person, and the address on file does not move. If this read the address
+    instead of the pair, an issuer could rename somebody into an account that
+    was never theirs.
+    """
+    first = _account(federation, db)
+    again = _account(federation, db, email="someone.else@example.internal")
+
+    assert again.id == first.id
+    assert again.email_address == "priya@example.internal"
+
+
+def test_the_same_subject_at_a_second_issuer_is_a_different_person(federation, db):
+    other = FederatedIssuer(
+        issuer="https://sso.other.internal",
+        display_name="Other SSO",
+        audience=AUDIENCE,
+        enabled=True,
+    )
+    db.add(other)
+    db.flush()
+
+    first = _account(federation, db)
+    stranger = svc.account_for(
+        svc.VerifiedNote(
+            issuer=other,
+            subject="u-4417",
+            email="namesake@other.internal",
+            full_name="A Namesake",
+            groups=[],
+        ),
+        db,
+    )
+
+    assert stranger.id != first.id, "the subject is only unique inside its issuer"
+    assert db.query(FederatedIdentity).count() == 2
+
+
+def test_a_role_an_administrator_set_survives_the_next_sign_in(federation, db):
+    """Federation never re-reads the role of an account that already exists.
+
+    Stated in the design rather than hidden, because the alternative is worse:
+    re-syncing on every sign-in would silently undo a change made here, and
+    UNIT_ADMIN is a role the map cannot grant at all.
+    """
+    user = _account(federation, db)
+    user.role_type = InstitutionalRole.UNIT_ADMIN
+    user.unit_code = "LIB"
+    db.flush()
+
+    again = _account(federation, db, groups=["students"])
+
+    assert again.role_type is InstitutionalRole.UNIT_ADMIN
+    assert again.unit_code == "LIB"
+
+
+def test_a_deactivated_linked_account_is_refused_and_not_provisioned_again(federation, db):
+    user = _account(federation, db)
+    user.deactivated_at = datetime.now(UTC)
+    db.flush()
+
+    with pytest.raises(svc.NoteRefused) as refused:
+        _account(federation, db)
+
+    assert "deactivated" in str(refused.value)
+    assert db.query(User).count() == 1, "signing in upstream does not resurrect the account"
+
+
+def test_a_reactivated_account_works_again(federation, db):
+    user = _account(federation, db)
+    user.deactivated_at = datetime.now(UTC)
+    db.flush()
+    with pytest.raises(svc.NoteRefused):
+        _account(federation, db)
+
+    user.deactivated_at = None
+    db.flush()
+
+    assert _account(federation, db).id == user.id
+
+
+def test_an_address_that_belongs_to_an_account_is_refused_and_nothing_written(federation, db):
+    """The refusal that stops an issuer taking over an account it never owned.
+
+    Linking on a matching address would be the takeover: assert the
+    administrator's address, get the administrator. So a first-time subject
+    whose address is taken is refused, and refused before any write, so a
+    caller cannot leave half an account behind by trying.
+    """
+    db.add(
+        User(
+            id="ADM900",
+            full_name="The Administrator",
+            email_address="priya@example.internal",
+            credential_secure_hash=hash_password("SomethingReal123!"),
+            role_type=InstitutionalRole.ORG_ADMIN,
+        )
+    )
+    db.flush()
+
+    with pytest.raises(svc.EmailAlreadyTaken):
+        _account(federation, db)
+
+    assert db.query(User).count() == 1
+    assert db.query(FederatedIdentity).count() == 0
+    assert db.get(User, "ADM900").role_type is InstitutionalRole.ORG_ADMIN
+
+
+@pytest.mark.parametrize(
+    ("on_file", "asserted"),
+    [
+        ("priya@example.internal", "Priya@Example.Internal"),
+        ("Priya@Example.Internal", "priya@example.internal"),
+    ],
+)
+def test_a_taken_address_in_a_different_case_is_still_taken(federation, db, on_file, asserted):
+    """Both directions, because the issuer picks the case and the account did not.
+
+    Every other writer in this system stores the case it was handed and
+    compares exactly, so an exact match here would let an issuer step past the
+    refusal by sending one capital letter, and land a second account whose
+    address reads the same as an administrator's.
+    """
+    db.add(
+        User(
+            id="ADM901",
+            full_name="The Administrator",
+            email_address=on_file,
+            credential_secure_hash=hash_password("SomethingReal123!"),
+            role_type=InstitutionalRole.ORG_ADMIN,
+        )
+    )
+    db.flush()
+
+    with pytest.raises(svc.EmailAlreadyTaken):
+        _account(federation, db, email=asserted)
+
+    assert db.query(User).count() == 1
+
+
+@pytest.mark.parametrize("unusable", [None, "", "   ", "x" * 110 + "@example.internal"])
+def test_a_first_time_subject_with_no_usable_address_cannot_be_provisioned(
+    federation, db, unusable
+):
+    """422 and not 401: the note was fine, and no note the caller sends fixes this.
+
+    The over-long case is here because users.email_address holds 120
+    characters and an IntegrityError from inside a sign-in would be a 500.
+    """
+    with pytest.raises(svc.NoEmailToProvisionWith):
+        _account(federation, db, email=unusable)
+
+    assert db.query(User).count() == 0
+
+
+def test_a_missing_name_falls_back_to_the_part_before_the_at(federation, db):
+    """full_name is NOT NULL and there is nobody to ask.
+
+    A readable placeholder an administrator can correct beats refusing a note
+    that is otherwise complete.
+    """
+    assert _account(federation, db, name=None).full_name == "priya"
+
+
+def test_a_very_long_name_is_cut_to_the_column(federation, db):
+    user = _account(federation, db, name="N" * 400)
+
+    assert len(user.full_name) == 120
+
+
+# --------------------------------------------------------------------------
+# What a group means here, which the operator decides and the note does not.
+# --------------------------------------------------------------------------
+
+
+def test_a_mapped_group_grants_the_role_and_the_unit(federation, db):
+    _map(db, federation, "library-staff", InstitutionalRole.STAFF, "LIB")
+
+    user = _account(federation, db, groups=["library-staff"])
+
+    assert (user.role_type, user.unit_code) == (InstitutionalRole.STAFF, "LIB")
+
+
+def test_a_group_the_map_does_not_know_lands_on_member(federation, db):
+    _map(db, federation, "library-staff", InstitutionalRole.STAFF, "LIB")
+
+    user = _account(federation, db, groups=["visiting-fellows"])
+
+    assert (user.role_type, user.unit_code) == (InstitutionalRole.MEMBER, None)
+
+
+def test_a_bare_string_group_is_read_as_one_group(federation, db):
+    _map(db, federation, "library-staff", InstitutionalRole.STAFF, "LIB")
+
+    user = _account(federation, db, groups="library-staff")
+
+    assert user.role_type is InstitutionalRole.STAFF
+
+
+def test_staff_beats_member_whichever_order_the_groups_arrive_in(federation, db):
+    """Several entries can match and only two roles are reachable.
+
+    So the rule is short, and it has to be the same both ways round, or the
+    role somebody gets would depend on how their issuer happened to order a
+    list.
+    """
+    _map(db, federation, "students", InstitutionalRole.MEMBER, None)
+    _map(db, federation, "library-staff", InstitutionalRole.STAFF, "LIB")
+
+    forwards = _account(federation, db, groups=["students", "library-staff"])
+    granted = (forwards.role_type, forwards.unit_code)
+    db.query(FederatedIdentity).delete()
+    db.query(User).delete()
+    db.flush()
+    backwards = _account(federation, db, groups=["library-staff", "students"])
+
+    assert granted == (InstitutionalRole.STAFF, "LIB")
+    assert (backwards.role_type, backwards.unit_code) == granted
+
+
+def test_a_map_belongs_to_its_own_issuer(federation, db):
+    """An entry written for one issuer grants nothing at another."""
+    other = FederatedIssuer(
+        issuer="https://sso.other.internal",
+        display_name="Other SSO",
+        audience=AUDIENCE,
+        enabled=True,
+    )
+    db.add(other)
+    db.flush()
+    _map(db, federation, "library-staff", InstitutionalRole.STAFF, "LIB")
+
+    role, unit = svc.resolve_role(other, ["library-staff"], db)
+
+    assert (role, unit) == (InstitutionalRole.MEMBER, None)
+
+
+# --------------------------------------------------------------------------
+# Deleting the account.
+# --------------------------------------------------------------------------
+
+
+def test_the_link_is_declared_to_go_with_the_account(federation, db):
+    """Checked as a declaration, because SQLite is not enforcing it here.
+
+    These tests run on SQLite with foreign keys off, so deleting a user does
+    not actually cascade in this process; the enforcement lives in migration
+    028 on Postgres. What is worth pinning here is that the declaration says
+    CASCADE, since a link left pointing at a deleted account would refuse that
+    person forever (the test below) instead of letting them arrive as somebody
+    new.
+    """
+    user_fk = next(iter(FederatedIdentity.__table__.c.user_id.foreign_keys))
+
+    assert user_fk.ondelete == "CASCADE"
+
+
+def test_once_the_link_is_gone_the_next_note_provisions_afresh(federation, db):
+    first = _account(federation, db)
+    db.query(FederatedIdentity).delete()
+    db.query(User).filter(User.id == first.id).delete()
+    db.flush()
+
+    again = _account(federation, db)
+
+    assert again.id != first.id
+    assert db.query(FederatedIdentity).count() == 1
+
+
+def test_a_link_pointing_at_no_account_is_refused(federation, db):
+    """Only reachable through a hand-edited database, and still worth an answer.
+
+    Refusing beats provisioning a second account for somebody an administrator
+    deleted, and it beats an AttributeError on None.
+    """
+    first = _account(federation, db)
+    db.query(User).filter(User.id == first.id).delete()
+    db.flush()
+
+    with pytest.raises(svc.NoteRefused) as refused:
+        _account(federation, db)
+
+    assert "points at no account" in str(refused.value)
+
+
+def test_a_minted_id_says_where_the_account_came_from_and_is_not_reused(federation, db):
+    """The one thing the contract left open, decided here.
+
+    Every other account takes its id from outside: an administrator types it,
+    or a CSV column carries it. A note carries no id anybody here agreed to,
+    and the subject is not a candidate, since it is an opaque string from
+    another system that would end up in this system's URLs. So: random, behind
+    a prefix in the shape the existing ids already have, which earns its keep
+    in a user list by answering why the account has no password.
+    """
+    minted = {
+        _account(federation, db, sub=f"u-{n}", email=f"p{n}@example.internal").id for n in range(5)
+    }
+
+    assert len(minted) == 5
+    assert all(one.startswith("FED-") and len(one) <= 50 for one in minted)
