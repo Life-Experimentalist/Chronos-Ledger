@@ -145,6 +145,10 @@ Higher roles inherit the permissions of all roles below them. Role is embedded i
 
 `initial_login_state: true` on first login, the client should redirect to the change-password flow.
 
+`email_address` is matched without regard to case, so somebody who types
+their own address the way they write it signs in whatever case the account
+was created with.
+
 The field was called `email` before 0.13. `email` is still accepted in place
 of `email_address` through 0.15 and is removed in 0.16.
 
@@ -652,7 +656,10 @@ approval. It has to name an existing user (`404` otherwise), and it cannot
 name the user themselves, anyone who already reports to them, directly or
 through others, or somebody who has been deactivated (`422`). The same checks run on `PATCH /users/{user_id}`, which
 also refuses with `409` an email address already registered to another
-account, as create does.
+account, as create does. That comparison ignores case, so
+`Priya@org.internal` is the account `priya@org.internal` already is and the
+second one is the same `409`. An address is stored folded to lower case,
+which is the case a read of the account gives back.
 
 ### GET /users/staff/available
 

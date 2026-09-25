@@ -4,11 +4,12 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.api.v1.endpoints.websocket import CLOSE_UNAUTHENTICATED
 from app.core.database import get_db
+from app.core.emails import normalize_email
 from app.core.pagination import Page
 from app.core.security import (
     ensure_unit_scope,
@@ -117,7 +118,11 @@ def create_user(
     ensure_unit_scope(current_user, payload.unit_code)
     if db.query(User).filter(User.id == payload.id).first():
         raise HTTPException(status_code=409, detail="User ID already exists")
-    if db.query(User).filter(User.email_address == payload.email_address).first():
+    if (
+        db.query(User)
+        .filter(func.lower(User.email_address) == normalize_email(payload.email_address))
+        .first()
+    ):
         raise HTTPException(status_code=409, detail="Email already registered")
     if payload.reporting_line_manager is not None:
         _check_manager(payload.id, payload.reporting_line_manager, db)
@@ -206,7 +211,10 @@ def update_user(
     if payload.email_address is not None:
         taken = (
             db.query(User)
-            .filter(User.email_address == payload.email_address, User.id != user.id)
+            .filter(
+                func.lower(User.email_address) == normalize_email(payload.email_address),
+                User.id != user.id,
+            )
             .first()
         )
         if taken:

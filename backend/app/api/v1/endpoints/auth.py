@@ -6,12 +6,14 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core import rate_limit
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.emails import normalize_email
 from app.core.security import (
     ABSENT_ACCOUNT_HASH,
     create_access_token,
@@ -76,7 +78,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     # the settings cache is cleared.
     limits = get_settings()
     address = rate_limit.caller_address(request)
-    account = payload.email_address.lower()
+    account = normalize_email(payload.email_address)
     window = rate_limit.LOGIN_WINDOW_SECONDS
     per_address = limits.rate_limit_login_per_ip
     per_account = limits.rate_limit_login_per_email
@@ -87,7 +89,10 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
         "login-email", account, per_account, window, "sign-in attempts for this account"
     )
 
-    user = db.query(User).filter(User.email_address == payload.email_address).first()
+    # Folded on both sides. New rows are stored folded, but a row written
+    # before 029 keeps the case it was given, and somebody typing their own
+    # address in the case they use for it is not a wrong password.
+    user = db.query(User).filter(func.lower(User.email_address) == account).first()
     # An address that matches no account still pays for a bcrypt comparison,
     # against a hash of a string nobody holds. `not user` comes second so the
     # comparison actually runs; short-circuiting past it is the leak. A

@@ -14,16 +14,19 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
     Time,
     UniqueConstraint,
+    func,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, validates
 
 from app.core.database import Base
+from app.core.emails import normalize_email
 
 
 def generate_feed_token() -> str:
@@ -118,6 +121,13 @@ class User(Base):
     full_name = Column(String(120), nullable=False)
     email_address = Column(String(120), unique=True, nullable=False)
     credential_secure_hash = Column(String(255), nullable=False)
+    # Unlike every other __table_args__ in this file this one cannot sit at the
+    # top of the class, because the expression needs the Column above it. The
+    # column's own `unique=True` stays: it costs nothing and it is what a
+    # database migrated before 029 has.
+    __table_args__ = (
+        Index("uq_users_email_address_lower", func.lower(email_address), unique=True),
+    )
     role_type = Column(Enum(InstitutionalRole, name="institutional_role"), nullable=False)
     unit_code = Column(String(50), nullable=True)
     assigned_base_station = Column(String(100))
@@ -135,6 +145,14 @@ class User(Base):
     # leaves is deactivated rather than deleted, so the attendance recorded
     # against them stays; see migration 018.
     deactivated_at = Column(DateTime(timezone=True), nullable=True)
+
+    @validates("email_address")
+    def _fold_email(self, _key, value):
+        # Every writer agrees on the stored case, including the three that
+        # never see a Pydantic schema. A None is handed back untouched so a
+        # missing address fails at flush against NOT NULL, which says what is
+        # wrong, rather than here on `.strip()`.
+        return value if value is None else normalize_email(value)
 
     manager = relationship("User", remote_side="User.id", foreign_keys=[reporting_line_manager])
     activity_enrollments = relationship(

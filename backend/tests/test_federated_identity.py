@@ -20,6 +20,7 @@ import pytest
 import redis
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import get_settings
@@ -620,26 +621,25 @@ def test_an_address_that_belongs_to_an_account_is_refused_and_nothing_written(fe
 def test_a_taken_address_in_a_different_case_is_still_taken(federation, db, on_file, asserted):
     """Both directions, because the issuer picks the case and the account did not.
 
-    Every other writer in this system stores the case it was handed and
-    compares exactly, so an exact match here would let an issuer step past the
-    refusal by sending one capital letter, and land a second account whose
-    address reads the same as an administrator's.
+    An exact match here would let an issuer step past the refusal by sending
+    one capital letter, and land a second account whose address reads the same
+    as an administrator's. The row goes in as raw SQL because every writer
+    folds now: an account that actually holds a capital is one made before
+    migration 029, and that is the only shape the second direction is real in.
     """
-    db.add(
-        User(
-            id="ADM901",
-            full_name="The Administrator",
-            email_address=on_file,
-            credential_secure_hash=hash_password("SomethingReal123!"),
-            role_type=InstitutionalRole.ORG_ADMIN,
-        )
+    db.execute(
+        text(
+            "INSERT INTO users (id, full_name, email_address, credential_secure_hash, role_type)"
+            " VALUES ('ADM901', 'The Administrator', :email, :hash, 'ORG_ADMIN')"
+        ),
+        {"email": on_file, "hash": hash_password("SomethingReal123!")},
     )
-    db.flush()
 
     with pytest.raises(svc.EmailAlreadyTaken):
         _account(federation, db, email=asserted)
 
     assert db.query(User).count() == 1
+    assert db.get(User, "ADM901").email_address == on_file
 
 
 @pytest.mark.parametrize("unusable", [None, "", "   ", "x" * 110 + "@example.internal"])

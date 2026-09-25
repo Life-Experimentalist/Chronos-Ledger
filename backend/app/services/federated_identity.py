@@ -50,6 +50,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.emails import normalize_email
 from app.core.redis_client import get_redis
 from app.core.security import hash_password
 from app.models.db import (
@@ -422,18 +423,15 @@ def account_for(note: VerifiedNote, db: Session) -> User:
             )
         return user
 
-    email = (note.email or "").strip().lower()
+    email = normalize_email(note.email or "")
     if not email or len(email) > EMAIL_COLUMN_LIMIT:
         raise NoEmailToProvisionWith(
             f"{note.issuer.issuer!r} vouched for {note.subject!r} with no usable email claim"
         )
-    # Compared without case, which is stricter than the rest of the system:
-    # every other writer stores whatever case it was handed and compares
-    # exactly, so `Priya@example.internal` and `priya@example.internal` can
-    # both exist as separate accounts today. Matching exactly here would let an
-    # issuer walk past this refusal by choosing the case, and land a second
-    # account whose address reads the same as somebody else's. The scan this
-    # costs is one table of accounts, once, on a first sign-in only.
+    # Compared without case, the same way every other reader of this column
+    # compares. Matching exactly would let an issuer walk past this refusal by
+    # choosing the case and land a second account whose address reads the same
+    # as somebody else's. The index this uses is the one 029 adds.
     taken = db.query(User.id).filter(func.lower(User.email_address) == email).first() is not None
     if taken:
         raise EmailAlreadyTaken(f"{email} already belongs to an account")
