@@ -590,3 +590,140 @@ class ChangeMarker(Base):
     # Not indexed. The feed reads by id and never by time, and this is here
     # to be shown to a consumer rather than to be filtered on.
     at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+
+
+class FederatedIssuer(Base):
+    """An outside identity system this instance will accept a note from.
+
+    A registration and not an environment variable, because rotating a key and
+    revoking an issuer are two of the things this feature exists to survive,
+    and both would otherwise be a restart. See docs/federated-identity.md.
+
+    `enabled` false is refused the same way an unknown issuer is, so turning
+    one off does not have to mean deleting what it was allowed to assert.
+    """
+
+    __tablename__ = "federated_issuers"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # The exact `iss` value the note carries. Compared, never parsed: it is an
+    # identifier that happens to look like a URL, and nothing here fetches it.
+    issuer = Column(String(255), unique=True, index=True, nullable=False)
+    display_name = Column(String(100), nullable=False)
+    # The `aud` this instance answers to. An issuer serving several relying
+    # parties gives each one its own, so a note for one is refused by the rest.
+    audience = Column(String(255), nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    keys = relationship(
+        "FederatedIssuerKey", back_populates="issuer_row", cascade="all, delete-orphan"
+    )
+    role_map = relationship(
+        "FederatedRoleMap", back_populates="issuer_row", cascade="all, delete-orphan"
+    )
+
+
+class FederatedIssuerKey(Base):
+    """One Ed25519 public key an issuer signs with, valid for a stated window.
+
+    A set rather than a single key so a rotation has an overlap: the new key is
+    added, the old one's not_after passes, and the old one is removed. A note
+    names its key by `kid` in the header and is verified against that key only.
+    Trying every key in turn would make the overlap a period in which a retired
+    key still works, which is the opposite of the point.
+    """
+
+    __tablename__ = "federated_issuer_keys"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    issuer_id = Column(
+        Integer,
+        ForeignKey("federated_issuers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    kid = Column(String(100), nullable=False)
+    # PEM. A public key, so there is nothing here a leak would cost anybody,
+    # which is why the administration routes may read it back.
+    public_key = Column(Text, nullable=False)
+    not_before = Column(DateTime(timezone=True), nullable=False)
+    # Null is a key with no planned retirement. A rotation sets it on the old
+    # key rather than deleting it, so notes already in flight still verify.
+    not_after = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    issuer_row = relationship("FederatedIssuer", back_populates="keys")
+
+    __table_args__ = (UniqueConstraint("issuer_id", "kid", name="uq_federated_key_kid"),)
+
+
+class FederatedRoleMap(Base):
+    """What a group an issuer asserts means here.
+
+    The map belongs to the operator. A note names a subject and may name
+    groups; it never names a role. A group with no entry lands on MEMBER, so
+    an issuer that is trusted to say who somebody is has not thereby been
+    trusted to say what they may do.
+
+    Neither admin role can appear. That is a check in the database as well as
+    a validator on the route, because it is the one rule whose failure would
+    hand an outside system this instance.
+    """
+
+    __tablename__ = "federated_role_map"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    issuer_id = Column(
+        Integer,
+        ForeignKey("federated_issuers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # One value out of the note's `groups` claim, matched exactly.
+    group_claim_value = Column(String(200), nullable=False)
+    role_type = Column(Enum(InstitutionalRole, name="institutional_role"), nullable=False)
+    unit_code = Column(String(50), nullable=True)
+
+    issuer_row = relationship("FederatedIssuer", back_populates="role_map")
+
+    __table_args__ = (
+        UniqueConstraint("issuer_id", "group_claim_value", name="uq_federated_role_map_group"),
+        CheckConstraint(
+            "role_type IN ('STAFF', 'MEMBER')",
+            name="ck_federated_role_map_no_admin",
+        ),
+    )
+
+
+class FederatedIdentity(Base):
+    """The link between a subject at an issuer and an account here.
+
+    This table is the record of federation, and the only thing consulted to
+    decide whether a note belongs to an existing account. An email address
+    that happens to match is never enough: linking on one would let an issuer
+    that never verified an address take over the account holding it.
+
+    user_id cascades. There is a hard-delete path for accounts, and a link
+    left pointing at a deleted one would refuse that person forever instead of
+    letting them arrive as somebody new.
+    """
+
+    __tablename__ = "federated_identities"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    issuer_id = Column(
+        Integer,
+        ForeignKey("federated_issuers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # The note's `sub`. Opaque and issuer-scoped: two issuers may use the same
+    # string for different people, which is why the pair is what is unique.
+    subject = Column(String(255), nullable=False)
+    user_id = Column(
+        String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    __table_args__ = (UniqueConstraint("issuer_id", "subject", name="uq_federated_identity"),)

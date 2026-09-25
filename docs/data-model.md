@@ -2,7 +2,7 @@
 
 <!-- Copyright 2026 Chronos Ledger Contributors (Apache 2.0) -->
 
-All fourteen production tables live in the default PostgreSQL `public` schema.
+Every production table lives in the default PostgreSQL `public` schema.
 Migrations are managed by Alembic (`backend/alembic/versions/`).
 
 ---
@@ -170,6 +170,41 @@ erDiagram
         datetime created_at
     }
 
+    FederatedIssuer {
+        int id PK
+        string issuer UK "the iss claim this row answers for"
+        string display_name
+        string audience "the aud claim a note must carry"
+        bool enabled
+        datetime created_at
+    }
+
+    FederatedIssuerKey {
+        int id PK
+        int issuer_id FK "→ FederatedIssuer.id"
+        string kid "unique within the issuer"
+        string public_key "PEM, Ed25519"
+        datetime not_before
+        datetime not_after "nullable, null = still current"
+        datetime created_at
+    }
+
+    FederatedRoleMap {
+        int id PK
+        int issuer_id FK "→ FederatedIssuer.id"
+        string group_claim_value "unique within the issuer"
+        string role_type "STAFF | MEMBER, CHECK refuses both admin roles"
+        string unit_code "nullable"
+    }
+
+    FederatedIdentity {
+        int id PK
+        int issuer_id FK "→ FederatedIssuer.id"
+        string subject "the sub claim, unique within the issuer"
+        string user_id FK "→ User.id"
+        datetime created_at
+    }
+
     PlanningCycle ||--o{ Activity : "contains"
     Activity ||--o{ StructuralMasterSlot : "has slots"
     Activity ||--o{ ActivityEnrollment : "enrolls members"
@@ -190,6 +225,10 @@ erDiagram
     User ||--o{ Reservation : "requests"
     User ||--o{ RefreshToken : "signs in with"
     User ||--o{ ApiKey : "has API key"
+    FederatedIssuer ||--o{ FederatedIssuerKey : "signs with"
+    FederatedIssuer ||--o{ FederatedRoleMap : "asserts groups"
+    FederatedIssuer ||--o{ FederatedIdentity : "vouches for"
+    User ||--o{ FederatedIdentity : "is reached from"
 ```
 
 ---
@@ -254,3 +293,15 @@ A note that one row changed, so a system keeping its own copy of the rooms and t
 
 ### `ApiKey`
 A long-lived credential for an integration, bound to a user row that acts as its service account. Only the SHA-256 hash is stored, and the raw key is shown once. A request made with the key acts as that user, so role checks and unit scoping apply unchanged. `scopes` is a comma separated list of `<area>:<read|write>` entries, or `*` for every area; `expires_at` null means the key does not expire. Deactivating the bound user deletes its keys, and reactivating does not bring them back.
+
+### `FederatedIssuer`
+An outside system allowed to vouch for a person, one row each. Registration is the whole of the off-by-default guarantee: with no rows, no note from anywhere verifies, and an instance that never registers an issuer behaves exactly as it did. `issuer` is matched against the note's `iss` and `audience` against its `aud`, both exactly and neither by pattern. `enabled` false keeps the registration and its keys while refusing every note, which is the lever for suspending an issuer without losing what it was. The design, threat model first, is [federated-identity.md](federated-identity.md).
+
+### `FederatedIssuerKey`
+The public keys an issuer signs with, several at once. A rotation is then an overlap rather than a restart: the new key is added with its own `not_before`, both verify for as long as the operator wants, and the old one is retired by setting `not_after` rather than deleted, so notes already in flight are not orphaned. `kid` is unique within the issuer and a note that names no `kid` is refused, since trying every key in turn is how a retired key keeps working. Keys are public, so nothing here is a secret.
+
+### `FederatedRoleMap`
+What a group an issuer asserts means here, and therefore the operator's decision rather than the issuer's. The check constraint is the rule that neither admin role can arrive from outside, and it is in the database and not only in the validator because a signing key that leaks must not be able to reach `ORG_ADMIN` through any path, including a future one nobody has written yet. `group_claim_value` is unique within the issuer. Roles are set when the account is first provisioned and never re-synced from a later note, so a demotion upstream is not a demotion here; the lever for that is `deactivated_at` on the account.
+
+### `FederatedIdentity`
+The link between a subject at an issuer and an account here, and the only thing consulted to decide whether a note belongs to an account that already exists. A matching email address is deliberately not enough: an issuer that can pick its own `email` claim could otherwise name any address and be handed that account, so a note whose subject is unknown and whose address is already taken is refused, and the link an administrator makes on purpose is the only way the two ever meet. `(issuer_id, subject)` is unique. `user_id` cascades, unlike most references to `User`, because this row records how an account is reached and not anything that happened; there is a hard-delete path for accounts with nothing on file, and a dangling link would leave a subject pointing at nobody.
