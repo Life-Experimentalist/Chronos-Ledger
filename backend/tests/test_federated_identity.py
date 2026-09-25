@@ -678,6 +678,25 @@ def test_staff_beats_member_whichever_order_the_groups_arrive_in(federation, db)
     assert (backwards.role_type, backwards.unit_code) == granted
 
 
+def test_two_staff_groups_with_different_units_resolve_to_the_older_entry(federation, db):
+    """The pair the design once said a write-time validator would refuse.
+
+    It does not, and the reason is that the pair is the ordinary case: a
+    library and a lab each mapping their own staff group, and somebody who
+    belongs to both. Refusing it at write time would forbid the map's whole
+    purpose, so it is allowed and the tie goes to the older entry, which is a
+    thing the operator controls and the note does not.
+    """
+    _map(db, federation, "library-staff", InstitutionalRole.STAFF, "LIB")
+    _map(db, federation, "lab-staff", InstitutionalRole.STAFF, "LAB")
+
+    forwards = svc.resolve_role(federation["issuer"], ["library-staff", "lab-staff"], db)
+    backwards = svc.resolve_role(federation["issuer"], ["lab-staff", "library-staff"], db)
+
+    assert forwards == (InstitutionalRole.STAFF, "LIB")
+    assert backwards == (InstitutionalRole.STAFF, "LIB")
+
+
 def test_a_map_belongs_to_its_own_issuer(federation, db):
     """An entry written for one issuer grants nothing at another."""
     other = FederatedIssuer(

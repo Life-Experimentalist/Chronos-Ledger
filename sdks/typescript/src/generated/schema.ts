@@ -338,6 +338,190 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/federation/issuers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List registered issuers
+         * @description Requires `ORG_ADMIN`; an API key needs `federation:read`. Every route under `/federation` works whether or not federated sign-in is switched on, because an issuer and a key have to be registered before switching it on is worth doing. It is the exchange route that answers 404 while the feature is off.
+         */
+        get: operations["federation.listIssuers"];
+        put?: never;
+        /**
+         * Register an outside issuer
+         * @description Requires `ORG_ADMIN`. A registration on its own accepts nothing: a note names its key by `kid`, so the issuer needs at least one key before any note it mints will verify. A role map is optional, and an issuer without one puts everybody it sends on `MEMBER`.
+         */
+        post: operations["federation.createIssuer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/federation/issuers/{issuer_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a registration
+         * @description Requires `ORG_ADMIN`. Takes the issuer's keys, its role map and its links with it. The accounts stay: somebody who signed in through this issuer keeps their account and their history, and loses the shortcut. Give them a password or link them to another registration.
+         */
+        delete: operations["federation.deleteIssuer"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a registration
+         * @description Requires `ORG_ADMIN`. `enabled` false is how an issuer is stopped without losing what it was allowed to assert; notes from it are then refused exactly the way an unknown issuer's are.
+         */
+        patch: operations["federation.updateIssuer"];
+        trace?: never;
+    };
+    "/api/v1/federation/issuers/{issuer_id}/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List an issuer's signing keys
+         * @description Requires `ORG_ADMIN`; an API key needs `federation:read`. The keys are public and are returned in full, which is how an integrator checks that what was registered is what they are signing with.
+         */
+        get: operations["federation.listKeys"];
+        put?: never;
+        /**
+         * Add a signing key
+         * @description Requires `ORG_ADMIN`. A rotation is this route and then `federation.retireKey` on the old key: add the new one, give the old one an end far enough ahead that notes already in flight still verify, and delete it afterwards. Adding a key does not retire anything.
+         */
+        post: operations["federation.addKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/federation/issuers/{issuer_id}/keys/{key_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a key
+         * @description Requires `ORG_ADMIN`. Immediate and complete: a note naming it is refused as naming an unknown key. Retiring it first is the kinder path during a rotation, and deleting it is the right one for a key that leaked.
+         */
+        delete: operations["federation.deleteKey"];
+        options?: never;
+        head?: never;
+        /**
+         * Give a key an end
+         * @description Requires `ORG_ADMIN`. A moment in the past stops the key now: the next note naming it is refused. A moment in the future is the overlap a planned rotation wants. The key stays readable either way, which is why this is a separate route from deleting it.
+         */
+        patch: operations["federation.retireKey"];
+        trace?: never;
+    };
+    "/api/v1/federation/issuers/{issuer_id}/role-map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What this issuer's groups mean here
+         * @description Requires `ORG_ADMIN`; an API key needs `federation:read`. Entries are returned oldest first, which is also the order that decides ties: where a note asserts two groups that both match, `STAFF` beats `MEMBER` and the older entry of the winning role supplies the unit.
+         */
+        get: operations["federation.listRoleMap"];
+        put?: never;
+        /**
+         * Map a group to a role
+         * @description Requires `ORG_ADMIN`. The map belongs to the operator: a note names a subject and may name groups, and never a role. Two groups may map to different units, which is the ordinary case for a library and a lab.
+         */
+        post: operations["federation.addRoleMapEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/federation/issuers/{issuer_id}/role-map/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unmap a group
+         * @description Requires `ORG_ADMIN`. Nobody who has already signed in changes: roles are read once, when the account is created. What changes is what the next first-time subject in that group gets, which with no entry is `MEMBER` and no unit.
+         */
+        delete: operations["federation.deleteRoleMapEntry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/federation/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Which accounts arrive through which issuer
+         * @description Requires `ORG_ADMIN`; an API key needs `federation:read`. A link made by a first sign-in has an id nobody was told, so this is how one is found before it can be removed. Both filters are optional and combine.
+         */
+        get: operations["federation.listLinks"];
+        put?: never;
+        /**
+         * Let an existing account arrive through an issuer
+         * @description Requires `ORG_ADMIN`. The link is the identity: a note is the account its `(issuer, subject)` pair points at, whatever address the note carries. Without this route the only accounts that can use the shortcut are ones federation created itself, so this is how somebody who already has a password here starts arriving through their institution instead. One account may hold several links, one per issuer.
+         */
+        post: operations["federation.createLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/federation/links/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Stop an account arriving through an issuer
+         * @description Requires `ORG_ADMIN`. The account stays, with whatever role and unit it holds; what goes is the route. A note carrying the unlinked pair is then a stranger, and a stranger whose address is taken is refused rather than given a second account.
+         */
+        delete: operations["federation.deleteLink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/resources/": {
         parameters: {
             query?: never;
@@ -1477,6 +1661,143 @@ export interface components {
              * @example ck_8Kd2mQ7xR3nL9vB5tY1wZ0aC6eF4gH2jK8mN
              */
             api_key: string;
+        };
+        IssuerCreate: {
+            /**
+             * @description The exact `iss` value notes will carry. Compared, never parsed: nothing here fetches it, so it is an identifier that happens to look like a URL.
+             * @example https://sso.example.internal
+             */
+            issuer: string;
+            /**
+             * @description What an administrator calls this issuer in a list.
+             * @example Campus SSO
+             */
+            display_name: string;
+            /**
+             * @description The `aud` this instance answers to. An issuer serving several relying parties should give each one its own value, so a note minted for another one is refused here.
+             * @example chronos-ledger
+             */
+            audience: string;
+            /**
+             * @description False is refused the same way an unknown issuer is, so turning an issuer off does not mean deleting what it was allowed to assert.
+             * @default true
+             */
+            enabled: boolean;
+        };
+        /** @description Every field is optional and one left out is unchanged. `issuer` cannot be changed: it is the value notes already in the wild carry, and editing it would retarget a registration rather than register another. */
+        IssuerUpdate: {
+            display_name?: string;
+            audience?: string;
+            enabled?: boolean;
+        };
+        IssuerResponse: {
+            /** @example 3 */
+            id?: number;
+            /** @example https://sso.example.internal */
+            issuer?: string;
+            /** @example Campus SSO */
+            display_name?: string;
+            /** @example chronos-ledger */
+            audience?: string;
+            /** @example true */
+            enabled?: boolean;
+            /** Format: date-time */
+            created_at?: string | null;
+        };
+        IssuerKeyCreate: {
+            /**
+             * @description The `kid` the note header will carry. A note is verified against the key it names and no other, so an overlap during a rotation is two registered keys rather than two candidates per note.
+             * @example 2026-key-a
+             */
+            kid: string;
+            /**
+             * @description An Ed25519 public key in PEM form. Loaded when it is registered, so a key that cannot be read is refused here rather than turning every note that names it into a 401 nobody can explain.
+             * @example -----BEGIN PUBLIC KEY-----
+             *     MCowBQYDK2VwAyEAWJyyHHtL1RwC53ABtyd229BalcSDxdE3P02wXuDoeV4=
+             *     -----END PUBLIC KEY-----
+             */
+            public_key: string;
+            /**
+             * Format: date-time
+             * @description When the key starts being accepted. Omitted means now.
+             */
+            not_before?: string | null;
+            /**
+             * Format: date-time
+             * @description When it stops. Omitted is a key with no planned retirement, which is the ordinary case until a rotation gives it one.
+             */
+            not_after?: string | null;
+        };
+        IssuerKeyRetire: {
+            /**
+             * Format: date-time
+             * @description The moment the key stops being accepted. A moment in the past stops it now, which is what a leaked key wants; a moment in the future is the overlap a planned rotation wants.
+             */
+            not_after: string;
+        };
+        IssuerKeyResponse: {
+            id?: number;
+            issuer_id?: number;
+            kid?: string;
+            /** @description Read back in full. It is a public key, so there is nothing here a leak would cost anybody, and an integrator comparing what was registered against what is being signed with needs to see it. */
+            public_key?: string;
+            /** Format: date-time */
+            not_before?: string;
+            /** Format: date-time */
+            not_after?: string | null;
+            /** Format: date-time */
+            created_at?: string | null;
+        };
+        RoleMapEntryCreate: {
+            /**
+             * @description One value out of the note's `groups` claim, matched exactly. A group with no entry lands on `MEMBER`, so an issuer trusted to say who somebody is has not thereby been trusted to say what they may do.
+             * @example library-staff
+             */
+            group_claim_value: string;
+            /**
+             * @description `ORG_ADMIN` and `UNIT_ADMIN` are refused with a 422, and refused again by a check constraint. It is the one rule whose failure would hand an outside system this instance.
+             * @example STAFF
+             * @enum {string}
+             */
+            role_type: "STAFF" | "MEMBER";
+            /**
+             * @description The unit somebody in this group belongs to, if any.
+             * @example LIB
+             */
+            unit_code?: string | null;
+        };
+        RoleMapEntryResponse: {
+            id?: number;
+            issuer_id?: number;
+            group_claim_value?: string;
+            /** @enum {string} */
+            role_type?: "STAFF" | "MEMBER";
+            unit_code?: string | null;
+        };
+        LinkCreate: {
+            /**
+             * @description The registration the subject belongs to.
+             * @example 3
+             */
+            issuer_id: number;
+            /**
+             * @description The `sub` notes for this person will carry. Opaque and scoped to its issuer: two issuers may use the same string for different people, which is why the pair is what has to be unique.
+             * @example u-4417
+             */
+            subject: string;
+            /**
+             * @description The account that subject signs in as. An `ORG_ADMIN` or `UNIT_ADMIN` account is refused: the role map cannot grant either role, and a link would be a way around that.
+             * @example EMP1042
+             */
+            user_id: string;
+        };
+        LinkResponse: {
+            id?: number;
+            issuer_id?: number;
+            subject?: string;
+            user_id?: string;
+            /** Format: date-time */
+            created_at?: string | null;
         };
         ResourceResponse: {
             id?: number;
@@ -2704,6 +3025,443 @@ export interface operations {
                 };
                 content?: never;
             };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "federation.listIssuers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every registration, oldest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuerResponse"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    "federation.createIssuer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssuerCreate"];
+            };
+        };
+        responses: {
+            /** @description Registered. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuerResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description That `iss` value is already registered. The detail names the registration. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    "federation.deleteIssuer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "federation.updateIssuer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssuerUpdate"];
+            };
+        };
+        responses: {
+            /** @description Changed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuerResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    "federation.listKeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every key on this registration, oldest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuerKeyResponse"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "federation.addKey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssuerKeyCreate"];
+            };
+        };
+        responses: {
+            /** @description Added. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuerKeyResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description This issuer already has a key with that `kid`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A `public_key` that is not a PEM public key or is not Ed25519, or a `not_after` that is not after `not_before`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    "federation.deleteKey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+                key_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "federation.retireKey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+                key_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssuerKeyRetire"];
+            };
+        };
+        responses: {
+            /** @description Retired at the moment given. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuerKeyResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description `not_after` is not after the key's `not_before`, which would leave a key that was never valid. Delete it instead. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    "federation.listRoleMap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every entry on this registration. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleMapEntryResponse"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "federation.addRoleMapEntry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleMapEntryCreate"];
+            };
+        };
+        responses: {
+            /** @description Mapped. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleMapEntryResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description This issuer already maps that group. Delete the entry to change what it means, so the map never holds two answers for one group. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A `role_type` of `ORG_ADMIN` or `UNIT_ADMIN`. No issuer may assert either, which is what keeps a leaked signing key to the level the operator chose. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    "federation.deleteRoleMapEntry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+                entry_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unmapped. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "federation.listLinks": {
+        parameters: {
+            query?: {
+                /** @description Only links on this registration. */
+                issuer_id?: number;
+                /** @description Only links pointing at this account. */
+                user_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Links, oldest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkResponse"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    "federation.createLink": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkCreate"];
+            };
+        };
+        responses: {
+            /** @description Linked. The next note carrying that pair is this account. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description No such issuer, or no such account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Either that `(issuer, subject)` pair is already linked, or the account is an `ORG_ADMIN` or `UNIT_ADMIN`. An admin account is refused because the answer to a leaked signing key is that no issuer holds a route to one; a link would be exactly that route. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    "federation.deleteLink": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unlinked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };

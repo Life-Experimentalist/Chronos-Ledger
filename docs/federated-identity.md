@@ -107,6 +107,11 @@ excluded from the map by validation, not by convention. A leaked key therefore
 buys accounts at the level the operator chose, which is the level the issuer's
 own users already had.
 
+`POST /federation/links` refuses an admin account for the same reason, and it is
+the same reason rather than a second rule: linking would hand an issuer a route
+to an account the map could never have produced, so the exclusion would hold on
+paper and not in fact.
+
 Registration also carries `not_before` and `not_after` per key, so a key can be
 retired at a known moment rather than at a restart.
 
@@ -331,7 +336,12 @@ meaning what it says, not about the gate.
   /api/v1/federation/links/{id}` to link an existing account to an
   `(issuer, subject)` pair and to unlink it again. The create route is the only
   way an account that already exists comes to use the shortcut, since the
-  exchange itself never links on a matching address. `ORG_ADMIN`
+  exchange itself never links on a matching address. `GET
+  /api/v1/federation/links` is here too, added during the build and not in the
+  first draft of this list: a link made by a first sign-in has an id nobody was
+  ever told, so without it unlinking would mean reading the id out of the
+  database by hand. The create route refuses an `ORG_ADMIN` or `UNIT_ADMIN`
+  account, for the reason the role map excludes both roles. `ORG_ADMIN`
   only: an issuer is organization-wide and a role map can place somebody in any
   unit, so a unit admin is the wrong scope for it. Scopes derive from the path,
   so `federation:read` and `federation:write` need no registration
@@ -415,16 +425,24 @@ the shape of the replay key are not settings.
 | `nbf` | no | Not more than the skew in the future, if present |
 | `exp` | yes | Now, allowing the skew, and the lifetime cap |
 | `email` | on first sign-in only | Refused if it belongs to an existing account |
-| `name` | no | Stored as `full_name`, or the subject if absent |
+| `name` | no | Stored as `full_name`, or the part of the address before the `@` |
 | `groups` | no | The role map; no match means `MEMBER` |
 
 The header must carry `kid`. `alg` is not consulted.
 
 `groups` is a list of strings; a bare string is read as a list of one. Several
 entries can match the map, and only two roles are reachable, so the rule is
-short: `STAFF` beats `MEMBER`. Two matches that both say `STAFF` with different
-`unit_code` values never happen, because the map validator refuses that pair at
-write time rather than leaving a sign-in to pick one.
+short: `STAFF` beats `MEMBER`, and among the matching rows of the winning role
+the oldest entry supplies the unit.
+
+An earlier draft of this document promised that two matches both saying `STAFF`
+with different `unit_code` values could never happen, because a validator would
+refuse the pair when the map was written. That validator was dropped, and the
+reason is worth recording: the pair it would refuse is the ordinary case. A
+library and a lab each mapping their own staff group is what the map is for, and
+somebody who belongs to both is not a misconfiguration. So the pair is allowed
+and the tie is broken at sign-in, by entry age rather than by anything the note
+controls, which keeps the answer the same however the issuer ordered its list.
 
 ### Build order
 

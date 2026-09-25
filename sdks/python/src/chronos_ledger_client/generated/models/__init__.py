@@ -48,6 +48,14 @@ from .import_orphans import ImportOrphans
 from .ingestion_generate_ledger_response_200 import IngestionGenerateLedgerResponse200
 from .ingestion_upload_csv_body import IngestionUploadCsvBody
 from .institutional_role import InstitutionalRole
+from .issuer_create import IssuerCreate
+from .issuer_key_create import IssuerKeyCreate
+from .issuer_key_response import IssuerKeyResponse
+from .issuer_key_retire import IssuerKeyRetire
+from .issuer_response import IssuerResponse
+from .issuer_update import IssuerUpdate
+from .link_create import LinkCreate
+from .link_response import LinkResponse
 from .log_verification_state import LogVerificationState
 from .login_request import LoginRequest
 from .master_slot_create import MasterSlotCreate
@@ -77,6 +85,10 @@ from .resource_update import ResourceUpdate
 from .resources_list_resource_type import ResourcesListResourceType
 from .reverse_rsvp_create import ReverseRsvpCreate
 from .reverse_rsvp_response import ReverseRsvpResponse
+from .role_map_entry_create import RoleMapEntryCreate
+from .role_map_entry_create_role_type import RoleMapEntryCreateRoleType
+from .role_map_entry_response import RoleMapEntryResponse
+from .role_map_entry_response_role_type import RoleMapEntryResponseRoleType
 from .rsvp_decision import RsvpDecision
 from .schedule_clone_cycle_response_200 import ScheduleCloneCycleResponse200
 from .schedule_close_cycle_response_200 import ScheduleCloseCycleResponse200
@@ -146,6 +158,14 @@ __all__ = (
     "IngestionGenerateLedgerResponse200",
     "IngestionUploadCsvBody",
     "InstitutionalRole",
+    "IssuerCreate",
+    "IssuerKeyCreate",
+    "IssuerKeyResponse",
+    "IssuerKeyRetire",
+    "IssuerResponse",
+    "IssuerUpdate",
+    "LinkCreate",
+    "LinkResponse",
     "LoginRequest",
     "LogVerificationState",
     "MasterSlotCreate",
@@ -175,6 +195,10 @@ __all__ = (
     "ResourceUpdate",
     "ReverseRsvpCreate",
     "ReverseRsvpResponse",
+    "RoleMapEntryCreate",
+    "RoleMapEntryCreateRoleType",
+    "RoleMapEntryResponse",
+    "RoleMapEntryResponseRoleType",
     "RsvpDecision",
     "ScheduleCloneCycleResponse200",
     "ScheduleCloseCycleResponse200",

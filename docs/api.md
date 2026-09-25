@@ -274,6 +274,7 @@ land open by nobody remembering to annotate it.
 | `sync` | the calendar feed |
 | `audit` | the audit log |
 | `changes` | the change feed |
+| `federation` | the federated identity registry |
 
 A key holding `schedule:read` passes `GET /schedule/slots` and is refused
 `POST /schedule/slots` with `403` and a detail naming `schedule:write`. The
@@ -357,6 +358,221 @@ Every key, without its secret.
 ### DELETE /api-keys/{key_id} `[ORG_ADMIN]`
 
 Revokes immediately: the next request using it gets `401`.
+
+---
+
+## Federation
+
+The registry behind [POST /auth/federated](#post-authfederated): which outside
+issuers this instance trusts, which public keys their notes may be signed with,
+what their group claims mean here, and which accounts arrive through them.
+
+Every route is `ORG_ADMIN`. An issuer is organization-wide and its role map can
+place somebody in any unit, so a unit admin is the wrong scope for it. All of
+them answer whether or not `FEDERATED_IDENTITY_ENABLED` is set: an operator has
+to register an issuer and a key before the exchange is worth turning on, and it
+is the exchange route that answers `404` while the feature is off.
+
+Nothing in this table is a secret. The keys are public keys, which is why they
+can be read back.
+
+### What an issuer may and may not assert
+
+A note names a subject and, optionally, groups. It never names a Chronos role.
+The role map is the operator's, stored here, and it is what decides what a
+group means. An issuer whose map has no entry for a group gets `MEMBER` with no
+unit.
+
+Neither `ORG_ADMIN` nor `UNIT_ADMIN` can be mapped. That is the whole answer to
+a leaked signing key: whoever holds the key can mint a note for any subject,
+and what limits the damage is that the best it buys is the level the operator
+chose, which is the level that issuer's own users already had. The refusal is a
+`422` from the schema and a check constraint underneath, so SQL is no way round
+it either. `POST /federation/links` refuses an admin account for the same
+reason, and it is the same reason rather than a second rule: a link would be a
+route to an account the map could never have produced.
+
+### POST /federation/issuers `[ORG_ADMIN]`
+
+```json
+{
+  "issuer": "https://sso.example.edu",
+  "display_name": "Example University SSO",
+  "audience": "chronos-ledger",
+  "enabled": true
+}
+```
+
+`issuer` is matched against the `iss` claim exactly, and `audience` against
+`aud`. `enabled` is optional and defaults to true. A second registration of the
+same `issuer` is `409`.
+
+```json
+{
+  "id": 1,
+  "issuer": "https://sso.example.edu",
+  "display_name": "Example University SSO",
+  "audience": "chronos-ledger",
+  "enabled": true,
+  "created_at": "2026-09-25T10:00:00Z"
+}
+```
+
+### GET /federation/issuers `[ORG_ADMIN]`
+
+Every registration, oldest first.
+
+### PATCH /federation/issuers/{issuer_id} `[ORG_ADMIN]`
+
+`display_name`, `audience` and `enabled`, any subset. `issuer` is not on this
+route: it is the value notes already in the wild carry, and editing it would
+silently retarget a registration rather than register a different issuer. That
+is a create and a delete.
+
+Setting `enabled` to false refuses every note from that issuer while leaving
+the keys, the map and the links in place, which is the lever to reach for when
+something is wrong upstream and you want it back later.
+
+### DELETE /federation/issuers/{issuer_id} `[ORG_ADMIN]`
+
+Takes the keys, the map and the links with it. The accounts stay: somebody who
+signed in through this issuer keeps their account and their history, and what
+they lose is the shortcut. Give them a password or link them to a new
+registration.
+
+### POST /federation/issuers/{issuer_id}/keys `[ORG_ADMIN]`
+
+```json
+{
+  "kid": "2026-rotation-a",
+  "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2Vw...\n-----END PUBLIC KEY-----\n",
+  "not_before": "2026-10-01T00:00:00Z",
+  "not_after": null
+}
+```
+
+A note's header must carry `kid`, and that is the key it is checked against;
+`alg` is not consulted, because notes are EdDSA and nothing else. So the key
+has to be an Ed25519 public key in PEM, and anything else is refused here with
+`422` rather than turning into a `401` on every note that names it. A PEM that
+does not parse is the same `422`.
+
+`kid` is unique inside its issuer and not across them. Two institutions both
+calling their key `default` is not a collision anybody should have to resolve.
+
+`not_before` defaults to now and `not_after` to none, meaning no end. A window
+that closes before it opens is `422`.
+
+### GET /federation/issuers/{issuer_id}/keys `[ORG_ADMIN]`
+
+Every key on this registration, oldest first, public keys included.
+
+### PATCH /federation/issuers/{issuer_id}/keys/{key_id} `[ORG_ADMIN]`
+
+```json
+{ "not_after": "2026-11-01T00:00:00Z" }
+```
+
+Gives a key an end without taking it away. A moment in the future is the
+overlap a planned rotation wants: add the new key, retire the old one at the
+moment the issuer stops signing with it, and no note is refused in between.
+
+A moment in the past is allowed, and it is how a leaked key is stopped now: the
+next note naming it is refused. Refusing the past would leave deletion as the
+only fast answer, and deletion loses the record that the key existed.
+
+An end at or before `not_before` is `422`, with a detail saying to delete the
+key instead.
+
+### DELETE /federation/issuers/{issuer_id}/keys/{key_id} `[ORG_ADMIN]`
+
+Removes it outright. Prefer retiring: a retired key leaves the registration
+readable by somebody asking later what was trusted when.
+
+### POST /federation/issuers/{issuer_id}/role-map `[ORG_ADMIN]`
+
+```json
+{
+  "group_claim_value": "library-staff",
+  "role_type": "STAFF",
+  "unit_code": "LIB"
+}
+```
+
+`role_type` is `STAFF` or `MEMBER`. `unit_code` is optional and is a free
+string; there is no units table to check it against.
+
+A group may appear once per issuer, so changing what one means is a delete and
+an add rather than an overwrite, and a second entry for the same group is
+`409`. Two groups may name two different units: a library and a lab each
+mapping their own staff group is the ordinary case, and somebody in both is not
+a misconfiguration.
+
+Where several entries match one note, `STAFF` beats `MEMBER`, and among the
+matching entries of the winning role the oldest supplies the unit. The rule is
+deliberately independent of the order the issuer listed the groups in.
+
+### GET /federation/issuers/{issuer_id}/role-map `[ORG_ADMIN]`
+
+Every entry, oldest first, which is also the order that decides ties.
+
+### DELETE /federation/issuers/{issuer_id}/role-map/{entry_id} `[ORG_ADMIN]`
+
+Nobody who has already signed in changes. Roles are read once, when the account
+is provisioned, and federation never re-reads them: re-syncing on every sign-in
+would silently undo a change an administrator made here. What this changes is
+what the next first-time subject in that group gets, which with no entry is
+`MEMBER` and no unit.
+
+### POST /federation/links `[ORG_ADMIN]`
+
+```json
+{ "issuer_id": 1, "subject": "a4f7c2e1-...", "user_id": "FAC001" }
+```
+
+The link is the identity. A note whose `(issuer, subject)` pair is linked is
+that account, whatever address the note carries, and a note whose pair is not
+linked is a stranger, whatever address it carries.
+
+This route is the only way an account that already exists comes to use the
+shortcut. The exchange never links on a matching address, because an issuer that
+never verified the address it asserts could otherwise name an administrator's
+and be handed their account. So somebody who already has a password here has to
+be linked deliberately, by an administrator who knows the subject is theirs.
+
+Refusals:
+
+| Code | When |
+|---|---|
+| `404` | No such issuer, or no such account |
+| `409` | That `(issuer, subject)` pair is already linked |
+| `409` | The account is `ORG_ADMIN` or `UNIT_ADMIN` |
+
+A deactivated account can be linked. A key bound to a deactivated account is
+dead on arrival, but a link outlives the deactivation and works again on
+reactivation, so refusing here would force an administrator to reactivate
+somebody in order to prepare their access. Sign-in refuses the account itself
+while it is deactivated, which is where that check belongs.
+
+One account may hold several links, at one issuer or several. That is a person
+with more than one upstream identity, and deciding it is a mistake is not this
+route's call to make.
+
+### GET /federation/links `[ORG_ADMIN]`
+
+Every link, oldest first. `issuer_id` and `user_id` are optional query
+parameters and narrow together.
+
+A link made by a first sign-in has an id nobody was ever told, so this is how
+one is found before it can be removed.
+
+### DELETE /federation/links/{link_id} `[ORG_ADMIN]`
+
+Takes the route away and leaves the account alone, with whatever role and unit
+it holds. The next note carrying that pair is a stranger: refused if the address
+on the account is still theirs, and provisioned as a second account if it is
+not. Unlinking is not deactivating. Do both if the intent is that the person
+loses access.
 
 ---
 

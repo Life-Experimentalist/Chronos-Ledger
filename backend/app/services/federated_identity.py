@@ -307,10 +307,14 @@ def resolve_role(
     grant and the right answer for an issuer that asserts nothing useful.
 
     Several entries can match and only two roles are reachable, so the rule is
-    short: `STAFF` beats `MEMBER`. Two `STAFF` rows with different units cannot
-    both match, because the map refuses that pair when it is written rather
-    than leaving a sign-in to pick one; the ordering below is what makes the
-    answer the same either way if one ever got in through SQL.
+    short: `STAFF` beats `MEMBER`, and among the rows of the winning role the
+    oldest entry supplies the unit. That tie-break is the whole answer to two
+    `STAFF` rows with different units, which the design once said a write-time
+    validator would refuse. It does not, and cannot: refusing two `STAFF` rows
+    with different units would forbid a library and a lab mapping their own
+    staff groups, which is what the map is for. So the pair is allowed, the
+    oldest entry wins, and the ordering below is what makes the answer
+    independent of how the issuer happened to order its list.
     """
     if not groups:
         return InstitutionalRole.MEMBER, None
