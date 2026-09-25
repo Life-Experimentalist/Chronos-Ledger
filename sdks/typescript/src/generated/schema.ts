@@ -51,6 +51,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/federated": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange a note from a registered outside issuer for a session
+         * @description Off unless FEDERATED_IDENTITY_ENABLED is true, and a 404 while it is off. The note is a short-lived JWT signed with Ed25519 by a key an operator registered for that issuer; the reply is the same pair POST /auth/login returns, so a client handles the session the same way afterwards. A note works exactly once. The account is found by the (issuer, subject) pair and not by the address in the note, so an issuer cannot name an existing account and be handed it; the first note for a subject creates an account, and its role comes from the operator's own map of group claims, never from the note alone. Every verification failure is the same 401 with the same message, on purpose: the reason is in the server log, where an integrator can be shown it and a forger cannot read it.
+         */
+        post: operations["auth.federated"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/refresh": {
         parameters: {
             query?: never;
@@ -1279,6 +1299,10 @@ export interface components {
              */
             new_password: string;
         };
+        FederatedTokenRequest: {
+            /** @description The note, exactly as its issuer minted it. A signed JWT whose `iss` names a registered issuer, whose header `kid` names one of that issuer's registered keys, and which carries `aud`, `sub`, `jti`, `iat` and `exp`. An `email` claim is what a first-time subject is provisioned from; `name` and `groups` are read if they are there. */
+            token: string;
+        };
         RefreshRequest: {
             refresh_token: string;
         };
@@ -2086,6 +2110,75 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             422: components["responses"]["UnprocessableEntity"];
             429: components["responses"]["TooManyRequests"];
+        };
+    };
+    "auth.federated": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FederatedTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description A session for the account the note belongs to. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description The note was refused. One message for every reason, so the answer cannot be used to take a forged note apart field by field. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Federated sign-in is off on this instance. The same answer an unknown path gives, so whether an instance has an integration is not something probing it reveals. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The address in the note already belongs to an account, and the (issuer, subject) pair is not linked to one. Linking on the address instead would let an issuer take over any account whose address it can guess, so this is refused and an administrator links the pair by hand. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A malformed body, or a note that verified and carried no usable email claim for a subject arriving for the first time. The second is not a 401 because the note was not the problem. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The replay cache is unreachable, so replay cannot be ruled out and this route answers nothing rather than accepting a note that may be a copy. Password sign-in is unaffected. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     "auth.refresh": {

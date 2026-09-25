@@ -12,6 +12,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 
 import jwt
@@ -19,10 +20,12 @@ import pytest
 import redis
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import get_settings
 from app.core.security import hash_password
 from app.models.db import (
+    AuditRecord,
     FederatedIdentity,
     FederatedIssuer,
     FederatedIssuerKey,
@@ -756,3 +759,254 @@ def test_a_minted_id_says_where_the_account_came_from_and_is_not_reused(federati
 
     assert len(minted) == 5
     assert all(one.startswith("FED-") and len(one) <= 50 for one in minted)
+
+
+# --------------------------------------------------------------------------
+# The route, which is the only way any of this is reachable.
+# --------------------------------------------------------------------------
+
+FEDERATED = "/api/v1/auth/federated"
+REFRESH = "/api/v1/auth/refresh"
+
+
+def _records(db, path=FEDERATED):
+    db.expire_all()
+    return db.query(AuditRecord).filter(AuditRecord.path == path).all()
+
+
+def test_a_note_is_exchanged_for_a_session_that_the_rest_of_the_api_accepts(client, federation, db):
+    """The acceptance case, end to end, which is what F-3 is for.
+
+    The pair has to be the same pair a password sign-in gives, or the frontend
+    would need a second kind of session: so the access token is tried against
+    a real route and the refresh token against the real refresh.
+    """
+    res = client.post(FEDERATED, json={"token": _note(federation["private"])})
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["token_type"] == "bearer"
+    assert body["role"] == "MEMBER"
+    assert body["full_name"] == "Priya R"
+    assert body["initial_login_state"] is False
+    assert body["user_id"].startswith("FED-")
+
+    me = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {body['access_token']}"})
+    assert me.status_code == 200, me.text
+    assert me.json()["id"] == body["user_id"]
+
+    again = client.post(REFRESH, json={"refresh_token": body["refresh_token"]})
+    assert again.status_code == 200, again.text
+    assert again.json()["user_id"] == body["user_id"]
+
+
+def test_the_route_is_not_there_when_the_feature_is_off(client, federation, db, monkeypatch):
+    """404 and not 403: whether this instance has an integration is not a fact
+    worth handing to whoever is probing it."""
+    monkeypatch.setenv("FEDERATED_IDENTITY_ENABLED", "false")
+    get_settings.cache_clear()
+
+    res = client.post(FEDERATED, json={"token": _note(federation["private"])})
+
+    assert res.status_code == 404
+    assert res.json()["detail"] == "Not Found", "the same body an unknown path gives"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"iss": "https://sso.attacker.test"},
+        {"aud": "some-other-service"},
+        {"kid": "a-kid-nobody-registered"},
+        {"kid": RETIRED_KID},
+        {"sub": None},
+    ],
+    ids=["unknown-issuer", "wrong-audience", "unknown-key", "retired-key", "no-subject"],
+)
+def test_every_kind_of_bad_note_gets_the_same_401(client, federation, db, overrides):
+    """One answer for all of them, so the response is not an oracle.
+
+    A caller who could tell a wrong audience from an unknown key could take a
+    forged note apart one field at a time. The reason is in the log instead.
+    """
+    res = client.post(FEDERATED, json={"token": _note(federation["private"], **overrides)})
+
+    assert res.status_code == 401
+    assert res.json()["detail"] == "Invalid federated token"
+
+
+def test_the_same_note_twice_is_refused_the_second_time(client, federation, db):
+    token = _note(federation["private"])
+
+    assert client.post(FEDERATED, json={"token": token}).status_code == 200
+    replayed = client.post(FEDERATED, json={"token": token})
+
+    assert replayed.status_code == 401
+    assert replayed.json()["detail"] == "Invalid federated token"
+
+
+def test_a_deactivated_account_is_refused_like_any_other_note(client, federation, db):
+    first = client.post(FEDERATED, json={"token": _note(federation["private"])})
+    db.get(User, first.json()["user_id"]).deactivated_at = datetime.now(UTC)
+    db.commit()
+
+    res = client.post(FEDERATED, json={"token": _note(federation["private"])})
+
+    assert res.status_code == 401, "the same answer password sign-in gives it"
+
+
+def test_a_note_whose_address_is_already_an_account_gets_a_409(client, federation, db):
+    db.add(
+        User(
+            id="ADM902",
+            full_name="The Administrator",
+            email_address="priya@example.internal",
+            credential_secure_hash=hash_password("SomethingReal123!"),
+            role_type=InstitutionalRole.ORG_ADMIN,
+        )
+    )
+    db.commit()
+
+    res = client.post(FEDERATED, json={"token": _note(federation["private"])})
+
+    assert res.status_code == 409
+    assert db.get(User, "ADM902").role_type is InstitutionalRole.ORG_ADMIN
+
+
+def test_a_note_with_no_address_to_make_an_account_from_gets_a_422(client, federation, db):
+    """Not a 401: this note verified, and no note the caller can send fixes it.
+
+    Telling an integrator that their notes carry no email claim is the whole
+    point of the separate code, and it reveals nothing a forger could use.
+    """
+    res = client.post(FEDERATED, json={"token": _note(federation["private"], email=None)})
+
+    assert res.status_code == 422
+    assert db.query(User).count() == 0
+
+
+def test_an_unreachable_replay_cache_gets_a_503_and_not_a_sign_in(client, federation, db):
+    """The fail-closed rule, from the outside.
+
+    Carrying on without the cache would turn every note into a bearer token
+    anybody who read it once could reuse, so the answer is that this route is
+    unavailable. Password sign-in is untouched, so nobody is locked out.
+    """
+    federation["redis"].broken = True
+
+    res = client.post(FEDERATED, json={"token": _note(federation["private"])})
+
+    assert res.status_code == 503
+    assert db.query(User).count() == 0
+
+
+def test_a_successful_exchange_is_recorded_against_the_account_it_created(client, federation, db):
+    """F-6: the record names who got the session.
+
+    On a first sign-in that reads as the account having been created by its own
+    arrival, which is what happened. `core/audit.py` reads the account off the
+    request state once the response has gone out, and nothing sets it for a
+    password sign-in, so this route is currently the only one that does.
+    """
+    res = client.post(FEDERATED, json={"token": _note(federation["private"])})
+
+    [record] = _records(db)
+    assert (record.actor_id, record.method, record.status_code) == (
+        res.json()["user_id"],
+        "POST",
+        200,
+    )
+    assert record.api_key_id is None
+
+
+def test_a_refused_exchange_is_recorded_with_no_account_and_the_note_is_not(client, federation, db):
+    """The flood question and the body question, which are different questions.
+
+    How many attempts arrived and how they ended is what the table answers, so
+    a refusal is a row like any other. Why a particular one failed is the log,
+    because `audit_records` holds nothing free-form on purpose.
+    """
+    token = _note(federation["private"], aud="some-other-service")
+
+    assert client.post(FEDERATED, json={"token": token}).status_code == 401
+
+    [record] = _records(db)
+    assert (record.actor_id, record.status_code) == (None, 401)
+    stored = " ".join(str(v) for v in vars(record).values())
+    assert token not in stored
+
+
+def test_each_refusal_says_why_in_the_log_and_does_not_repeat_the_note(
+    client, federation, db, caplog
+):
+    """F-6: the reason, the issuer and the kid, once each, and never the note.
+
+    An integrator whose notes are all being refused has to be able to find out
+    why, and the 401 deliberately will not say. This is where it says.
+    """
+    token = _note(federation["private"], kid=RETIRED_KID)
+
+    with caplog.at_level(logging.WARNING):
+        assert client.post(FEDERATED, json={"token": token}).status_code == 401
+
+    refusals = [r for r in caplog.records if "federated sign-in refused" in r.getMessage()]
+    assert len(refusals) == 1, "one line per refusal, not one per check"
+    said = refusals[0].getMessage()
+    assert RETIRED_KID in said, "which key"
+    assert ISSUER in said, "which issuer"
+    assert "was retired" in said, "and why"
+    assert token not in said
+
+
+def test_the_address_of_a_clash_stays_out_of_the_log(client, federation, db, caplog):
+    """A 409 is logged with the issuer and the subject and not the address.
+
+    The address is a claim out of the note, and the note does not go in the
+    log. Which issuer vouched for which subject is enough to find the clash.
+    """
+    db.add(
+        User(
+            id="ADM903",
+            full_name="The Administrator",
+            email_address="priya@example.internal",
+            credential_secure_hash=hash_password("SomethingReal123!"),
+            role_type=InstitutionalRole.ORG_ADMIN,
+        )
+    )
+    db.commit()
+
+    with caplog.at_level(logging.WARNING):
+        assert client.post(FEDERATED, json={"token": _note(federation["private"])}).status_code
+
+    said = " ".join(r.getMessage() for r in caplog.records)
+    assert "priya@example.internal" not in said
+    assert ISSUER in said and "u-4417" in said
+
+
+def test_two_first_notes_racing_each_other_are_retried_rather_than_a_500(
+    client, federation, db, monkeypatch
+):
+    """A double-click on a sign-in button is enough to produce this.
+
+    Two first-time notes for the same subject in flight together both find no
+    link and both insert; one of them meets the unique constraint. The race
+    cannot be staged on one SQLite session, so the constraint is stood in for
+    by a commit that fails once. What is under test is the recovery: roll back,
+    run the whole resolution again, and answer with a session.
+    """
+    real = db.commit
+    calls = []
+
+    def fails_once(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise IntegrityError("INSERT INTO users", {}, Exception("duplicate key"))
+        return real()
+
+    monkeypatch.setattr(db, "commit", fails_once)
+
+    res = client.post(FEDERATED, json={"token": _note(federation["private"])})
+
+    assert res.status_code == 200, res.text
+    assert len(calls) > 1, "the first commit failed, so there was a second attempt"
+    assert db.query(User).count() == 1, "the rolled-back attempt left nothing behind"

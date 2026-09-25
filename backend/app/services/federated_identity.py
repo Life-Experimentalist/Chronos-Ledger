@@ -179,9 +179,9 @@ def _key_for(kid: object, issuer: FederatedIssuer, now: datetime, db: Session) -
     if key is None:
         raise NoteRefused(f"issuer {issuer.issuer!r} has no key {kid!r}")
     if now < _as_utc(key.not_before):
-        raise NoteRefused(f"key {kid!r} is not in use yet")
+        raise NoteRefused(f"key {kid!r} of {issuer.issuer!r} is not in use yet")
     if key.not_after is not None and now >= _as_utc(key.not_after):
-        raise NoteRefused(f"key {kid!r} was retired")
+        raise NoteRefused(f"key {kid!r} of {issuer.issuer!r} was retired")
     return key.public_key
 
 
@@ -197,7 +197,7 @@ def _spend_jti(issuer: str, jti: object, ttl: int) -> None:
     must not consume the jti of the real note it was copied from.
     """
     if not isinstance(jti, str) or not jti:
-        raise NoteRefused("the note carries no jti")
+        raise NoteRefused(f"the note from {issuer!r} carries no jti")
     try:
         first = get_redis().set(_replay_key(issuer, jti), "1", nx=True, ex=ttl)
     except redis.RedisError as unreachable:
@@ -377,12 +377,16 @@ def account_for(note: VerifiedNote, db: Session) -> User:
             # The cascade should have taken the link with the account, so this
             # is a database somebody edited by hand. Refusing beats provisioning
             # a second account for a person an administrator deleted.
-            raise NoteRefused(f"the link for {note.subject!r} points at no account")
+            raise NoteRefused(
+                f"the link from {note.issuer.issuer!r} for {note.subject!r} points at no account"
+            )
         if user.deactivated_at is not None:
             # The same answer password sign-in gives a deactivated account, and
             # deliberately not a re-provision: signing in again upstream does
             # not resurrect an account somebody here switched off.
-            raise NoteRefused(f"account {user.id!r} is deactivated")
+            raise NoteRefused(
+                f"account {user.id!r}, linked from {note.issuer.issuer!r}, is deactivated"
+            )
         return user
 
     email = (note.email or "").strip().lower()

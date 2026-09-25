@@ -64,8 +64,9 @@ a caller learns the password floor from a single rejected change anyway.
 
 ## Authentication
 
-All endpoints except `/auth/login`, `/auth/refresh`, `/auth/logout`, the
-`/config` document above and the calendar feed require a Bearer token:
+All endpoints except `/auth/login`, `/auth/refresh`, `/auth/logout`,
+`/auth/federated`, the `/config` document above and the calendar feed require
+a Bearer token:
 
 ```
 Authorization: Bearer <access_token>
@@ -146,6 +147,70 @@ Higher roles inherit the permissions of all roles below them. Role is embedded i
 
 The field was called `email` before 0.13. `email` is still accepted in place
 of `email_address` through 0.14 and is removed in 0.15.
+
+### POST /auth/federated
+
+Off unless `FEDERATED_IDENTITY_ENABLED` is true, and a `404` while it is off,
+the same answer an unknown path gives: whether an instance has an integration
+at all is not something probing it should reveal. The whole design, the threat
+model it answers and the operator steps are in
+[Federated identity](federated-identity.md); this is the route.
+
+```json
+// Request
+{ "token": "<the note, exactly as its issuer minted it>" }
+
+// Response 200
+{
+  "access_token": "<jwt>",
+  "token_type": "bearer",
+  "user_id": "FED-3f9a1c27e4b05d18",
+  "role": "MEMBER",
+  "full_name": "Priya R",
+  "initial_login_state": false
+}
+```
+
+The same pair `POST /auth/login` returns, so nothing in a client changes about
+holding a session afterwards, and `POST /auth/refresh` accepts the refresh
+token like any other. `initial_login_state` is false: there is no password the
+account was handed, so there is nothing to move it off.
+
+The account is found by the `(issuer, subject)` pair and never by the address
+in the note. The first note for a subject creates the account, and its role
+comes from the operator's own map of group claims, not from the note. A role
+an administrator sets afterwards is never re-read, so an upstream change does
+not reach it; `POST /users/{user_id}/deactivate` is the lever, and a
+deactivated linked account is refused rather than provisioned again.
+
+| Status | When                                                                      |
+| ------ | ------------------------------------------------------------------------- |
+| `401`  | The note was refused. One message for every reason.                       |
+| `404`  | Federated sign-in is off on this instance.                                |
+| `409`  | The address in the note belongs to an account and the pair is not linked. |
+| `422`  | A malformed body, or a verified note with no usable email claim.          |
+| `503`  | The replay cache is unreachable, so replay cannot be ruled out.           |
+
+The `401` is deliberately one answer with one message, `Invalid federated
+token`, whatever was wrong: an unknown issuer, a wrong audience, an unknown or
+retired key, a bad signature, an expired or too long-lived note, a note already
+spent, a missing subject, a link pointing at no account, a deactivated account.
+The `409` is a refusal and not a link, because linking on a matching address
+would let an issuer name an administrator's address and be handed the account;
+an administrator links the pair by hand. The `422` for a note with no address
+is not a `401` because the note was not the problem, and no note the caller
+sends next would fix it. The `503` answers nothing rather than accept a note
+that may be a copy; password sign-in is unaffected.
+
+There is no rate budget here. A note is signed by a key an operator
+registered, so guessing one is not the attack this route has; replay and
+lifetime are, and the single-use cache and the lifetime cap answer those.
+
+Every refusal is a `WARNING` in the server log naming the issuer, the reason
+and the key id wherever the key was the part that was wrong. The note itself is
+never logged, and neither is the address it carries. The log is the only place
+the reason exists, so an integrator being set up is shown the log rather than
+the response.
 
 ### POST /auth/change-password
 
@@ -1488,8 +1553,11 @@ refused ones included: a `401`, a `403` for role or key scope, a `422`. A
 record holds the time, the account (`actor_id`), the API key if one was used
 (`api_key_id`), the method, the path and the status code. Request and
 response bodies are never stored, so a login is recorded without its password
-and an upload without its file. A login's `actor_id` is null, since nobody is
-signed in yet when it arrives.
+and an upload without its file. A password login's `actor_id` is null, since
+nobody is signed in yet when it arrives; `POST /auth/federated` is the
+exception and names the account it handed the session to, which on a first
+sign-in reads as the account having been created by its own arrival. A
+refused exchange is recorded with no account, like any other refusal.
 
 Records point at no other table, so deleting an account or revoking a key
 leaves its history. If a record cannot be written the request still succeeds

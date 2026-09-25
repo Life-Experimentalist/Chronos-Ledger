@@ -178,6 +178,20 @@ components:
             At least PASSWORD_MIN_LENGTH characters, 12 unless the deployment
             has raised it, and not a placeholder published in this repository.
 
+    FederatedTokenRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: >
+            The note, exactly as its issuer minted it. A signed JWT whose
+            `iss` names a registered issuer, whose header `kid` names one of
+            that issuer's registered keys, and which carries `aud`, `sub`,
+            `jti`, `iat` and `exp`. An `email` claim is what a first-time
+            subject is provisioned from; `name` and `groups` are read if they
+            are there.
+
     RefreshRequest:
       type: object
       required: [refresh_token]
@@ -1649,6 +1663,85 @@ paths:
           $ref: "#/components/responses/UnprocessableEntity"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+
+  /api/v1/auth/federated:
+    post:
+      operationId: auth.federated
+      tags: [Authentication]
+      summary: Exchange a note from a registered outside issuer for a session
+      description: >
+        Off unless FEDERATED_IDENTITY_ENABLED is true, and a 404 while it is
+        off. The note is a short-lived JWT signed with Ed25519 by a key an
+        operator registered for that issuer; the reply is the same pair
+        POST /auth/login returns, so a client handles the session the same way
+        afterwards. A note works exactly once. The account is found by the
+        (issuer, subject) pair and not by the address in the note, so an issuer
+        cannot name an existing account and be handed it; the first note for a
+        subject creates an account, and its role comes from the operator's own
+        map of group claims, never from the note alone. Every verification
+        failure is the same 401 with the same message, on purpose: the reason
+        is in the server log, where an integrator can be shown it and a forger
+        cannot read it.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FederatedTokenRequest"
+      responses:
+        "200":
+          description: A session for the account the note belongs to.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          description: >
+            The note was refused. One message for every reason, so the answer
+            cannot be used to take a forged note apart field by field.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: >
+            Federated sign-in is off on this instance. The same answer an
+            unknown path gives, so whether an instance has an integration is
+            not something probing it reveals.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            The address in the note already belongs to an account, and the
+            (issuer, subject) pair is not linked to one. Linking on the
+            address instead would let an issuer take over any account whose
+            address it can guess, so this is refused and an administrator
+            links the pair by hand.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            A malformed body, or a note that verified and carried no usable
+            email claim for a subject arriving for the first time. The second
+            is not a 401 because the note was not the problem.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: >
+            The replay cache is unreachable, so replay cannot be ruled out and
+            this route answers nothing rather than accepting a note that may
+            be a copy. Password sign-in is unaffected.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/auth/refresh:
     post:

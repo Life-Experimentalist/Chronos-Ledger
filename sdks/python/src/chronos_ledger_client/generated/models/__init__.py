@@ -33,6 +33,7 @@ from .deactivated_user_response import DeactivatedUserResponse
 from .dynamic_state import DynamicState
 from .error_response import ErrorResponse
 from .execution_mode import ExecutionMode
+from .federated_token_request import FederatedTokenRequest
 from .feed_token import FeedToken
 from .guest_check_in_request import GuestCheckInRequest
 from .guest_check_in_response_200 import GuestCheckInResponse200
@@ -130,6 +131,7 @@ __all__ = (
     "DynamicState",
     "ErrorResponse",
     "ExecutionMode",
+    "FederatedTokenRequest",
     "FeedToken",
     "GuestCheckInRequest",
     "GuestCheckInResponse200",

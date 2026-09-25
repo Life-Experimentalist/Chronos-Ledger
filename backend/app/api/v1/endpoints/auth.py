@@ -6,6 +6,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core import rate_limit
@@ -24,10 +25,12 @@ from app.models.db import RefreshToken, User, generate_feed_token
 from app.schemas.auth import (
     ChangePasswordRequest,
     ChangePasswordResponse,
+    FederatedTokenRequest,
     LoginRequest,
     RefreshRequest,
     TokenResponse,
 )
+from app.services import federated_identity
 
 settings = get_settings()
 router = APIRouter()
@@ -101,6 +104,122 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
 
     refresh_token = _mint_refresh_token(db, user.id)
     db.commit()
+    token = create_access_token(subject=user.id, extra={"role": user.role_type.value})
+    return TokenResponse(
+        access_token=token,
+        refresh_token=refresh_token,
+        user_id=user.id,
+        role=user.role_type.value,
+        full_name=user.full_name,
+        initial_login_state=user.initial_login_state,
+    )
+
+
+def _issue(note: federated_identity.VerifiedNote, db: Session) -> tuple[User, str]:
+    """The account a verified note belongs to, and a refresh token for it.
+
+    Committed here, before any token is minted, so a note that could not be
+    turned into a session does not hand one out. A failed commit therefore
+    burns the note: its jti was spent during verification and the same note
+    cannot be sent again. That is deliberate and it is the safe direction, so
+    the commit does not belong any later than this.
+
+    The second attempt is for two first-time notes for the same subject in
+    flight together, which one double-click on a sign-in button produces. Both
+    find no link, both insert, and the loser meets a unique constraint at the
+    flush inside `account_for` or at the commit, depending on the database.
+    Running the whole thing again finds the row the winner committed, and
+    answers with a session or a 409 rather than with a 500. Once is enough,
+    because what the second attempt would collide with is committed by then.
+    """
+    for last in (False, True):
+        try:
+            user = federated_identity.account_for(note, db)
+            raw = _mint_refresh_token(db, user.id)
+            db.commit()
+            return user, raw
+        except IntegrityError:
+            db.rollback()
+            if last:
+                raise
+
+
+@router.post("/federated", operation_id="auth.federated", response_model=TokenResponse)
+def federated(request: Request, payload: FederatedTokenRequest, db: Session = Depends(get_db)):
+    """Trade a note from an outside issuer for a session here.
+
+    The note is verified, the account it names is found or created, and the
+    answer is the same `TokenResponse` a password sign-in gives, so nothing in
+    a client changes about holding a session. Every decision about whether a
+    note is acceptable lives in `services/federated_identity.py`; this maps
+    the answers onto status codes.
+
+    Off is a 404 and not a 403, because whether an instance has an integration
+    at all is not something probing it should reveal. Every verification
+    failure is one 401 carrying one message, so the response cannot be used to
+    find out which part of a forged note was wrong; the reason goes to the log
+    instead. The two refusals that are not about the note get their own
+    answers: 409 when the address it carries already belongs to an account,
+    and 422 when a first-time subject arrives with no address to create one
+    from, which is a note that verified and then could not be acted on.
+
+    There is no rate budget here, unlike `/auth/login`. A note is signed by a
+    key an operator registered, so guessing one is not the attack this route
+    has; replay and lifetime are, and the cache and the cap answer those.
+    """
+    try:
+        note = federated_identity.verify_note(payload.token, db)
+    except federated_identity.FederationDisabled:
+        # Not logged as a refusal, because nothing was wrong with the request.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found") from None
+    except federated_identity.ReplayCacheDown as unreachable:
+        # Logged already, where it happened, by the code that knows why.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Federated sign-in is temporarily unavailable",
+        ) from unreachable
+    except federated_identity.NoteRefused as refused:
+        # The reason names the issuer, and the kid wherever the kid is the part
+        # that was wrong. The note itself never reaches the log.
+        logger.warning("federated sign-in refused: %s", refused)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid federated token"
+        ) from refused
+
+    try:
+        user, refresh_token = _issue(note, db)
+    except federated_identity.NoEmailToProvisionWith as unusable:
+        logger.warning("federated sign-in could not become an account: %s", unusable)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="This note carries no email address an account can be created from",
+        ) from unusable
+    except federated_identity.EmailAlreadyTaken as taken:
+        # The address stays out of the log: it is a claim out of the note, and
+        # which issuer vouched for which subject is enough to find the clash.
+        logger.warning(
+            "federated sign-in refused, that address is already an account: %s vouched for %s",
+            note.issuer.issuer,
+            note.subject,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The address in this note already belongs to an account",
+        ) from taken
+    except federated_identity.NoteRefused as refused:
+        # A deactivated account and a link pointing at nothing land here, and
+        # the caller is told the same thing as for any other refusal.
+        logger.warning("federated sign-in refused: %s", refused)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid federated token"
+        ) from refused
+
+    # Read by `core/audit.py` once the response has gone out, so the record
+    # names who got the session; on a first sign-in it reads as the account
+    # having been created by its own arrival, which is what happened. Password
+    # sign-in sets nothing here and its records name nobody, which is a gap
+    # there rather than a convention to follow.
+    request.state.actor_id = user.id
     token = create_access_token(subject=user.id, extra={"role": user.role_type.value})
     return TokenResponse(
         access_token=token,
