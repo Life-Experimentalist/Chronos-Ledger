@@ -74,9 +74,19 @@ cap is Chronos's.
 Two machines that differ by thirty seconds will reject notes that are perfectly
 good, and the failure looks like a broken integration rather than a clock.
 
-`FEDERATED_CLOCK_SKEW_SECONDS` (default 60) is allowed in both directions, on
-`exp` and on `iat`. The replay cache holds each `jti` for the lifetime cap plus
-the skew, so a note cannot outlive its own record.
+`FEDERATED_CLOCK_SKEW_SECONDS` (default 60) is the tolerance, and it is not
+symmetric in what it protects against. `exp` may be up to the skew in the past,
+so a note that expired a moment ago on a slightly fast clock still works.
+`iat` and `nbf` may be up to the skew in the *future*, so a note from a
+slightly fast issuer works. There is no lower bound on `iat`: how old a note may
+be is already answered by `exp` and the lifetime cap, and bounding its age by
+`iat` as well would refuse a two-minute note ninety seconds into its life, which
+is a note doing exactly what it was minted to do. The replay cache holds each
+`jti` for the lifetime cap plus the skew, so a note cannot outlive its own
+record.
+
+One `leeway` on the verifier covers `exp` and `nbf`, and the lifetime cap is a
+separate comparison after it.
 
 Left over: skew widens the replay window by the same amount it widens the
 tolerance. Sixty seconds is the trade; an operator who runs NTP everywhere can
@@ -206,7 +216,8 @@ though it is not throttled.
 ## The contract
 
 Numbered so the items can be picked up in order. `F-1` through `F-4` are the
-smallest thing that works; `F-5` and `F-6` are what make it operable.
+smallest thing that works; `F-5` through `F-7` are what make it usable by
+anyone who is not writing SQL and curl.
 
 ### F-1. An issuer registry
 
@@ -216,12 +227,15 @@ smallest thing that works; `F-5` and `F-6` are what make it operable.
   Ed25519 public key, PEM), `not_before`, `not_after`. A
   `federated_role_map` table: `id`, `issuer_id`, `group_claim_value`,
   `role_type`, `unit_code`. Validation refuses `ORG_ADMIN` and `UNIT_ADMIN` in
-  the map.
+  the map, and refuses a second `STAFF` entry for the same issuer whose
+  `unit_code` differs from an existing one, so that a person in two mapped
+  groups has one answer and it is decided when the map is written rather than
+  when somebody signs in.
 - **Touches:** `backend/app/models/db.py`,
   `backend/alembic/versions/028_*.py`, `docs/data-model.md`.
 - **Done when:** a registration with two keys whose validity windows overlap
-  verifies notes signed by either, and the map refuses an admin role with a
-  422 naming the field.
+  verifies notes signed by either, the map refuses an admin role with a 422
+  naming the field, and refuses the conflicting `STAFF` unit the same way.
 
 ### F-2. The note is verified
 
@@ -242,6 +256,17 @@ smallest thing that works; `F-5` and `F-6` are what make it operable.
 - **Done when:** a test suite covers each refusal separately: wrong algorithm,
   `alg: none`, unknown `kid`, retired `kid`, wrong `aud`, wrong `iss`, expired,
   issued in the future, `exp` beyond the cap, replayed `jti`, and Redis down.
+  A note ninety seconds into a two-minute life is accepted, which is the test
+  that keeps the `iat` rule from drifting back into a lower bound.
+
+The tests need a Redis that answers, since this cache fails closed and there is
+nothing to fall back to. There is no `fakeredis` dependency and none is needed:
+`tests/test_rate_limit.py` already carries a hand-written stand-in monkeypatched
+over `get_redis` in the module under test, and this wants the same thing with
+`set(key, value, nx=True, ex=...)` on it. That means the service imports
+`get_redis` into its own namespace and calls it directly, not through
+`rate_limit._counter`, which answers `None` whenever `RATE_LIMIT_ENABLED` is
+false and would quietly turn the replay check off for the whole suite.
 
 ### F-3. The exchange route
 
@@ -249,8 +274,11 @@ smallest thing that works; `F-5` and `F-6` are what make it operable.
   `{token: str}`, `operation_id: auth.federated`. Returns the existing
   `TokenResponse`, unchanged, so the frontend's session handling is untouched.
   404 when the feature is off. 401 for any verification failure, with one
-  message for all of them. 409 on the email collision in F-4. 503 when the
-  replay cache is unreachable.
+  message for all of them, so the refusal is not an oracle. 409 on the email
+  collision in F-4. 422 when a first-time subject arrives with no `email`
+  claim, which is a note that verified correctly and then could not be turned
+  into an account: a different thing from a bad note and worth a different
+  answer. 503 when the replay cache is unreachable.
 - **Touches:** `backend/app/api/v1/endpoints/auth.py`,
   `backend/app/schemas/auth.py`, `docs/openapi.yaml`, both SDKs,
   `docs/api.md`.
@@ -263,17 +291,21 @@ smallest thing that works; `F-5` and `F-6` are what make it operable.
 - **Scope:** A `federated_identities` table: `id`, `issuer_id`, `subject`,
   `user_id`, `created_at`, unique on `(issuer_id, subject)`. On a note whose
   pair is already there, load that user, refuse if `deactivated_at` is set, and
-  issue the session. On a pair that is not there, provision: resolve the role
-  and unit from the map (no match means `MEMBER` and no unit), refuse with 409
-  if the email address already belongs to an account, and insert a `User` with
-  `credential_secure_hash` set to `hash_password(secrets.token_urlsafe(32))`
-  and `initial_login_state` false.
+  issue the session. On a pair that is not there, provision: require an `email`
+  claim, resolve the role and unit from the map (no match means `MEMBER` and no
+  unit), refuse with 409 if that address already belongs to an account, and
+  insert a `User` with `credential_secure_hash` set to
+  `hash_password(secrets.token_urlsafe(32))` and `initial_login_state` false.
+  The link's `user_id` cascades on delete: `users.py` has a hard-delete path,
+  and a link left pointing at a deleted account would refuse that person
+  forever rather than letting them arrive as somebody new.
 - **Touches:** `backend/app/models/db.py`, migration `028`,
   `backend/app/services/federated_identity.py`, `docs/data-model.md`.
 - **Done when:** the second sign-in reuses the first account, a role changed by
   an administrator survives the next sign-in, a deactivated linked account is
-  refused rather than re-provisioned, and a colliding address is refused with
-  409 without writing anything.
+  refused rather than re-provisioned, a reactivated one works again, a colliding
+  address is refused with 409 without writing anything, and deleting the
+  account takes the link with it so the next note provisions afresh.
 
 Why a random hash rather than a nullable column: `credential_secure_hash` is
 `nullable=False`, and making it nullable puts a `None` in the path of
@@ -295,7 +327,11 @@ meaning what it says, not about the gate.
 
 - **Scope:** `GET`, `POST`, `PATCH`, `DELETE` under
   `/api/v1/federation/issuers`, plus nested routes for keys and the role map,
-  and `DELETE /api/v1/federation/links/{id}` to unlink a person. `ORG_ADMIN`
+  and `POST /api/v1/federation/links` and `DELETE
+  /api/v1/federation/links/{id}` to link an existing account to an
+  `(issuer, subject)` pair and to unlink it again. The create route is the only
+  way an account that already exists comes to use the shortcut, since the
+  exchange itself never links on a matching address. `ORG_ADMIN`
   only: an issuer is organization-wide and a role map can place somebody in any
   unit, so a unit admin is the wrong scope for it. Scopes derive from the path,
   so `federation:read` and `federation:write` need no registration
@@ -304,8 +340,10 @@ meaning what it says, not about the gate.
 - **Touches:** `backend/app/api/v1/endpoints/federation.py`,
   `backend/app/api/v1/router.py`, `backend/app/schemas/federation.py`,
   `docs/openapi.yaml`, both SDKs, `docs/api.md`.
-- **Done when:** an `ORG_ADMIN` can add a key, retire it and delete an issuer;
-  a `UNIT_ADMIN` gets 403 on all of it; every write lands an audit record.
+- **Done when:** an `ORG_ADMIN` can add a key, retire it, link and unlink an
+  account and delete an issuer; a `UNIT_ADMIN` gets 403 on all of it; a link to
+  an `(issuer, subject)` pair that is already taken is refused with 409; and
+  every write lands an audit record.
 
 ### F-6. It is visible when it goes wrong
 
@@ -330,13 +368,36 @@ the table answers is how many attempts arrived and how they ended, which is the
 question a flood raises; what the log answers is why a particular one failed,
 which is the question an integrator raises.
 
+### F-7. Where the person lands
+
+- **Scope:** A page at `/auth/federated` that reads the note from the URL
+  fragment, posts it once, and then does what the landing page already does
+  with a `TokenResponse`: `saveSession(data)` and route by role
+  (`frontend/src/store/auth.ts`). The fragment is cleared from the address bar
+  before anything else happens, so a reload does not re-post a spent note and
+  the note does not sit in the history. A refusal shows what went wrong in
+  plain words with a link to sign in with a password instead, because a
+  federated failure must not leave somebody with no way in.
+- **Touches:** `frontend/src/app/auth/federated/page.tsx`,
+  `frontend/src/store/auth.ts`, `frontend/src/lib/api.ts`.
+- **Done when:** the page appears in the static export's route list, a spent
+  note reloaded shows the refusal rather than a blank screen, and the fragment
+  is gone from the address bar by the time the first request goes out.
+
+Without this item the contract is backend-only and the URL-fragment reasoning in
+the threat model describes something that does not exist. The integrating system
+sends its person to `/auth/federated#token=...`; a fragment never reaches a
+server, so it stays out of the proxy's access log and out of the `Referer` of
+whatever the page loads next. There is nowhere else to put it: the frontend is a
+static export with no server-side handler that could receive it.
+
 ### Settings
 
 | Setting | Default | What it does |
 |---|---|---|
 | `FEDERATED_IDENTITY_ENABLED` | `false` | Off means the exchange route answers 404 |
 | `FEDERATED_TOKEN_MAX_LIFETIME_SECONDS` | `120` | A note whose `exp` is further ahead is refused |
-| `FEDERATED_CLOCK_SKEW_SECONDS` | `60` | Tolerance on `iat` and `exp`, both directions |
+| `FEDERATED_CLOCK_SKEW_SECONDS` | `60` | How far `exp` may be past, and `iat` and `nbf` may be future |
 
 Three settings, on the same reasoning as the rate limiter's: these are the
 numbers an operator has an opinion about. The algorithm, the claim names and
@@ -350,13 +411,28 @@ the shape of the replay key are not settings.
 | `aud` | yes | The registration's `audience` |
 | `sub` | yes | The link table, as `(issuer, subject)` |
 | `jti` | yes | The replay cache |
-| `iat` | yes | Now, within skew |
-| `exp` | yes | Now, within skew, and the lifetime cap |
+| `iat` | yes | Not more than the skew in the future. No lower bound |
+| `nbf` | no | Not more than the skew in the future, if present |
+| `exp` | yes | Now, allowing the skew, and the lifetime cap |
 | `email` | on first sign-in only | Refused if it belongs to an existing account |
 | `name` | no | Stored as `full_name`, or the subject if absent |
 | `groups` | no | The role map; no match means `MEMBER` |
 
 The header must carry `kid`. `alg` is not consulted.
+
+`groups` is a list of strings; a bare string is read as a list of one. Several
+entries can match the map, and only two roles are reachable, so the rule is
+short: `STAFF` beats `MEMBER`. Two matches that both say `STAFF` with different
+`unit_code` values never happen, because the map validator refuses that pair at
+write time rather than leaving a sign-in to pick one.
+
+### Build order
+
+F-1, then F-2 with its refusal tests and no route yet, then F-4 in the same
+service, then F-3 with F-6 folded into it, then F-5, then F-7. F-5 is last of
+the backend items because it carries the spec tests and a regeneration of both
+SDKs, and it is not optional for a release: without it the only way to register
+an issuer is SQL against a running database.
 
 ---
 
@@ -386,6 +462,12 @@ clearly better and reversing one is a small change:
   DNS part of Chronos's trust boundary.
 - No SAML.
 - No group membership sync. Groups are read once, when the account is created.
+- No federating an issuer that has no email address for its people. The address
+  is required on a first sign-in, because `email_address` is unique and not null
+  on `User` and a synthesized one (`subject@issuer`, say) would be a real-looking
+  address that reaches nobody, in the field an administrator uses to find a
+  person and the system uses to write to them. An issuer in that position should
+  be linked to accounts an administrator created.
 - No outbound direction. Chronos does not issue notes other systems can verify.
 - No QR codes, badges or kiosk shortcuts. The verification here is the support
   such things would need; whether any of them get built is a separate decision.
