@@ -232,15 +232,14 @@ anyone who is not writing SQL and curl.
   Ed25519 public key, PEM), `not_before`, `not_after`. A
   `federated_role_map` table: `id`, `issuer_id`, `group_claim_value`,
   `role_type`, `unit_code`. Validation refuses `ORG_ADMIN` and `UNIT_ADMIN` in
-  the map, and refuses a second `STAFF` entry for the same issuer whose
-  `unit_code` differs from an existing one, so that a person in two mapped
-  groups has one answer and it is decided when the map is written rather than
-  when somebody signs in.
+  the map. It does not refuse a second `STAFF` entry whose `unit_code` differs
+  from an existing one: that pair is the ordinary case, and the tie is broken
+  at sign-in instead, for the reason recorded under the claims table below.
 - **Touches:** `backend/app/models/db.py`,
   `backend/alembic/versions/028_*.py`, `docs/data-model.md`.
 - **Done when:** a registration with two keys whose validity windows overlap
-  verifies notes signed by either, the map refuses an admin role with a 422
-  naming the field, and refuses the conflicting `STAFF` unit the same way.
+  verifies notes signed by either, and the map refuses an admin role with a
+  422 naming the field.
 
 ### F-2. The note is verified
 
