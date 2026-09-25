@@ -12,6 +12,7 @@ interface AuthState {
   isLoading: boolean
   error: string | null
   login: (email: string, password: string) => Promise<AuthUser>
+  federatedSignIn: (token: string) => Promise<AuthUser>
   logout: () => void
   hydrate: () => void
   clearError: () => void
@@ -44,6 +45,34 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch (err: unknown) {
       const msg = apiErrorMessage(err, 'Login failed')
       set({ isLoading: false, error: msg })
+      throw err
+    }
+  },
+
+  // The same ending as `login` from a different beginning: one note instead of
+  // an address and a password. The note is spent by this request whether it
+  // succeeds or not, so the caller gets one attempt and the error rather than
+  // a store it could retry from.
+  federatedSignIn: async (token) => {
+    set({ isLoading: true, error: null })
+    try {
+      const res = await authApi.federated(token)
+      const data = res.data
+      saveSession(data)
+      const user: AuthUser = {
+        user_id: data.user_id,
+        full_name: data.full_name,
+        role: data.role,
+        initial_login_state: data.initial_login_state,
+      }
+      set({ user, isLoading: false })
+      return user
+    } catch (err: unknown) {
+      // Deliberately not into `error`, unlike `login` above. The login form
+      // renders the store's `error` and only clears it on submit, so a refusal
+      // left here would greet whoever follows the page's link to password
+      // sign-in with a message about something they did not do.
+      set({ isLoading: false })
       throw err
     }
   },
