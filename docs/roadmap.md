@@ -222,6 +222,7 @@ needs one should say so.
 |---|---|
 | Webhooks | Subscriptions per event type (`reservation.created`, `ledger.updated`, ...), HMAC-signed bodies, retries with backoff, delivery log |
 | Activities CRUD | Create, edit and retire activities through the API instead of only through CSV import |
+| Federated identity | A registered issuer vouches for a person with a short-lived signed note, and Chronos issues its own session. Off by default. Designed in full: [federated-identity.md](federated-identity.md) |
 
 ## Later
 

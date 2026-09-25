@@ -374,6 +374,7 @@ the first login is the only thing it can do: use Admin Portal → Profile
 | [`docs/roadmap.md`](docs/roadmap.md)           | Planned releases 0.13 to 0.15 with scope and acceptance checks       |
 | [`docs/distribution.md`](docs/distribution.md) | Planned installer, channels, drift handling and signing              |
 | [`docs/sdks.md`](docs/sdks.md)                 | Planned TypeScript, Python, Go and Rust client libraries             |
+| [`docs/federated-identity.md`](docs/federated-identity.md) | Planned sign-in from a registered outside issuer, threat model first |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md)           | Development setup, commit conventions, PR checklist                    |
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)     | Community standards and enforcement                                    |
 | [`SECURITY.md`](SECURITY.md)                   | Vulnerability reporting and disclosure policy                          |
