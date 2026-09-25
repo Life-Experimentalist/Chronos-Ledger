@@ -105,6 +105,16 @@ services:
       # outside system to poll for. Off: nothing deletes those rows, and an
       # instance with no integrator has nobody to read them.
       CHANGE_FEED_ENABLED: ${CHANGE_FEED_ENABLED:-false}
+      # Whether a registered outside issuer may vouch for a person. Off, and
+      # off answers 404 rather than 403; nothing verifies until an operator
+      # registers an issuer and a signing key.
+      FEDERATED_IDENTITY_ENABLED: ${FEDERATED_IDENTITY_ENABLED:-false}
+      # The longest life accepted in one of those notes, in seconds. The note
+      # says how long it should work and this is the second opinion.
+      FEDERATED_TOKEN_MAX_LIFETIME_SECONDS: ${FEDERATED_TOKEN_MAX_LIFETIME_SECONDS:-120}
+      # How far the two clocks may disagree, in seconds. Widening it widens
+      # the window a stolen note can be replayed in by the same amount.
+      FEDERATED_CLOCK_SKEW_SECONDS: ${FEDERATED_CLOCK_SKEW_SECONDS:-60}
       # Which upstream addresses uvicorn believes X-Forwarded-For from. This
       # service publishes no ports, so nginx is the only way in. Without it
       # every request looks like it came from the proxy and the sign-in

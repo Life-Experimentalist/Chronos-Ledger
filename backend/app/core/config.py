@@ -202,6 +202,32 @@ class Settings(BaseSettings):
     # and polls from there: what happened while this was off was not recorded.
     change_feed_enabled: bool = False
 
+    # Whether a registered outside issuer may vouch for a person, so that
+    # somebody already signed in over there arrives here without a second
+    # password. Off, and off means POST /api/v1/auth/federated answers 404
+    # rather than 403: whether an instance has an integration is not something
+    # probing it should reveal. Turning it on is not enough on its own, since
+    # nothing verifies until an issuer is registered. docs/federated-identity.md
+    # is the design, threat model first.
+    federated_identity_enabled: bool = False
+
+    # The longest life Chronos will accept in a note, in seconds, counted from
+    # when it arrives. Checking exp on its own is not enough, because exp is the
+    # issuer's opinion and an issuer that sets it a year out has minted a bearer
+    # token for a year. This cap is Chronos's opinion, and two minutes is long
+    # enough for a browser to hand a note over and short enough that a stolen
+    # one is worth little.
+    federated_token_max_lifetime_seconds: int = 120
+
+    # How far two clocks may disagree before a perfectly good note is refused,
+    # in seconds, and it is not symmetric. exp may be this far in the past, so a
+    # note that expired a moment ago on a fast clock still works; iat and nbf
+    # may be this far in the future, so a note from a fast issuer works. There
+    # is no lower bound on how old a note may be, because that is what exp and
+    # the cap above already answer. Widening this widens the replay window by
+    # the same amount, so an operator running NTP everywhere can set it lower.
+    federated_clock_skew_seconds: int = 60
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.app_cors_origins.split(",") if o.strip()]
@@ -278,6 +304,35 @@ class Settings(BaseSettings):
                 "of minutes such as 240."
             )
         return minutes
+
+    @field_validator("federated_token_max_lifetime_seconds")
+    @classmethod
+    def _lifetime_cap_is_positive(cls, seconds: int) -> int:
+        """Zero is not "off" here, it is "refuse every note".
+
+        The other numbers on this page read 0 as a way to turn one check off.
+        This one cannot: a cap of zero refuses a note whose exp is even a
+        second ahead, which is every note there is, and the failure would look
+        like a broken issuer. Turning federation off is
+        FEDERATED_IDENTITY_ENABLED.
+        """
+        if seconds < 1:
+            raise ValueError(
+                f"FEDERATED_TOKEN_MAX_LIFETIME_SECONDS={seconds} would refuse every "
+                "note. Set FEDERATED_IDENTITY_ENABLED=false to turn federated sign-in "
+                "off, or leave this unset for 120."
+            )
+        return seconds
+
+    @field_validator("federated_clock_skew_seconds")
+    @classmethod
+    def _skew_is_not_negative(cls, seconds: int) -> int:
+        if seconds < 0:
+            raise ValueError(
+                f"FEDERATED_CLOCK_SKEW_SECONDS={seconds} is negative. Set 0 to allow "
+                "no disagreement at all, or leave it unset for 60."
+            )
+        return seconds
 
     @field_validator("org_timezone")
     @classmethod
