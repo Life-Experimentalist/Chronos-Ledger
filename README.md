@@ -374,7 +374,7 @@ the first login is the only thing it can do: use Admin Portal → Profile
 | [`docs/vocabulary.md`](docs/vocabulary.md)     | What an instance calls things, and which value sets are closed         |
 | [`docs/faq.md`](docs/faq.md)                   | FAQ & troubleshooting, setup, auth, CSV import, geofencing, CI/CD     |
 | [`docs/quickstart.md`](docs/quickstart.md)     | Call the REST API from any language: auth, keys, paging, idempotency |
-| [`docs/roadmap.md`](docs/roadmap.md)           | Planned releases 0.13 to 0.15 with scope and acceptance checks       |
+| [`docs/roadmap.md`](docs/roadmap.md)           | Planned releases 0.13 to 0.16 with scope and acceptance checks       |
 | [`docs/distribution.md`](docs/distribution.md) | Planned installer, channels, drift handling and signing              |
 | [`docs/sdks.md`](docs/sdks.md)                 | Planned TypeScript, Python, Go and Rust client libraries             |
 | [`docs/federated-identity.md`](docs/federated-identity.md) | Planned sign-in from a registered outside issuer, threat model first |

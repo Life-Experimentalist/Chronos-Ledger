@@ -16,8 +16,9 @@ requirement model, the login field), and those are the reason `1.0` waits.
 | Release | Theme | Breaking |
 |---|---|---|
 | 0.13 | Platform: contract check, hardening, `chronos` CLI and channels, first SDKs, ledger range queries, audit log | No |
-| 0.14 | Engine, part 1: resource modes, conflict report, rolling horizon, leave ranges, Go and Rust SDKs, Helm | Additive |
-| 0.15 | Engine, part 2: recurrence rules, editable timetable, exclusion on instances | Yes |
+| 0.14 | Roles renamed, guest desk (visit expiry, configurable approver, change feed), federated identity | Yes |
+| 0.15 | Engine, part 1: resource modes, conflict report, rolling horizon, leave ranges, Go and Rust SDKs, Helm | Additive |
+| 0.16 | Engine, part 2: recurrence rules, editable timetable, exclusion on instances | Yes |
 | Waiting on a decision | Webhooks, activities CRUD | n/a |
 
 Detailed designs: [distribution.md](distribution.md) for installers, channels,
@@ -72,8 +73,8 @@ drift and signing; [sdks.md](sdks.md) for client libraries;
 ### P-5. Login field name
 
 - **Scope:** `POST /auth/login` takes `email_address`, the name every other
-  schema uses, and keeps accepting `email` as a deprecated alias through 0.14.
-  `email` is removed in 0.15.
+  schema uses, and keeps accepting `email` as a deprecated alias through 0.15.
+  `email` is removed in 0.16.
 - **Touches:** `backend/app/schemas/auth.py`, `frontend` login call,
   `docs/api.md`, `docs/quickstart.md`, `docs/openapi.yaml`.
 - **Done when:** both forms sign in; the docs show `email_address`.
@@ -124,7 +125,7 @@ against the spec. Publishing to npm and PyPI is added on request.
 
 ---
 
-## 0.14: Engine, part 1
+## 0.15: Engine, part 1
 
 Background: a schedule in Chronos is a set of intervals on resources. Today a
 resource is a room or a person and every booking takes the whole resource.
@@ -180,7 +181,7 @@ See [sdks.md](sdks.md) and [distribution.md](distribution.md).
 
 ---
 
-## 0.15: Engine, part 2 (breaking)
+## 0.16: Engine, part 2 (breaking)
 
 ### E-5. Recurrence rules
 
@@ -189,7 +190,7 @@ See [sdks.md](sdks.md) and [distribution.md](distribution.md).
   migrate to `FREQ=WEEKLY;BYDAY=..`. Expansion uses `dateutil.rrule` and is
   DST-correct: a weekly 09:00 stays 09:00 local time all year.
 - **API:** slots return `rrule` and `dtstart`. `day_of_week_index` is still
-  returned, derived, through 0.15, and removed after.
+  returned, derived, through 0.16, and removed after.
 - **Done when:** a weekly slot across a DST change materializes at the same
   local time on both sides; migrated slots materialize the same days as before.
 
