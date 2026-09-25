@@ -18,9 +18,11 @@ instead of assuming. Rewriting stored case would be a separate migration and
 would change what every account looks like to gain nothing.
 
 The one operator-visible consequence: this refuses to run while two accounts
-already collide under lower(), and names them. Merging two accounts is a
-decision about people, and guessing which one to keep is not a migration's
-business.
+already collide under lower(), and names them and what to do about them.
+Merging two accounts is a decision about people, and guessing which one to
+keep is not a migration's business. Deactivating one is not the way out
+either: a deactivated account keeps its address, so the collision stays. The
+address on all but one of them has to change.
 
 Revision ID: 029
 Revises: 028
@@ -55,7 +57,8 @@ def upgrade() -> None:
         )
         raise RuntimeError(
             "these addresses belong to more than one account once case is "
-            f"ignored, and one account has to be chosen or deactivated first: {named}"
+            "ignored; change the address on all but one of each set with "
+            f"PATCH /users/{{id}} and run this again: {named}"
         )
 
     op.create_index(INDEX, "users", [sa.text("lower(email_address)")], unique=True)
