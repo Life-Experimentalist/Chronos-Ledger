@@ -497,21 +497,65 @@ def test_the_same_subject_at_a_second_issuer_is_a_different_person(federation, d
 
 
 def test_a_role_an_administrator_set_survives_the_next_sign_in(federation, db):
-    """Federation never re-reads the role of an account that already exists.
+    """Federation never reads the role of an account that already exists back into it.
 
     Stated in the design rather than hidden, because the alternative is worse:
-    re-syncing on every sign-in would silently undo a change made here, and
-    UNIT_ADMIN is a role the map cannot grant at all.
+    re-syncing on every sign-in would silently undo a change made here. The
+    note below carries a group the map does not know, which would resolve to
+    MEMBER on a first sign-in, and the account keeps what it was given.
     """
     user = _account(federation, db)
-    user.role_type = InstitutionalRole.UNIT_ADMIN
+    user.role_type = InstitutionalRole.STAFF
     user.unit_code = "LIB"
     db.flush()
 
     again = _account(federation, db, groups=["students"])
 
-    assert again.role_type is InstitutionalRole.UNIT_ADMIN
+    assert again.role_type is InstitutionalRole.STAFF
     assert again.unit_code == "LIB"
+
+
+@pytest.mark.parametrize("promoted_to", [InstitutionalRole.UNIT_ADMIN, InstitutionalRole.ORG_ADMIN])
+def test_an_account_promoted_to_admin_can_no_longer_use_the_shortcut(federation, db, promoted_to):
+    """The other half of the rule `POST /federation/links` already enforces.
+
+    That route will not link an admin account, because no issuer may hold a
+    route to one, and the threat model's answer to a leaked signing key rests
+    on it: a leaked key buys accounts at the level the operator chose. An
+    account can reach an admin role in the ordinary way after it was linked,
+    so checking only at link time would leave exactly that route open.
+
+    The refusal is of the sign-in, not of the role. Demoting somebody an
+    administrator promoted is the thing federation deliberately does not do.
+    """
+    user = _account(federation, db)
+    user.role_type = promoted_to
+    db.flush()
+
+    with pytest.raises(svc.LinkedAccountIsAdmin) as refused:
+        _account(federation, db)
+
+    assert promoted_to.value in str(refused.value)
+    assert db.get(User, user.id).role_type is promoted_to, "refused, not demoted"
+
+
+def test_the_link_survives_the_refusal_and_works_again_after_a_demotion(federation, db):
+    """A promotion closes the shortcut; undoing it opens the shortcut again.
+
+    The link is untouched by the refusal, the way a deactivation leaves it
+    alone, so an administrator who promoted somebody by mistake has nothing to
+    repair beyond the role.
+    """
+    user = _account(federation, db)
+    user.role_type = InstitutionalRole.ORG_ADMIN
+    db.flush()
+    with pytest.raises(svc.LinkedAccountIsAdmin):
+        _account(federation, db)
+
+    user.role_type = InstitutionalRole.STAFF
+    db.flush()
+
+    assert _account(federation, db).id == user.id
 
 
 def test_a_deactivated_linked_account_is_refused_and_not_provisioned_again(federation, db):
@@ -872,6 +916,26 @@ def test_a_deactivated_account_is_refused_like_any_other_note(client, federation
     res = client.post(FEDERATED, json={"token": _note(federation["private"])})
 
     assert res.status_code == 401, "the same answer password sign-in gives it"
+
+
+def test_an_admin_account_gets_a_403_that_says_so_and_not_the_opaque_401(client, federation, db):
+    """Not folded into the one 401 every bad note gets.
+
+    The note verified and the link is the one an operator created, so there is
+    nothing here for somebody to probe: reaching this refusal at all takes a
+    note the issuer's key signed. What is left is a person who was sent here by
+    their own organization and can do nothing about the refusal, so they are
+    told what to do instead.
+    """
+    first = client.post(FEDERATED, json={"token": _note(federation["private"])})
+    db.get(User, first.json()["user_id"]).role_type = InstitutionalRole.UNIT_ADMIN
+    db.commit()
+
+    res = client.post(FEDERATED, json={"token": _note(federation["private"])})
+
+    assert res.status_code == 403
+    assert "password" in res.json()["detail"]
+    assert db.get(User, first.json()["user_id"]).role_type is InstitutionalRole.UNIT_ADMIN
 
 
 def test_a_note_whose_address_is_already_an_account_gets_a_409(client, federation, db):

@@ -161,7 +161,9 @@ def federated(request: Request, payload: FederatedTokenRequest, db: Session = De
     instead. The two refusals that are not about the note get their own
     answers: 409 when the address it carries already belongs to an account,
     and 422 when a first-time subject arrives with no address to create one
-    from, which is a note that verified and then could not be acted on.
+    from, which is a note that verified and then could not be acted on. A
+    third, 403, is the account behind a sound link having become an admin,
+    which no issuer may hold a route to.
 
     There is no rate budget here, unlike `/auth/login`. A note is signed by a
     key an operator registered, so guessing one is not the attack this route
@@ -194,6 +196,20 @@ def federated(request: Request, payload: FederatedTokenRequest, db: Session = De
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="This note carries no email address an account can be created from",
         ) from unusable
+    except federated_identity.LinkedAccountIsAdmin as promoted:
+        # Said plainly rather than folded into the opaque 401. Whoever is
+        # holding this note was sent here by their own organization and can do
+        # nothing about the refusal, and that they are an administrator is not
+        # news to them. Getting here needs a note the issuer's key signed, so
+        # there is no way to ask this question about somebody else's account.
+        logger.warning("federated sign-in refused, that account is an admin: %s", promoted)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "This account is an administrator and signs in with a password, "
+                "not through your organization."
+            ),
+        ) from promoted
     except federated_identity.EmailAlreadyTaken as taken:
         # The address stays out of the log: it is a claim out of the note, and
         # which issuer vouched for which subject is enough to find the clash.

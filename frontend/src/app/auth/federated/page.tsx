@@ -39,6 +39,9 @@ function refusalMessage(err: unknown): string {
   if (status === 401) {
     return 'That sign-in note was refused. It may have expired, or already been used: a note works once, and opening this page again reuses nothing. Ask your organization to send you here again.'
   }
+  // The 403 is not listed. It is the one refusal whose sentence the server
+  // wrote for the person reading it, and a string `detail` is what
+  // `apiErrorMessage` returns untouched.
   return apiErrorMessage(err, 'Federated sign-in could not be completed.')
 }
 
@@ -74,16 +77,13 @@ export default function FederatedSignInPage() {
         return federatedSignIn(note)
       })
       .then((user) => {
-        // The same branch `src/app/page.tsx` takes after a password sign-in,
-        // and it is reachable from here: `account_for` does not re-read the
-        // role of an account that already exists, so one linked while it was
-        // STAFF and promoted since arrives with the role it has now. replace,
-        // not push: going back to this page would find the fragment gone and
-        // show a refusal for a sign-in that worked.
-        const onboarding =
-          user.initial_login_state &&
-          (user.role === 'ORG_ADMIN' || user.role === 'UNIT_ADMIN')
-        router.replace(onboarding ? '/admin/onboarding' : roleRedirectPath(user.role))
+        // No admin check on the way out, unlike `src/app/page.tsx` after a
+        // password sign-in: nobody arrives here as an admin. The server refuses
+        // that with a 403 rather than a session, so admin onboarding is not
+        // reachable from this page and is not branched on. replace, not push:
+        // going back to this page would find the fragment gone and show a
+        // refusal for a sign-in that worked.
+        router.replace(roleRedirectPath(user.role))
       })
       .catch((err: unknown) => setError(refusalMessage(err)))
   }, [federatedSignIn, router])

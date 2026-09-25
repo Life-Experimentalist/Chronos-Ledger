@@ -63,6 +63,11 @@ from app.models.db import (
 
 log = logging.getLogger(__name__)
 
+# No issuer may hold a route to an admin account. `POST /federation/links`
+# refuses to create one and `account_for` refuses to spend one, so the tuple
+# lives here rather than in either of them.
+ADMIN_ROLES = (InstitutionalRole.ORG_ADMIN, InstitutionalRole.UNIT_ADMIN)
+
 # One algorithm, and not a setting. Ed25519 has one curve, one key size and no
 # padding mode, so there is nothing about it for an operator to misconfigure,
 # and a second permitted algorithm is a second way to be wrong.
@@ -286,6 +291,17 @@ class NoEmailToProvisionWith(Exception):
     """
 
 
+class LinkedAccountIsAdmin(Exception):
+    """The link is sound and the account behind it has become an admin.
+
+    Not a bad note, so not a 401: the note verified and the link is the one
+    an operator created. What changed is the account, and the person holding
+    the note can do nothing about it, so the route says 403 and says why.
+    An administrator has a password; this closes a route, it does not close
+    them out.
+    """
+
+
 class EmailAlreadyTaken(Exception):
     """A first-time subject arrived with an address that is already somebody's.
 
@@ -361,11 +377,19 @@ def account_for(note: VerifiedNote, db: Session) -> User:
     now carries; a note whose pair is not is a stranger, whatever address it
     carries.
 
-    Nothing here re-reads the role of an account that already exists. An
+    The role of an account that already exists is never read back into it. An
     upstream demotion does not reach Chronos, which is stated in the design
     rather than hidden: re-syncing on every sign-in would silently undo an
     administrator's own change. `deactivated_at` is the lever, and it is
     checked here.
+
+    The role is read for one thing, which is to refuse. `POST /federation/links`
+    will not link an admin account, because no issuer may hold a route to one,
+    and an account can reach an admin role in the ordinary way after it was
+    linked. Checking only at link time would leave that route open for anybody
+    who holds the issuer's key, so the same refusal is made here. It refuses
+    the sign-in and leaves the role alone: demoting somebody an administrator
+    promoted is the thing the paragraph above rules out.
     """
     link = (
         db.query(FederatedIdentity)
@@ -390,6 +414,11 @@ def account_for(note: VerifiedNote, db: Session) -> User:
             # not resurrect an account somebody here switched off.
             raise NoteRefused(
                 f"account {user.id!r}, linked from {note.issuer.issuer!r}, is deactivated"
+            )
+        if user.role_type in ADMIN_ROLES:
+            raise LinkedAccountIsAdmin(
+                f"account {user.id!r}, linked from {note.issuer.issuer!r}, "
+                f"is {user.role_type.value}"
             )
         return user
 

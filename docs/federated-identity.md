@@ -110,7 +110,8 @@ own users already had.
 `POST /federation/links` refuses an admin account for the same reason, and it is
 the same reason rather than a second rule: linking would hand an issuer a route
 to an account the map could never have produced, so the exclusion would hold on
-paper and not in fact.
+paper and not in fact. Refusing at link time is not enough on its own, because a
+linked account can become an admin afterwards; the next item is that case.
 
 Registration also carries `not_before` and `not_after` per key, so a key can be
 retired at a known moment rather than at a restart.
@@ -166,6 +167,32 @@ A link is created only by provisioning a new account, and used only when
 use the shortcut is linked by an administrator, deliberately, through the
 registry routes. The email address is convenience; `(issuer, subject)` is
 identity.
+
+### The linked account becomes an administrator
+
+A link that was sound when an operator created it stops being sound if the
+account behind it is promoted. Nothing about the issuer changed, and nobody did
+anything wrong: an account linked while it was `STAFF` was later given an admin
+role in the ordinary way, and from that moment whoever holds the issuer's
+signing key can mint a note that authenticates as an administrator. That is the
+one thing the role map and the link rule both exist to prevent.
+
+So the refusal is made twice, at both moments it can be made. `POST
+/federation/links` will not link an admin account, and `account_for` will not
+spend a link whose account has since become one: the sign-in fails with 403 and
+a sentence saying to use a password. Checking only at link time would leave the
+promotion path open, and checking only at sign-in would let an operator create a
+link that can never be used.
+
+The role is read to refuse, never to rewrite. Federation does not demote the
+account, because demoting somebody an administrator promoted is the thing the
+item below rules out. The refusal closes a route; it does not close anybody out,
+since an administrator has a password. Undoing the promotion makes the link work
+again, so a promotion made by mistake needs nothing repaired beyond the role.
+
+Left over: between the promotion and the next attempt, any session the person
+already holds is still a session. This closes the shortcut, not the sessions
+issued through it before the promotion.
 
 ### The upstream account goes away
 
@@ -278,10 +305,14 @@ false and would quietly turn the replay check off for the whole suite.
   `{token: str}`, `operation_id: auth.federated`. Returns the existing
   `TokenResponse`, unchanged, so the frontend's session handling is untouched.
   404 when the feature is off. 401 for any verification failure, with one
-  message for all of them, so the refusal is not an oracle. 409 on the email
-  collision in F-4. 422 when a first-time subject arrives with no `email`
-  claim, which is a note that verified correctly and then could not be turned
-  into an account: a different thing from a bad note and worth a different
+  message for all of them, so the refusal is not an oracle. 403 when the account
+  behind a sound link has become an admin, which is said plainly rather than
+  folded into the 401: the note verified, the person can do nothing about the
+  refusal, and reaching this answer at all takes a note the issuer's key signed,
+  so it tells nobody anything about an account that is not already theirs. 409 on
+  the email collision in F-4. 422 when a first-time subject arrives with no
+  `email` claim, which is a note that verified correctly and then could not be
+  turned into an account: a different thing from a bad note and worth a different
   answer. 503 when the replay cache is unreachable.
 - **Touches:** `backend/app/api/v1/endpoints/auth.py`,
   `backend/app/schemas/auth.py`, `docs/openapi.yaml`, both SDKs,
@@ -306,7 +337,8 @@ false and would quietly turn the replay check off for the whole suite.
 - **Touches:** `backend/app/models/db.py`, migration `028`,
   `backend/app/services/federated_identity.py`, `docs/data-model.md`.
 - **Done when:** the second sign-in reuses the first account, a role changed by
-  an administrator survives the next sign-in, a deactivated linked account is
+  an administrator survives the next sign-in, an account promoted to either admin
+  role is refused with 403 and not demoted, a deactivated linked account is
   refused rather than re-provisioned, a reactivated one works again, a colliding
   address is refused with 409 without writing anything, and deleting the
   account takes the link with it so the next note provisions afresh.
@@ -340,7 +372,8 @@ meaning what it says, not about the gate.
   first draft of this list: a link made by a first sign-in has an id nobody was
   ever told, so without it unlinking would mean reading the id out of the
   database by hand. The create route refuses an `ORG_ADMIN` or `UNIT_ADMIN`
-  account, for the reason the role map excludes both roles. `ORG_ADMIN`
+  account, for the reason the role map excludes both roles, and F-3 refuses the
+  sign-in for the same reason when an already-linked account is promoted later. `ORG_ADMIN`
   only: an issuer is organization-wide and a role map can place somebody in any
   unit, so a unit admin is the wrong scope for it. Scopes derive from the path,
   so `federation:read` and `federation:write` need no registration

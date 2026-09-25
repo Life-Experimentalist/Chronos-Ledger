@@ -1933,6 +1933,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: >
+            The account behind the link has been given an admin role since it
+            was linked, so the shortcut is closed for it: no issuer may hold a
+            route to an admin account, which is also why the link could not
+            have been created against one. Said plainly rather than as the
+            opaque 401, because the note verified and the person holding it
+            cannot act on the refusal. The role is not changed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: >
             Federated sign-in is off on this instance. The same answer an

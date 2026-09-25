@@ -2464,6 +2464,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description The account behind the link has been given an admin role since it was linked, so the shortcut is closed for it: no issuer may hold a route to an admin account, which is also why the link could not have been created against one. Said plainly rather than as the opaque 401, because the note verified and the person holding it cannot act on the refusal. The role is not changed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Federated sign-in is off on this instance. The same answer an unknown path gives, so whether an instance has an integration is not something probing it reveals. */
             404: {
                 headers: {

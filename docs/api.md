@@ -181,11 +181,15 @@ in the note. The first note for a subject creates the account, and its role
 comes from the operator's own map of group claims, not from the note. A role
 an administrator sets afterwards is never re-read, so an upstream change does
 not reach it; `POST /users/{user_id}/deactivate` is the lever, and a
-deactivated linked account is refused rather than provisioned again.
+deactivated linked account is refused rather than provisioned again. An account
+that has been given either admin role since it was linked is refused here too,
+with `403`: no issuer may hold a route to an admin account, which is also why
+`POST /federation/links` will not create one.
 
 | Status | When                                                                      |
 | ------ | ------------------------------------------------------------------------- |
 | `401`  | The note was refused. One message for every reason.                       |
+| `403`  | The account behind the link is an administrator and signs in by password. |
 | `404`  | Federated sign-in is off on this instance.                                |
 | `409`  | The address in the note belongs to an account and the pair is not linked. |
 | `422`  | A malformed body, or a verified note with no usable email claim.          |
@@ -195,6 +199,14 @@ The `401` is deliberately one answer with one message, `Invalid federated
 token`, whatever was wrong: an unknown issuer, a wrong audience, an unknown or
 retired key, a bad signature, an expired or too long-lived note, a note already
 spent, a missing subject, a link pointing at no account, a deactivated account.
+The `403` is not folded into it, because none of that reasoning applies: the
+note verified, the link is one an operator created, and nobody reaches this
+answer without a note the issuer's key signed, so it says nothing about an
+account that is not already the issuer's to sign for. What is left is a person
+who was sent here by their own organization and cannot act on the refusal, so
+they are told what to use instead. The role is not changed, only the route
+closed; undoing the promotion makes the link work again.
+
 The `409` is a refusal and not a link, because linking on a matching address
 would let an issuer name an administrator's address and be handed the account;
 an administrator links the pair by hand. The `422` for a note with no address

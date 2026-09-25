@@ -29,7 +29,6 @@ from app.models.db import (
     FederatedIssuer,
     FederatedIssuerKey,
     FederatedRoleMap,
-    InstitutionalRole,
     User,
 )
 from app.schemas.federation import (
@@ -44,10 +43,9 @@ from app.schemas.federation import (
     RoleMapEntryCreate,
     RoleMapEntryResponse,
 )
+from app.services.federated_identity import ADMIN_ROLES
 
 router = APIRouter()
-
-ADMIN_ROLES = (InstitutionalRole.ORG_ADMIN, InstitutionalRole.UNIT_ADMIN)
 
 
 def _as_utc(moment: datetime) -> datetime:
