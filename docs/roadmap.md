@@ -2,8 +2,8 @@
 
 <!-- Copyright 2026 Chronos Ledger Contributors (Apache 2.0) -->
 
-Current release: 0.12. This page plans the next three minor releases. The
-plan is detailed on purpose: each item has a scope, the files it touches and
+Current release: 0.13.1, with 0.14 merged and waiting for its tag. This page
+plans the releases after it. The plan is detailed on purpose: each item has a scope, the files it touches and
 a check that says when it is done, so it can be picked up without
 re-deciding anything.
 
@@ -11,15 +11,29 @@ Chronos Ledger stays on `0.x` until the scheduling API has stopped changing.
 Several items below change the API (recurrence rules, the resource
 requirement model, the login field), and those are the reason `1.0` waits.
 
+## What the engine is for
+
+The target is everything a scheduling engine has to do for a hospital
+management system, done completely and without surprises: rooms, theatres,
+staff and equipment as resources; shifts, rotations and leave; bookings that
+can never double-book; and a ledger of what actually happened. Hospital work
+is the hardest case in scope, so meeting it covers the simpler ones
+(colleges, offices, clinics). An integrator embeds the engine behind its own
+product and talks to it only through the HTTP API and the SDKs.
+
+Integrators pin to tagged releases, never to `main`. A release can migrate the
+database forward, and the changelog for each tag is the contract they upgrade
+against.
+
 ## At a glance
 
 | Release | Theme | Breaking |
 |---|---|---|
 | 0.13 | Platform: contract check, hardening, `chronos` CLI and channels, first SDKs, ledger range queries, audit log | No |
 | 0.14 | Roles renamed, guest desk (visit expiry, configurable approver, change feed), federated identity | Yes |
-| 0.15 | Engine, part 1: resource modes, conflict report, rolling horizon, leave ranges, Go and Rust SDKs, Helm | Additive |
+| 0.15 | Standalone engine (one SQLite file, no Docker or Redis); engine, part 1: resource modes, conflict report, rolling horizon, Go and Rust SDKs, Helm | Additive |
 | 0.16 | Engine, part 2: recurrence rules, editable timetable, exclusion on instances | Yes |
-| Waiting on a decision | Webhooks, activities CRUD | n/a |
+| Waiting on a decision | Webhooks, activities CRUD, reservation external reference | n/a |
 
 Detailed designs: [distribution.md](distribution.md) for installers, channels,
 drift and signing; [sdks.md](sdks.md) for client libraries;
@@ -125,6 +139,37 @@ against the spec. Publishing to npm and PyPI is added on request.
 
 ---
 
+## 0.15: Standalone engine
+
+### S-1. `chronos-engine`: one process, one SQLite file
+
+- **Scope:** run the same HTTP API as the container with no Docker, no
+  PostgreSQL and no Redis, for a program that embeds Chronos on the same
+  machine. `chronos-engine serve` and `chronos-engine backup`, SQLite in WAL
+  mode with every transaction opened by `BEGIN IMMEDIATE` (standing in for
+  row locks and the exclusion constraint), rate limits and the replay cache
+  in memory, the WAL folded into the file on a clean stop, and a wheel that
+  carries its own migrations. Migrations from 030 on run on both databases.
+- **Touches:** `backend/app/standalone.py`, `backend/app/core/database.py`,
+  `backend/app/core/redis_client.py`, `backend/app/core/migrations.py`,
+  `backend/app/main.py`, `backend/alembic/env.py`, `backend/pyproject.toml`,
+  `docs/standalone.md`.
+- **Done when:** 40 concurrent overlapping bookings give one `201` and 39
+  `409`; a file made by one release is upgraded by the next; an installed
+  wheel starts on a fresh folder. Built on `feat/standalone-engine`, merged
+  after the 0.14 tag.
+
+### S-2. CI upgrades a SQLite file
+
+- **Scope:** a CI job builds a standalone file with the previous tag's wheel,
+  then starts the current code on it, so a migration that only works on
+  PostgreSQL fails the build instead of a user's upgrade.
+- **Touches:** `.github/workflows/ci.yml`.
+- **Done when:** a migration using a PostgreSQL-only operation without the
+  dialect guard fails the job.
+
+---
+
 ## 0.15: Engine, part 1
 
 Background: a schedule in Chronos is a set of intervals on resources. Today a
@@ -164,7 +209,7 @@ This release lets a resource be consumed in three ways.
   immediately rather than at 23:00.
 - **Done when:** after import, the calendar feed shows the next four weeks; running the job twice creates no duplicates.
 
-### E-8. Leave ranges
+### E-8. Leave ranges (shipped in 0.14)
 
 - **Scope:** an absence request takes an optional `end_date` beside
   `target_absence_date`. Approving it marks the requester's ledger rows
@@ -174,10 +219,15 @@ This release lets a resource be consumed in three ways.
   `backend/app/services/reverse_rsvp.py`, `docs/api.md`, `docs/openapi.yaml`.
 - **Done when:** approving a three-day request marks three days of rows and
   reversing it restores them; single-day requests pass their existing tests.
+- **Status:** shipped ahead of plan, migration 022.
 
 ### E-4. Go and Rust SDKs, Helm chart, deb/rpm
 
-See [sdks.md](sdks.md) and [distribution.md](distribution.md).
+See [sdks.md](sdks.md) and [distribution.md](distribution.md). The Go and Rust
+SDKs move up in priority: PulseWard's next major version is a rewrite in Go or
+Rust on PostgreSQL behind an ORM, and these SDKs are how it will call Chronos.
+They follow the same rules as the other two: generated from the spec, checked
+in CI against it, versioned with the server's tags.
 
 ---
 
@@ -223,7 +273,7 @@ needs one should say so.
 |---|---|
 | Webhooks | Subscriptions per event type (`reservation.created`, `ledger.updated`, ...), HMAC-signed bodies, retries with backoff, delivery log |
 | Activities CRUD | Create, edit and retire activities through the API instead of only through CSV import |
-| Federated identity | A registered issuer vouches for a person with a short-lived signed note, and Chronos issues its own session. Off by default. Designed in full: [federated-identity.md](federated-identity.md) |
+| Reservation external reference | An optional `external_ref` on a reservation, unique per API key, so an integrator can find and update a booking by its own identifier and retry a create safely |
 
 ## Later
 
