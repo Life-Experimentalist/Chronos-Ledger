@@ -224,8 +224,8 @@ This release lets a resource be consumed in three ways.
 ### E-4. Go and Rust SDKs, Helm chart, deb/rpm
 
 See [sdks.md](sdks.md) and [distribution.md](distribution.md). The Go and Rust
-SDKs move up in priority: PulseWard's next major version is a rewrite in Go or
-Rust on PostgreSQL behind an ORM, and these SDKs are how it will call Chronos.
+SDKs move up in priority: an integrator's planned rewrite is in Go or Rust, and
+these SDKs are how it will call Chronos.
 They follow the same rules as the other two: generated from the spec, checked
 in CI against it, versioned with the server's tags.
 
