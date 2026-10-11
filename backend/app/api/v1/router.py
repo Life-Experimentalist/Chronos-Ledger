@@ -9,6 +9,8 @@ from app.api.v1.endpoints import (
     audit,
     auth,
     calendar_sync,
+    changes,
+    federation,
     guest,
     ingestion,
     org_config,
@@ -32,3 +34,5 @@ api_router.include_router(ingestion.router, prefix="/ingestion", tags=["Data Ing
 api_router.include_router(websocket.router, tags=["WebSocket"])
 api_router.include_router(calendar_sync.router, prefix="/sync", tags=["Calendar Sync"])
 api_router.include_router(audit.router, prefix="/audit", tags=["Audit"])
+api_router.include_router(changes.router, prefix="/changes", tags=["Changes"])
+api_router.include_router(federation.router, prefix="/federation", tags=["Federation"])

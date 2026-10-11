@@ -51,6 +51,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/federated": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange a note from a registered outside issuer for a session
+         * @description Off unless FEDERATED_IDENTITY_ENABLED is true, and a 404 while it is off. The note is a short-lived JWT signed with Ed25519 by a key an operator registered for that issuer; the reply is the same pair POST /auth/login returns, so a client handles the session the same way afterwards. A note works exactly once. The account is found by the (issuer, subject) pair and not by the address in the note, so an issuer cannot name an existing account and be handed it; the first note for a subject creates an account, and its role comes from the operator's own map of group claims, never from the note alone. Every verification failure is the same 401 with the same message, on purpose: the reason is in the server log, where an integrator can be shown it and a forger cannot read it.
+         */
+        post: operations["auth.federated"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/refresh": {
         parameters: {
             query?: never;
@@ -134,13 +154,13 @@ export interface paths {
         };
         /**
          * List all users
-         * @description Requires `SUPER_ADMIN` or `UNIT_ADMIN`.
+         * @description Requires `ORG_ADMIN` or `UNIT_ADMIN`.
          */
         get: operations["users.list"];
         put?: never;
         /**
          * Create a new user
-         * @description Requires `SUPER_ADMIN` or `UNIT_ADMIN`. A unit admin can create users only in their own unit, and only a super-admin can create an admin account; either is refused with `403`.
+         * @description Requires `ORG_ADMIN` or `UNIT_ADMIN`. A unit admin can create users only in their own unit, and only an organization admin can create an admin account; either is refused with `403`.
          */
         post: operations["users.create"];
         delete?: never;
@@ -185,7 +205,7 @@ export interface paths {
         head?: never;
         /**
          * Update a user
-         * @description Requires `SUPER_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Only a super-admin can modify an account that is itself an admin. A user cannot update their own record here.
+         * @description Requires `ORG_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Only an organization admin can modify an account that is itself an admin. A user cannot update their own record here.
          */
         patch: operations["users.update"];
         trace?: never;
@@ -264,7 +284,7 @@ export interface paths {
         get?: never;
         /**
          * Update staff availability status
-         * @description Anyone signed in can update their own. A super-admin can update anyone's. This is the occupancy index, and it does not change the location the location routes resolve.
+         * @description Anyone signed in can update their own. An organization admin can update anyone's. This is the occupancy index, and it does not change the location the location routes resolve.
          */
         put: operations["users.updateStatus"];
         post?: never;
@@ -283,13 +303,13 @@ export interface paths {
         };
         /**
          * List issued keys
-         * @description Requires `SUPER_ADMIN`. Shows what each key is scoped to and when it runs out, which is how an unrestricted key left over from before scopes existed becomes visible.
+         * @description Requires `ORG_ADMIN`. Shows what each key is scoped to and when it runs out, which is how an unrestricted key left over from before scopes existed becomes visible.
          */
         get: operations["apiKeys.list"];
         put?: never;
         /**
          * Issue a key
-         * @description Requires `SUPER_ADMIN`. The raw key is in the response and nowhere else. Bind it to a service account rather than to a person: the key acts as that user, so a person's key inherits everything they can do.
+         * @description Requires `ORG_ADMIN`. The raw key is in the response and nowhere else. Bind it to a service account rather than to a person: the key acts as that user, so a person's key inherits everything they can do.
          */
         post: operations["apiKeys.create"];
         delete?: never;
@@ -310,9 +330,193 @@ export interface paths {
         post?: never;
         /**
          * Revoke a key
-         * @description Requires `SUPER_ADMIN`. Takes effect on the next request that uses it.
+         * @description Requires `ORG_ADMIN`. Takes effect on the next request that uses it.
          */
         delete: operations["apiKeys.revoke"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/federation/issuers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List registered issuers
+         * @description Requires `ORG_ADMIN`; an API key needs `federation:read`. Every route under `/federation` works whether or not federated sign-in is switched on, because an issuer and a key have to be registered before switching it on is worth doing. It is the exchange route that answers 404 while the feature is off.
+         */
+        get: operations["federation.listIssuers"];
+        put?: never;
+        /**
+         * Register an outside issuer
+         * @description Requires `ORG_ADMIN`. A registration on its own accepts nothing: a note names its key by `kid`, so the issuer needs at least one key before any note it mints will verify. A role map is optional, and an issuer without one puts everybody it sends on `MEMBER`.
+         */
+        post: operations["federation.createIssuer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/federation/issuers/{issuer_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a registration
+         * @description Requires `ORG_ADMIN`. Takes the issuer's keys, its role map and its links with it. The accounts stay: somebody who signed in through this issuer keeps their account and their history, and loses the shortcut. Give them a password or link them to another registration.
+         */
+        delete: operations["federation.deleteIssuer"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a registration
+         * @description Requires `ORG_ADMIN`. `enabled` false is how an issuer is stopped without losing what it was allowed to assert; notes from it are then refused exactly the way an unknown issuer's are.
+         */
+        patch: operations["federation.updateIssuer"];
+        trace?: never;
+    };
+    "/api/v1/federation/issuers/{issuer_id}/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List an issuer's signing keys
+         * @description Requires `ORG_ADMIN`; an API key needs `federation:read`. The keys are public and are returned in full, which is how an integrator checks that what was registered is what they are signing with.
+         */
+        get: operations["federation.listKeys"];
+        put?: never;
+        /**
+         * Add a signing key
+         * @description Requires `ORG_ADMIN`. A rotation is this route and then `federation.retireKey` on the old key: add the new one, give the old one an end far enough ahead that notes already in flight still verify, and delete it afterwards. Adding a key does not retire anything.
+         */
+        post: operations["federation.addKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/federation/issuers/{issuer_id}/keys/{key_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a key
+         * @description Requires `ORG_ADMIN`. Immediate and complete: a note naming it is refused as naming an unknown key. Retiring it first is the kinder path during a rotation, and deleting it is the right one for a key that leaked.
+         */
+        delete: operations["federation.deleteKey"];
+        options?: never;
+        head?: never;
+        /**
+         * Give a key an end
+         * @description Requires `ORG_ADMIN`. A moment in the past stops the key now: the next note naming it is refused. A moment in the future is the overlap a planned rotation wants. The key stays readable either way, which is why this is a separate route from deleting it.
+         */
+        patch: operations["federation.retireKey"];
+        trace?: never;
+    };
+    "/api/v1/federation/issuers/{issuer_id}/role-map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What this issuer's groups mean here
+         * @description Requires `ORG_ADMIN`; an API key needs `federation:read`. Entries are returned oldest first, which is also the order that decides ties: where a note asserts two groups that both match, `STAFF` beats `MEMBER` and the older entry of the winning role supplies the unit.
+         */
+        get: operations["federation.listRoleMap"];
+        put?: never;
+        /**
+         * Map a group to a role
+         * @description Requires `ORG_ADMIN`. The map belongs to the operator: a note names a subject and may name groups, and never a role. Two groups may map to different units, which is the ordinary case for a library and a lab.
+         */
+        post: operations["federation.addRoleMapEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/federation/issuers/{issuer_id}/role-map/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unmap a group
+         * @description Requires `ORG_ADMIN`. Nobody who has already signed in changes: roles are read once, when the account is created. What changes is what the next first-time subject in that group gets, which with no entry is `MEMBER` and no unit.
+         */
+        delete: operations["federation.deleteRoleMapEntry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/federation/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Which accounts arrive through which issuer
+         * @description Requires `ORG_ADMIN`; an API key needs `federation:read`. A link made by a first sign-in has an id nobody was told, so this is how one is found before it can be removed. Both filters are optional and combine.
+         */
+        get: operations["federation.listLinks"];
+        put?: never;
+        /**
+         * Let an existing account arrive through an issuer
+         * @description Requires `ORG_ADMIN`. The link is the identity: a note is the account its `(issuer, subject)` pair points at, whatever address the note carries. Without this route the only accounts that can use the shortcut are ones federation created itself, so this is how somebody who already has a password here starts arriving through their institution instead. One account may hold several links, one per issuer.
+         */
+        post: operations["federation.createLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/federation/links/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Stop an account arriving through an issuer
+         * @description Requires `ORG_ADMIN`. The account stays, with whatever role and unit it holds; what goes is the route. A note carrying the unlinked pair is then a stranger, and a stranger whose address is taken is refused rather than given a second account.
+         */
+        delete: operations["federation.deleteLink"];
         options?: never;
         head?: never;
         patch?: never;
@@ -333,7 +537,7 @@ export interface paths {
         put?: never;
         /**
          * Create a room
-         * @description Requires `SUPER_ADMIN`. Registers a room before any timetable names it, for a system that manages its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response reads the room back with `GET /api/v1/resources/?code=`: the code already identifies it, so no Idempotency-Key is taken.
+         * @description Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response reads the room back with `GET /api/v1/resources/?code=`: the code already identifies it, so no Idempotency-Key is taken.
          */
         post: operations["resources.create"];
         delete?: never;
@@ -399,7 +603,7 @@ export interface paths {
         put?: never;
         /**
          * Hold a resource for one dated window
-         * @description Requires `SUPER_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it refuses is exactly what GET availability calls busy, through the same queries and the same expansion, so a caller cannot read an hour as free and then be refused it.
+         * @description Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it refuses is exactly what GET availability calls busy, through the same queries and the same expansion, so a caller cannot read an hour as free and then be refused it.
          *
          *     The rule runs both ways. A class cannot be put on top of a hold either, so POST /schedule/slots, PATCH /schedule/slots/{slot_id} and a CSV upload are each refused where a booking already stands. A hold taken here holds against the timetable and not only against other holds.
          *
@@ -426,11 +630,11 @@ export interface paths {
         post?: never;
         /**
          * Let a hold go
-         * @description Requires `SUPER_ADMIN` or `UNIT_ADMIN`. Marks the reservation cancelled and leaves the row in place. A deleted row cannot be told to anybody, and a system that was informed the room was held has to be able to learn that it no longer is.
+         * @description Requires `ORG_ADMIN` or `UNIT_ADMIN`. Marks the reservation cancelled and leaves the row in place. A deleted row cannot be told to anybody, and a system that was informed the room was held has to be able to learn that it no longer is.
          *
          *     The freed window is bookable again immediately and stops appearing in availability. Cancelling twice is not an error and returns the same timestamp. Cancelling through the wrong resource id is a 404.
          *
-         *     A hold is let go by whoever took it. A `UNIT_ADMIN` that did not make the reservation gets a 403; a `SUPER_ADMIN` overrides, because a hold taken by an account that no longer exists has nobody left to cancel it.
+         *     A hold is let go by whoever took it. A `UNIT_ADMIN` that did not make the reservation gets a 403; an `ORG_ADMIN` overrides, because a hold taken by an account that no longer exists has nobody left to cancel it.
          */
         delete: operations["resources.cancelReservation"];
         options?: never;
@@ -555,7 +759,7 @@ export interface paths {
         head?: never;
         /**
          * Update a ledger entry
-         * @description Requires `SUPER_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Sets the substitute, the delivery format, or the day's own geofence. A field left out, or sent as null, keeps its current value.
+         * @description Requires `ORG_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Sets the substitute, the delivery format, or the day's own geofence. A field left out, or sent as null, keeps its current value.
          */
         patch: operations["schedule.updateLedgerEntry"];
         trace?: never;
@@ -606,7 +810,7 @@ export interface paths {
         put?: never;
         /**
          * Create a new planning cycle
-         * @description Requires `SUPER_ADMIN`. The two dates are the days the cycle's slots run on, both included. An end earlier than the start is refused with 422; equal dates are a cycle of one day.
+         * @description Requires `ORG_ADMIN`. The two dates are the days the cycle's slots run on, both included. An end earlier than the start is refused with 422; equal dates are a cycle of one day.
          */
         post: operations["schedule.createCycle"];
         delete?: never;
@@ -632,7 +836,7 @@ export interface paths {
          * Take a planning cycle out of service
          * @description Sets `operational_status = false`, so the nightly generator writes no more days for the cycle's slots, and removes the days it has already written from today onward, which are still only plans. A day that carries attendance or a note is kept rather than refused over. Days before today are not touched.
          *
-         *     Closing a cycle that is already closed runs the same sweep. Requires `SUPER_ADMIN`.
+         *     Closing a cycle that is already closed runs the same sweep. Requires `ORG_ADMIN`.
          */
         patch: operations["schedule.closeCycle"];
         trace?: never;
@@ -656,7 +860,7 @@ export interface paths {
          *
          *     Not a flag flip. A slot entered into a closed cycle is never checked against the bookings or against the rest of the timetable, because a closed cycle's slots occupy nothing, and every one of them starts occupying its room the moment the flag goes true. The checks `POST /schedule/slots` would have run are run here over every slot in the cycle at once, the cycle's own slots counting against each other, and the whole open is refused where any of them lands on a room that is taken. A refused open writes nothing.
          *
-         *     Opening a cycle that is already open changes nothing. Requires `SUPER_ADMIN`.
+         *     Opening a cycle that is already open changes nothing. Requires `ORG_ADMIN`.
          */
         patch: operations["schedule.openCycle"];
         trace?: never;
@@ -674,7 +878,7 @@ export interface paths {
          * Copy one cycle's activities and weekly slots into another
          * @description Copies every `Activity` in the old cycle and every `StructuralMasterSlot` under them, each slot pointed at its activity's copy with the same lead, room and window. Member enrollment and attendance records are **not** cloned. Re-import CSV after cloning to update enrollment.
          *
-         *     The target must be closed and have no activities. The copied slots are not checked against the rooms here; opening the target runs those checks over all of them at once. Requires `SUPER_ADMIN`.
+         *     The target must be closed and have no activities. The copied slots are not checked against the rooms here; opening the target runs those checks over all of them at once. Requires `ORG_ADMIN`.
          */
         post: operations["schedule.cloneCycle"];
         delete?: never;
@@ -732,7 +936,7 @@ export interface paths {
         };
         /**
          * Get the roster for a ledger entry
-         * @description Whoever runs the session gets every row: the assigned lead, the substitute, a super admin, or a unit admin inside that unit. A member gets their own row and nothing else. Anyone else is refused rather than handed an empty list.
+         * @description Whoever runs the session gets every row: the assigned lead, the substitute, an organization admin, or a unit admin inside that unit. A member gets their own row and nothing else. Anyone else is refused rather than handed an empty list.
          */
         get: operations["attendance.listForLedger"];
         put?: never;
@@ -772,7 +976,7 @@ export interface paths {
         };
         /**
          * List absence requests pending the caller's approval
-         * @description Any signed-in user. Returns the undecided requests the caller may decide: those routed to them as the submitter's line manager and, for an admin, those whose manager has since been deactivated. A SUPER_ADMIN gets every one of those, a UNIT_ADMIN those from the non-admin accounts of their own unit, and nobody gets their own.
+         * @description Any signed-in user. Returns the undecided requests the caller may decide: those routed to them as the submitter's line manager and, for an admin, those whose manager has since been deactivated. A ORG_ADMIN gets every one of those, a UNIT_ADMIN those from the non-admin accounts of their own unit, and nobody gets their own.
          */
         get: operations["attendance.listPendingAbsences"];
         put?: never;
@@ -814,7 +1018,7 @@ export interface paths {
         put?: never;
         /**
          * Create a ledger annotation
-         * @description Freeform notes about a session: lab issues, late starts, a handover. Restricted to whoever runs it, meaning the assigned lead, the substitute, a super admin, or a unit admin inside that unit.
+         * @description Freeform notes about a session: lab issues, late starts, a handover. Restricted to whoever runs it, meaning the assigned lead, the substitute, an organization admin, or a unit admin inside that unit.
          */
         post: operations["attendance.createAnnotation"];
         delete?: never;
@@ -911,10 +1115,30 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List pending guest requests for authenticated staff
-         * @description Returns guests targeting the authenticated staff member with PENDING_VERIFICATION status.
+         * List the pending guest requests this account may decide
+         * @description Guests with PENDING_VERIFICATION status that this account may decide: the ones targeting it, and with GUEST_ADMIN_CAN_DECIDE on also those an admin may decide, which for an ORG_ADMIN is the whole organization's queue. Unpaginated.
          */
         get: operations["guest.listPending"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/guest/overstays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the approved visits that have run past their end
+         * @description Longest over first, which is the desk's other list: who was let in and has not been dealt with since. The same reach as the decision, so for an ORG_ADMIN with GUEST_ADMIN_CAN_DECIDE on it is the whole organization's. Nothing here has been revoked; each row says the time is up, and a person decides whether to extend it or to go and find them. Empty while GUEST_VISIT_LENGTH_MINUTES is 0, since then no visit has an end. Unpaginated, as /guest/pending is.
+         */
+        get: operations["guest.listOverstays"];
         put?: never;
         post?: never;
         delete?: never;
@@ -940,6 +1164,26 @@ export interface paths {
         patch: operations["guest.decide"];
         trace?: never;
     };
+    "/api/v1/guest/{entry_id}/extend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Give an approved visit longer
+         * @description Whoever could have decided the visit can extend it, on the reasoning that a desk which may let somebody in may also let them stay. The extension runs from whichever is later, now or the end the visit already has, so a visit half an hour over gets the full grant rather than a window that has already gone. There is no limit on how many times: this bounds one grant, and the audit record of each extension is what an organization gets in place of a ceiling on the whole visit.
+         */
+        patch: operations["guest.extendVisit"];
+        trace?: never;
+    };
     "/api/v1/ingestion/upload-csv": {
         parameters: {
             query?: never;
@@ -951,7 +1195,7 @@ export interface paths {
         put?: never;
         /**
          * Bulk import schedule from CSV
-         * @description Requires `SUPER_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`.
+         * @description Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`.
          *     Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent, re-uploading the same CSV is safe: an existing member keeps their password.
          *
          *     Never removes. Slots and enrollments the cycle holds that the file does not mention come back in `not_in_file` for somebody to act on, which is what makes a partial upload safe.
@@ -979,7 +1223,7 @@ export interface paths {
         put?: never;
         /**
          * Trigger daily ledger generation
-         * @description Requires `SUPER_ADMIN`. Generates `DailyLedger` rows from `StructuralMasterSlot` for a given date, tomorrow by default. The same job the nightly cron runs. Safe to re-run: a day already written for a slot is skipped.
+         * @description Requires `ORG_ADMIN`. Generates `DailyLedger` rows from `StructuralMasterSlot` for a given date, tomorrow by default. The same job the nightly cron runs. Safe to re-run: a day already written for a slot is skipped.
          *
          *     A day is skipped as well where the room is already taken for part of that window by another day. Two slots on one room at one hour is a state the API refuses to create, and a database holding one anyway materializes the slot that was put on the timetable first and drops the other. The dropped day is written to the server log naming the slot, the date and the room. It is not in this response.
          */
@@ -999,9 +1243,39 @@ export interface paths {
         };
         /**
          * Writes made through the API, newest first
-         * @description Requires `SUPER_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
+         * @description Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
          */
         get: operations["audit.list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/changes/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What has changed about the rooms and the bookings
+         * @description Requires `ORG_ADMIN`; an API key needs `changes:read`. For a system that keeps its own copy of the rooms and the bookings: the websocket cannot tell it anything, because those notices go to a signed-in socket and a service behind another firewall has none, and re-reading every room on a timer costs the building rather than the change.
+         *
+         *     One entry per row, not one per change. A room renamed to Bedroom and then to Living Room is one entry saying Living Room, because a consumer catching up wants where things ended and not the walk. `full=true` returns the walk: every marker, oldest first, with no row state.
+         *
+         *     Send `next_cursor` back as `since`. An entry can arrive twice, after a crash between a write and the poll that read it, or because a row changed again while the page was being built; applying an entry is replacing a row with what the row already says, so no bookkeeping is needed for that.
+         *
+         *     An entry can also be missed, which is the one thing to plan around. The cursor is the marker's own id, handed out when the row is inserted and not when it commits, so two writes that commit in the other order leave a gap: a poll that reads the later id and stores it does not come back for the earlier one. So re-read the rooms and the bookings in full on a slow timer. That is needed anyway, because the feed records only from the moment it was switched on.
+         *
+         *     A page as long as `limit` means there is probably more, so poll again rather than waiting for the timer.
+         *
+         *     The role is higher than reading the rooms takes because a booking carries what it is for, which the availability calendar withholds from everyone but the account that made it. This hands the booking over whole, so it sits where the audit log sits.
+         */
+        get: operations["changes.list"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1079,7 +1353,7 @@ export interface paths {
         };
         /**
          * Count of people with an open websocket, on every instance
-         * @description Requires `SUPER_ADMIN`. The count is organization-wide, and there is nothing in it a unit admin could be shown only their own share of. A person counts once however many instances they are connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis counts only its own sockets.
+         * @description Requires `ORG_ADMIN`. The count is organization-wide, and there is nothing in it a unit admin could be shown only their own share of. A person counts once however many instances they are connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis counts only its own sockets.
          */
         get: operations["ws.getStats"];
         put?: never;
@@ -1138,7 +1412,7 @@ export interface components {
          * @description Role assigned to a system user.
          * @enum {string}
          */
-        InstitutionalRole: "SUPER_ADMIN" | "UNIT_ADMIN" | "STAFF" | "MEMBER";
+        InstitutionalRole: "ORG_ADMIN" | "UNIT_ADMIN" | "STAFF" | "MEMBER";
         /**
          * @description Staff availability / occupancy index visible to members.
          * @enum {string}
@@ -1208,6 +1482,10 @@ export interface components {
              * @description At least PASSWORD_MIN_LENGTH characters, 12 unless the deployment has raised it, and not a placeholder published in this repository.
              */
             new_password: string;
+        };
+        FederatedTokenRequest: {
+            /** @description The note, exactly as its issuer minted it. A signed JWT whose `iss` names a registered issuer, whose header `kid` names one of that issuer's registered keys, and which carries `aud`, `sub`, `jti`, `iat` and `exp`. An `email` claim is what a first-time subject is provisioned from; `name` and `groups` are read if they are there. */
+            token: string;
         };
         RefreshRequest: {
             refresh_token: string;
@@ -1383,6 +1661,143 @@ export interface components {
              * @example ck_8Kd2mQ7xR3nL9vB5tY1wZ0aC6eF4gH2jK8mN
              */
             api_key: string;
+        };
+        IssuerCreate: {
+            /**
+             * @description The exact `iss` value notes will carry. Compared, never parsed: nothing here fetches it, so it is an identifier that happens to look like a URL.
+             * @example https://sso.example.internal
+             */
+            issuer: string;
+            /**
+             * @description What an administrator calls this issuer in a list.
+             * @example Campus SSO
+             */
+            display_name: string;
+            /**
+             * @description The `aud` this instance answers to. An issuer serving several relying parties should give each one its own value, so a note minted for another one is refused here.
+             * @example chronos-ledger
+             */
+            audience: string;
+            /**
+             * @description False is refused the same way an unknown issuer is, so turning an issuer off does not mean deleting what it was allowed to assert.
+             * @default true
+             */
+            enabled: boolean;
+        };
+        /** @description Every field is optional and one left out is unchanged. `issuer` cannot be changed: it is the value notes already in the wild carry, and editing it would retarget a registration rather than register another. */
+        IssuerUpdate: {
+            display_name?: string;
+            audience?: string;
+            enabled?: boolean;
+        };
+        IssuerResponse: {
+            /** @example 3 */
+            id?: number;
+            /** @example https://sso.example.internal */
+            issuer?: string;
+            /** @example Campus SSO */
+            display_name?: string;
+            /** @example chronos-ledger */
+            audience?: string;
+            /** @example true */
+            enabled?: boolean;
+            /** Format: date-time */
+            created_at?: string | null;
+        };
+        IssuerKeyCreate: {
+            /**
+             * @description The `kid` the note header will carry. A note is verified against the key it names and no other, so an overlap during a rotation is two registered keys rather than two candidates per note.
+             * @example 2026-key-a
+             */
+            kid: string;
+            /**
+             * @description An Ed25519 public key in PEM form. Loaded when it is registered, so a key that cannot be read is refused here rather than turning every note that names it into a 401 nobody can explain.
+             * @example -----BEGIN PUBLIC KEY-----
+             *     MCowBQYDK2VwAyEAWJyyHHtL1RwC53ABtyd229BalcSDxdE3P02wXuDoeV4=
+             *     -----END PUBLIC KEY-----
+             */
+            public_key: string;
+            /**
+             * Format: date-time
+             * @description When the key starts being accepted. Omitted means now.
+             */
+            not_before?: string | null;
+            /**
+             * Format: date-time
+             * @description When it stops. Omitted is a key with no planned retirement, which is the ordinary case until a rotation gives it one.
+             */
+            not_after?: string | null;
+        };
+        IssuerKeyRetire: {
+            /**
+             * Format: date-time
+             * @description The moment the key stops being accepted. A moment in the past stops it now, which is what a leaked key wants; a moment in the future is the overlap a planned rotation wants.
+             */
+            not_after: string;
+        };
+        IssuerKeyResponse: {
+            id?: number;
+            issuer_id?: number;
+            kid?: string;
+            /** @description Read back in full. It is a public key, so there is nothing here a leak would cost anybody, and an integrator comparing what was registered against what is being signed with needs to see it. */
+            public_key?: string;
+            /** Format: date-time */
+            not_before?: string;
+            /** Format: date-time */
+            not_after?: string | null;
+            /** Format: date-time */
+            created_at?: string | null;
+        };
+        RoleMapEntryCreate: {
+            /**
+             * @description One value out of the note's `groups` claim, matched exactly. A group with no entry lands on `MEMBER`, so an issuer trusted to say who somebody is has not thereby been trusted to say what they may do.
+             * @example library-staff
+             */
+            group_claim_value: string;
+            /**
+             * @description `ORG_ADMIN` and `UNIT_ADMIN` are refused with a 422, and refused again by a check constraint. It is the one rule whose failure would hand an outside system this instance.
+             * @example STAFF
+             * @enum {string}
+             */
+            role_type: "STAFF" | "MEMBER";
+            /**
+             * @description The unit somebody in this group belongs to, if any.
+             * @example LIB
+             */
+            unit_code?: string | null;
+        };
+        RoleMapEntryResponse: {
+            id?: number;
+            issuer_id?: number;
+            group_claim_value?: string;
+            /** @enum {string} */
+            role_type?: "STAFF" | "MEMBER";
+            unit_code?: string | null;
+        };
+        LinkCreate: {
+            /**
+             * @description The registration the subject belongs to.
+             * @example 3
+             */
+            issuer_id: number;
+            /**
+             * @description The `sub` notes for this person will carry. Opaque and scoped to its issuer: two issuers may use the same string for different people, which is why the pair is what has to be unique.
+             * @example u-4417
+             */
+            subject: string;
+            /**
+             * @description The account that subject signs in as. An `ORG_ADMIN` or `UNIT_ADMIN` account is refused: the role map cannot grant either role, and a link would be a way around that.
+             * @example EMP1042
+             */
+            user_id: string;
+        };
+        LinkResponse: {
+            id?: number;
+            issuer_id?: number;
+            subject?: string;
+            user_id?: string;
+            /** Format: date-time */
+            created_at?: string | null;
         };
         ResourceResponse: {
             id?: number;
@@ -1808,6 +2223,13 @@ export interface components {
         GuestDecisionRequest: {
             decision: components["schemas"]["LogVerificationState"];
         };
+        GuestExtensionRequest: {
+            /**
+             * @description How much longer the visit gets. The ceiling is GUEST_VISIT_EXTENSION_MAX_MINUTES, which defaults to 240 and is checked in the route rather than here, because a schema is fixed at import and the setting is an operator's to change.
+             * @example 30
+             */
+            minutes: number;
+        };
         GuestResponse: {
             id?: number;
             guest_name?: string;
@@ -1818,6 +2240,11 @@ export interface components {
             handshake_status?: components["schemas"]["LogVerificationState"];
             /** Format: date-time */
             timestamp_marked?: string;
+            /**
+             * Format: date-time
+             * @description When an approved visit is over. Null is one nobody has approved, one approved while GUEST_VISIT_LENGTH_MINUTES was 0, and every visit approved before the column existed.
+             */
+            visit_expires_at?: string | null;
         };
         /** @description What a visit code opens. The name, phone and target are left out, because a code on a kiosk screen can be read over a shoulder. */
         GuestVisitStatus: {
@@ -1827,6 +2254,11 @@ export interface components {
              * @description When the visitor checked in.
              */
             timestamp_marked?: string;
+            /**
+             * Format: date-time
+             * @description When to leave, which is the one thing the visitor most needs from this and gives away nothing about them: whoever reads the code over a shoulder learns a time, not a name. Null is an open-ended visit.
+             */
+            visit_expires_at?: string | null;
         };
         StaffAvailabilityResponse: {
             staff_id?: string;
@@ -1834,6 +2266,28 @@ export interface components {
             unit_code?: string | null;
             /** @description Human-readable availability derived from current_occupancy_index. */
             availability_label?: string;
+        };
+        /** @description One thing that changed, and what it now holds. `resource` and `reservation` are the row as it stands, one of them filled in according to `entity_kind`, so an entry can be applied without a second request. Both are null in the full log, which is the markers alone. */
+        Change: {
+            /** @description Send the last one back as `since`, or `next_cursor`, which is the same number. */
+            cursor?: number;
+            /** @description `resource` or `reservation`. Not a closed set: another part of the API gaining a feed adds a kind here, and a consumer should ignore one it does not know rather than fail on it. */
+            entity_kind?: string;
+            entity_id?: number;
+            /** @description `created` or `updated`, and likewise open. Measured against the cursor that was sent in, not against the row's whole history: a row created and then edited between two polls reads as `created`, because the caller has never seen it. There is no `deleted`: nothing this feed carries is deleted, and a cancelled booking keeps its row and reads as `updated`. */
+            change_kind?: string;
+            /**
+             * Format: date-time
+             * @description When the most recent of the collapsed changes was made.
+             */
+            at?: string;
+            resource?: components["schemas"]["ResourceResponse"] | null;
+            reservation?: components["schemas"]["ReservationResponse"] | null;
+        };
+        ChangeFeed: {
+            changes?: components["schemas"]["Change"][];
+            /** @description What the next poll sends as `since`. The cursor that was sent in when nothing changed, so storing it unconditionally keeps the caller's place. */
+            next_cursor?: number;
         };
         ErrorResponse: {
             /** @example Not authorized. */
@@ -1977,6 +2431,84 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             422: components["responses"]["UnprocessableEntity"];
             429: components["responses"]["TooManyRequests"];
+        };
+    };
+    "auth.federated": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FederatedTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description A session for the account the note belongs to. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description The note was refused. One message for every reason, so the answer cannot be used to take a forged note apart field by field. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The account behind the link has been given an admin role since it was linked, so the shortcut is closed for it: no issuer may hold a route to an admin account, which is also why the link could not have been created against one. Said plainly rather than as the opaque 401, because the note verified and the person holding it cannot act on the refusal. The role is not changed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Federated sign-in is off on this instance. The same answer an unknown path gives, so whether an instance has an integration is not something probing it reveals. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The address in the note already belongs to an account, and the (issuer, subject) pair is not linked to one. Linking on the address instead would let an issuer take over any account whose address it can guess, so this is refused and an administrator links the pair by hand. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A malformed body, or a note that verified and carried no usable email claim for a subject arriving for the first time. The second is not a 401 because the note was not the problem. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The replay cache is unreachable, so replay cannot be ruled out and this route answers nothing rather than accepting a note that may be a copy. Password sign-in is unaffected. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     "auth.refresh": {
@@ -2502,6 +3034,443 @@ export interface operations {
                 };
                 content?: never;
             };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "federation.listIssuers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every registration, oldest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuerResponse"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    "federation.createIssuer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssuerCreate"];
+            };
+        };
+        responses: {
+            /** @description Registered. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuerResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description That `iss` value is already registered. The detail names the registration. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    "federation.deleteIssuer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "federation.updateIssuer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssuerUpdate"];
+            };
+        };
+        responses: {
+            /** @description Changed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuerResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    "federation.listKeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every key on this registration, oldest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuerKeyResponse"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "federation.addKey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssuerKeyCreate"];
+            };
+        };
+        responses: {
+            /** @description Added. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuerKeyResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description This issuer already has a key with that `kid`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A `public_key` that is not a PEM public key or is not Ed25519, or a `not_after` that is not after `not_before`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    "federation.deleteKey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+                key_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "federation.retireKey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+                key_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssuerKeyRetire"];
+            };
+        };
+        responses: {
+            /** @description Retired at the moment given. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuerKeyResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description `not_after` is not after the key's `not_before`, which would leave a key that was never valid. Delete it instead. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    "federation.listRoleMap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every entry on this registration. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleMapEntryResponse"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "federation.addRoleMapEntry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleMapEntryCreate"];
+            };
+        };
+        responses: {
+            /** @description Mapped. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleMapEntryResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description This issuer already maps that group. Delete the entry to change what it means, so the map never holds two answers for one group. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A `role_type` of `ORG_ADMIN` or `UNIT_ADMIN`. No issuer may assert either, which is what keeps a leaked signing key to the level the operator chose. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    "federation.deleteRoleMapEntry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issuer_id: number;
+                entry_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unmapped. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "federation.listLinks": {
+        parameters: {
+            query?: {
+                /** @description Only links on this registration. */
+                issuer_id?: number;
+                /** @description Only links pointing at this account. */
+                user_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Links, oldest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkResponse"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    "federation.createLink": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkCreate"];
+            };
+        };
+        responses: {
+            /** @description Linked. The next note carrying that pair is this account. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description No such issuer, or no such account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Either that `(issuer, subject)` pair is already linked, or the account is an `ORG_ADMIN` or `UNIT_ADMIN`. An admin account is refused because the answer to a leaked signing key is that no issuer holds a route to one; a link would be exactly that route. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    "federation.deleteLink": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unlinked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
@@ -3567,7 +4536,7 @@ export interface operations {
                     "application/json": components["schemas"]["GuestVisitStatus"];
                 };
             };
-            /** @description No visit with that code, including one deleted under `GUEST_RETENTION_DAYS`. */
+            /** @description No visit with that code, including one deleted under `GUEST_RETENTION_DAYS` and one past the window in `GUEST_VISIT_CODE_TTL_MINUTES`, which answers exactly as an unknown code does. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3588,6 +4557,26 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Pending guest requests. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestResponse"][];
+                };
+            };
+        };
+    };
+    "guest.listOverstays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Approved visits past their end. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3627,8 +4616,72 @@ export interface operations {
                 };
             };
             403: components["responses"]["Forbidden"];
-            /** @description No such entry, or the visitor asked for somebody else. */
+            /** @description No such entry, or the visitor asked for somebody else. By default only the staff member the visitor named may decide; with GUEST_ADMIN_CAN_DECIDE on an ORG_ADMIN may decide any visit and a UNIT_ADMIN those meant for their own unit. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    "guest.extendVisit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuestExtensionRequest"];
+            };
+        };
+        responses: {
+            /** @description The visit's new end. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example VISIT_EXTENDED */
+                        status?: string;
+                        /** @description The visitor's name. */
+                        guest?: string;
+                        /**
+                         * Format: date-time
+                         * @description When the visit is now over.
+                         */
+                        visit_expires_at?: string;
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description No such entry, or one this account could not have decided either. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The visit is not approved, or it is approved with no end to move, which is any visit approved while GUEST_VISIT_LENGTH_MINUTES was 0. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Longer than GUEST_VISIT_EXTENSION_MAX_MINUTES, refused rather than quietly trimmed so that a desk which meant 30 and typed 300 hears about it. Also every extension when that setting is 0. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3756,6 +4809,45 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    "changes.list": {
+        parameters: {
+            query?: {
+                /** @description The cursor the last poll returned. 0 is from the beginning. */
+                since?: number;
+                /** @description At most this many entries. */
+                limit?: number;
+                /** @description Every marker rather than one entry per row, and no row state. */
+                full?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The changes, oldest first, and the cursor to send next time. Empty with the cursor handed back unchanged when nothing has changed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeFeed"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["UnprocessableEntity"];
+            /** @description The feed is off, which is the default. `CHANGE_FEED_ENABLED=true` starts recording; changes made while it was off were not recorded. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     "sync.getFeedToken": {

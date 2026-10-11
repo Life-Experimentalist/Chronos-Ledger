@@ -77,8 +77,8 @@ def sync_detailed(
 ) -> Response[ErrorResponse | UsersUpdateStatusResponse200]:
     """Update staff availability status
 
-     Anyone signed in can update their own. A super-admin can update anyone's. This is the occupancy
-    index, and it does not change the location the location routes resolve.
+     Anyone signed in can update their own. An organization admin can update anyone's. This is the
+    occupancy index, and it does not change the location the location routes resolve.
 
     Args:
         user_id (str):
@@ -112,8 +112,8 @@ def sync(
 ) -> ErrorResponse | UsersUpdateStatusResponse200 | None:
     """Update staff availability status
 
-     Anyone signed in can update their own. A super-admin can update anyone's. This is the occupancy
-    index, and it does not change the location the location routes resolve.
+     Anyone signed in can update their own. An organization admin can update anyone's. This is the
+    occupancy index, and it does not change the location the location routes resolve.
 
     Args:
         user_id (str):
@@ -142,8 +142,8 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | UsersUpdateStatusResponse200]:
     """Update staff availability status
 
-     Anyone signed in can update their own. A super-admin can update anyone's. This is the occupancy
-    index, and it does not change the location the location routes resolve.
+     Anyone signed in can update their own. An organization admin can update anyone's. This is the
+    occupancy index, and it does not change the location the location routes resolve.
 
     Args:
         user_id (str):
@@ -175,8 +175,8 @@ async def asyncio(
 ) -> ErrorResponse | UsersUpdateStatusResponse200 | None:
     """Update staff availability status
 
-     Anyone signed in can update their own. A super-admin can update anyone's. This is the occupancy
-    index, and it does not change the location the location routes resolve.
+     Anyone signed in can update their own. An organization admin can update anyone's. This is the
+    occupancy index, and it does not change the location the location routes resolve.
 
     Args:
         user_id (str):

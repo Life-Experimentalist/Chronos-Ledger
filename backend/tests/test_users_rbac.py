@@ -83,7 +83,7 @@ def test_unit_admin_cannot_create_admin_accounts(client, seed_users):
     assert res.status_code == 200
     da_headers = login(client, "unitadmin@test.internal", "UnitAdmin789!")
 
-    for role in ("SUPER_ADMIN", "UNIT_ADMIN"):
+    for role in ("ORG_ADMIN", "UNIT_ADMIN"):
         payload = dict(
             NEW_USER,
             id=f"ESC_{role}",
@@ -121,7 +121,7 @@ def test_unit_admin_cannot_modify_admin_accounts(client, seed_users):
     assert res.status_code == 200
     da_headers = login(client, "unitadmin2@test.internal", "UnitAdmin789!")
 
-    # Login is by email, so patching the super-admin's email would lock
+    # Login is by email, so patching the organization admin's email would lock
     # them out. Any admin account is off-limits to a unit-admin.
     res = client.patch(
         "/api/v1/users/ADM001",
@@ -145,7 +145,7 @@ def test_unit_admin_cannot_modify_admin_accounts(client, seed_users):
     )
     assert res.status_code == 200
 
-    # The super-admin can still rename a unit-admin.
+    # The organization admin can still rename a unit admin.
     res = client.patch(
         "/api/v1/users/DAD002",
         headers=headers,

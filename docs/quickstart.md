@@ -50,7 +50,7 @@ file you commit.
 
 ### API key
 
-A `SUPER_ADMIN` creates one. Bind it to a service account and scope it to the
+A `ORG_ADMIN` creates one. Bind it to a service account and scope it to the
 areas the integration calls (see [Service accounts](api.md#service-accounts)):
 
 ```bash

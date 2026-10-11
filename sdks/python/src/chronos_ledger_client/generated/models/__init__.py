@@ -17,6 +17,8 @@ from .auth_change_password_response_200 import AuthChangePasswordResponse200
 from .auth_logout_response_200 import AuthLogoutResponse200
 from .availability_response import AvailabilityResponse
 from .busy_interval import BusyInterval
+from .change import Change
+from .change_feed import ChangeFeed
 from .change_password_request import ChangePasswordRequest
 from .config_get_response_200 import ConfigGetResponse200
 from .config_get_response_200_labels import ConfigGetResponse200Labels
@@ -31,11 +33,14 @@ from .deactivated_user_response import DeactivatedUserResponse
 from .dynamic_state import DynamicState
 from .error_response import ErrorResponse
 from .execution_mode import ExecutionMode
+from .federated_token_request import FederatedTokenRequest
 from .feed_token import FeedToken
 from .guest_check_in_request import GuestCheckInRequest
 from .guest_check_in_response_200 import GuestCheckInResponse200
 from .guest_decide_response_200 import GuestDecideResponse200
 from .guest_decision_request import GuestDecisionRequest
+from .guest_extend_visit_response_200 import GuestExtendVisitResponse200
+from .guest_extension_request import GuestExtensionRequest
 from .guest_response import GuestResponse
 from .guest_visit_status import GuestVisitStatus
 from .health_check_response_200 import HealthCheckResponse200
@@ -43,6 +48,14 @@ from .import_orphans import ImportOrphans
 from .ingestion_generate_ledger_response_200 import IngestionGenerateLedgerResponse200
 from .ingestion_upload_csv_body import IngestionUploadCsvBody
 from .institutional_role import InstitutionalRole
+from .issuer_create import IssuerCreate
+from .issuer_key_create import IssuerKeyCreate
+from .issuer_key_response import IssuerKeyResponse
+from .issuer_key_retire import IssuerKeyRetire
+from .issuer_response import IssuerResponse
+from .issuer_update import IssuerUpdate
+from .link_create import LinkCreate
+from .link_response import LinkResponse
 from .log_verification_state import LogVerificationState
 from .login_request import LoginRequest
 from .master_slot_create import MasterSlotCreate
@@ -72,6 +85,10 @@ from .resource_update import ResourceUpdate
 from .resources_list_resource_type import ResourcesListResourceType
 from .reverse_rsvp_create import ReverseRsvpCreate
 from .reverse_rsvp_response import ReverseRsvpResponse
+from .role_map_entry_create import RoleMapEntryCreate
+from .role_map_entry_create_role_type import RoleMapEntryCreateRoleType
+from .role_map_entry_response import RoleMapEntryResponse
+from .role_map_entry_response_role_type import RoleMapEntryResponseRoleType
 from .rsvp_decision import RsvpDecision
 from .schedule_clone_cycle_response_200 import ScheduleCloneCycleResponse200
 from .schedule_close_cycle_response_200 import ScheduleCloseCycleResponse200
@@ -110,6 +127,8 @@ __all__ = (
     "AuthLogoutResponse200",
     "AvailabilityResponse",
     "BusyInterval",
+    "Change",
+    "ChangeFeed",
     "ChangePasswordRequest",
     "ConfigGetResponse200",
     "ConfigGetResponse200Labels",
@@ -124,11 +143,14 @@ __all__ = (
     "DynamicState",
     "ErrorResponse",
     "ExecutionMode",
+    "FederatedTokenRequest",
     "FeedToken",
     "GuestCheckInRequest",
     "GuestCheckInResponse200",
     "GuestDecideResponse200",
     "GuestDecisionRequest",
+    "GuestExtendVisitResponse200",
+    "GuestExtensionRequest",
     "GuestResponse",
     "GuestVisitStatus",
     "HealthCheckResponse200",
@@ -136,6 +158,14 @@ __all__ = (
     "IngestionGenerateLedgerResponse200",
     "IngestionUploadCsvBody",
     "InstitutionalRole",
+    "IssuerCreate",
+    "IssuerKeyCreate",
+    "IssuerKeyResponse",
+    "IssuerKeyRetire",
+    "IssuerResponse",
+    "IssuerUpdate",
+    "LinkCreate",
+    "LinkResponse",
     "LoginRequest",
     "LogVerificationState",
     "MasterSlotCreate",
@@ -165,6 +195,10 @@ __all__ = (
     "ResourceUpdate",
     "ReverseRsvpCreate",
     "ReverseRsvpResponse",
+    "RoleMapEntryCreate",
+    "RoleMapEntryCreateRoleType",
+    "RoleMapEntryResponse",
+    "RoleMapEntryResponseRoleType",
     "RsvpDecision",
     "ScheduleCloneCycleResponse200",
     "ScheduleCloseCycleResponse200",

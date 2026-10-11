@@ -9,6 +9,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import change_feed
 from app.core.database import get_db
 from app.core.pagination import Page
 from app.core.security import get_current_user, require_roles
@@ -83,7 +84,7 @@ def list_resources(
 def create_resource(
     payload: ResourceCreate,
     db: Session = Depends(get_db),
-    _=Depends(require_roles("SUPER_ADMIN")),
+    _=Depends(require_roles("ORG_ADMIN")),
 ):
     """Register a room before any timetable names it.
 
@@ -106,6 +107,11 @@ def create_resource(
     resource = Resource(resource_type=ResourceType.ROOM, **fields)
     db.add(resource)
     try:
+        # The insert is what hands out the id the marker points at and what
+        # the taken code is refused by, so the flush that does both sits
+        # inside the same try as the commit.
+        db.flush()
+        change_feed.record(db, change_feed.RESOURCE, resource.id, change_feed.CREATED)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -186,7 +192,7 @@ def update_resource(
     resource_id: int,
     payload: ResourceUpdate,
     db: Session = Depends(get_db),
-    _=Depends(require_roles("SUPER_ADMIN")),
+    _=Depends(require_roles("ORG_ADMIN")),
 ):
     """Fill in what a CSV could not know.
 
@@ -204,6 +210,7 @@ def update_resource(
     # mentioning it.
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(resource, field, value)
+    change_feed.record(db, change_feed.RESOURCE, resource.id, change_feed.UPDATED)
     db.commit()
     db.refresh(resource)
     return resource
@@ -272,7 +279,13 @@ def _already_taken(conflicts: list[dict]) -> HTTPException:
     )
 
 
-def _view(reservation: Reservation, resource: Resource) -> dict:
+def reservation_view(reservation: Reservation, resource: Resource) -> dict:
+    """The ReservationResponse shape, built once.
+
+    Public because the change feed hands back the same reservation in the same
+    shape, and a second copy of this dict is a second place for the two to
+    drift apart.
+    """
     return {
         "id": reservation.id,
         "resource_id": resource.id,
@@ -307,7 +320,7 @@ def create_reservation(
         description="Unique across every caller. A UUID is the right shape.",
     ),
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+    current_user=Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
 ):
     """Hold a resource for one dated window.
 
@@ -356,7 +369,7 @@ def create_reservation(
         # cancelled or not: a retry is asking what happened, not asking for
         # a second room.
         response.status_code = status.HTTP_200_OK
-        return _view(seen, resource)
+        return reservation_view(seen, resource)
 
     conflicts = _conflicts_for(db, resource_id, payload)
     if conflicts:
@@ -375,6 +388,12 @@ def create_reservation(
     )
     db.add(reservation)
     try:
+        # Flushed here rather than at the commit because the marker needs the
+        # id. What the constraint refuses it refuses at the flush, and an
+        # IntegrityError from a flush is the same one, so the branching below
+        # reads exc.orig exactly as it did.
+        db.flush()
+        change_feed.record(db, change_feed.RESERVATION, reservation.id, change_feed.CREATED)
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -390,10 +409,10 @@ def create_reservation(
         if won is None or won.request_fingerprint != fingerprint:
             raise HTTPException(status_code=422, detail=KEY_REUSED) from None
         response.status_code = status.HTTP_200_OK
-        return _view(won, resource)
+        return reservation_view(won, resource)
 
     db.refresh(reservation)
-    return _view(reservation, resource)
+    return reservation_view(reservation, resource)
 
 
 @router.delete(
@@ -405,7 +424,7 @@ def cancel_reservation(
     resource_id: int,
     reservation_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+    current_user=Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
 ):
     """Let a hold go. The row stays.
 
@@ -419,7 +438,7 @@ def cancel_reservation(
 
     A hold is let go by whoever took it. More than one system books through
     here, and one integration dropping another's hold is how a room goes
-    quietly free under something that still believes it has it. A SUPER_ADMIN
+    quietly free under something that still believes it has it. An ORG_ADMIN
     is the exception, because a hold taken by an account that no longer
     exists has nobody left to cancel it.
     """
@@ -432,7 +451,7 @@ def cancel_reservation(
         raise HTTPException(status_code=404, detail="Reservation not found")
 
     if (
-        current_user.role_type.value != "SUPER_ADMIN"
+        current_user.role_type.value != "ORG_ADMIN"
         and reservation.requested_by_id != current_user.id
     ):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=NOT_YOUR_HOLD)
@@ -440,6 +459,7 @@ def cancel_reservation(
     if reservation.status is not ReservationStatus.CANCELLED:
         reservation.status = ReservationStatus.CANCELLED
         reservation.cancelled_at = datetime.datetime.now(datetime.UTC)
+        change_feed.record(db, change_feed.RESERVATION, reservation.id, change_feed.UPDATED)
         db.commit()
         db.refresh(reservation)
-    return _view(reservation, reservation.resource)
+    return reservation_view(reservation, reservation.resource)

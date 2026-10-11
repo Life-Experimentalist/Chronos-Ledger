@@ -74,7 +74,7 @@ feat: add member attendance export to CSV
 
 Adds a new GET /schedule/attendance/export endpoint that streams a
 gzip-compressed CSV of all attendance records for the current cycle.
-Only accessible by SUPER_ADMIN and UNIT_ADMIN.
+Only accessible by ORG_ADMIN and UNIT_ADMIN.
 ```
 
 ---

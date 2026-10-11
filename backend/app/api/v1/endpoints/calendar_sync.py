@@ -169,7 +169,7 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
 
     is_staff = user.role_type in (
         InstitutionalRole.STAFF,
-        InstitutionalRole.SUPER_ADMIN,
+        InstitutionalRole.ORG_ADMIN,
         InstitutionalRole.UNIT_ADMIN,
     )
 

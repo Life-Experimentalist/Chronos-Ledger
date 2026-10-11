@@ -2,7 +2,7 @@
 
 <!-- Copyright 2026 Chronos Ledger Contributors (Apache 2.0) -->
 
-All fourteen production tables live in the default PostgreSQL `public` schema.
+Every production table lives in the default PostgreSQL `public` schema.
 Migrations are managed by Alembic (`backend/alembic/versions/`).
 
 ---
@@ -16,7 +16,7 @@ erDiagram
         string full_name
         string email_address UK
         string credential_secure_hash
-        string role_type "SUPER_ADMIN | UNIT_ADMIN | STAFF | MEMBER"
+        string role_type "ORG_ADMIN | UNIT_ADMIN | STAFF | MEMBER"
         string unit_code
         string assigned_base_station
         string current_occupancy_index "AccessReadiness enum"
@@ -122,6 +122,7 @@ erDiagram
         string handshake_status "LogVerificationState enum"
         datetime timestamp_marked
         string visit_code_hash "SHA-256 of the visit code (unique, nullable)"
+        string decided_by_id FK "→ User.id (nullable)"
     }
 
     LedgerAnnotation {
@@ -169,6 +170,41 @@ erDiagram
         datetime created_at
     }
 
+    FederatedIssuer {
+        int id PK
+        string issuer UK "the iss claim this row answers for"
+        string display_name
+        string audience "the aud claim a note must carry"
+        bool enabled
+        datetime created_at
+    }
+
+    FederatedIssuerKey {
+        int id PK
+        int issuer_id FK "→ FederatedIssuer.id"
+        string kid "unique within the issuer"
+        string public_key "PEM, Ed25519"
+        datetime not_before
+        datetime not_after "nullable, null = still current"
+        datetime created_at
+    }
+
+    FederatedRoleMap {
+        int id PK
+        int issuer_id FK "→ FederatedIssuer.id"
+        string group_claim_value "unique within the issuer"
+        string role_type "STAFF | MEMBER, CHECK refuses both admin roles"
+        string unit_code "nullable"
+    }
+
+    FederatedIdentity {
+        int id PK
+        int issuer_id FK "→ FederatedIssuer.id"
+        string subject "the sub claim, unique within the issuer"
+        string user_id FK "→ User.id"
+        datetime created_at
+    }
+
     PlanningCycle ||--o{ Activity : "contains"
     Activity ||--o{ StructuralMasterSlot : "has slots"
     Activity ||--o{ ActivityEnrollment : "enrolls members"
@@ -189,6 +225,10 @@ erDiagram
     User ||--o{ Reservation : "requests"
     User ||--o{ RefreshToken : "signs in with"
     User ||--o{ ApiKey : "has API key"
+    FederatedIssuer ||--o{ FederatedIssuerKey : "signs with"
+    FederatedIssuer ||--o{ FederatedRoleMap : "asserts groups"
+    FederatedIssuer ||--o{ FederatedIdentity : "vouches for"
+    User ||--o{ FederatedIdentity : "is reached from"
 ```
 
 ---
@@ -198,7 +238,11 @@ erDiagram
 ### `User`
 Central identity record. Role-based access is enforced at the API layer (`core/security.py`), not as a DB constraint. The `reporting_line_manager` self-join is used to route absence requests to the correct supervisor.
 
+`email_address` is unique on `lower(email_address)`, an index migration 029 adds, and every writer stores the address folded to lower case: `models/db.py::User._fold_email` is the one place that does it, because three of the writers never see a Pydantic schema. Reads fold both sides rather than assuming, since a row written before 029 keeps the case it was given and 029 rewrites nothing. It refuses to run while two accounts already collide once folded, and names them: merging two accounts is a decision about people.
+
 Somebody who leaves is deactivated rather than deleted. `deactivated_at` is set, the account can no longer sign in or be named as a lead, substitute or manager, and every row recorded against it stays. Its API keys are deleted, and migration 019 deleted any still held by an account deactivated before it. The email address stays with the account while it is deactivated, since the account can be reactivated.
+
+An account provisioned by a federated sign-in is an ordinary row with two things worth knowing. Its `id` is minted as `FED-` plus eight random bytes in hex, because a note carries no id anybody here agreed to and the subject is an opaque string from another system that would otherwise end up in this system's URLs; the prefix answers, in a user list, why the account has no password. Its `credential_secure_hash` is a bcrypt hash of a string nobody kept, generated per account rather than shared, so no submitted password can match it and a database dump cannot pick the federated rows out by an identical hash. The column stays `NOT NULL`, and `initial_login_state` is false, since there is no initial password to move off. `services/federated_identity.py::account_for` is the only writer.
 
 ### `PlanningCycle`
 The scheduling container. Several cycles can be open (`operational_status = true`) at once. A slot gets a day only while its cycle is open and the date is inside the cycle's own bounds, so two open cycles covering different parts of the year can use the same room at the same hour, and opening a cycle is refused with `409` where its slots would land on a room already taken on a date both run. `cycle_label` is not unique.
@@ -234,10 +278,10 @@ One row per member per ledger entry. `authorizing_agent_id` is whoever set the c
 `member_id` is `ON DELETE RESTRICT` since migration 018, so a user with attendance on file cannot be deleted and is deactivated instead. Before 018 it cascaded, and deleting a user took their attendance with it.
 
 ### `ReverseRsvpLog`
-The Reverse RSVP state machine. Starts at `PENDING_VERIFICATION` and is routed to the submitter's `reporting_line_manager`, who decides it. If that manager is later deactivated an admin decides it instead (any `SUPER_ADMIN`, or a `UNIT_ADMIN` for the non-admin accounts of their unit), and whoever decides becomes `authorized_by_user_id`. `services/reverse_rsvp.py` applies the decision: `VERIFIED_APPROVED` sets `operational_state` to `ON_LEAVE` and clears the substitute on every `DailyLedger` row the submitter leads from `target_absence_date` through `end_date` (the one day when `end_date` is null), and `VERIFIED_DENIED` puts any of those rows still `ON_LEAVE` back to `SCHEDULED`. The endpoint, not the service, sends the WebSocket frames: `ABSENCE_APPROVAL_REQUIRED` to the manager on submission and `ABSENCE_DECISION` to the submitter on a decision.
+The Reverse RSVP state machine. Starts at `PENDING_VERIFICATION` and is routed to the submitter's `reporting_line_manager`, who decides it. If that manager is later deactivated an admin decides it instead (any `ORG_ADMIN`, or a `UNIT_ADMIN` for the non-admin accounts of their unit), and whoever decides becomes `authorized_by_user_id`. `services/reverse_rsvp.py` applies the decision: `VERIFIED_APPROVED` sets `operational_state` to `ON_LEAVE` and clears the substitute on every `DailyLedger` row the submitter leads from `target_absence_date` through `end_date` (the one day when `end_date` is null), and `VERIFIED_DENIED` puts any of those rows still `ON_LEAVE` back to `SCHEDULED`. The endpoint, not the service, sends the WebSocket frames: `ABSENCE_APPROVAL_REQUIRED` to the manager on submission and `ABSENCE_DECISION` to the submitter on a decision.
 
 ### `GuestGateRegistry`
-Records each organization visitor interaction. `handshake_status` transitions from `PENDING_VERIFICATION` → `VERIFIED_APPROVED | VERIFIED_DENIED` when the target staff member acts via the Interaction Desk. `visit_code_hash` is the SHA-256 of the code the check-in hands the visitor, and `GET /guest/visit/{code}` finds the row by it; the code itself is stored nowhere. Rows from before migration 020 have none. When `GUEST_RETENTION_DAYS` is set, a daily job deletes the rows older than that many days, whatever their status; 0, the default, keeps them forever.
+Records each organization visitor interaction. `handshake_status` transitions from `PENDING_VERIFICATION` → `VERIFIED_APPROVED | VERIFIED_DENIED` when the target staff member acts via the Interaction Desk. `visit_code_hash` is the SHA-256 of the code the check-in hands the visitor, and `GET /guest/visit/{code}` finds the row by it; the code itself is stored nowhere. Rows from before migration 020 have none. `visit_code_expires_at` is when that code stops opening the lookup, set from `GUEST_VISIT_CODE_TTL_MINUTES` at check-in; null, which is every row made while that was 0 and every row from before migration 024, means it does not stop. When `GUEST_RETENTION_DAYS` is set, a daily job deletes the rows older than that many days, whatever their status; 0, the default, keeps them forever. `decided_by_id` is whoever decided it, which with `GUEST_ADMIN_CAN_DECIDE` on need not be `target_staff_id`; written whoever decides, so null is a check-in nobody has decided yet or one from before migration 026. No endpoint returns it, so it is read from the database alongside `audit_records`, which is where the rest of "who did this" lives. `ON DELETE SET NULL` rather than the cascade on `target_staff_id`: deleting the account that decided must not delete the visitor record it decided. `visit_expires_at` is when an approved visit is over, written at the decision from `GUEST_VISIT_LENGTH_MINUTES`; null is a visit nobody has approved, one approved while that setting was 0, and every row from before migration 027. Nothing enforces it: past that moment the visit reads as an overstay at `GET /guest/overstays` and the desk is told, and a person decides the rest. `overstay_notified_at` is when the five-minute sweep last said so, which is what makes it say it once rather than every five minutes; an extension clears it, so a second overrun announces itself as the first did.
 
 ### `LedgerAnnotation`
 Free-form notes attached to a ledger entry (e.g., "lab equipment failure", "class started late"). Used for post-session audits. No schema constraint on `classification_tag`, it's a freeform string at the application layer.
@@ -248,5 +292,20 @@ A hold on a resource for one date and window. Two `HELD` rows on the same resour
 ### `RefreshToken`
 One row per refresh token until it expires. Only the SHA-256 hash is stored. A token works once: using it sets `consumed_at` and issues its successor in the same `family_id`, and a sign-in starts a new family. Presenting a used token again ends the whole family. Rows are deleted at logout (the family), at a password change (every family the user has), and a day after expiry by a nightly job.
 
+### `ChangeMarker`
+A note that one row changed, so a system keeping its own copy of the rooms and the bookings can poll for what moved at `GET /api/v1/changes/`. Written only while `CHANGE_FEED_ENABLED` is on, in the same transaction as the change itself, so a write that rolls back leaves no marker. Deliberately thin: `entity_kind` (`resource` or `reservation`), `entity_id` and `change_kind` (`created` or `updated`), and `at`. It says nothing about what the row now holds, because the feed reads the current row back out of its own table and so cannot disagree with it, and nothing about who, because that is what `audit_records` is for. `id` is the cursor a consumer holds on to. No foreign keys, hence its absence from the diagram above: a marker outlives what it points at, and a cascade would take the news of a change away with the row it was about. Nothing deletes these rows.
+
 ### `ApiKey`
 A long-lived credential for an integration, bound to a user row that acts as its service account. Only the SHA-256 hash is stored, and the raw key is shown once. A request made with the key acts as that user, so role checks and unit scoping apply unchanged. `scopes` is a comma separated list of `<area>:<read|write>` entries, or `*` for every area; `expires_at` null means the key does not expire. Deactivating the bound user deletes its keys, and reactivating does not bring them back.
+
+### `FederatedIssuer`
+An outside system allowed to vouch for a person, one row each. Registration is the whole of the off-by-default guarantee: with no rows, no note from anywhere verifies, and an instance that never registers an issuer behaves exactly as it did. `issuer` is matched against the note's `iss` and `audience` against its `aud`, both exactly and neither by pattern. `enabled` false keeps the registration and its keys while refusing every note, which is the lever for suspending an issuer without losing what it was. The design, threat model first, is [federated-identity.md](federated-identity.md).
+
+### `FederatedIssuerKey`
+The public keys an issuer signs with, several at once. A rotation is then an overlap rather than a restart: the new key is added with its own `not_before`, both verify for as long as the operator wants, and the old one is retired by setting `not_after` rather than deleted, so notes already in flight are not orphaned. `kid` is unique within the issuer and a note that names no `kid` is refused, since trying every key in turn is how a retired key keeps working. Keys are public, so nothing here is a secret.
+
+### `FederatedRoleMap`
+What a group an issuer asserts means here, and therefore the operator's decision rather than the issuer's. The check constraint is the rule that neither admin role can arrive from outside, and it is in the database and not only in the validator because a signing key that leaks must not be able to reach `ORG_ADMIN` through any path, including a future one nobody has written yet. `group_claim_value` is unique within the issuer. Roles are set when the account is first provisioned and never re-synced from a later note, so a demotion upstream is not a demotion here; the lever for that is `deactivated_at` on the account.
+
+### `FederatedIdentity`
+The link between a subject at an issuer and an account here, and the only thing consulted to decide whether a note belongs to an account that already exists. A matching email address is deliberately not enough: an issuer that can pick its own `email` claim could otherwise name any address and be handed that account, so a note whose subject is unknown and whose address is already taken is refused, and the link an administrator makes on purpose is the only way the two ever meet. `(issuer_id, subject)` is unique. `user_id` cascades, unlike most references to `User`, because this row records how an account is reached and not anything that happened; there is a hard-delete path for accounts with nothing on file, and a dangling link would leave a subject pointing at nobody.

@@ -98,7 +98,7 @@ def sync_detailed(
 ) -> Response[ErrorResponse | list[UserResponse]]:
     """List all users
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`.
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`.
 
     Args:
         role (InstitutionalRole | Unset): Role assigned to a system user.
@@ -141,7 +141,7 @@ def sync(
 ) -> ErrorResponse | list[UserResponse] | None:
     """List all users
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`.
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`.
 
     Args:
         role (InstitutionalRole | Unset): Role assigned to a system user.
@@ -179,7 +179,7 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | list[UserResponse]]:
     """List all users
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`.
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`.
 
     Args:
         role (InstitutionalRole | Unset): Role assigned to a system user.
@@ -220,7 +220,7 @@ async def asyncio(
 ) -> ErrorResponse | list[UserResponse] | None:
     """List all users
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`.
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`.
 
     Args:
         role (InstitutionalRole | Unset): Role assigned to a system user.

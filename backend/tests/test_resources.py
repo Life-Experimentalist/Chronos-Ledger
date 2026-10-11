@@ -277,7 +277,7 @@ def test_a_code_already_taken_is_409(client, db, seed_users):
     assert [r["label"] for r in found.json()] == ["LH-9"]
 
 
-def test_only_a_super_admin_creates_rooms(client, db, seed_users):
+def test_only_an_org_admin_creates_rooms(client, db, seed_users):
     for headers in (
         login(client, "staff@test.internal", STAFF_PASSWORD),
         login(client, "member@test.internal", MEMBER_PASSWORD),

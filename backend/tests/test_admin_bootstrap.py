@@ -30,7 +30,7 @@ def _seeded_admin(db, password=DISCARDED, unused=True):
         full_name="Organization Administrator",
         email_address="admin@org.internal",
         credential_secure_hash=hash_password(password),
-        role_type=InstitutionalRole.SUPER_ADMIN,
+        role_type=InstitutionalRole.ORG_ADMIN,
         initial_login_state=unused,
     )
     db.add(admin)

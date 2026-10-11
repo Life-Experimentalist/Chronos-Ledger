@@ -97,6 +97,13 @@ export const authApi = {
     return res
   },
   logout: (refresh_token: string) => api.post('/auth/logout', { refresh_token }),
+  // Plain axios for the reason `tryRefresh` uses it: the client's own
+  // interceptor treats a 401 as a lapsed session, and finding no refresh token
+  // to spend it clears storage and sends the tab to the password page. A
+  // refused note would then replace the explanation with a screen that does
+  // not say anything happened. There is also no session to authenticate with
+  // yet, so there is no header worth attaching.
+  federated: (token: string) => axios.post(`${BASE_URL}/auth/federated`, { token }),
 }
 
 // ── Schedule ──────────────────────────────────────────────────────────────────
@@ -162,6 +169,8 @@ export const guestApi = {
   decidePending: (id: number, decision: string) =>
     api.patch(`/guest/${id}/decide`, { decision }),
   getPendingGuests: () => api.get('/guest/pending'),
+  getOverstays: () => api.get('/guest/overstays'),
+  extendVisit: (id: number, minutes: number) => api.patch(`/guest/${id}/extend`, { minutes }),
   // Visitor-side, from the kiosk or the visitor's own phone: the code is the
   // only credential, so plain axios, with neither a token nor a device key.
   visitStatus: (code: string) =>

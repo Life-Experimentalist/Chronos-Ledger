@@ -48,7 +48,7 @@ export function isAuthenticated(): boolean {
 
 export function roleRedirectPath(role: string): string {
   switch (role) {
-    case 'SUPER_ADMIN':
+    case 'ORG_ADMIN':
     case 'UNIT_ADMIN':
       return '/admin/dashboard'
     case 'STAFF':

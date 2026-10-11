@@ -97,7 +97,7 @@ def seed_users(db):
             full_name="Admin One",
             email_address="admin@test.internal",
             credential_secure_hash=_HASHES["admin"],
-            role_type=InstitutionalRole.SUPER_ADMIN,
+            role_type=InstitutionalRole.ORG_ADMIN,
             # Admins are gated server-side until the first password change,
             # so the seed admin starts past that gate.
             initial_login_state=False,

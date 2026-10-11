@@ -57,8 +57,8 @@ def sync_detailed(
 
      Any signed-in user. Returns the undecided requests the caller may decide: those routed to them as
     the submitter's line manager and, for an admin, those whose manager has since been deactivated. A
-    SUPER_ADMIN gets every one of those, a UNIT_ADMIN those from the non-admin accounts of their own
-    unit, and nobody gets their own.
+    ORG_ADMIN gets every one of those, a UNIT_ADMIN those from the non-admin accounts of their own unit,
+    and nobody gets their own.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -85,8 +85,8 @@ def sync(
 
      Any signed-in user. Returns the undecided requests the caller may decide: those routed to them as
     the submitter's line manager and, for an admin, those whose manager has since been deactivated. A
-    SUPER_ADMIN gets every one of those, a UNIT_ADMIN those from the non-admin accounts of their own
-    unit, and nobody gets their own.
+    ORG_ADMIN gets every one of those, a UNIT_ADMIN those from the non-admin accounts of their own unit,
+    and nobody gets their own.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -109,8 +109,8 @@ async def asyncio_detailed(
 
      Any signed-in user. Returns the undecided requests the caller may decide: those routed to them as
     the submitter's line manager and, for an admin, those whose manager has since been deactivated. A
-    SUPER_ADMIN gets every one of those, a UNIT_ADMIN those from the non-admin accounts of their own
-    unit, and nobody gets their own.
+    ORG_ADMIN gets every one of those, a UNIT_ADMIN those from the non-admin accounts of their own unit,
+    and nobody gets their own.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -135,8 +135,8 @@ async def asyncio(
 
      Any signed-in user. Returns the undecided requests the caller may decide: those routed to them as
     the submitter's line manager and, for an admin, those whose manager has since been deactivated. A
-    SUPER_ADMIN gets every one of those, a UNIT_ADMIN those from the non-admin accounts of their own
-    unit, and nobody gets their own.
+    ORG_ADMIN gets every one of those, a UNIT_ADMIN those from the non-admin accounts of their own unit,
+    and nobody gets their own.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.

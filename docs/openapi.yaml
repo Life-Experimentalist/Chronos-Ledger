@@ -21,7 +21,7 @@ info:
     `/guest/directory`. A key can be narrowed to part of the API and given
     an end date: see the `ApiKeyAuth` security scheme.
 
-    **Roles**: `SUPER_ADMIN` > `UNIT_ADMIN` > `STAFF` > `MEMBER`.
+    **Roles**: `ORG_ADMIN` > `UNIT_ADMIN` > `STAFF` > `MEMBER`.
     Role requirements are noted on each endpoint.
   contact:
     name: Chronos Ledger Contributors
@@ -61,7 +61,7 @@ components:
         cannot be. `scopes` is a comma separated list of `<area>:read` and
         `<area>:write`, where the area is the path segment after `/api/v1`:
         `schedule`, `resources`, `attendance`, `users`, `ingestion`, `guest`,
-        `sync`, `config`, `auth`, `api-keys`. `GET`, `HEAD` and `OPTIONS` are
+        `sync`, `config`, `auth`, `api-keys`, `audit`, `changes`. `GET`, `HEAD` and `OPTIONS` are
         reads and everything else is a write, so `schedule:read` passes
         `GET /schedule/slots` and is refused `POST /schedule/slots` with a 403
         naming `schedule:write`. The single scope `*` is every area, which is
@@ -81,7 +81,7 @@ components:
     # ── Enumerations ──────────────────────────
     InstitutionalRole:
       type: string
-      enum: [SUPER_ADMIN, UNIT_ADMIN, STAFF, MEMBER]
+      enum: [ORG_ADMIN, UNIT_ADMIN, STAFF, MEMBER]
       description: Role assigned to a system user.
 
     AccessReadiness:
@@ -177,6 +177,20 @@ components:
           description: >
             At least PASSWORD_MIN_LENGTH characters, 12 unless the deployment
             has raised it, and not a placeholder published in this repository.
+
+    FederatedTokenRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: >
+            The note, exactly as its issuer minted it. A signed JWT whose
+            `iss` names a registered issuer, whose header `kid` names one of
+            that issuer's registered keys, and which carries `aud`, `sub`,
+            `jti`, `iat` and `exp`. An `email` claim is what a first-time
+            subject is provisioned from; `name` and `groups` are read if they
+            are there.
 
     RefreshRequest:
       type: object
@@ -523,6 +537,235 @@ components:
                 revoked and reissued.
               example: ck_8Kd2mQ7xR3nL9vB5tY1wZ0aC6eF4gH2jK8mN
 
+    # ── Federation ────────────────────────────
+    IssuerCreate:
+      type: object
+      required: [issuer, display_name, audience]
+      properties:
+        issuer:
+          type: string
+          maxLength: 255
+          description: >
+            The exact `iss` value notes will carry. Compared, never parsed:
+            nothing here fetches it, so it is an identifier that happens to
+            look like a URL.
+          example: https://sso.example.internal
+        display_name:
+          type: string
+          maxLength: 100
+          description: What an administrator calls this issuer in a list.
+          example: Campus SSO
+        audience:
+          type: string
+          maxLength: 255
+          description: >
+            The `aud` this instance answers to. An issuer serving several
+            relying parties should give each one its own value, so a note
+            minted for another one is refused here.
+          example: chronos-ledger
+        enabled:
+          type: boolean
+          default: true
+          description: >
+            False is refused the same way an unknown issuer is, so turning an
+            issuer off does not mean deleting what it was allowed to assert.
+
+    IssuerUpdate:
+      type: object
+      description: >
+        Every field is optional and one left out is unchanged. `issuer` cannot
+        be changed: it is the value notes already in the wild carry, and
+        editing it would retarget a registration rather than register another.
+      properties:
+        display_name:
+          type: string
+          maxLength: 100
+        audience:
+          type: string
+          maxLength: 255
+        enabled:
+          type: boolean
+
+    IssuerResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 3
+        issuer:
+          type: string
+          example: https://sso.example.internal
+        display_name:
+          type: string
+          example: Campus SSO
+        audience:
+          type: string
+          example: chronos-ledger
+        enabled:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    IssuerKeyCreate:
+      type: object
+      required: [kid, public_key]
+      properties:
+        kid:
+          type: string
+          maxLength: 100
+          description: >
+            The `kid` the note header will carry. A note is verified against
+            the key it names and no other, so an overlap during a rotation is
+            two registered keys rather than two candidates per note.
+          example: 2026-key-a
+        public_key:
+          type: string
+          description: >
+            An Ed25519 public key in PEM form. Loaded when it is registered, so
+            a key that cannot be read is refused here rather than turning every
+            note that names it into a 401 nobody can explain.
+          example: |
+            -----BEGIN PUBLIC KEY-----
+            MCowBQYDK2VwAyEAWJyyHHtL1RwC53ABtyd229BalcSDxdE3P02wXuDoeV4=
+            -----END PUBLIC KEY-----
+        not_before:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the key starts being accepted. Omitted means now.
+        not_after:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            When it stops. Omitted is a key with no planned retirement, which
+            is the ordinary case until a rotation gives it one.
+
+    IssuerKeyRetire:
+      type: object
+      required: [not_after]
+      properties:
+        not_after:
+          type: string
+          format: date-time
+          description: >
+            The moment the key stops being accepted. A moment in the past stops
+            it now, which is what a leaked key wants; a moment in the future is
+            the overlap a planned rotation wants.
+
+    IssuerKeyResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        issuer_id:
+          type: integer
+        kid:
+          type: string
+        public_key:
+          type: string
+          description: >
+            Read back in full. It is a public key, so there is nothing here a
+            leak would cost anybody, and an integrator comparing what was
+            registered against what is being signed with needs to see it.
+        not_before:
+          type: string
+          format: date-time
+        not_after:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    RoleMapEntryCreate:
+      type: object
+      required: [group_claim_value, role_type]
+      properties:
+        group_claim_value:
+          type: string
+          maxLength: 200
+          description: >
+            One value out of the note's `groups` claim, matched exactly. A group
+            with no entry lands on `MEMBER`, so an issuer trusted to say who
+            somebody is has not thereby been trusted to say what they may do.
+          example: library-staff
+        role_type:
+          type: string
+          enum: [STAFF, MEMBER]
+          description: >
+            `ORG_ADMIN` and `UNIT_ADMIN` are refused with a 422, and refused
+            again by a check constraint. It is the one rule whose failure would
+            hand an outside system this instance.
+          example: STAFF
+        unit_code:
+          type: string
+          maxLength: 50
+          nullable: true
+          description: The unit somebody in this group belongs to, if any.
+          example: LIB
+
+    RoleMapEntryResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        issuer_id:
+          type: integer
+        group_claim_value:
+          type: string
+        role_type:
+          type: string
+          enum: [STAFF, MEMBER]
+        unit_code:
+          type: string
+          nullable: true
+
+    LinkCreate:
+      type: object
+      required: [issuer_id, subject, user_id]
+      properties:
+        issuer_id:
+          type: integer
+          description: The registration the subject belongs to.
+          example: 3
+        subject:
+          type: string
+          maxLength: 255
+          description: >
+            The `sub` notes for this person will carry. Opaque and scoped to its
+            issuer: two issuers may use the same string for different people,
+            which is why the pair is what has to be unique.
+          example: u-4417
+        user_id:
+          type: string
+          maxLength: 50
+          description: >
+            The account that subject signs in as. An `ORG_ADMIN` or `UNIT_ADMIN`
+            account is refused: the role map cannot grant either role, and a
+            link would be a way around that.
+          example: EMP1042
+
+    LinkResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        issuer_id:
+          type: integer
+        subject:
+          type: string
+        user_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
     # ── Resources ─────────────────────────────
     ResourceResponse:
       type: object
@@ -1338,6 +1581,20 @@ components:
         decision:
           $ref: "#/components/schemas/LogVerificationState"
 
+    GuestExtensionRequest:
+      type: object
+      required: [minutes]
+      properties:
+        minutes:
+          type: integer
+          minimum: 1
+          description: >
+            How much longer the visit gets. The ceiling is
+            GUEST_VISIT_EXTENSION_MAX_MINUTES, which defaults to 240 and is
+            checked in the route rather than here, because a schema is fixed at
+            import and the setting is an operator's to change.
+          example: 30
+
     GuestResponse:
       type: object
       properties:
@@ -1358,6 +1615,14 @@ components:
         timestamp_marked:
           type: string
           format: date-time
+        visit_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            When an approved visit is over. Null is one nobody has approved, one
+            approved while GUEST_VISIT_LENGTH_MINUTES was 0, and every visit
+            approved before the column existed.
 
     GuestVisitStatus:
       type: object
@@ -1371,6 +1636,14 @@ components:
           type: string
           format: date-time
           description: When the visitor checked in.
+        visit_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            When to leave, which is the one thing the visitor most needs from
+            this and gives away nothing about them: whoever reads the code over
+            a shoulder learns a time, not a name. Null is an open-ended visit.
 
     StaffAvailabilityResponse:
       type: object
@@ -1385,6 +1658,64 @@ components:
         availability_label:
           type: string
           description: Human-readable availability derived from current_occupancy_index.
+
+    # ── Changes ───────────────────────────────
+    Change:
+      type: object
+      description: >
+        One thing that changed, and what it now holds. `resource` and
+        `reservation` are the row as it stands, one of them filled in according
+        to `entity_kind`, so an entry can be applied without a second request.
+        Both are null in the full log, which is the markers alone.
+      properties:
+        cursor:
+          type: integer
+          description: >
+            Send the last one back as `since`, or `next_cursor`, which is the
+            same number.
+        entity_kind:
+          type: string
+          description: >
+            `resource` or `reservation`. Not a closed set: another part of the
+            API gaining a feed adds a kind here, and a consumer should ignore
+            one it does not know rather than fail on it.
+        entity_id:
+          type: integer
+        change_kind:
+          type: string
+          description: >
+            `created` or `updated`, and likewise open. Measured against the
+            cursor that was sent in, not against the row's whole history: a row
+            created and then edited between two polls reads as `created`,
+            because the caller has never seen it. There is no `deleted`:
+            nothing this feed carries is deleted, and a cancelled booking keeps
+            its row and reads as `updated`.
+        at:
+          type: string
+          format: date-time
+          description: When the most recent of the collapsed changes was made.
+        resource:
+          allOf:
+            - $ref: "#/components/schemas/ResourceResponse"
+          nullable: true
+        reservation:
+          allOf:
+            - $ref: "#/components/schemas/ReservationResponse"
+          nullable: true
+
+    ChangeFeed:
+      type: object
+      properties:
+        changes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Change"
+        next_cursor:
+          type: integer
+          description: >
+            What the next poll sends as `since`. The cursor that was sent in
+            when nothing changed, so storing it unconditionally keeps the
+            caller's place.
 
     # ── Common ────────────────────────────────
     ErrorResponse:
@@ -1562,6 +1893,97 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
+  /api/v1/auth/federated:
+    post:
+      operationId: auth.federated
+      tags: [Authentication]
+      summary: Exchange a note from a registered outside issuer for a session
+      description: >
+        Off unless FEDERATED_IDENTITY_ENABLED is true, and a 404 while it is
+        off. The note is a short-lived JWT signed with Ed25519 by a key an
+        operator registered for that issuer; the reply is the same pair
+        POST /auth/login returns, so a client handles the session the same way
+        afterwards. A note works exactly once. The account is found by the
+        (issuer, subject) pair and not by the address in the note, so an issuer
+        cannot name an existing account and be handed it; the first note for a
+        subject creates an account, and its role comes from the operator's own
+        map of group claims, never from the note alone. Every verification
+        failure is the same 401 with the same message, on purpose: the reason
+        is in the server log, where an integrator can be shown it and a forger
+        cannot read it.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FederatedTokenRequest"
+      responses:
+        "200":
+          description: A session for the account the note belongs to.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          description: >
+            The note was refused. One message for every reason, so the answer
+            cannot be used to take a forged note apart field by field.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: >
+            The account behind the link has been given an admin role since it
+            was linked, so the shortcut is closed for it: no issuer may hold a
+            route to an admin account, which is also why the link could not
+            have been created against one. Said plainly rather than as the
+            opaque 401, because the note verified and the person holding it
+            cannot act on the refusal. The role is not changed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: >
+            Federated sign-in is off on this instance. The same answer an
+            unknown path gives, so whether an instance has an integration is
+            not something probing it reveals.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            The address in the note already belongs to an account, and the
+            (issuer, subject) pair is not linked to one. Linking on the
+            address instead would let an issuer take over any account whose
+            address it can guess, so this is refused and an administrator
+            links the pair by hand.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            A malformed body, or a note that verified and carried no usable
+            email claim for a subject arriving for the first time. The second
+            is not a 401 because the note was not the problem.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: >
+            The replay cache is unreachable, so replay cannot be ruled out and
+            this route answers nothing rather than accepting a note that may
+            be a copy. Password sign-in is unaffected.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/auth/refresh:
     post:
       operationId: auth.refresh
@@ -1692,7 +2114,7 @@ paths:
       operationId: users.list
       tags: [Users]
       summary: List all users
-      description: Requires `SUPER_ADMIN` or `UNIT_ADMIN`.
+      description: Requires `ORG_ADMIN` or `UNIT_ADMIN`.
       parameters:
         - name: role
           in: query
@@ -1734,8 +2156,8 @@ paths:
       tags: [Users]
       summary: Create a new user
       description: >
-        Requires `SUPER_ADMIN` or `UNIT_ADMIN`. A unit admin can create users
-        only in their own unit, and only a super-admin can create an admin
+        Requires `ORG_ADMIN` or `UNIT_ADMIN`. A unit admin can create users
+        only in their own unit, and only an organization admin can create an admin
         account; either is refused with `403`.
       requestBody:
         required: true
@@ -1844,8 +2266,8 @@ paths:
       tags: [Users]
       summary: Update a user
       description: >
-        Requires `SUPER_ADMIN` or `UNIT_ADMIN`, and a unit admin only within
-        their own unit. Only a super-admin can modify an account that is itself
+        Requires `ORG_ADMIN` or `UNIT_ADMIN`, and a unit admin only within
+        their own unit. Only an organization admin can modify an account that is itself
         an admin. A user cannot update their own record here.
       parameters:
         - name: user_id
@@ -2014,7 +2436,7 @@ paths:
       tags: [Users]
       summary: Update staff availability status
       description: >
-        Anyone signed in can update their own. A super-admin can update
+        Anyone signed in can update their own. An organization admin can update
         anyone's. This is the occupancy index, and it does not change the
         location the location routes resolve.
       parameters:
@@ -2051,7 +2473,7 @@ paths:
       tags: [API Keys]
       summary: List issued keys
       description: >
-        Requires `SUPER_ADMIN`. Shows what each key is scoped to and when it
+        Requires `ORG_ADMIN`. Shows what each key is scoped to and when it
         runs out, which is how an unrestricted key left over from before
         scopes existed becomes visible.
       responses:
@@ -2073,7 +2495,7 @@ paths:
       tags: [API Keys]
       summary: Issue a key
       description: >
-        Requires `SUPER_ADMIN`. The raw key is in the response and nowhere
+        Requires `ORG_ADMIN`. The raw key is in the response and nowhere
         else. Bind it to a service account rather than to a person: the key
         acts as that user, so a person's key inherits everything they can do.
       requestBody:
@@ -2118,7 +2540,7 @@ paths:
       tags: [API Keys]
       summary: Revoke a key
       description: >
-        Requires `SUPER_ADMIN`. Takes effect on the next request that uses it.
+        Requires `ORG_ADMIN`. Takes effect on the next request that uses it.
       parameters:
         - name: key_id
           in: path
@@ -2133,6 +2555,510 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  # ── Federation ────────────────────────────
+  /api/v1/federation/issuers:
+    get:
+      operationId: federation.listIssuers
+      tags: [Federation]
+      summary: List registered issuers
+      description: >
+        Requires `ORG_ADMIN`; an API key needs `federation:read`. Every route
+        under `/federation` works whether or not federated sign-in is switched
+        on, because an issuer and a key have to be registered before switching
+        it on is worth doing. It is the exchange route that answers 404 while
+        the feature is off.
+      responses:
+        "200":
+          description: Every registration, oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IssuerResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+    post:
+      operationId: federation.createIssuer
+      tags: [Federation]
+      summary: Register an outside issuer
+      description: >
+        Requires `ORG_ADMIN`. A registration on its own accepts nothing: a note
+        names its key by `kid`, so the issuer needs at least one key before any
+        note it mints will verify. A role map is optional, and an issuer without
+        one puts everybody it sends on `MEMBER`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssuerCreate"
+      responses:
+        "201":
+          description: Registered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssuerResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: That `iss` value is already registered. The detail names the registration.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/v1/federation/issuers/{issuer_id}:
+    patch:
+      operationId: federation.updateIssuer
+      tags: [Federation]
+      summary: Change a registration
+      description: >
+        Requires `ORG_ADMIN`. `enabled` false is how an issuer is stopped
+        without losing what it was allowed to assert; notes from it are then
+        refused exactly the way an unknown issuer's are.
+      parameters:
+        - name: issuer_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssuerUpdate"
+      responses:
+        "200":
+          description: Changed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssuerResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+    delete:
+      operationId: federation.deleteIssuer
+      tags: [Federation]
+      summary: Remove a registration
+      description: >
+        Requires `ORG_ADMIN`. Takes the issuer's keys, its role map and its
+        links with it. The accounts stay: somebody who signed in through this
+        issuer keeps their account and their history, and loses the shortcut.
+        Give them a password or link them to another registration.
+      parameters:
+        - name: issuer_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/federation/issuers/{issuer_id}/keys:
+    get:
+      operationId: federation.listKeys
+      tags: [Federation]
+      summary: List an issuer's signing keys
+      description: >
+        Requires `ORG_ADMIN`; an API key needs `federation:read`. The keys are
+        public and are returned in full, which is how an integrator checks that
+        what was registered is what they are signing with.
+      parameters:
+        - name: issuer_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Every key on this registration, oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IssuerKeyResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    post:
+      operationId: federation.addKey
+      tags: [Federation]
+      summary: Add a signing key
+      description: >
+        Requires `ORG_ADMIN`. A rotation is this route and then
+        `federation.retireKey` on the old key: add the new one, give the old one
+        an end far enough ahead that notes already in flight still verify, and
+        delete it afterwards. Adding a key does not retire anything.
+      parameters:
+        - name: issuer_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssuerKeyCreate"
+      responses:
+        "201":
+          description: Added.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssuerKeyResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: This issuer already has a key with that `kid`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            A `public_key` that is not a PEM public key or is not Ed25519, or a
+            `not_after` that is not after `not_before`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/federation/issuers/{issuer_id}/keys/{key_id}:
+    patch:
+      operationId: federation.retireKey
+      tags: [Federation]
+      summary: Give a key an end
+      description: >
+        Requires `ORG_ADMIN`. A moment in the past stops the key now: the next
+        note naming it is refused. A moment in the future is the overlap a
+        planned rotation wants. The key stays readable either way, which is why
+        this is a separate route from deleting it.
+      parameters:
+        - name: issuer_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: key_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssuerKeyRetire"
+      responses:
+        "200":
+          description: Retired at the moment given.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssuerKeyResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: >
+            `not_after` is not after the key's `not_before`, which would leave a
+            key that was never valid. Delete it instead.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      operationId: federation.deleteKey
+      tags: [Federation]
+      summary: Remove a key
+      description: >
+        Requires `ORG_ADMIN`. Immediate and complete: a note naming it is
+        refused as naming an unknown key. Retiring it first is the kinder path
+        during a rotation, and deleting it is the right one for a key that
+        leaked.
+      parameters:
+        - name: issuer_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: key_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/federation/issuers/{issuer_id}/role-map:
+    get:
+      operationId: federation.listRoleMap
+      tags: [Federation]
+      summary: What this issuer's groups mean here
+      description: >
+        Requires `ORG_ADMIN`; an API key needs `federation:read`. Entries are
+        returned oldest first, which is also the order that decides ties: where
+        a note asserts two groups that both match, `STAFF` beats `MEMBER` and
+        the older entry of the winning role supplies the unit.
+      parameters:
+        - name: issuer_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Every entry on this registration.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RoleMapEntryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    post:
+      operationId: federation.addRoleMapEntry
+      tags: [Federation]
+      summary: Map a group to a role
+      description: >
+        Requires `ORG_ADMIN`. The map belongs to the operator: a note names a
+        subject and may name groups, and never a role. Two groups may map to
+        different units, which is the ordinary case for a library and a lab.
+      parameters:
+        - name: issuer_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleMapEntryCreate"
+      responses:
+        "201":
+          description: Mapped.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleMapEntryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            This issuer already maps that group. Delete the entry to change what
+            it means, so the map never holds two answers for one group.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            A `role_type` of `ORG_ADMIN` or `UNIT_ADMIN`. No issuer may assert
+            either, which is what keeps a leaked signing key to the level the
+            operator chose.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/federation/issuers/{issuer_id}/role-map/{entry_id}:
+    delete:
+      operationId: federation.deleteRoleMapEntry
+      tags: [Federation]
+      summary: Unmap a group
+      description: >
+        Requires `ORG_ADMIN`. Nobody who has already signed in changes: roles
+        are read once, when the account is created. What changes is what the
+        next first-time subject in that group gets, which with no entry is
+        `MEMBER` and no unit.
+      parameters:
+        - name: issuer_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: entry_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Unmapped.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/federation/links:
+    get:
+      operationId: federation.listLinks
+      tags: [Federation]
+      summary: Which accounts arrive through which issuer
+      description: >
+        Requires `ORG_ADMIN`; an API key needs `federation:read`. A link made by
+        a first sign-in has an id nobody was told, so this is how one is found
+        before it can be removed. Both filters are optional and combine.
+      parameters:
+        - name: issuer_id
+          in: query
+          required: false
+          description: Only links on this registration.
+          schema:
+            type: integer
+        - name: user_id
+          in: query
+          required: false
+          description: Only links pointing at this account.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Links, oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LinkResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+    post:
+      operationId: federation.createLink
+      tags: [Federation]
+      summary: Let an existing account arrive through an issuer
+      description: >
+        Requires `ORG_ADMIN`. The link is the identity: a note is the account
+        its `(issuer, subject)` pair points at, whatever address the note
+        carries. Without this route the only accounts that can use the shortcut
+        are ones federation created itself, so this is how somebody who already
+        has a password here starts arriving through their institution instead.
+        One account may hold several links, one per issuer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkCreate"
+      responses:
+        "201":
+          description: Linked. The next note carrying that pair is this account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No such issuer, or no such account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            Either that `(issuer, subject)` pair is already linked, or the
+            account is an `ORG_ADMIN` or `UNIT_ADMIN`. An admin account is
+            refused because the answer to a leaked signing key is that no
+            issuer holds a route to one; a link would be exactly that route.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/v1/federation/links/{link_id}:
+    delete:
+      operationId: federation.deleteLink
+      tags: [Federation]
+      summary: Stop an account arriving through an issuer
+      description: >
+        Requires `ORG_ADMIN`. The account stays, with whatever role and unit it
+        holds; what goes is the route. A note carrying the unlinked pair is then
+        a stranger, and a stranger whose address is taken is refused rather than
+        given a second account.
+      parameters:
+        - name: link_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Unlinked.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   # ── Resources ─────────────────────────────
   /api/v1/resources/:
     get:
@@ -2182,7 +3108,7 @@ paths:
       tags: [Resources]
       summary: Create a room
       description: >
-        Requires `SUPER_ADMIN`. Registers a room before any timetable names
+        Requires `ORG_ADMIN`. Registers a room before any timetable names
         it, for a system that manages its own rooms. The row is the one an
         import would have made, so a later CSV naming the room finds it
         rather than creating a second. A retry after a lost response reads
@@ -2344,7 +3270,7 @@ paths:
       tags: [Resources]
       summary: Hold a resource for one dated window
       description: >
-        Requires `SUPER_ADMIN` or `UNIT_ADMIN`. The route an outside system
+        Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system
         uses to take a room. What it refuses is exactly what GET availability
         calls busy, through the same queries and the same expansion, so a
         caller cannot read an hour as free and then be refused it.
@@ -2435,7 +3361,7 @@ paths:
       tags: [Resources]
       summary: Let a hold go
       description: >
-        Requires `SUPER_ADMIN` or `UNIT_ADMIN`. Marks the reservation
+        Requires `ORG_ADMIN` or `UNIT_ADMIN`. Marks the reservation
         cancelled and leaves the row in place. A deleted row cannot be told to
         anybody, and a system that was informed the room was held has to be
         able to learn that it no longer is.
@@ -2447,7 +3373,7 @@ paths:
 
 
         A hold is let go by whoever took it. A `UNIT_ADMIN` that did not make
-        the reservation gets a 403; a `SUPER_ADMIN` overrides, because a hold
+        the reservation gets a 403; an `ORG_ADMIN` overrides, because a hold
         taken by an account that no longer exists has nobody left to cancel
         it.
       parameters:
@@ -2786,7 +3712,7 @@ paths:
       tags: [Schedule]
       summary: Update a ledger entry
       description: >
-        Requires `SUPER_ADMIN` or `UNIT_ADMIN`, and a unit admin only within
+        Requires `ORG_ADMIN` or `UNIT_ADMIN`, and a unit admin only within
         their own unit. Sets the substitute, the delivery format, or the day's
         own geofence. A field left out, or sent as null, keeps its current
         value.
@@ -2896,7 +3822,7 @@ paths:
       tags: [Schedule]
       summary: Create a new planning cycle
       description: >
-        Requires `SUPER_ADMIN`. The two dates are the days the cycle's slots
+        Requires `ORG_ADMIN`. The two dates are the days the cycle's slots
         run on, both included. An end earlier than the start is refused with
         422; equal dates are a cycle of one day.
       requestBody:
@@ -2931,7 +3857,7 @@ paths:
 
 
         Closing a cycle that is already closed runs the same sweep. Requires
-        `SUPER_ADMIN`.
+        `ORG_ADMIN`.
       parameters:
         - name: cycle_id
           in: path
@@ -2980,7 +3906,7 @@ paths:
 
 
         Opening a cycle that is already open changes nothing. Requires
-        `SUPER_ADMIN`.
+        `ORG_ADMIN`.
       parameters:
         - name: cycle_id
           in: path
@@ -3022,7 +3948,7 @@ paths:
 
         The target must be closed and have no activities. The copied slots
         are not checked against the rooms here; opening the target runs those
-        checks over all of them at once. Requires `SUPER_ADMIN`.
+        checks over all of them at once. Requires `ORG_ADMIN`.
       parameters:
         - name: old_id
           in: path
@@ -3173,7 +4099,7 @@ paths:
       summary: Get the roster for a ledger entry
       description: >
         Whoever runs the session gets every row: the assigned lead, the
-        substitute, a super admin, or a unit admin inside that unit. A member
+        substitute, an organization admin, or a unit admin inside that unit. A member
         gets their own row and nothing else. Anyone else is refused rather
         than handed an empty list.
       parameters:
@@ -3241,7 +4167,7 @@ paths:
         Any signed-in user. Returns the undecided requests the caller may
         decide: those routed to them as the submitter's line manager and,
         for an admin, those whose manager has since been deactivated. A
-        SUPER_ADMIN gets every one of those, a UNIT_ADMIN those from the
+        ORG_ADMIN gets every one of those, a UNIT_ADMIN those from the
         non-admin accounts of their own unit, and nobody gets their own.
       responses:
         "200":
@@ -3304,7 +4230,7 @@ paths:
       description: >
         Freeform notes about a session: lab issues, late starts, a handover.
         Restricted to whoever runs it, meaning the assigned lead, the
-        substitute, a super admin, or a unit admin inside that unit.
+        substitute, an organization admin, or a unit admin inside that unit.
       requestBody:
         required: true
         content:
@@ -3472,7 +4398,9 @@ paths:
         "404":
           description: >
             No visit with that code, including one deleted under
-            `GUEST_RETENTION_DAYS`.
+            `GUEST_RETENTION_DAYS` and one past the window in
+            `GUEST_VISIT_CODE_TTL_MINUTES`, which answers exactly as an
+            unknown code does.
           content:
             application/json:
               schema:
@@ -3482,11 +4410,37 @@ paths:
     get:
       operationId: guest.listPending
       tags: [Guest Gate]
-      summary: List pending guest requests for authenticated staff
-      description: Returns guests targeting the authenticated staff member with PENDING_VERIFICATION status.
+      summary: List the pending guest requests this account may decide
+      description: >
+        Guests with PENDING_VERIFICATION status that this account may decide: the ones
+        targeting it, and with GUEST_ADMIN_CAN_DECIDE on also those an admin may decide,
+        which for an ORG_ADMIN is the whole organization's queue. Unpaginated.
       responses:
         "200":
           description: Pending guest requests.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GuestResponse"
+
+  /api/v1/guest/overstays:
+    get:
+      operationId: guest.listOverstays
+      tags: [Guest Gate]
+      summary: List the approved visits that have run past their end
+      description: >
+        Longest over first, which is the desk's other list: who was let in and
+        has not been dealt with since. The same reach as the decision, so for an
+        ORG_ADMIN with GUEST_ADMIN_CAN_DECIDE on it is the whole organization's.
+        Nothing here has been revoked; each row says the time is up, and a person
+        decides whether to extend it or to go and find them. Empty while
+        GUEST_VISIT_LENGTH_MINUTES is 0, since then no visit has an end.
+        Unpaginated, as /guest/pending is.
+      responses:
+        "200":
+          description: Approved visits past their end.
           content:
             application/json:
               schema:
@@ -3527,7 +4481,80 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
-          description: No such entry, or the visitor asked for somebody else.
+          description: >
+            No such entry, or the visitor asked for somebody else. By default only the
+            staff member the visitor named may decide; with GUEST_ADMIN_CAN_DECIDE on an
+            ORG_ADMIN may decide any visit and a UNIT_ADMIN those meant for their own unit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/guest/{entry_id}/extend:
+    patch:
+      operationId: guest.extendVisit
+      tags: [Guest Gate]
+      summary: Give an approved visit longer
+      description: >
+        Whoever could have decided the visit can extend it, on the reasoning that
+        a desk which may let somebody in may also let them stay. The extension
+        runs from whichever is later, now or the end the visit already has, so a
+        visit half an hour over gets the full grant rather than a window that has
+        already gone. There is no limit on how many times: this bounds one grant,
+        and the audit record of each extension is what an organization gets in
+        place of a ceiling on the whole visit.
+      parameters:
+        - name: entry_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuestExtensionRequest"
+      responses:
+        "200":
+          description: The visit's new end.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: VISIT_EXTENDED
+                  guest:
+                    type: string
+                    description: The visitor's name.
+                  visit_expires_at:
+                    type: string
+                    format: date-time
+                    description: When the visit is now over.
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: >
+            No such entry, or one this account could not have decided either.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            The visit is not approved, or it is approved with no end to move,
+            which is any visit approved while GUEST_VISIT_LENGTH_MINUTES was 0.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            Longer than GUEST_VISIT_EXTENSION_MAX_MINUTES, refused rather than
+            quietly trimmed so that a desk which meant 30 and typed 300 hears
+            about it. Also every extension when that setting is 0.
           content:
             application/json:
               schema:
@@ -3540,7 +4567,7 @@ paths:
       tags: [Ingestion]
       summary: Bulk import schedule from CSV
       description: >
-        Requires `SUPER_ADMIN`. The matrix rewrites activities and
+        Requires `ORG_ADMIN`. The matrix rewrites activities and
         registrations across every unit, so a unit-scoped admin cannot
         upload it.
         The CSV must contain these columns (case-sensitive):
@@ -3645,7 +4672,7 @@ paths:
       tags: [Ingestion]
       summary: Trigger daily ledger generation
       description: >
-        Requires `SUPER_ADMIN`. Generates `DailyLedger` rows from
+        Requires `ORG_ADMIN`. Generates `DailyLedger` rows from
         `StructuralMasterSlot` for a given date, tomorrow by default. The
         same job the nightly cron runs. Safe to re-run: a day already written
         for a slot is skipped.
@@ -3689,7 +4716,7 @@ paths:
       tags: [Audit]
       summary: Writes made through the API, newest first
       description: >
-        Requires `SUPER_ADMIN`; an API key needs `audit:read`. One record per
+        Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per
         request under `/api/v1` with a method other than GET, HEAD or OPTIONS,
         including refused ones. Bodies are never stored. `from` and `to` are
         dates in the organization's timezone, both included.
@@ -3731,6 +4758,99 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/v1/changes/:
+    get:
+      operationId: changes.list
+      tags: [Changes]
+      summary: What has changed about the rooms and the bookings
+      description: >
+        Requires `ORG_ADMIN`; an API key needs `changes:read`. For a system
+        that keeps its own copy of the rooms and the bookings: the websocket
+        cannot tell it anything, because those notices go to a signed-in socket
+        and a service behind another firewall has none, and re-reading every
+        room on a timer costs the building rather than the change.
+
+
+        One entry per row, not one per change. A room renamed to Bedroom and
+        then to Living Room is one entry saying Living Room, because a consumer
+        catching up wants where things ended and not the walk. `full=true`
+        returns the walk: every marker, oldest first, with no row state.
+
+
+        Send `next_cursor` back as `since`. An entry can arrive twice, after a
+        crash between a write and the poll that read it, or because a row
+        changed again while the page was being built; applying an entry is
+        replacing a row with what the row already says, so no bookkeeping is
+        needed for that.
+
+
+        An entry can also be missed, which is the one thing to plan around.
+        The cursor is the marker's own id, handed out when the row is inserted
+        and not when it commits, so two writes that commit in the other order
+        leave a gap: a poll that reads the later id and stores it does not come
+        back for the earlier one. So re-read the rooms and the bookings in full
+        on a slow timer. That is needed anyway, because the feed records only
+        from the moment it was switched on.
+
+
+        A page as long as `limit` means there is probably more, so poll again
+        rather than waiting for the timer.
+
+
+        The role is higher than reading the rooms takes because a booking
+        carries what it is for, which the availability calendar withholds from
+        everyone but the account that made it. This hands the booking over
+        whole, so it sits where the audit log sits.
+      parameters:
+        - name: since
+          in: query
+          required: false
+          description: The cursor the last poll returned. 0 is from the beginning.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          required: false
+          description: At most this many entries.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 200
+        - name: full
+          in: query
+          required: false
+          description: >
+            Every marker rather than one entry per row, and no row state.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: >
+            The changes, oldest first, and the cursor to send next time. Empty
+            with the cursor handed back unchanged when nothing has changed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChangeFeed"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "503":
+          description: >
+            The feed is off, which is the default. `CHANGE_FEED_ENABLED=true`
+            starts recording; changes made while it was off were not recorded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/sync/feed-token:
     get:
@@ -3818,7 +4938,7 @@ paths:
       tags: [WebSocket]
       summary: Count of people with an open websocket, on every instance
       description: >
-        Requires `SUPER_ADMIN`. The count is organization-wide, and there is
+        Requires `ORG_ADMIN`. The count is organization-wide, and there is
         nothing in it a unit admin could be shown only their own share of. A
         person counts once however many instances they are connected to. The
         other instances' figures can be up to 15 seconds old, and an instance
@@ -3926,5 +5046,12 @@ paths:
 #   { "event": "GUEST_HANDSHAKE_REQ",
 #     "payload": { "transaction_reference": 5, "guest_name": "J. Smith",
 #                  "organization": "TechCorp", "intent": "..." } }
+#
+#   { "event": "GUEST_VISIT_EXPIRED",
+#     "payload": { "transaction_reference": 5, "guest_name": "J. Smith",
+#                  "visit_expires_at": "2026-09-12T07:31:07Z" } }
+#   Sent once per overrun, within five minutes of the end passing, to the
+#   target staff and to whoever decided the visit. GET /guest/overstays is
+#   the same list for a desk that had no socket open at the time.
 #
 # The AUTH frame is the only thing a client sends upstream.

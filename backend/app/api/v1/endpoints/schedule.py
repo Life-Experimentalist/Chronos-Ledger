@@ -154,7 +154,7 @@ def list_cycles(
 def create_cycle(
     payload: PlanningCycleCreate,
     db: Session = Depends(get_db),
-    _=Depends(require_roles("SUPER_ADMIN")),
+    _=Depends(require_roles("ORG_ADMIN")),
 ):
     cycle = PlanningCycle(**payload.model_dump())
     db.add(cycle)
@@ -165,7 +165,7 @@ def create_cycle(
 
 @router.patch("/cycles/{cycle_id}/close", operation_id="schedule.closeCycle")
 def close_cycle(
-    cycle_id: int, db: Session = Depends(get_db), _=Depends(require_roles("SUPER_ADMIN"))
+    cycle_id: int, db: Session = Depends(get_db), _=Depends(require_roles("ORG_ADMIN"))
 ):
     """Take a cycle out of service, and the days it had planned ahead with it.
 
@@ -214,9 +214,7 @@ def close_cycle(
     operation_id="schedule.openCycle",
     responses={409: {"model": CycleActivationConflict}},
 )
-def open_cycle(
-    cycle_id: int, db: Session = Depends(get_db), _=Depends(require_roles("SUPER_ADMIN"))
-):
+def open_cycle(cycle_id: int, db: Session = Depends(get_db), _=Depends(require_roles("ORG_ADMIN"))):
     """Put a drafted cycle into service, with its slots checked first.
 
     Nothing set this flag back to true. A cycle could be closed and never
@@ -303,7 +301,7 @@ def clone_cycle_offerings(
     old_id: int,
     new_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_roles("SUPER_ADMIN")),
+    _=Depends(require_roles("ORG_ADMIN")),
 ):
     """Copy one cycle's activities and weekly slots into another.
 
@@ -417,7 +415,7 @@ def _refuse_unless_active(db: Session, user_id: str, role: str) -> None:
 def create_master_slot(
     payload: MasterSlotCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
 ):
     offering = db.query(Activity).filter(Activity.id == payload.activity_id).first()
     if not offering:
@@ -473,7 +471,7 @@ def update_master_slot(
     slot_id: int,
     payload: MasterSlotUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
 ):
     """Change a slot, and take the days it has already produced with it.
 
@@ -570,7 +568,7 @@ def update_master_slot(
 def delete_master_slot(
     slot_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
 ):
     """Take a slot off the timetable without taking its history with it.
 
@@ -733,7 +731,7 @@ def update_ledger_entry(
     ledger_id: int,
     payload: DailyLedgerUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "UNIT_ADMIN")),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
 ):
     entry = db.query(DailyLedger).filter(DailyLedger.id == ledger_id).first()
     if not entry:

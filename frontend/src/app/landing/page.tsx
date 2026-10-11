@@ -491,7 +491,7 @@ const FEATURES = [
   },
   {
     title: 'Role-Based Access',
-    desc: 'SUPER_ADMIN, UNIT_ADMIN, STAFF, MEMBER. JWT RBAC enforced at every endpoint. Each role sees only their own data.',
+    desc: 'ORG_ADMIN, UNIT_ADMIN, STAFF, MEMBER. JWT RBAC enforced at every endpoint. Each role sees only their own data.',
     icon: Shield,
     iconBg: 'bg-chronos-danger/10',
     iconColor: 'text-chronos-danger',

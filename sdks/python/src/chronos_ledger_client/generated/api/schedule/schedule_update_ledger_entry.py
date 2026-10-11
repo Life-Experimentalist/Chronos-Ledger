@@ -82,7 +82,7 @@ def sync_detailed(
 ) -> Response[ErrorResponse | ScheduleUpdateLedgerEntryResponse200]:
     """Update a ledger entry
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Sets the
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Sets the
     substitute, the delivery format, or the day's own geofence. A field left out, or sent as null, keeps
     its current value.
 
@@ -119,7 +119,7 @@ def sync(
 ) -> ErrorResponse | ScheduleUpdateLedgerEntryResponse200 | None:
     """Update a ledger entry
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Sets the
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Sets the
     substitute, the delivery format, or the day's own geofence. A field left out, or sent as null, keeps
     its current value.
 
@@ -151,7 +151,7 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | ScheduleUpdateLedgerEntryResponse200]:
     """Update a ledger entry
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Sets the
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Sets the
     substitute, the delivery format, or the day's own geofence. A field left out, or sent as null, keeps
     its current value.
 
@@ -186,7 +186,7 @@ async def asyncio(
 ) -> ErrorResponse | ScheduleUpdateLedgerEntryResponse200 | None:
     """Update a ledger entry
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Sets the
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`, and a unit admin only within their own unit. Sets the
     substitute, the delivery format, or the day's own geofence. A field left out, or sent as null, keeps
     its current value.
 

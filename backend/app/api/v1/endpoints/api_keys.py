@@ -73,7 +73,7 @@ class ApiKeyCreated(ApiKeyResponse):
 def create_api_key(
     payload: ApiKeyCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN")),
+    current_user: User = Depends(require_roles("ORG_ADMIN")),
 ):
     bound_user = db.query(User).filter(User.id == payload.user_id).first()
     if bound_user is None:
@@ -124,7 +124,7 @@ def create_api_key(
 @router.get("/", operation_id="apiKeys.list", response_model=list[ApiKeyResponse])
 def list_api_keys(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN")),
+    current_user: User = Depends(require_roles("ORG_ADMIN")),
 ):
     return db.query(ApiKey).order_by(ApiKey.id).all()
 
@@ -133,7 +133,7 @@ def list_api_keys(
 def revoke_api_key(
     key_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("SUPER_ADMIN")),
+    current_user: User = Depends(require_roles("ORG_ADMIN")),
 ):
     row = db.query(ApiKey).filter(ApiKey.id == key_id).first()
     if row is None:

@@ -116,7 +116,7 @@ def test_an_admin_still_on_the_seeded_password_is_refused(client, db, seed_users
             full_name="Fresh Admin",
             email_address="fresh.admin@test.internal",
             credential_secure_hash=_FRESH_ADMIN_HASH,
-            role_type=InstitutionalRole.SUPER_ADMIN,
+            role_type=InstitutionalRole.ORG_ADMIN,
             initial_login_state=True,
         )
     )
@@ -140,7 +140,7 @@ def test_the_connection_count_is_refused_to_a_member(client, seed_users):
     assert client.get(STATS_PATH, headers=headers).status_code == 403
 
 
-def test_the_connection_count_is_readable_by_a_super_admin(client, seed_users):
+def test_the_connection_count_is_readable_by_an_org_admin(client, seed_users):
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
 
     res = client.get(STATS_PATH, headers=headers)

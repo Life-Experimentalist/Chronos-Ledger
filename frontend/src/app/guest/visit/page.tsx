@@ -4,17 +4,27 @@
 
 import { useEffect, useState } from 'react'
 import { isAxiosError } from 'axios'
-import { Search, Loader2, CheckCircle2, CircleX } from 'lucide-react'
+import { Search, Loader2, CheckCircle2, CircleX, Hourglass } from 'lucide-react'
 import { guestApi } from '@/lib/api'
 import { useVocabulary } from '@/hooks/useVocabulary'
 import type { LogVerificationState } from '@/types'
 
 const POLL_MS = 5000
+// Once approved this page is watching for one of two slow things: the desk
+// giving the visitor more time, and the end time arriving. Neither is worth
+// asking about every five seconds for the length of a visit, and the lookup
+// deliberately carries no rate-limit budget, so the restraint has to live here.
+const SETTLED_POLL_MS = 60000
+
+// The clock time the visitor should read, in whatever the phone's locale is.
+// A date is left out: a visit that runs past midnight is not what this is for.
+const formatEnd = (iso: string) =>
+  new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 
 type Lookup =
   | { state: 'checking' }
   | { state: 'missing' }
-  | { state: 'found'; status: LogVerificationState }
+  | { state: 'found'; status: LogVerificationState; expiresAt: string | null }
 
 // Where a visitor follows their check-in from their own phone. Nobody signs
 // in: the code the kiosk showed them is the whole credential, and all it
@@ -41,21 +51,32 @@ export default function GuestVisitPage() {
     let timer: ReturnType<typeof setTimeout>
     setLookup({ state: 'checking' })
     const ask = async () => {
+      let next = POLL_MS
       try {
         const res = await guestApi.visitStatus(code)
         if (cancelled) return
-        setLookup({ state: 'found', status: res.data.handshake_status })
-        // Once decided there is nothing more to wait for.
-        if (res.data.handshake_status !== 'PENDING_VERIFICATION') return
+        const expiresAt = res.data.visit_expires_at ?? null
+        const status = res.data.handshake_status
+        setLookup({ state: 'found', status, expiresAt })
+        // A denial is the end of it, and so is an approval with no end time.
+        // An approval that has one is not: the desk can push that time out,
+        // and this page is where the visitor reads the new one.
+        if (status === 'VERIFIED_DENIED') return
+        if (status === 'VERIFIED_APPROVED' && !expiresAt) return
+        if (status === 'VERIFIED_APPROVED') next = SETTLED_POLL_MS
       } catch (err) {
         if (cancelled) return
+        // A 404 on the first ask is a code that matches no visit. Later it is
+        // a code that stopped working, GUEST_VISIT_CODE_TTL_MINUTES having
+        // passed, which is not the same as the visit never existing: leave
+        // the card the visitor is reading where it is and stop asking.
         if (isAxiosError(err) && err.response?.status === 404) {
-          setLookup({ state: 'missing' })
+          setLookup((prev) => (prev?.state === 'found' ? prev : { state: 'missing' }))
           return
         }
         // Anything else is the network or a restart: ask again.
       }
-      timer = setTimeout(ask, POLL_MS)
+      timer = setTimeout(ask, next)
     }
     ask()
     return () => {
@@ -129,9 +150,26 @@ export default function GuestVisitPage() {
 
         {lookup?.state === 'found' && lookup.status === 'VERIFIED_APPROVED' && (
           <div className="glass-card p-8 text-center">
-            <CheckCircle2 className="w-14 h-14 text-chronos-teal mx-auto mb-4" />
-            <h2 className="text-lg font-bold text-chronos-text mb-1">Request Approved</h2>
-            <p className="text-chronos-text-dim text-sm">You are expected. Please proceed.</p>
+            {lookup.expiresAt && new Date(lookup.expiresAt) <= new Date() ? (
+              <>
+                <Hourglass className="w-14 h-14 text-chronos-danger mx-auto mb-4" />
+                <h2 className="text-lg font-bold text-chronos-text mb-1">Your Time Is Up</h2>
+                <p className="text-chronos-text-dim text-sm">
+                  {`Your visit ended at ${formatEnd(lookup.expiresAt)}. Please go to the front desk to leave or to ask for more time.`}
+                </p>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-14 h-14 text-chronos-teal mx-auto mb-4" />
+                <h2 className="text-lg font-bold text-chronos-text mb-1">Request Approved</h2>
+                <p className="text-chronos-text-dim text-sm">You are expected. Please proceed.</p>
+                {lookup.expiresAt && (
+                  <p className="text-chronos-text text-sm mt-3">
+                    {`Please be out by ${formatEnd(lookup.expiresAt)}.`}
+                  </p>
+                )}
+              </>
+            )}
           </div>
         )}
 

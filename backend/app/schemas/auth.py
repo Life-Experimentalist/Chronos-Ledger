@@ -39,3 +39,10 @@ class ChangePasswordResponse(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class FederatedTokenRequest(BaseModel):
+    # The note exactly as its issuer minted it. Nothing reads it here: what a
+    # note says is only worth knowing after it has verified, which
+    # `services/federated_identity.py` does.
+    token: str

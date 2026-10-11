@@ -67,7 +67,7 @@ def sync_detailed(
     day that carries attendance or a note is kept rather than refused over. Days before today are not
     touched.
 
-    Closing a cycle that is already closed runs the same sweep. Requires `SUPER_ADMIN`.
+    Closing a cycle that is already closed runs the same sweep. Requires `ORG_ADMIN`.
 
     Args:
         cycle_id (int):
@@ -103,7 +103,7 @@ def sync(
     day that carries attendance or a note is kept rather than refused over. Days before today are not
     touched.
 
-    Closing a cycle that is already closed runs the same sweep. Requires `SUPER_ADMIN`.
+    Closing a cycle that is already closed runs the same sweep. Requires `ORG_ADMIN`.
 
     Args:
         cycle_id (int):
@@ -134,7 +134,7 @@ async def asyncio_detailed(
     day that carries attendance or a note is kept rather than refused over. Days before today are not
     touched.
 
-    Closing a cycle that is already closed runs the same sweep. Requires `SUPER_ADMIN`.
+    Closing a cycle that is already closed runs the same sweep. Requires `ORG_ADMIN`.
 
     Args:
         cycle_id (int):
@@ -168,7 +168,7 @@ async def asyncio(
     day that carries attendance or a note is kept rather than refused over. Days before today are not
     touched.
 
-    Closing a cycle that is already closed runs the same sweep. Requires `SUPER_ADMIN`.
+    Closing a cycle that is already closed runs the same sweep. Requires `ORG_ADMIN`.
 
     Args:
         cycle_id (int):

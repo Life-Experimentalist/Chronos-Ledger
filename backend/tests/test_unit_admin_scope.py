@@ -172,7 +172,7 @@ def test_cannot_batch_mark_another_units_attendance(client, db, seed_users):
     assert client.post("/api/v1/attendance/batch", headers=headers, json=body).status_code == 200
 
 
-def test_csv_upload_is_super_admin_only(client, db, seed_users):
+def test_csv_upload_is_org_admin_only(client, db, seed_users):
     _seed_unit_world(db)
     headers = _unit_admin(client)
     res = client.post(
@@ -183,7 +183,7 @@ def test_csv_upload_is_super_admin_only(client, db, seed_users):
     assert res.status_code == 403
 
 
-def test_super_admin_still_reaches_every_unit(client, db, seed_users):
+def test_org_admin_still_reaches_every_unit(client, db, seed_users):
     _seed_unit_world(db)
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
     res = client.get("/api/v1/users/", headers=headers)

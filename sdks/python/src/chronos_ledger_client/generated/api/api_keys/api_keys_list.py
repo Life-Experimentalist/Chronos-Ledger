@@ -66,7 +66,7 @@ def sync_detailed(
 ) -> Response[ErrorResponse | list[ApiKeyResponse]]:
     """List issued keys
 
-     Requires `SUPER_ADMIN`. Shows what each key is scoped to and when it runs out, which is how an
+     Requires `ORG_ADMIN`. Shows what each key is scoped to and when it runs out, which is how an
     unrestricted key left over from before scopes existed becomes visible.
 
     Raises:
@@ -92,7 +92,7 @@ def sync(
 ) -> ErrorResponse | list[ApiKeyResponse] | None:
     """List issued keys
 
-     Requires `SUPER_ADMIN`. Shows what each key is scoped to and when it runs out, which is how an
+     Requires `ORG_ADMIN`. Shows what each key is scoped to and when it runs out, which is how an
     unrestricted key left over from before scopes existed becomes visible.
 
     Raises:
@@ -114,7 +114,7 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | list[ApiKeyResponse]]:
     """List issued keys
 
-     Requires `SUPER_ADMIN`. Shows what each key is scoped to and when it runs out, which is how an
+     Requires `ORG_ADMIN`. Shows what each key is scoped to and when it runs out, which is how an
     unrestricted key left over from before scopes existed becomes visible.
 
     Raises:
@@ -138,7 +138,7 @@ async def asyncio(
 ) -> ErrorResponse | list[ApiKeyResponse] | None:
     """List issued keys
 
-     Requires `SUPER_ADMIN`. Shows what each key is scoped to and when it runs out, which is how an
+     Requires `ORG_ADMIN`. Shows what each key is scoped to and when it runs out, which is how an
     unrestricted key left over from before scopes existed becomes visible.
 
     Raises:

@@ -1,7 +1,7 @@
 // Copyright 2026 Chronos Ledger Contributors
 // Licensed under the Apache License, Version 2.0
 
-export type InstitutionalRole = 'SUPER_ADMIN' | 'UNIT_ADMIN' | 'STAFF' | 'MEMBER'
+export type InstitutionalRole = 'ORG_ADMIN' | 'UNIT_ADMIN' | 'STAFF' | 'MEMBER'
 export type DynamicState = 'SCHEDULED' | 'ON_LEAVE' | 'PROXY_SUBSTITUTE' | 'LUNCH' | 'INTERNAL_MEETING' | 'ADHOC_EVENT'
 export type VerificationMetric = 'PRESENT' | 'ABSENT' | 'LATE'
 export type ExecutionMode = 'PHYSICAL' | 'ONLINE_STREAM'
@@ -83,11 +83,15 @@ export interface GuestEntry {
   visitation_intent: string
   handshake_status: LogVerificationState
   timestamp_marked: string
+  // When an approved visit is over. Null where the organization sets no
+  // length, and on every visit nobody has approved.
+  visit_expires_at: string | null
 }
 
 export interface GuestVisitStatus {
   handshake_status: LogVerificationState
   timestamp_marked: string
+  visit_expires_at: string | null
 }
 
 export interface StaffLocation {

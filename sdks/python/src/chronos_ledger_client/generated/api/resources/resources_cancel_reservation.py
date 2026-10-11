@@ -75,15 +75,15 @@ def sync_detailed(
 ) -> Response[ErrorResponse | ReservationResponse]:
     """Let a hold go
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`. Marks the reservation cancelled and leaves the row in place.
-    A deleted row cannot be told to anybody, and a system that was informed the room was held has to be
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`. Marks the reservation cancelled and leaves the row in place. A
+    deleted row cannot be told to anybody, and a system that was informed the room was held has to be
     able to learn that it no longer is.
 
     The freed window is bookable again immediately and stops appearing in availability. Cancelling twice
     is not an error and returns the same timestamp. Cancelling through the wrong resource id is a 404.
 
-    A hold is let go by whoever took it. A `UNIT_ADMIN` that did not make the reservation gets a 403; a
-    `SUPER_ADMIN` overrides, because a hold taken by an account that no longer exists has nobody left to
+    A hold is let go by whoever took it. A `UNIT_ADMIN` that did not make the reservation gets a 403; an
+    `ORG_ADMIN` overrides, because a hold taken by an account that no longer exists has nobody left to
     cancel it.
 
     Args:
@@ -118,15 +118,15 @@ def sync(
 ) -> ErrorResponse | ReservationResponse | None:
     """Let a hold go
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`. Marks the reservation cancelled and leaves the row in place.
-    A deleted row cannot be told to anybody, and a system that was informed the room was held has to be
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`. Marks the reservation cancelled and leaves the row in place. A
+    deleted row cannot be told to anybody, and a system that was informed the room was held has to be
     able to learn that it no longer is.
 
     The freed window is bookable again immediately and stops appearing in availability. Cancelling twice
     is not an error and returns the same timestamp. Cancelling through the wrong resource id is a 404.
 
-    A hold is let go by whoever took it. A `UNIT_ADMIN` that did not make the reservation gets a 403; a
-    `SUPER_ADMIN` overrides, because a hold taken by an account that no longer exists has nobody left to
+    A hold is let go by whoever took it. A `UNIT_ADMIN` that did not make the reservation gets a 403; an
+    `ORG_ADMIN` overrides, because a hold taken by an account that no longer exists has nobody left to
     cancel it.
 
     Args:
@@ -156,15 +156,15 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | ReservationResponse]:
     """Let a hold go
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`. Marks the reservation cancelled and leaves the row in place.
-    A deleted row cannot be told to anybody, and a system that was informed the room was held has to be
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`. Marks the reservation cancelled and leaves the row in place. A
+    deleted row cannot be told to anybody, and a system that was informed the room was held has to be
     able to learn that it no longer is.
 
     The freed window is bookable again immediately and stops appearing in availability. Cancelling twice
     is not an error and returns the same timestamp. Cancelling through the wrong resource id is a 404.
 
-    A hold is let go by whoever took it. A `UNIT_ADMIN` that did not make the reservation gets a 403; a
-    `SUPER_ADMIN` overrides, because a hold taken by an account that no longer exists has nobody left to
+    A hold is let go by whoever took it. A `UNIT_ADMIN` that did not make the reservation gets a 403; an
+    `ORG_ADMIN` overrides, because a hold taken by an account that no longer exists has nobody left to
     cancel it.
 
     Args:
@@ -197,15 +197,15 @@ async def asyncio(
 ) -> ErrorResponse | ReservationResponse | None:
     """Let a hold go
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`. Marks the reservation cancelled and leaves the row in place.
-    A deleted row cannot be told to anybody, and a system that was informed the room was held has to be
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`. Marks the reservation cancelled and leaves the row in place. A
+    deleted row cannot be told to anybody, and a system that was informed the room was held has to be
     able to learn that it no longer is.
 
     The freed window is bookable again immediately and stops appearing in availability. Cancelling twice
     is not an error and returns the same timestamp. Cancelling through the wrong resource id is a 404.
 
-    A hold is let go by whoever took it. A `UNIT_ADMIN` that did not make the reservation gets a 403; a
-    `SUPER_ADMIN` overrides, because a hold taken by an account that no longer exists has nobody left to
+    A hold is let go by whoever took it. A `UNIT_ADMIN` that did not make the reservation gets a 403; an
+    `ORG_ADMIN` overrides, because a hold taken by an account that no longer exists has nobody left to
     cancel it.
 
     Args:

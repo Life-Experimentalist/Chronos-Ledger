@@ -71,7 +71,7 @@ def sync_detailed(
 ) -> Response[ErrorResponse | IngestionGenerateLedgerResponse200]:
     """Trigger daily ledger generation
 
-     Requires `SUPER_ADMIN`. Generates `DailyLedger` rows from `StructuralMasterSlot` for a given date,
+     Requires `ORG_ADMIN`. Generates `DailyLedger` rows from `StructuralMasterSlot` for a given date,
     tomorrow by default. The same job the nightly cron runs. Safe to re-run: a day already written for a
     slot is skipped.
 
@@ -109,7 +109,7 @@ def sync(
 ) -> ErrorResponse | IngestionGenerateLedgerResponse200 | None:
     """Trigger daily ledger generation
 
-     Requires `SUPER_ADMIN`. Generates `DailyLedger` rows from `StructuralMasterSlot` for a given date,
+     Requires `ORG_ADMIN`. Generates `DailyLedger` rows from `StructuralMasterSlot` for a given date,
     tomorrow by default. The same job the nightly cron runs. Safe to re-run: a day already written for a
     slot is skipped.
 
@@ -142,7 +142,7 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | IngestionGenerateLedgerResponse200]:
     """Trigger daily ledger generation
 
-     Requires `SUPER_ADMIN`. Generates `DailyLedger` rows from `StructuralMasterSlot` for a given date,
+     Requires `ORG_ADMIN`. Generates `DailyLedger` rows from `StructuralMasterSlot` for a given date,
     tomorrow by default. The same job the nightly cron runs. Safe to re-run: a day already written for a
     slot is skipped.
 
@@ -178,7 +178,7 @@ async def asyncio(
 ) -> ErrorResponse | IngestionGenerateLedgerResponse200 | None:
     """Trigger daily ledger generation
 
-     Requires `SUPER_ADMIN`. Generates `DailyLedger` rows from `StructuralMasterSlot` for a given date,
+     Requires `ORG_ADMIN`. Generates `DailyLedger` rows from `StructuralMasterSlot` for a given date,
     tomorrow by default. The same job the nightly cron runs. Safe to re-run: a day already written for a
     slot is skipped.
 

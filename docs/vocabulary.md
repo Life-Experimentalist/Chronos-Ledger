@@ -159,7 +159,7 @@ could no longer reason about its own data.
 
 | Set                     | Values                                                                             |
 | ----------------------- | ----------------------------------------------------------------------------------- |
-| `InstitutionalRole`     | `SUPER_ADMIN`, `UNIT_ADMIN`, `STAFF`, `MEMBER`                                      |
+| `InstitutionalRole`     | `ORG_ADMIN`, `UNIT_ADMIN`, `STAFF`, `MEMBER`                                      |
 | `VerificationMetric`    | `PRESENT`, `ABSENT`, `LATE`                                                          |
 | `DynamicState`          | `SCHEDULED`, `ON_LEAVE`, `PROXY_SUBSTITUTE`, `LUNCH`, `INTERNAL_MEETING`, `ADHOC_EVENT` |
 | `ExecutionMode`         | `PHYSICAL`, `ONLINE_STREAM`                                                          |

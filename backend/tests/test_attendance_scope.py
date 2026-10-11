@@ -157,7 +157,7 @@ def test_an_admin_inside_the_unit_reads_the_whole_roster(client, db, seed_users)
     assert len(res.json()) == 2
 
 
-def test_a_super_admin_reads_the_whole_roster(client, db, seed_users):
+def test_an_org_admin_reads_the_whole_roster(client, db, seed_users):
     ledgers = _world(db)
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
 

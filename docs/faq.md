@@ -143,7 +143,7 @@ docker compose exec chronos-app uv run --no-sync alembic upgrade head
 
 ### A user is locked out and cannot reset their password
 
-Super Admins can reset any user's password via the Admin dashboard. If the Super Admin account itself is locked, reset directly in the database. It takes two steps, because the stored hash is bcrypt written by the application: Postgres has no function that produces one this app will accept.
+Organization admins can reset any user's password via the Admin dashboard. If the organization admin account itself is locked, reset directly in the database. It takes two steps, because the stored hash is bcrypt written by the application: Postgres has no function that produces one this app will accept.
 
 First generate the hash inside the backend container:
 
@@ -167,7 +167,7 @@ UPDATE users
 
 Run the UPDATE at the psql prompt rather than through `psql -c` from your shell. A bcrypt hash contains `$` characters and a shell will eat them.
 
-While `initial_login_state` is true, a Super Admin token is refused everywhere except the password-change endpoints, so the temporary password cannot be used for anything else.
+While `initial_login_state` is true, an organization admin's token is refused everywhere except the password-change endpoints, so the temporary password cannot be used for anything else.
 
 ---
 
@@ -196,7 +196,7 @@ docker compose exec chronos-db psql -U chronos_admin -d chronos_ledger -c \
 
 ### When does the Onboarding Wizard appear?
 
-Automatically on first login when `initial_login_state` is `true` for a `SUPER_ADMIN` or `UNIT_ADMIN` account. It can also be reopened at any time from Admin Dashboard → **Setup Guide** button (top-right of the tab bar).
+Automatically on first login when `initial_login_state` is `true` for an `ORG_ADMIN` or `UNIT_ADMIN` account. It can also be reopened at any time from Admin Dashboard → **Setup Guide** button (top-right of the tab bar).
 
 ---
 

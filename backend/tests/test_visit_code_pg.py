@@ -1,11 +1,11 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
-"""Migration 020 on a real PostgreSQL: the visit code column and its index.
+"""Migrations 020 and 024 on a real PostgreSQL: the visit code columns.
 
 The rest of the suite builds its schema with create_all, which reads the model
-and never runs a migration, so only this proves that 020 builds what the model
-describes and that its downgrade takes it away again. Set TEST_DATABASE_URL as
-for tests/test_admin_rotation_pg.py.
+and never runs a migration, so only this proves that they build what the model
+describes and that their downgrades take it away again. Set TEST_DATABASE_URL
+as for tests/test_admin_rotation_pg.py.
 """
 
 import os
@@ -50,6 +50,22 @@ def test_020_adds_a_unique_visit_code_hash_and_takes_it_away_again():
             command.downgrade(config, "019")
         assert "visit_code_hash" not in _columns(engine)
         assert _visit_code_indexes(engine) == []
+    finally:
+        with _alembic() as config:
+            command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_024_adds_the_expiry_column_and_takes_it_away_again():
+    engine = create_engine(DATABASE_URL)
+    try:
+        with _alembic() as config:
+            command.upgrade(config, "head")
+        assert "visit_code_expires_at" in _columns(engine)
+
+        with _alembic() as config:
+            command.downgrade(config, "023")
+        assert "visit_code_expires_at" not in _columns(engine)
     finally:
         with _alembic() as config:
             command.upgrade(config, "head")

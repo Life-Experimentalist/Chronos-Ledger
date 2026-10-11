@@ -82,9 +82,9 @@ def sync_detailed(
 ) -> Response[ApiKeyCreated | ErrorResponse]:
     """Issue a key
 
-     Requires `SUPER_ADMIN`. The raw key is in the response and nowhere else. Bind it to a service
-    account rather than to a person: the key acts as that user, so a person's key inherits everything
-    they can do.
+     Requires `ORG_ADMIN`. The raw key is in the response and nowhere else. Bind it to a service account
+    rather than to a person: the key acts as that user, so a person's key inherits everything they can
+    do.
 
     Args:
         body (ApiKeyCreate):
@@ -115,9 +115,9 @@ def sync(
 ) -> ApiKeyCreated | ErrorResponse | None:
     """Issue a key
 
-     Requires `SUPER_ADMIN`. The raw key is in the response and nowhere else. Bind it to a service
-    account rather than to a person: the key acts as that user, so a person's key inherits everything
-    they can do.
+     Requires `ORG_ADMIN`. The raw key is in the response and nowhere else. Bind it to a service account
+    rather than to a person: the key acts as that user, so a person's key inherits everything they can
+    do.
 
     Args:
         body (ApiKeyCreate):
@@ -143,9 +143,9 @@ async def asyncio_detailed(
 ) -> Response[ApiKeyCreated | ErrorResponse]:
     """Issue a key
 
-     Requires `SUPER_ADMIN`. The raw key is in the response and nowhere else. Bind it to a service
-    account rather than to a person: the key acts as that user, so a person's key inherits everything
-    they can do.
+     Requires `ORG_ADMIN`. The raw key is in the response and nowhere else. Bind it to a service account
+    rather than to a person: the key acts as that user, so a person's key inherits everything they can
+    do.
 
     Args:
         body (ApiKeyCreate):
@@ -174,9 +174,9 @@ async def asyncio(
 ) -> ApiKeyCreated | ErrorResponse | None:
     """Issue a key
 
-     Requires `SUPER_ADMIN`. The raw key is in the response and nowhere else. Bind it to a service
-    account rather than to a person: the key acts as that user, so a person's key inherits everything
-    they can do.
+     Requires `ORG_ADMIN`. The raw key is in the response and nowhere else. Bind it to a service account
+    rather than to a person: the key acts as that user, so a person's key inherits everything they can
+    do.
 
     Args:
         body (ApiKeyCreate):

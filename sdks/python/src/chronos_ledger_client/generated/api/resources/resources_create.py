@@ -82,8 +82,8 @@ def sync_detailed(
 ) -> Response[ErrorResponse | ResourceResponse]:
     """Create a room
 
-     Requires `SUPER_ADMIN`. Registers a room before any timetable names it, for a system that manages
-    its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it
+     Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its
+    own rooms. The row is the one an import would have made, so a later CSV naming the room finds it
     rather than creating a second. A retry after a lost response reads the room back with `GET
     /api/v1/resources/?code=`: the code already identifies it, so no Idempotency-Key is taken.
 
@@ -117,8 +117,8 @@ def sync(
 ) -> ErrorResponse | ResourceResponse | None:
     """Create a room
 
-     Requires `SUPER_ADMIN`. Registers a room before any timetable names it, for a system that manages
-    its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it
+     Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its
+    own rooms. The row is the one an import would have made, so a later CSV naming the room finds it
     rather than creating a second. A retry after a lost response reads the room back with `GET
     /api/v1/resources/?code=`: the code already identifies it, so no Idempotency-Key is taken.
 
@@ -147,8 +147,8 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | ResourceResponse]:
     """Create a room
 
-     Requires `SUPER_ADMIN`. Registers a room before any timetable names it, for a system that manages
-    its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it
+     Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its
+    own rooms. The row is the one an import would have made, so a later CSV naming the room finds it
     rather than creating a second. A retry after a lost response reads the room back with `GET
     /api/v1/resources/?code=`: the code already identifies it, so no Idempotency-Key is taken.
 
@@ -180,8 +180,8 @@ async def asyncio(
 ) -> ErrorResponse | ResourceResponse | None:
     """Create a room
 
-     Requires `SUPER_ADMIN`. Registers a room before any timetable names it, for a system that manages
-    its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it
+     Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its
+    own rooms. The row is the one an import would have made, so a later CSV naming the room finds it
     rather than creating a second. A retry after a lost response reads the room back with `GET
     /api/v1/resources/?code=`: the code already identifies it, so no Idempotency-Key is taken.
 

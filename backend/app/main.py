@@ -24,6 +24,7 @@ from app.core.migrations import database_revision, unknown_revision_message
 from app.core.pagination import TOTAL_COUNT_HEADER
 from app.core.time import org_now, org_timezone, org_tomorrow
 from app.core.websocket_manager import socket_broker
+from app.cron.guest_overstay import announce_overstayed_visits
 from app.cron.guest_retention import purge_old_guest_check_ins
 from app.cron.ledger_generator import generate_daily_ledger_entries, missed_ledger_dates
 from app.cron.refresh_token_cleanup import purge_expired_refresh_tokens
@@ -77,6 +78,18 @@ async def lifespan(_app: FastAPI):
         hour=3,
         minute=30,
         id="guest_retention_purge",
+        replace_existing=True,
+    )
+    # Often enough that a desk hears about an overstay while the visitor is
+    # still in the building, seldom enough to be nothing on a database: it
+    # reads the approved visits that have run over and not been announced,
+    # which is a short list or an empty one. Announces nothing while
+    # GUEST_VISIT_LENGTH_MINUTES is 0, since then no visit has an end.
+    scheduler.add_job(
+        _announce_guest_overstays,
+        "interval",
+        minutes=5,
+        id="guest_overstay_notice",
         replace_existing=True,
     )
     scheduler.start()
@@ -169,6 +182,16 @@ def _purge_guest_check_ins():
     db = SessionLocal()
     try:
         purge_old_guest_check_ins(db, settings.guest_retention_days)
+    finally:
+        db.close()
+
+
+async def _announce_guest_overstays():
+    # Async, unlike its neighbours: the notice goes out over the socket, which
+    # belongs to this loop, and the scheduler runs in the same process.
+    db = SessionLocal()
+    try:
+        await announce_overstayed_visits(db)
     finally:
         db.close()
 

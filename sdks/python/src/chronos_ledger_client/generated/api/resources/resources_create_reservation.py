@@ -101,7 +101,7 @@ def sync_detailed(
 ) -> Response[ErrorResponse | ReservationConflict | ReservationResponse]:
     """Hold a resource for one dated window
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
     refuses is exactly what GET availability calls busy, through the same queries and the same
     expansion, so a caller cannot read an hour as free and then be refused it.
 
@@ -152,7 +152,7 @@ def sync(
 ) -> ErrorResponse | ReservationConflict | ReservationResponse | None:
     """Hold a resource for one dated window
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
     refuses is exactly what GET availability calls busy, through the same queries and the same
     expansion, so a caller cannot read an hour as free and then be refused it.
 
@@ -198,7 +198,7 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | ReservationConflict | ReservationResponse]:
     """Hold a resource for one dated window
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
     refuses is exactly what GET availability calls busy, through the same queries and the same
     expansion, so a caller cannot read an hour as free and then be refused it.
 
@@ -247,7 +247,7 @@ async def asyncio(
 ) -> ErrorResponse | ReservationConflict | ReservationResponse | None:
     """Hold a resource for one dated window
 
-     Requires `SUPER_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
     refuses is exactly what GET availability calls busy, through the same queries and the same
     expansion, so a caller cannot read an hour as free and then be refused it.
 

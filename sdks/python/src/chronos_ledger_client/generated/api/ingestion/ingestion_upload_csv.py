@@ -96,11 +96,11 @@ def sync_detailed(
 ) -> Response[CsvImportResult | ErrorResponse]:
     """Bulk import schedule from CSV
 
-     Requires `SUPER_ADMIN`. The matrix rewrites activities and registrations across every unit, so a
-    unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive):
-    `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`,
-    `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end`
-    (HH:MM), `lead_id`, `room`.
+     Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-
+    scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`,
+    `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO
+    8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`,
+    `room`.
     Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent,
     re-uploading the same CSV is safe: an existing member keeps their password.
 
@@ -154,11 +154,11 @@ def sync(
 ) -> CsvImportResult | ErrorResponse | None:
     """Bulk import schedule from CSV
 
-     Requires `SUPER_ADMIN`. The matrix rewrites activities and registrations across every unit, so a
-    unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive):
-    `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`,
-    `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end`
-    (HH:MM), `lead_id`, `room`.
+     Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-
+    scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`,
+    `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO
+    8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`,
+    `room`.
     Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent,
     re-uploading the same CSV is safe: an existing member keeps their password.
 
@@ -207,11 +207,11 @@ async def asyncio_detailed(
 ) -> Response[CsvImportResult | ErrorResponse]:
     """Bulk import schedule from CSV
 
-     Requires `SUPER_ADMIN`. The matrix rewrites activities and registrations across every unit, so a
-    unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive):
-    `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`,
-    `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end`
-    (HH:MM), `lead_id`, `room`.
+     Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-
+    scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`,
+    `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO
+    8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`,
+    `room`.
     Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent,
     re-uploading the same CSV is safe: an existing member keeps their password.
 
@@ -263,11 +263,11 @@ async def asyncio(
 ) -> CsvImportResult | ErrorResponse | None:
     """Bulk import schedule from CSV
 
-     Requires `SUPER_ADMIN`. The matrix rewrites activities and registrations across every unit, so a
-    unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive):
-    `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`,
-    `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end`
-    (HH:MM), `lead_id`, `room`.
+     Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-
+    scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`,
+    `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO
+    8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`,
+    `room`.
     Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent,
     re-uploading the same CSV is safe: an existing member keeps their password.
 

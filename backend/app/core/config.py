@@ -35,7 +35,7 @@ PUBLISHED_DB_PASSWORDS = frozenset(
 )
 # The password migration 001 used to seed for the administrator account,
 # and the placeholder .env.example carries in its place. Either one lets
-# whoever reaches the instance first take a SUPER_ADMIN account, so this is
+# whoever reaches the instance first take an ORG_ADMIN account, so this is
 # the same exposure as a published signing key and gets the same refusal.
 # Migration 014 rotates a database that still holds the first of them.
 PUBLISHED_ADMIN_PASSWORDS = frozenset(
@@ -155,6 +155,79 @@ class Settings(BaseSettings):
     # instance behaved before this setting existed.
     guest_retention_days: int = 0
 
+    # How long a visit code opens GET /guest/visit/{code}, in minutes. The code
+    # is the visitor's only credential and it is shown to them once, so a code
+    # printed or scanned today goes on working for as long as the row lives.
+    # Past the window the lookup reads as though the code never existed. 0
+    # leaves a code working for as long as the check-in is kept, which is how
+    # an instance behaved before this setting existed.
+    guest_visit_code_ttl_minutes: int = 0
+
+    # How long an approved visit lasts, in minutes, counted from the decision
+    # and not from the check-in: the clock starts when somebody was let in at
+    # the door, not when they arrived at it. Past it the visit shows as
+    # overstayed at GET /guest/overstays and a notice goes to the desk. Chronos
+    # revokes nothing and turns nobody out; the row says the time is up and a
+    # person decides what to do about it. 0 leaves an approved visit
+    # open-ended, which is how an instance behaved before this setting existed.
+    guest_visit_length_minutes: int = 0
+
+    # The largest single extension PATCH /guest/{entry_id}/extend will grant,
+    # in minutes. More than this is refused rather than quietly trimmed, so a
+    # desk that meant 30 and typed 300 hears about it. A visit can be extended
+    # again as often as somebody keeps deciding to, so this bounds one grant
+    # and not the total. 0 refuses every extension, for an organization that
+    # would rather the visitor checked in again.
+    guest_visit_extension_max_minutes: int = 240
+
+    # Whether an admin may decide a visit that was not meant for them, at
+    # PATCH /guest/{entry_id}/decide. Off, and with it off the person the
+    # visitor came to see is the only one who can let them in, which stalls at
+    # the door when that person is in theatre or has gone home for the day. On,
+    # an organization admin decides any visit and a unit admin those meant for
+    # their own unit, and the row records which of them did.
+    #
+    # A front desk attendant is not an admin. Give the desk a guest-scoped key
+    # on an admin account rather than an admin's password: the scope keeps the
+    # key to the visitor log and the role is what this setting reads. The
+    # kiosk's own account is a member and stays unable to decide, which is why
+    # a lobby tablet does not become an approver when this is turned on.
+    guest_admin_can_decide: bool = False
+
+    # Whether a change to a room or a booking is written down for an outside
+    # system to poll for, at GET /api/v1/changes/. Off, because it is a table
+    # that grows with every write and nothing deletes it, and an instance with
+    # no integrator has nobody to read it. Turning it on starts recording from
+    # that moment, so a consumer reads the rooms and the bookings once in full
+    # and polls from there: what happened while this was off was not recorded.
+    change_feed_enabled: bool = False
+
+    # Whether a registered outside issuer may vouch for a person, so that
+    # somebody already signed in over there arrives here without a second
+    # password. Off, and off means POST /api/v1/auth/federated answers 404
+    # rather than 403: whether an instance has an integration is not something
+    # probing it should reveal. Turning it on is not enough on its own, since
+    # nothing verifies until an issuer is registered. docs/federated-identity.md
+    # is the design, threat model first.
+    federated_identity_enabled: bool = False
+
+    # The longest life Chronos will accept in a note, in seconds, counted from
+    # when it arrives. Checking exp on its own is not enough, because exp is the
+    # issuer's opinion and an issuer that sets it a year out has minted a bearer
+    # token for a year. This cap is Chronos's opinion, and two minutes is long
+    # enough for a browser to hand a note over and short enough that a stolen
+    # one is worth little.
+    federated_token_max_lifetime_seconds: int = 120
+
+    # How far two clocks may disagree before a perfectly good note is refused,
+    # in seconds, and it is not symmetric. exp may be this far in the past, so a
+    # note that expired a moment ago on a fast clock still works; iat and nbf
+    # may be this far in the future, so a note from a fast issuer works. There
+    # is no lower bound on how old a note may be, because that is what exp and
+    # the cap above already answer. Widening this widens the replay window by
+    # the same amount, so an operator running NTP everywhere can set it lower.
+    federated_clock_skew_seconds: int = 60
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.app_cors_origins.split(",") if o.strip()]
@@ -200,6 +273,66 @@ class Settings(BaseSettings):
                 "check-ins forever, or a number of days such as 90."
             )
         return days
+
+    @field_validator("guest_visit_length_minutes")
+    @classmethod
+    def _visit_length_is_not_negative(cls, minutes: int) -> int:
+        if minutes < 0:
+            raise ValueError(
+                f"GUEST_VISIT_LENGTH_MINUTES={minutes} is negative. Set 0 to leave an "
+                "approved visit open-ended, or a number of minutes such as 120."
+            )
+        return minutes
+
+    @field_validator("guest_visit_extension_max_minutes")
+    @classmethod
+    def _extension_max_is_not_negative(cls, minutes: int) -> int:
+        if minutes < 0:
+            raise ValueError(
+                f"GUEST_VISIT_EXTENSION_MAX_MINUTES={minutes} is negative. Set 0 to "
+                "refuse every extension, or a number of minutes such as 240."
+            )
+        return minutes
+
+    @field_validator("guest_visit_code_ttl_minutes")
+    @classmethod
+    def _ttl_is_not_negative(cls, minutes: int) -> int:
+        if minutes < 0:
+            raise ValueError(
+                f"GUEST_VISIT_CODE_TTL_MINUTES={minutes} is negative. Set 0 to leave "
+                "a visit code working for as long as the check-in is kept, or a number "
+                "of minutes such as 240."
+            )
+        return minutes
+
+    @field_validator("federated_token_max_lifetime_seconds")
+    @classmethod
+    def _lifetime_cap_is_positive(cls, seconds: int) -> int:
+        """Zero is not "off" here, it is "refuse every note".
+
+        The other numbers on this page read 0 as a way to turn one check off.
+        This one cannot: a cap of zero refuses a note whose exp is even a
+        second ahead, which is every note there is, and the failure would look
+        like a broken issuer. Turning federation off is
+        FEDERATED_IDENTITY_ENABLED.
+        """
+        if seconds < 1:
+            raise ValueError(
+                f"FEDERATED_TOKEN_MAX_LIFETIME_SECONDS={seconds} would refuse every "
+                "note. Set FEDERATED_IDENTITY_ENABLED=false to turn federated sign-in "
+                "off, or leave this unset for 120."
+            )
+        return seconds
+
+    @field_validator("federated_clock_skew_seconds")
+    @classmethod
+    def _skew_is_not_negative(cls, seconds: int) -> int:
+        if seconds < 0:
+            raise ValueError(
+                f"FEDERATED_CLOCK_SKEW_SECONDS={seconds} is negative. Set 0 to allow "
+                "no disagreement at all, or leave it unset for 60."
+            )
+        return seconds
 
     @field_validator("org_timezone")
     @classmethod

@@ -73,7 +73,7 @@ def sync_detailed(
     """Create a ledger annotation
 
      Freeform notes about a session: lab issues, late starts, a handover. Restricted to whoever runs it,
-    meaning the assigned lead, the substitute, a super admin, or a unit admin inside that unit.
+    meaning the assigned lead, the substitute, an organization admin, or a unit admin inside that unit.
 
     Args:
         body (AnnotationCreate):
@@ -105,7 +105,7 @@ def sync(
     """Create a ledger annotation
 
      Freeform notes about a session: lab issues, late starts, a handover. Restricted to whoever runs it,
-    meaning the assigned lead, the substitute, a super admin, or a unit admin inside that unit.
+    meaning the assigned lead, the substitute, an organization admin, or a unit admin inside that unit.
 
     Args:
         body (AnnotationCreate):
@@ -132,7 +132,7 @@ async def asyncio_detailed(
     """Create a ledger annotation
 
      Freeform notes about a session: lab issues, late starts, a handover. Restricted to whoever runs it,
-    meaning the assigned lead, the substitute, a super admin, or a unit admin inside that unit.
+    meaning the assigned lead, the substitute, an organization admin, or a unit admin inside that unit.
 
     Args:
         body (AnnotationCreate):
@@ -162,7 +162,7 @@ async def asyncio(
     """Create a ledger annotation
 
      Freeform notes about a session: lab issues, late starts, a handover. Restricted to whoever runs it,
-    meaning the assigned lead, the substitute, a super admin, or a unit admin inside that unit.
+    meaning the assigned lead, the substitute, an organization admin, or a unit admin inside that unit.
 
     Args:
         body (AnnotationCreate):

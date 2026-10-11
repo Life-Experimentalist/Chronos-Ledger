@@ -64,8 +64,9 @@ a caller learns the password floor from a single rejected change anyway.
 
 ## Authentication
 
-All endpoints except `/auth/login`, `/auth/refresh`, `/auth/logout`, the
-`/config` document above and the calendar feed require a Bearer token:
+All endpoints except `/auth/login`, `/auth/refresh`, `/auth/logout`,
+`/auth/federated`, the `/config` document above and the calendar feed require
+a Bearer token:
 
 ```
 Authorization: Bearer <access_token>
@@ -116,7 +117,7 @@ stops applying the limits rather than refusing the requests.
 
 ```mermaid
 graph TD
-    SA[SUPER_ADMIN] --> DA[UNIT_ADMIN]
+    SA[ORG_ADMIN] --> DA[UNIT_ADMIN]
     DA --> FAC[STAFF]
     FAC --> STU[MEMBER]
 ```
@@ -144,8 +145,88 @@ Higher roles inherit the permissions of all roles below them. Role is embedded i
 
 `initial_login_state: true` on first login, the client should redirect to the change-password flow.
 
+`email_address` is matched without regard to case, so somebody who types
+their own address the way they write it signs in whatever case the account
+was created with.
+
 The field was called `email` before 0.13. `email` is still accepted in place
-of `email_address` through 0.14 and is removed in 0.15.
+of `email_address` through 0.15 and is removed in 0.16.
+
+### POST /auth/federated
+
+Off unless `FEDERATED_IDENTITY_ENABLED` is true, and a `404` while it is off,
+the same answer an unknown path gives: whether an instance has an integration
+at all is not something probing it should reveal. The whole design, the threat
+model it answers and the operator steps are in
+[Federated identity](federated-identity.md); this is the route.
+
+```json
+// Request
+{ "token": "<the note, exactly as its issuer minted it>" }
+
+// Response 200
+{
+  "access_token": "<jwt>",
+  "token_type": "bearer",
+  "user_id": "FED-3f9a1c27e4b05d18",
+  "role": "MEMBER",
+  "full_name": "Priya R",
+  "initial_login_state": false
+}
+```
+
+The same pair `POST /auth/login` returns, so nothing in a client changes about
+holding a session afterwards, and `POST /auth/refresh` accepts the refresh
+token like any other. `initial_login_state` is false: there is no password the
+account was handed, so there is nothing to move it off.
+
+The account is found by the `(issuer, subject)` pair and never by the address
+in the note. The first note for a subject creates the account, and its role
+comes from the operator's own map of group claims, not from the note. A role
+an administrator sets afterwards is never re-read, so an upstream change does
+not reach it; `POST /users/{user_id}/deactivate` is the lever, and a
+deactivated linked account is refused rather than provisioned again. An account
+that has been given either admin role since it was linked is refused here too,
+with `403`: no issuer may hold a route to an admin account, which is also why
+`POST /federation/links` will not create one.
+
+| Status | When                                                                      |
+| ------ | ------------------------------------------------------------------------- |
+| `401`  | The note was refused. One message for every reason.                       |
+| `403`  | The account behind the link is an administrator and signs in by password. |
+| `404`  | Federated sign-in is off on this instance.                                |
+| `409`  | The address in the note belongs to an account and the pair is not linked. |
+| `422`  | A malformed body, or a verified note with no usable email claim.          |
+| `503`  | The replay cache is unreachable, so replay cannot be ruled out.           |
+
+The `401` is deliberately one answer with one message, `Invalid federated
+token`, whatever was wrong: an unknown issuer, a wrong audience, an unknown or
+retired key, a bad signature, an expired or too long-lived note, a note already
+spent, a missing subject, a link pointing at no account, a deactivated account.
+The `403` is not folded into it, because none of that reasoning applies: the
+note verified, the link is one an operator created, and nobody reaches this
+answer without a note the issuer's key signed, so it says nothing about an
+account that is not already the issuer's to sign for. What is left is a person
+who was sent here by their own organization and cannot act on the refusal, so
+they are told what to use instead. The role is not changed, only the route
+closed; undoing the promotion makes the link work again.
+
+The `409` is a refusal and not a link, because linking on a matching address
+would let an issuer name an administrator's address and be handed the account;
+an administrator links the pair by hand. The `422` for a note with no address
+is not a `401` because the note was not the problem, and no note the caller
+sends next would fix it. The `503` answers nothing rather than accept a note
+that may be a copy; password sign-in is unaffected.
+
+There is no rate budget here. A note is signed by a key an operator
+registered, so guessing one is not the attack this route has; replay and
+lifetime are, and the single-use cache and the lifetime cap answer those.
+
+Every refusal is a `WARNING` in the server log naming the issuer, the reason
+and the key id wherever the key was the part that was wrong. The note itself is
+never logged, and neither is the address it carries. The log is the only place
+the reason exists, so an integrator being set up is shown the log rather than
+the response.
 
 ### POST /auth/change-password
 
@@ -208,6 +289,8 @@ land open by nobody remembering to annotate it.
 | `ingestion` | CSV upload and ledger generation |
 | `sync` | the calendar feed |
 | `audit` | the audit log |
+| `changes` | the change feed |
+| `federation` | the federated identity registry |
 
 A key holding `schedule:read` passes `GET /schedule/slots` and is refused
 `POST /schedule/slots` with `403` and a detail naming `schedule:write`. The
@@ -237,13 +320,13 @@ An admin account signing in with a password is held at the first-login gate
 until it changes the password it was handed (see
 [POST /auth/change-password](#post-authchange-password)). A request made with a
 key is not held there: the gate exists to move a person off that password, and
-a key never uses it. Issuing a key already takes a `SUPER_ADMIN` who has cleared
+a key never uses it. Issuing a key already takes an `ORG_ADMIN` who has cleared
 the gate.
 
 So a service account takes two steps, and nobody signs in as it:
 
 1. `POST /users/` at the role the routes it calls require. Creating and editing
-   rooms needs `SUPER_ADMIN`; holding and releasing them needs `UNIT_ADMIN` or
+   rooms needs `ORG_ADMIN`; holding and releasing them needs `UNIT_ADMIN` or
    above.
 2. `POST /api-keys/` bound to that account, scoped to the areas it calls (for a
    room-booking integration, `resources:read` and `resources:write`), with an
@@ -252,7 +335,7 @@ So a service account takes two steps, and nobody signs in as it:
 The password set in step 1 is never used. Anyone who signs in with it still
 meets the gate.
 
-### POST /api-keys/ `[SUPER_ADMIN]`
+### POST /api-keys/ `[ORG_ADMIN]`
 
 ```json
 {
@@ -284,13 +367,228 @@ anybody wants.
 key is revoked and reissued, never recovered. Scopes come back sorted and
 deduplicated.
 
-### GET /api-keys/ `[SUPER_ADMIN]`
+### GET /api-keys/ `[ORG_ADMIN]`
 
 Every key, without its secret.
 
-### DELETE /api-keys/{key_id} `[SUPER_ADMIN]`
+### DELETE /api-keys/{key_id} `[ORG_ADMIN]`
 
 Revokes immediately: the next request using it gets `401`.
+
+---
+
+## Federation
+
+The registry behind [POST /auth/federated](#post-authfederated): which outside
+issuers this instance trusts, which public keys their notes may be signed with,
+what their group claims mean here, and which accounts arrive through them.
+
+Every route is `ORG_ADMIN`. An issuer is organization-wide and its role map can
+place somebody in any unit, so a unit admin is the wrong scope for it. All of
+them answer whether or not `FEDERATED_IDENTITY_ENABLED` is set: an operator has
+to register an issuer and a key before the exchange is worth turning on, and it
+is the exchange route that answers `404` while the feature is off.
+
+Nothing in this table is a secret. The keys are public keys, which is why they
+can be read back.
+
+### What an issuer may and may not assert
+
+A note names a subject and, optionally, groups. It never names a Chronos role.
+The role map is the operator's, stored here, and it is what decides what a
+group means. An issuer whose map has no entry for a group gets `MEMBER` with no
+unit.
+
+Neither `ORG_ADMIN` nor `UNIT_ADMIN` can be mapped. That is the whole answer to
+a leaked signing key: whoever holds the key can mint a note for any subject,
+and what limits the damage is that the best it buys is the level the operator
+chose, which is the level that issuer's own users already had. The refusal is a
+`422` from the schema and a check constraint underneath, so SQL is no way round
+it either. `POST /federation/links` refuses an admin account for the same
+reason, and it is the same reason rather than a second rule: a link would be a
+route to an account the map could never have produced.
+
+### POST /federation/issuers `[ORG_ADMIN]`
+
+```json
+{
+  "issuer": "https://sso.example.edu",
+  "display_name": "Example University SSO",
+  "audience": "chronos-ledger",
+  "enabled": true
+}
+```
+
+`issuer` is matched against the `iss` claim exactly, and `audience` against
+`aud`. `enabled` is optional and defaults to true. A second registration of the
+same `issuer` is `409`.
+
+```json
+{
+  "id": 1,
+  "issuer": "https://sso.example.edu",
+  "display_name": "Example University SSO",
+  "audience": "chronos-ledger",
+  "enabled": true,
+  "created_at": "2026-09-25T10:00:00Z"
+}
+```
+
+### GET /federation/issuers `[ORG_ADMIN]`
+
+Every registration, oldest first.
+
+### PATCH /federation/issuers/{issuer_id} `[ORG_ADMIN]`
+
+`display_name`, `audience` and `enabled`, any subset. `issuer` is not on this
+route: it is the value notes already in the wild carry, and editing it would
+silently retarget a registration rather than register a different issuer. That
+is a create and a delete.
+
+Setting `enabled` to false refuses every note from that issuer while leaving
+the keys, the map and the links in place, which is the lever to reach for when
+something is wrong upstream and you want it back later.
+
+### DELETE /federation/issuers/{issuer_id} `[ORG_ADMIN]`
+
+Takes the keys, the map and the links with it. The accounts stay: somebody who
+signed in through this issuer keeps their account and their history, and what
+they lose is the shortcut. Give them a password or link them to a new
+registration.
+
+### POST /federation/issuers/{issuer_id}/keys `[ORG_ADMIN]`
+
+```json
+{
+  "kid": "2026-rotation-a",
+  "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2Vw...\n-----END PUBLIC KEY-----\n",
+  "not_before": "2026-10-01T00:00:00Z",
+  "not_after": null
+}
+```
+
+A note's header must carry `kid`, and that is the key it is checked against;
+`alg` is not consulted, because notes are EdDSA and nothing else. So the key
+has to be an Ed25519 public key in PEM, and anything else is refused here with
+`422` rather than turning into a `401` on every note that names it. A PEM that
+does not parse is the same `422`.
+
+`kid` is unique inside its issuer and not across them. Two institutions both
+calling their key `default` is not a collision anybody should have to resolve.
+
+`not_before` defaults to now and `not_after` to none, meaning no end. A window
+that closes before it opens is `422`.
+
+### GET /federation/issuers/{issuer_id}/keys `[ORG_ADMIN]`
+
+Every key on this registration, oldest first, public keys included.
+
+### PATCH /federation/issuers/{issuer_id}/keys/{key_id} `[ORG_ADMIN]`
+
+```json
+{ "not_after": "2026-11-01T00:00:00Z" }
+```
+
+Gives a key an end without taking it away. A moment in the future is the
+overlap a planned rotation wants: add the new key, retire the old one at the
+moment the issuer stops signing with it, and no note is refused in between.
+
+A moment in the past is allowed, and it is how a leaked key is stopped now: the
+next note naming it is refused. Refusing the past would leave deletion as the
+only fast answer, and deletion loses the record that the key existed.
+
+An end at or before `not_before` is `422`, with a detail saying to delete the
+key instead.
+
+### DELETE /federation/issuers/{issuer_id}/keys/{key_id} `[ORG_ADMIN]`
+
+Removes it outright. Prefer retiring: a retired key leaves the registration
+readable by somebody asking later what was trusted when.
+
+### POST /federation/issuers/{issuer_id}/role-map `[ORG_ADMIN]`
+
+```json
+{
+  "group_claim_value": "library-staff",
+  "role_type": "STAFF",
+  "unit_code": "LIB"
+}
+```
+
+`role_type` is `STAFF` or `MEMBER`. `unit_code` is optional and is a free
+string; there is no units table to check it against.
+
+A group may appear once per issuer, so changing what one means is a delete and
+an add rather than an overwrite, and a second entry for the same group is
+`409`. Two groups may name two different units: a library and a lab each
+mapping their own staff group is the ordinary case, and somebody in both is not
+a misconfiguration.
+
+Where several entries match one note, `STAFF` beats `MEMBER`, and among the
+matching entries of the winning role the oldest supplies the unit. The rule is
+deliberately independent of the order the issuer listed the groups in.
+
+### GET /federation/issuers/{issuer_id}/role-map `[ORG_ADMIN]`
+
+Every entry, oldest first, which is also the order that decides ties.
+
+### DELETE /federation/issuers/{issuer_id}/role-map/{entry_id} `[ORG_ADMIN]`
+
+Nobody who has already signed in changes. Roles are read once, when the account
+is provisioned, and federation never re-reads them: re-syncing on every sign-in
+would silently undo a change an administrator made here. What this changes is
+what the next first-time subject in that group gets, which with no entry is
+`MEMBER` and no unit.
+
+### POST /federation/links `[ORG_ADMIN]`
+
+```json
+{ "issuer_id": 1, "subject": "a4f7c2e1-...", "user_id": "FAC001" }
+```
+
+The link is the identity. A note whose `(issuer, subject)` pair is linked is
+that account, whatever address the note carries, and a note whose pair is not
+linked is a stranger, whatever address it carries.
+
+This route is the only way an account that already exists comes to use the
+shortcut. The exchange never links on a matching address, because an issuer that
+never verified the address it asserts could otherwise name an administrator's
+and be handed their account. So somebody who already has a password here has to
+be linked deliberately, by an administrator who knows the subject is theirs.
+
+Refusals:
+
+| Code | When |
+|---|---|
+| `404` | No such issuer, or no such account |
+| `409` | That `(issuer, subject)` pair is already linked |
+| `409` | The account is `ORG_ADMIN` or `UNIT_ADMIN` |
+
+A deactivated account can be linked. A key bound to a deactivated account is
+dead on arrival, but a link outlives the deactivation and works again on
+reactivation, so refusing here would force an administrator to reactivate
+somebody in order to prepare their access. Sign-in refuses the account itself
+while it is deactivated, which is where that check belongs.
+
+One account may hold several links, at one issuer or several. That is a person
+with more than one upstream identity, and deciding it is a mistake is not this
+route's call to make.
+
+### GET /federation/links `[ORG_ADMIN]`
+
+Every link, oldest first. `issuer_id` and `user_id` are optional query
+parameters and narrow together.
+
+A link made by a first sign-in has an id nobody was ever told, so this is how
+one is found before it can be removed.
+
+### DELETE /federation/links/{link_id} `[ORG_ADMIN]`
+
+Takes the route away and leaves the account alone, with whatever role and unit
+it holds. The next note carrying that pair is a stranger: refused if the address
+on the account is still theirs, and provisioned as a second account if it is
+not. Unlinking is not deactivating. Do both if the intent is that the person
+loses access.
 
 ---
 
@@ -337,7 +635,7 @@ Deactivated accounts are left out unless `?include_deactivated=true`.
 Create users individually. For bulk creation, use CSV import (`POST /ingestion/upload-csv`).
 
 A `UNIT_ADMIN` can create users only in their own unit, and only a
-`SUPER_ADMIN` can create an admin account. Either is refused with `403`.
+`ORG_ADMIN` can create an admin account. Either is refused with `403`.
 
 ```json
 // POST body
@@ -358,7 +656,10 @@ approval. It has to name an existing user (`404` otherwise), and it cannot
 name the user themselves, anyone who already reports to them, directly or
 through others, or somebody who has been deactivated (`422`). The same checks run on `PATCH /users/{user_id}`, which
 also refuses with `409` an email address already registered to another
-account, as create does.
+account, as create does. That comparison ignores case, so
+`Priya@org.internal` is the account `priya@org.internal` already is and the
+second one is the same `409`. An address is stored folded to lower case,
+which is the case a read of the account gives back.
 
 ### GET /users/staff/available
 
@@ -456,7 +757,7 @@ same `UNIT_ADMIN` limits apply.
 ### PUT /users/{user_id}/status
 
 Update staff occupancy. Enum values: `OPEN_AD_HOC`, `BUSY`, `CRITICAL_DO_NOT_DISTURB`, `VERY_FREE`.
-Anyone signed in can set their own; only a `SUPER_ADMIN` can set somebody
+Anyone signed in can set their own; only an `ORG_ADMIN` can set somebody
 else's (`403`). This is the `current_occupancy_index` the staff list, the
 location routes and the kiosk directory's labels are read from. It does not
 change where somebody is resolved to be.
@@ -499,7 +800,7 @@ Readable by anyone signed in. Ordered by code, and pages with `limit` and
 ]
 ```
 
-### POST /resources/ `[SUPER_ADMIN]`
+### POST /resources/ `[ORG_ADMIN]`
 
 Register a room before any timetable names it.
 
@@ -619,7 +920,7 @@ retiring a room does not clear its calendar.
 366 days inclusive is `422` (`the range must not exceed 366 days`), which
 leaves room for the next twelve months from any date, leap years included.
 
-### PATCH /resources/{id} `[SUPER_ADMIN]`
+### PATCH /resources/{id} `[ORG_ADMIN]`
 
 ```json
 {
@@ -644,7 +945,7 @@ second row rather than find this one; change `label` instead, which is what
 gets shown. A room that becomes a person is not an edit, it is a different
 resource.
 
-### POST /resources/{id}/reservations `[SUPER_ADMIN, UNIT_ADMIN]`
+### POST /resources/{id}/reservations `[ORG_ADMIN, UNIT_ADMIN]`
 
 Hold a resource for one dated window. This is the route an outside system uses
 to take a room: a hospital system books a consulting room here the same way an
@@ -745,7 +1046,7 @@ arrive in. When the constraint is what catches it, the window is looked up
 again and the `409` names the hold that won rather than only saying this
 one lost.
 
-### DELETE /resources/{id}/reservations/{reservation_id} `[SUPER_ADMIN, UNIT_ADMIN]`
+### DELETE /resources/{id}/reservations/{reservation_id} `[ORG_ADMIN, UNIT_ADMIN]`
 
 Let a hold go. Returns the reservation with `status` set to `CANCELLED` and
 `cancelled_at` filled in. The row stays: a deleted row cannot be told to
@@ -761,7 +1062,7 @@ A hold is let go by whoever took it. A `UNIT_ADMIN` that did not make a
 reservation gets `403` with `"only the caller that took a hold may cancel it"`,
 which matters because more than one integration books through this route with
 the same role, and one dropping another's hold is how a room goes quietly free
-under a system that still believes it has it. A `SUPER_ADMIN` overrides: a hold
+under a system that still believes it has it. A `ORG_ADMIN` overrides: a hold
 taken by an account that has since been deleted has a null `requested_by_id`
 and nobody left to cancel it.
 
@@ -788,7 +1089,7 @@ the other lists, and a long span should be paged.
 GET /api/v1/schedule/ledger?from=2026-01-05&to=2026-01-11&resource_id=12&limit=100
 ```
 
-### PATCH /schedule/ledger/{ledger_id} `[SUPER_ADMIN, UNIT_ADMIN]`
+### PATCH /schedule/ledger/{ledger_id} `[ORG_ADMIN, UNIT_ADMIN]`
 
 A unit admin can edit only the days of their own unit's activities. A field
 left out keeps its current value, and one sent as `null` is cleared, except
@@ -849,10 +1150,10 @@ Snapshot of every active staff member's location, paged. Open to anyone signed
 in, like the single lookup. Polled by the Member Locator panel.
 
 ### GET /schedule/cycles
-### POST /schedule/cycles `[SUPER_ADMIN]`
-### PATCH /schedule/cycles/{id}/close `[SUPER_ADMIN]`
-### PATCH /schedule/cycles/{id}/open `[SUPER_ADMIN]`
-### POST /schedule/cycles/{old}/clone-to/{new} `[SUPER_ADMIN]`
+### POST /schedule/cycles `[ORG_ADMIN]`
+### PATCH /schedule/cycles/{id}/close `[ORG_ADMIN]`
+### PATCH /schedule/cycles/{id}/open `[ORG_ADMIN]`
+### POST /schedule/cycles/{old}/clone-to/{new} `[ORG_ADMIN]`
 
 A cycle can be created closed, filled in over as long as that takes, and put
 into service once it is ready, which is what `open` is for. It is the only
@@ -1095,7 +1396,7 @@ batch writes nothing, and an accepted one is written in one transaction:
 ### GET /attendance/ledger/{ledger_id}
 
 The roster for one session. Whoever runs it gets every row: the assigned lead,
-the substitute, a super admin, or a unit admin inside that unit. A member gets
+the substitute, an organization admin, or a unit admin inside that unit. A member gets
 their own row and nothing else. Anyone else gets `403` rather than an empty
 list, because an empty list reads as "nobody came". A session id that matches
 nothing gets `404`.
@@ -1137,7 +1438,7 @@ rather than a request waiting on nobody.
 
 Returns the undecided requests that are yours to decide: those sent to you as
 the submitter's manager and, for an admin, those whose manager has since been
-deactivated. A `SUPER_ADMIN` gets every one of those, a `UNIT_ADMIN` those
+deactivated. A `ORG_ADMIN` gets every one of those, a `UNIT_ADMIN` those
 from the non-admin accounts of their own unit, and nobody gets their own. The
 `ABSENCE_APPROVAL_REQUIRED` frame went to the manager, so this list is where
 an admin finds them.
@@ -1225,7 +1526,11 @@ and `?offset=` page through them, and `X-Total-Count` says how many matched.
 
 ### GET /guest/pending `[STAFF]`
 
-Pending guest requests targeting the authenticated staff member.
+The pending check-ins this account may decide, which is the ones the visitor
+asked for it by name. With `GUEST_ADMIN_CAN_DECIDE` on it is also every visit an
+admin may decide, so an `ORG_ADMIN` reads the whole organization's queue here.
+Unpaginated, which is worth knowing before turning that setting on in a building
+with a busy lobby.
 
 ### PATCH /guest/{id}/decide `[STAFF]`
 
@@ -1233,9 +1538,68 @@ Pending guest requests targeting the authenticated staff member.
 { "decision": "VERIFIED_APPROVED" }
 ```
 
-Only the staff member the visitor asked for can decide; anyone else gets `404`.
+By default only the staff member the visitor asked for can decide; anyone else
+gets `404`. That stalls at the door when the person the visitor came to see is
+in a meeting or has gone home, so `GUEST_ADMIN_CAN_DECIDE=true` adds the two
+admin roles: an `ORG_ADMIN` decides any visit and a `UNIT_ADMIN` those meant for
+somebody in their own unit. Nobody else is added, whatever their role, and a
+kiosk key on a member account stays unable to decide.
+
+The row records who decided, which is not always who the visitor came to see.
+No endpoint reads it back; it is for the operator holding the database, next to
+the audit log, since a visitor log is read after an incident rather than on a
+screen.
+
 The response is `{"status": "VERIFIED_APPROVED", "guest": "John Smith"}`.
 The kiosk and the visitor see the decision through `GET /guest/visit/{code}`.
+
+An approval also writes when the visit is over, `GUEST_VISIT_LENGTH_MINUTES`
+from the decision rather than from the check-in: the clock starts when somebody
+was let in at the door, not when they arrived at it. The setting defaults to 0,
+which leaves an approved visit open-ended as every instance behaved before it
+existed. Denying a visit gives it no end, and deciding again the other way takes
+away the end the earlier approval gave it.
+
+### PATCH /guest/{id}/extend `[STAFF]`
+
+```json
+{ "minutes": 30 }
+```
+
+Gives an approved visit longer. Whoever could have decided the visit can extend
+it, on the reasoning that a desk which may let somebody in may also let them
+stay, so `404` for a visit out of reach exactly as the decision gives. `409` for
+a visit nobody has approved and for an approved one with no end to move, which
+is any visit approved while `GUEST_VISIT_LENGTH_MINUTES` was 0.
+
+`minutes` is at least 1 and at most `GUEST_VISIT_EXTENSION_MAX_MINUTES`, which
+defaults to 240. More is `422` rather than quietly trimmed, so a desk that meant
+30 and typed 300 hears about it, and `GUEST_VISIT_EXTENSION_MAX_MINUTES=0`
+refuses every extension for an organization that would rather the visitor
+checked in again. There is no limit on how many times a visit is extended: this
+bounds one grant, and the audit record of each extension is what an organization
+gets in place of a ceiling on the whole visit.
+
+The extension runs from whichever is later, now or the end the visit already
+has, so a visit half an hour over gets the full grant rather than a window that
+has already gone. The response is
+`{"status": "VISIT_EXTENDED", "guest": "John Smith", "visit_expires_at": "2026-09-12T08:01:07Z"}`.
+
+### GET /guest/overstays `[STAFF]`
+
+The approved visits whose time has passed, longest over first, which is the
+desk's other list: who was let in and has not been dealt with since. The same
+reach as the decision, so an `ORG_ADMIN` with `GUEST_ADMIN_CAN_DECIDE` on reads
+the whole organization's. Nothing here has been revoked; each row says the time
+is up, and a person decides whether to extend it or to go and find them.
+
+Every five minutes a job in the app process also says so once over the
+websocket, as `GUEST_VISIT_EXPIRED` with the entry id, the visitor's name and
+the end that passed. It goes to the person the visitor came to see and, when
+that was somebody else, to whoever let them in. Once, not every five minutes: a
+desk that was logged out reads this list instead. An extension makes a second
+overrun announce itself as the first did. Unpaginated, as `GET /guest/pending`
+is.
 
 ### GET /guest/visit/{code} `[public]`
 
@@ -1247,11 +1611,23 @@ since a code on a kiosk screen can be read by whoever is standing behind the
 visitor:
 
 ```json
-{ "handshake_status": "VERIFIED_APPROVED", "timestamp_marked": "2026-09-12T05:31:07Z" }
+{
+  "handshake_status": "VERIFIED_APPROVED",
+  "timestamp_marked": "2026-09-12T05:31:07Z",
+  "visit_expires_at": "2026-09-12T07:31:07Z"
+}
 ```
 
+`visit_expires_at` is when to leave, which is the one thing the visitor most
+needs from this and gives away nothing about them: whoever reads the code over a
+shoulder learns a time, not a name. Null is an open-ended visit.
+
 `404` for a code that matches no visit, including one deleted under
-`GUEST_RETENTION_DAYS`. It is not rate limited: a code is about 79 bits, so
+`GUEST_RETENTION_DAYS` and one past the window in
+`GUEST_VISIT_CODE_TTL_MINUTES`. An expired code answers exactly as an
+unknown one does, so trying codes says nothing about which ones were real.
+That setting defaults to 0, which leaves a code working for as long as the
+check-in is kept, and codes issued while it was 0 never expire. It is not rate limited: a code is about 79 bits, so
 guessing one is not a strategy, and a right guess shows only whether one
 unnamed visit was approved.
 
@@ -1259,7 +1635,7 @@ unnamed visit was approved.
 
 ## Ingestion
 
-### POST /ingestion/upload-csv?cycle_id={id} `[SUPER_ADMIN]`
+### POST /ingestion/upload-csv?cycle_id={id} `[ORG_ADMIN]`
 
 Upload a `multipart/form-data` CSV file. Required columns:
 
@@ -1384,7 +1760,7 @@ regardless, so the accounts exist but nobody ever saw their passwords.
 Reset those members individually, or re-upload after raising both
 timeouts.
 
-### POST /ingestion/generate-ledger `[SUPER_ADMIN]`
+### POST /ingestion/generate-ledger `[ORG_ADMIN]`
 
 ```
 POST /api/v1/ingestion/generate-ledger?target_date=2026-09-01
@@ -1412,14 +1788,17 @@ refused ones included: a `401`, a `403` for role or key scope, a `422`. A
 record holds the time, the account (`actor_id`), the API key if one was used
 (`api_key_id`), the method, the path and the status code. Request and
 response bodies are never stored, so a login is recorded without its password
-and an upload without its file. A login's `actor_id` is null, since nobody is
-signed in yet when it arrives.
+and an upload without its file. A password login's `actor_id` is null, since
+nobody is signed in yet when it arrives; `POST /auth/federated` is the
+exception and names the account it handed the session to, which on a first
+sign-in reads as the account having been created by its own arrival. A
+refused exchange is recorded with no account, like any other refusal.
 
 Records point at no other table, so deleting an account or revoking a key
 leaves its history. If a record cannot be written the request still succeeds
 and the failure is logged.
 
-### GET /audit/ `[SUPER_ADMIN]`
+### GET /audit/ `[ORG_ADMIN]`
 
 Records newest first, paged like the other lists. Optional filters: `from`
 and `to` (dates in the organization's timezone, both included; `to` before
@@ -1437,6 +1816,87 @@ and `to` (dates in the organization's timezone, both included; `to` before
     "status_code": 201
   }
 ]
+```
+
+---
+
+## Changes
+
+For a system that keeps its own copy of the rooms and the bookings. The
+websocket cannot tell it anything, because those notices go to a signed-in
+socket and a service behind another firewall has none, and re-reading every
+room on a timer costs the building rather than the change.
+
+Off by default. With `CHANGE_FEED_ENABLED` unset nothing is recorded and the
+route answers `503` naming the setting. Turning it on starts recording from
+that moment, so the first thing a consumer does is read the rooms and the
+bookings in full, then poll from there.
+
+### GET /changes/?since={cursor} `[ORG_ADMIN]`
+
+One entry per row that changed, oldest first, carrying the row as it now
+stands. `entity_kind` says which of `resource` and `reservation` is filled in.
+An API key needs `changes:read`.
+
+The role is higher than reading the rooms takes because a booking carries what
+it is for, which the availability calendar withholds from everyone but the
+account that made it. This hands the booking over whole, so it sits where the
+audit log sits.
+
+A row that changed several times is one entry showing where it ended: renamed
+to Bedroom and then to Living Room reads as Living Room. `change_kind` is
+measured against the cursor that was sent in rather than the row's whole
+history, so a room created and then edited between two polls reads as
+`created`, because the caller has never seen it. There is no `deleted`:
+nothing here is deleted, and a cancelled booking keeps its row and reads as
+`updated`.
+
+`full=true` returns the walk instead: every recorded change, oldest first,
+with no row state. That is the log to read when the question is what happened
+rather than what is.
+
+`limit` caps the page at 1000 and defaults to 200. A page that long means
+there is probably more, so poll again rather than waiting for the timer.
+
+Send `next_cursor` back as `since`. It comes back unchanged when nothing has
+changed, so a consumer that stores it every time keeps its place.
+
+An entry can arrive twice, after a crash between a write and the poll that
+read it, or because a row changed again while the page was being built.
+Applying an entry is replacing a row with what the row already says, so that
+needs no bookkeeping. An entry can also be **missed**, which does: the cursor
+is the marker's own id, handed out when the row is inserted and not when it
+commits, so two writes that commit in the other order leave a gap, and a poll
+that reads the later id does not come back for the earlier one. Re-read the
+rooms and the bookings in full on a slow timer, which is needed anyway.
+
+```json
+{
+  "changes": [
+    {
+      "cursor": 4193,
+      "entity_kind": "resource",
+      "entity_id": 12,
+      "change_kind": "updated",
+      "at": "2026-01-06T08:31:02.114000+00:00",
+      "resource": {
+        "id": 12,
+        "code": "LH-3",
+        "label": "Living Room",
+        "resource_type": "ROOM",
+        "unit_code": null,
+        "capacity": 90,
+        "user_id": null,
+        "latitude": 12.9716,
+        "longitude": 77.5946,
+        "altitude_target": 920.0,
+        "active": true
+      },
+      "reservation": null
+    }
+  ],
+  "next_cursor": 4193
+}
 ```
 
 ---
@@ -1491,11 +1951,12 @@ Events are delivered as JSON frames:
 | `ABSENCE_APPROVAL_REQUIRED` | Line manager | `{log_id, from, date}`, plus `end_date` for a request over several days |
 | `ABSENCE_DECISION` | Staff who submitted | `{log_id, decision}` |
 | `GUEST_HANDSHAKE_REQ` | Target staff | `{transaction_reference, guest_name, organization, intent}` |
+| `GUEST_VISIT_EXPIRED` | Target staff, and whoever decided the visit if that was somebody else | `{transaction_reference, guest_name, visit_expires_at}` |
 
 The `AUTH` frame is the only thing a client sends. Everything after it
 travels server to client.
 
-### GET /ws/stats `[SUPER_ADMIN]`
+### GET /ws/stats `[ORG_ADMIN]`
 
 How many people have a socket open right now, on every instance:
 `{"online_connections": 4}`. A person counts once however many instances they

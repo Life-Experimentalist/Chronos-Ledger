@@ -6,8 +6,10 @@ import logging
 from typing import Any
 
 import pandas as pd
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.emails import normalize_email
 from app.core.security import generate_password, hash_password
 from app.models.db import (
     Activity,
@@ -157,9 +159,11 @@ class ChronosIngestionEngine:
             }
             email_owners = dict(
                 owner
-                for emails in _chunked({str(row["member_email"]) for _, row in rows})
-                for owner in self.db.query(User.email_address, User.id).filter(
-                    User.email_address.in_(emails)
+                for emails in _chunked(
+                    {normalize_email(str(row["member_email"])) for _, row in rows}
+                )
+                for owner in self.db.query(func.lower(User.email_address), User.id).filter(
+                    func.lower(User.email_address).in_(emails)
                 )
             )
             offerings = {
@@ -196,13 +200,17 @@ class ChronosIngestionEngine:
                 blank = [name for name in df.columns if name in REQUIRED_COLUMNS and not row[name]]
                 if blank:
                     raise ValueError(f"{', '.join(blank)} cannot be blank")
+                # Folded once, and used for every lookup, comparison and write
+                # below. The raw cell is still what the messages and the report
+                # quote, because that is what somebody reading the file sees.
+                member_email = normalize_email(str(row["member_email"]))
                 # 1. Upsert member user
                 member = users.get(str(row["member_id"]))
                 if not member:
                     # The same refusal as an address change below, for the
                     # same reason. A new member was never checked, so an
                     # address already in use went as far as the unique index.
-                    owner = email_owners.get(str(row["member_email"]))
+                    owner = email_owners.get(member_email)
                     if owner is not None:
                         raise ValueError(
                             f"member '{row['member_id']}': email "
@@ -215,7 +223,7 @@ class ChronosIngestionEngine:
                     member = User(
                         id=str(row["member_id"]),
                         full_name=str(row["member_name"]),
-                        email_address=str(row["member_email"]),
+                        email_address=member_email,
                         credential_secure_hash=hash_password(raw_password),
                         role_type=InstitutionalRole.MEMBER,
                         unit_code=str(row["unit"]),
@@ -226,7 +234,7 @@ class ChronosIngestionEngine:
                     provisioned.append(
                         {
                             "member_id": str(row["member_id"]),
-                            "email_address": str(row["member_email"]),
+                            "email_address": member_email,
                             "initial_password": raw_password,
                         }
                     )
@@ -240,11 +248,13 @@ class ChronosIngestionEngine:
                         )
                     member.full_name = str(row["member_name"])
                     member.unit_code = str(row["unit"])
-                    if member.email_address != str(row["member_email"]):
+                    if normalize_email(member.email_address) != member_email:
                         # email_address is unique. Letting the collision reach
                         # the database turns a fixable typo into a rolled-back
-                        # import explained by a raw driver error.
-                        clash = email_owners.get(str(row["member_email"]))
+                        # import explained by a raw driver error. Compared
+                        # folded, so re-importing the same file with a capital
+                        # somewhere is not a change to make.
+                        clash = email_owners.get(member_email)
                         if clash is not None and clash != member.id:
                             raise ValueError(
                                 f"member '{row['member_id']}': email "
@@ -252,8 +262,8 @@ class ChronosIngestionEngine:
                             )
                         # The address it had is free from here on, for a later
                         # row to take.
-                        email_owners.pop(member.email_address, None)
-                        member.email_address = str(row["member_email"])
+                        email_owners.pop(normalize_email(member.email_address), None)
+                        member.email_address = member_email
                         email_owners[member.email_address] = member.id
                     # role_type is deliberately not touched. Somebody promoted
                     # to STAFF since the last import stays STAFF.

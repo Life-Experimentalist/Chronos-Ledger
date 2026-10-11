@@ -301,7 +301,7 @@ def test_the_database_refuses_an_overlap_the_endpoint_did_not_see(db, resource, 
             full_name="Postgres Admin",
             email_address="pg-admin@test.internal",
             credential_secure_hash=hash_password(ADMIN_PASSWORD),
-            role_type=InstitutionalRole.SUPER_ADMIN,
+            role_type=InstitutionalRole.ORG_ADMIN,
             initial_login_state=False,
         )
     )
@@ -372,7 +372,7 @@ def test_the_409_for_an_overnight_loser_still_names_what_beat_it(db, resource, m
             full_name="Postgres Admin",
             email_address="pg-admin@test.internal",
             credential_secure_hash=hash_password(ADMIN_PASSWORD),
-            role_type=InstitutionalRole.SUPER_ADMIN,
+            role_type=InstitutionalRole.ORG_ADMIN,
             initial_login_state=False,
         )
     )

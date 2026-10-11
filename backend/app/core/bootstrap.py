@@ -3,7 +3,7 @@
 
 """The first password for the seeded administrator account.
 
-Migration 001 seeds one SUPER_ADMIN, because an instance with no way in is not
+Migration 001 seeds one ORG_ADMIN, because an instance with no way in is not
 a deployment. It used to seed that account with a password written into the
 migration file, in a public repository, which is the same as seeding no
 password at all: whoever reached the instance first could read the password out

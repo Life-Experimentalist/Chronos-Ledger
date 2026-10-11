@@ -86,7 +86,7 @@ def _has_ledger_authority(current_user: User, ledger: DailyLedger) -> bool:
     """
     if current_user.id in (ledger.active_lead_id, ledger.substitute_lead_id):
         return True
-    if current_user.role_type.value not in ("SUPER_ADMIN", "UNIT_ADMIN"):
+    if current_user.role_type.value not in ("ORG_ADMIN", "UNIT_ADMIN"):
         return False
     return in_unit_scope(current_user, ledger.activity.unit_code)
 
@@ -309,13 +309,13 @@ def _decidable_by(current_user: User):
     A request goes to the submitter's manager, who decides it. Once that
     manager was deactivated nobody could, and the request waited on an
     account that can no longer sign in. An admin decides those instead: a
-    super admin any of them, a unit admin those from the non-admin accounts
-    of their own unit. Nobody decides their own. Deciding makes the admin
+    organization admin any of them, a unit admin those from the non-admin
+    accounts of their own unit. Nobody decides their own. Deciding makes the admin
     the approver on record, so the decision is theirs to revisit.
     """
     mine = ReverseRsvpLog.authorized_by_user_id == current_user.id
     role = current_user.role_type.value
-    if role not in ("SUPER_ADMIN", "UNIT_ADMIN"):
+    if role not in ("ORG_ADMIN", "UNIT_ADMIN"):
         return mine
     left_behind = and_(
         or_(
@@ -329,7 +329,7 @@ def _decidable_by(current_user: User):
         ReverseRsvpLog.submitting_user_id != current_user.id,
     )
     if role == "UNIT_ADMIN":
-        admin_roles = (InstitutionalRole.SUPER_ADMIN, InstitutionalRole.UNIT_ADMIN)
+        admin_roles = (InstitutionalRole.ORG_ADMIN, InstitutionalRole.UNIT_ADMIN)
         left_behind = and_(
             left_behind,
             ReverseRsvpLog.submitting_user_id.in_(

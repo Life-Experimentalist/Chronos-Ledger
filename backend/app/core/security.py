@@ -214,7 +214,7 @@ def first_login_blocks(user) -> bool:
     get_current_user lets two paths through regardless so the change can be
     made; a websocket has no equivalent exemption, so it asks this directly.
     """
-    return user.initial_login_state and user.role_type.value in ("SUPER_ADMIN", "UNIT_ADMIN")
+    return user.initial_login_state and user.role_type.value in ("ORG_ADMIN", "UNIT_ADMIN")
 
 
 def get_current_user(
@@ -234,7 +234,8 @@ def get_current_user(
     if user.deactivated_at is not None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account deactivated")
     # The gate moves a person off a password they were handed. A key never
-    # uses that password, and issuing one already took a super admin who had
+    # uses that password, and issuing one already took an organization admin
+    # who had
     # cleared the gate, so a request made with a key is not held. Holding it
     # left a service account at an admin role with nobody to change its
     # password, and so unusable.

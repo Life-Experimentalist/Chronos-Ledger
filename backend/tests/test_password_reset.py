@@ -122,7 +122,7 @@ def test_a_reset_admin_must_choose_their_own_password(client, seed_users, db):
             full_name="Second Admin",
             email_address="admin2@test.internal",
             credential_secure_hash=hash_password(ADMIN_PASSWORD),
-            role_type=InstitutionalRole.SUPER_ADMIN,
+            role_type=InstitutionalRole.ORG_ADMIN,
             initial_login_state=False,
         )
     )
@@ -165,7 +165,7 @@ def test_a_unit_admin_may_reset_inside_their_unit(client, seed_users, db):
 
 
 def test_a_unit_admin_may_not_reset_an_admin(client, seed_users, db):
-    """Otherwise a unit admin promotes themselves by taking the super-admin."""
+    """Otherwise a unit admin promotes themselves by taking the organization admin's role."""
     _seed_cse_unit_admin(db)
     headers = login(client, "cse.admin@test.internal", UNIT_ADMIN_PASSWORD)
     assert client.post(RESET % "ADM001", headers=headers).status_code == 403

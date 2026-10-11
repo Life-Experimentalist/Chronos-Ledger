@@ -78,7 +78,7 @@ def sync_detailed(
     each other, and the whole open is refused where any of them lands on a room that is taken. A refused
     open writes nothing.
 
-    Opening a cycle that is already open changes nothing. Requires `SUPER_ADMIN`.
+    Opening a cycle that is already open changes nothing. Requires `ORG_ADMIN`.
 
     Args:
         cycle_id (int):
@@ -119,7 +119,7 @@ def sync(
     each other, and the whole open is refused where any of them lands on a room that is taken. A refused
     open writes nothing.
 
-    Opening a cycle that is already open changes nothing. Requires `SUPER_ADMIN`.
+    Opening a cycle that is already open changes nothing. Requires `ORG_ADMIN`.
 
     Args:
         cycle_id (int):
@@ -155,7 +155,7 @@ async def asyncio_detailed(
     each other, and the whole open is refused where any of them lands on a room that is taken. A refused
     open writes nothing.
 
-    Opening a cycle that is already open changes nothing. Requires `SUPER_ADMIN`.
+    Opening a cycle that is already open changes nothing. Requires `ORG_ADMIN`.
 
     Args:
         cycle_id (int):
@@ -194,7 +194,7 @@ async def asyncio(
     each other, and the whole open is refused where any of them lands on a room that is taken. A refused
     open writes nothing.
 
-    Opening a cycle that is already open changes nothing. Requires `SUPER_ADMIN`.
+    Opening a cycle that is already open changes nothing. Requires `ORG_ADMIN`.
 
     Args:
         cycle_id (int):
