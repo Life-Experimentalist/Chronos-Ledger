@@ -29,9 +29,11 @@ def script_location() -> Path:
 
     Beside app/ in a checkout and in the container. A built wheel has no
     "beside", so pyproject.toml packs them into the package as app/_migrations.
+    Installed, "beside" is site-packages, where alembic/ is the library itself,
+    so the test is for versions/, which only a migrations directory has.
     """
     beside = BACKEND / "alembic"
-    if beside.is_dir():
+    if (beside / "versions").is_dir():
         return beside
     return Path(__file__).resolve().parents[1] / "_migrations"
 

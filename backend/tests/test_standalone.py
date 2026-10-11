@@ -307,3 +307,14 @@ def test_backup_is_reachable_from_the_command_line(data_dir, tmp_path):
     argv = ["backup", "--data-dir", str(data_dir), "--to", str(target)]
     assert standalone.main(argv) == 0
     assert target.exists()
+
+
+def test_an_installed_wheel_finds_its_own_migrations(tmp_path, monkeypatch):
+    """Installed, the folder beside app/ is site-packages, and its alembic/ is
+    the library, not these migrations."""
+    from app.core import migrations
+
+    (tmp_path / "alembic").mkdir()
+    monkeypatch.setattr(migrations, "BACKEND", tmp_path)
+    assert migrations.script_location().name == "_migrations"
+    assert migrations.script_location().parent.name == "app"

@@ -590,7 +590,7 @@ wheels = [
 
 [[package]]
 name = "chronos-ledger-backend"
-version = "0.13.1"
+version = "0.13.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
