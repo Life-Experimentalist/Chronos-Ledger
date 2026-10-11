@@ -24,9 +24,21 @@ from sqlalchemy.engine import Engine
 BACKEND = Path(__file__).resolve().parents[2]
 
 
+def script_location() -> Path:
+    """Where the migration scripts are.
+
+    Beside app/ in a checkout and in the container. A built wheel has no
+    "beside", so pyproject.toml packs them into the package as app/_migrations.
+    """
+    beside = BACKEND / "alembic"
+    if beside.is_dir():
+        return beside
+    return Path(__file__).resolve().parents[1] / "_migrations"
+
+
 def _scripts() -> ScriptDirectory:
     config = Config()
-    config.set_main_option("script_location", str(BACKEND / "alembic"))
+    config.set_main_option("script_location", str(script_location()))
     return ScriptDirectory.from_config(config)
 
 

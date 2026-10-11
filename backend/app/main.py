@@ -19,9 +19,10 @@ from app.core.audit import AuditMiddleware
 from app.core.bootstrap import apply_initial_admin_password
 from app.core.concurrency import ConcurrencyGate
 from app.core.config import docs_are_published, get_settings
-from app.core.database import POOL_CAPACITY, SessionLocal, engine
+from app.core.database import POOL_CAPACITY, SessionLocal, engine, is_sqlite
 from app.core.migrations import database_revision, unknown_revision_message
 from app.core.pagination import TOTAL_COUNT_HEADER
+from app.core.redis_client import get_redis, is_memory
 from app.core.time import org_now, org_timezone, org_tomorrow
 from app.core.websocket_manager import socket_broker
 from app.cron.guest_overstay import announce_overstayed_visits
@@ -51,6 +52,11 @@ migration_state: dict[str, str | None] = {"revision": None}
 async def lifespan(_app: FastAPI):
     _check_the_database_revision()
     _open_the_admin_account()
+    if is_memory(settings.redis_url):
+        # Now rather than at the first rate-limited request, so a missing
+        # standalone extra stops the process with a message instead of
+        # failing sign-ins one at a time.
+        get_redis()
     # Schedule nightly ledger generation at 23:00
     scheduler.add_job(
         _run_ledger_generator,
@@ -94,13 +100,20 @@ async def lifespan(_app: FastAPI):
     )
     scheduler.start()
     # Socket events and closes for people connected to another instance, and
-    # the presence the connection count reads. Harmless with one instance.
-    relay = asyncio.create_task(socket_broker.run_relay(settings.redis_url))
+    # the presence the connection count reads. Harmless with one instance, and
+    # skipped where Redis is this process's own memory: there is only one
+    # instance and nobody else to hear it.
+    relay = None
+    if not is_memory(settings.redis_url):
+        relay = asyncio.create_task(socket_broker.run_relay(settings.redis_url))
     yield
     scheduler.shutdown(wait=False)
-    relay.cancel()
-    with suppress(asyncio.CancelledError):
-        await relay
+    if relay is not None:
+        relay.cancel()
+        with suppress(asyncio.CancelledError):
+            await relay
+    if is_sqlite(settings.database_url):
+        _fold_the_write_ahead_log()
 
 
 def _check_the_database_revision():
@@ -140,6 +153,27 @@ def _open_the_admin_account():
         )
     finally:
         db.close()
+
+
+def _fold_the_write_ahead_log():
+    """Leave one file behind on a clean stop, not three.
+
+    In WAL mode recent commits sit in chronos.db-wal until a checkpoint moves
+    them into the database. Folding them in on the way out means a copy of
+    chronos.db alone is the whole data, which is what somebody copying the
+    data directory by hand expects.
+    """
+    # On the driver's connection, not through SQLAlchemy: every transaction
+    # here opens with BEGIN IMMEDIATE, and SQLite will not checkpoint from
+    # inside one.
+    try:
+        connection = engine.raw_connection()
+        try:
+            connection.driver_connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        finally:
+            connection.close()
+    except Exception:
+        logging.getLogger(__name__).exception("Could not checkpoint the SQLite write-ahead log.")
 
 
 def _run_ledger_generator():
@@ -253,24 +287,28 @@ async def health_check():
 
 @app.get("/health/ready", operation_id="health.ready")
 def readiness_check():
-    """Whether this instance can serve requests: PostgreSQL has to answer.
+    """Whether this instance can serve requests: the database has to answer.
 
     Redis is pinged and reported, but it being down does not fail readiness.
     Everything that uses it falls back without it, so taking the app out of
-    rotation over it would turn a degraded instance into a missing one.
+    rotation over it would turn a degraded instance into a missing one. Under
+    REDIS_URL=memory:// there is nothing to ping and it reports "memory".
     """
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
         database = "ok"
     except Exception:
-        logging.getLogger(__name__).exception("Readiness: PostgreSQL did not answer.")
+        logging.getLogger(__name__).exception("Readiness: the database did not answer.")
         database = "unavailable"
-    try:
-        redis.from_url(settings.redis_url, socket_connect_timeout=1, socket_timeout=1).ping()
-        cache = "ok"
-    except Exception:
-        cache = "unavailable"
+    if is_memory(settings.redis_url):
+        cache = "memory"
+    else:
+        try:
+            redis.from_url(settings.redis_url, socket_connect_timeout=1, socket_timeout=1).ping()
+            cache = "ok"
+        except Exception:
+            cache = "unavailable"
     ready = database == "ok"
     return JSONResponse(
         status_code=200 if ready else 503,
