@@ -180,17 +180,12 @@ def configure_clock(clock_start: str | None, id_seed: int | None) -> None:
 
 def embedded(args) -> int:
     # Before the first `app.` import: app.core.config caches its settings on
-    # first use, and the clock is built from them.
+    # first use, the clock is built from them, and app.core.database builds
+    # its engine from them at import. Nothing under `app.` is imported until
+    # configure_environment has run, host_identity included: it imports the
+    # database module.
     try:
         configure_clock(args.clock_start, args.id_seed)
-    except ValueError as problem:
-        print(f"chronos-engine embedded: {problem}", file=sys.stderr)
-        return 2
-
-    from app.core.host_identity import check_host_secret
-
-    try:
-        secret = check_host_secret(read_host_secret(args, sys.stdin))
     except ValueError as problem:
         print(f"chronos-engine embedded: {problem}", file=sys.stderr)
         return 2
@@ -202,6 +197,14 @@ def embedded(args) -> int:
     data_dir.mkdir(parents=True, exist_ok=True)
     _warn_about_synced_folders(data_dir)
     configure_environment(data_dir, args.database_url)
+
+    from app.core.host_identity import check_host_secret
+
+    try:
+        secret = check_host_secret(read_host_secret(args, sys.stdin))
+    except ValueError as problem:
+        print(f"chronos-engine embedded: {problem}", file=sys.stderr)
+        return 2
 
     from app.core.database import engine, is_sqlite, use_schema
 

@@ -303,13 +303,16 @@ def test_the_secret_comes_from_the_environment_or_stdin(monkeypatch):
     assert stdin.readline() == "next line\n"
 
 
-def test_embedded_refuses_to_start_without_a_secret(monkeypatch, capsys):
+def test_embedded_refuses_to_start_without_a_secret(tmp_path, monkeypatch, capsys):
+    # The data directory is made before the secret is looked at, so a
+    # refusal still needs one that is not the working directory.
+    argv = ["embedded", "--data-dir", str(tmp_path)]
     monkeypatch.delenv(host_identity.HOST_SECRET_ENV, raising=False)
-    assert standalone.main(["embedded"]) == 2
+    assert standalone.main(argv) == 2
     assert host_identity.HOST_SECRET_ENV in capsys.readouterr().err
 
     monkeypatch.setenv(host_identity.HOST_SECRET_ENV, "short")
-    assert standalone.main(["embedded"]) == 2
+    assert standalone.main(argv) == 2
     assert "32 characters" in capsys.readouterr().err
 
 
