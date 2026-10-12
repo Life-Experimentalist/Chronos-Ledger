@@ -34,6 +34,7 @@ import sqlite3
 import sys
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 import uvicorn
@@ -150,7 +151,42 @@ def read_host_secret(args, stdin) -> str | None:
     return os.environ.get(HOST_SECRET_ENV)
 
 
+def configure_clock(clock_start: str | None, id_seed: int | None) -> None:
+    """Put the clock settings in the environment, before anything reads them.
+
+    --clock-start is the one switch into host mode: CLOCK_MODE is set
+    outright either way, so a CLOCK_MODE left in the environment cannot put
+    the process on a clock the host did not ask for. A start without an
+    offset is a ValueError here rather than a settings error later, so the
+    message names the flag.
+    """
+    if clock_start is None:
+        os.environ["CLOCK_MODE"] = "system"
+    else:
+        try:
+            start = datetime.fromisoformat(clock_start)
+        except ValueError:
+            start = None
+        if start is None or start.tzinfo is None or start.utcoffset() is None:
+            raise ValueError(
+                f"--clock-start {clock_start!r} is not an ISO 8601 instant with an offset, "
+                "such as 2026-09-07T08:00:00+00:00"
+            )
+        os.environ["CLOCK_MODE"] = "host"
+        os.environ["CLOCK_START"] = clock_start
+    if id_seed is not None:
+        os.environ["ID_SEED"] = str(id_seed)
+
+
 def embedded(args) -> int:
+    # Before the first `app.` import: app.core.config caches its settings on
+    # first use, and the clock is built from them.
+    try:
+        configure_clock(args.clock_start, args.id_seed)
+    except ValueError as problem:
+        print(f"chronos-engine embedded: {problem}", file=sys.stderr)
+        return 2
+
     from app.core.host_identity import check_host_secret
 
     try:
@@ -189,13 +225,17 @@ def embedded(args) -> int:
 
 def ready_line(server: uvicorn.Server) -> str:
     """The one line the host reads from stdout. Nothing else is written there."""
+    from app.core import clock
     from app.core.schema import SCHEMA_VERSION
 
     if server.config.uds:
         where = {"socket": server.config.uds}
     else:
         where = {"port": server.servers[0].sockets[0].getsockname()[1]}
-    return json.dumps({"chronos": "ready", **where, "schema_version": SCHEMA_VERSION})
+    mode = "host" if clock.is_host() else "system"
+    return json.dumps(
+        {"chronos": "ready", **where, "schema_version": SCHEMA_VERSION, "clock": mode}
+    )
 
 
 class AnnouncingServer(uvicorn.Server):
@@ -363,6 +403,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--parent-pid", type=int, help="also stop when this process is gone (checked every second)"
     )
     child.add_argument("--log-level", default="info")
+    child.add_argument(
+        "--clock-start",
+        metavar="INSTANT",
+        help="run on a host clock that starts at this ISO 8601 instant with an offset, "
+        "moved by POST /api/v1/clock/advance (docs/clock.md); without it, the system clock",
+    )
+    child.add_argument(
+        "--id-seed", type=int, metavar="N", help="seed the non-secret identifiers (ID_SEED)"
+    )
     child.set_defaults(handler=embedded)
 
     copy = commands.add_parser(
