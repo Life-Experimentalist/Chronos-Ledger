@@ -19,10 +19,10 @@ from starlette.websockets import WebSocketDisconnect
 
 import app.embedded as embedded_module
 from app import standalone
-from app.core import database, host_identity
+from app.core import clock, database, host_identity
 from app.core.database import get_db, get_session_opener, sqlite_engine
 from app.core.host_identity import SYSTEM_ACTOR_ID, seed_system_account
-from app.embedded import STRIPPED_OPERATIONS, build_app
+from app.embedded import CLOCK_OPERATIONS, STRIPPED_OPERATIONS, build_app
 from app.main import app as ordinary_app
 from app.models.db import AuditRecord, InstitutionalRole, User
 from tests.conftest import ADMIN_PASSWORD, login
@@ -256,8 +256,9 @@ def test_the_stripped_routes_exist_only_in_the_ordinary_app(embedded):
     ordinary = _operation_ids(ordinary_app)
     assert ordinary >= STRIPPED_OPERATIONS
     assert not STRIPPED_OPERATIONS & _operation_ids(embedded.app)
-    # Everything else is mounted as it is.
-    assert ordinary - STRIPPED_OPERATIONS == _operation_ids(embedded.app)
+    # Everything else is mounted as it is, plus the clock, which is only here.
+    assert not CLOCK_OPERATIONS & ordinary
+    assert _operation_ids(embedded.app) == (ordinary - STRIPPED_OPERATIONS) | CLOCK_OPERATIONS
 
 
 def test_the_websocket_is_not_mounted(embedded, client):
@@ -348,7 +349,10 @@ def test_embedded_prepares_the_file_then_serves(tmp_path, monkeypatch):
     [(application, args)] = served
     assert args.parent_pid == 4242
     assert args.port == 0
-    assert _operation_ids(application) == _operation_ids(ordinary_app) - STRIPPED_OPERATIONS
+    assert (
+        _operation_ids(application)
+        == (_operation_ids(ordinary_app) - STRIPPED_OPERATIONS) | CLOCK_OPERATIONS
+    )
     with file_engine.connect() as connection:
         from sqlalchemy import text
 
@@ -404,12 +408,22 @@ def test_the_ready_line_is_one_json_object():
         "chronos": "ready",
         "port": 54321,
         "schema_version": "1",
+        "clock": "system",
     }
     assert json.loads(standalone.ready_line(_listening(uds="/run/chronos.sock"))) == {
         "chronos": "ready",
         "socket": "/run/chronos.sock",
         "schema_version": "1",
+        "clock": "system",
     }
+
+
+def test_the_ready_line_says_when_a_host_owns_the_clock():
+    clock.install(clock.HostClock(datetime(2026, 9, 7, 8, tzinfo=UTC)))
+    try:
+        assert json.loads(standalone.ready_line(_listening()))["clock"] == "host"
+    finally:
+        clock.reset()
 
 
 def test_the_ready_line_is_printed_once_the_server_listens(monkeypatch, capsys):
