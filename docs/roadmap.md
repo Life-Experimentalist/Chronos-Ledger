@@ -32,7 +32,8 @@ database, and the changelog for each tag is the contract they upgrade against.
 | 0.13 | Platform: contract check, hardening, `chronos` CLI and channels, first SDKs, ledger range queries, audit log | No |
 | 0.14 | Roles renamed, guest desk (visit expiry, configurable approver, change feed), federated identity | Yes |
 | 0.15 | Standalone engine (`chronos-engine`, no Docker or Redis, on PostgreSQL or a SQLite file), embedded flavour with the host clock, Alembic removed (the models own the schema, `SCHEMA_VERSION`), PostgreSQL-first `--database-url`, optional Cloudflare tunnel compose profile, psycopg 3 and SQLAlchemy 2.1 | Yes |
-| 0.16 | Engine: resource modes, conflict report, rolling horizon, Go and Rust SDKs, Helm; then recurrence rules, editable timetable, exclusion on instances | Yes |
+| 0.16 | Engine, part 1: resource modes, conflict report, rolling horizon, Go and Rust SDKs, Helm | Additive |
+| 0.17 | Engine, part 2: recurrence rules, editable timetable, exclusion on instances | Yes |
 | Designed, waiting for approval | Integration contract: error codes, idempotency on every write, export and import, per-organization uniqueness | Mostly additive |
 | Waiting on a decision | Webhooks, activities CRUD, reservation external reference | n/a |
 
@@ -268,7 +269,7 @@ in CI against it, versioned with the server's tags.
 
 ---
 
-## 0.16: Engine, part 2 (breaking)
+## 0.17: Engine, part 2 (breaking)
 
 ### E-5. Recurrence rules
 
@@ -277,7 +278,7 @@ in CI against it, versioned with the server's tags.
   migrate to `FREQ=WEEKLY;BYDAY=..`. Expansion uses `dateutil.rrule` and is
   DST-correct: a weekly 09:00 stays 09:00 local time all year.
 - **API:** slots return `rrule` and `dtstart`. `day_of_week_index` is still
-  returned, derived, through 0.16, and removed after.
+  returned, derived, through 0.17, and removed after.
 - **Done when:** a weekly slot across a DST change materializes at the same
   local time on both sides; migrated slots materialize the same days as before.
 
