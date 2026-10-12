@@ -22,6 +22,7 @@ the models:
 
 import datetime
 import os
+from contextlib import contextmanager
 
 import pytest
 from fastapi.testclient import TestClient
@@ -30,7 +31,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.v1.endpoints import schedule
-from app.core.database import get_db
+from app.core.database import get_db, get_session_opener
 from app.core.schema import ensure_schema
 from app.core.security import hash_password
 from app.core.time import org_today
@@ -434,7 +435,14 @@ def test_the_endpoint_returns_409_when_the_database_refuses_the_propagate(
     def override_get_db():
         yield db
 
+    @contextmanager
+    def override_open_session():
+        # AuditMiddleware records every write in a session of its own. Left
+        # alone it opens one on the configured database_url, not this one.
+        yield db
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_session_opener] = lambda: override_open_session
     try:
         client = TestClient(app)
         token = client.post(
@@ -512,7 +520,14 @@ def test_the_endpoint_refuses_the_move_before_it_writes_anything(db, room, cycle
     def override_get_db():
         yield db
 
+    @contextmanager
+    def override_open_session():
+        # AuditMiddleware records every write in a session of its own. Left
+        # alone it opens one on the configured database_url, not this one.
+        yield db
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_session_opener] = lambda: override_open_session
     try:
         client = TestClient(app)
         token = client.post(
