@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
+import httpx
 import pytest
 import uvicorn
 from fastapi.testclient import TestClient
@@ -524,4 +525,36 @@ def test_the_entry_point_builds_the_file_the_flag_names(tmp_path, embedded_proce
     assert not decoy.exists()
 
     # The host going away: stdin closes, the process leaves on its own.
+    assert child.leave() == 0
+
+
+def test_an_ingestion_request_is_answered_while_the_host_holds_stdin(tmp_path, embedded_process):
+    """pandas is imported on the first ingestion request, long after startup.
+
+    On Windows that import hung for as long as the stdin watcher sat in a
+    read on the host's pipe, so the request never got an answer. The
+    answer here is a refusal, since the file has none of the columns, but
+    a refusal from pandas is one that has been through the import.
+    """
+    child = embedded_process("--data-dir", str(tmp_path), "--port", "0")
+    base = f"http://127.0.0.1:{child.ready()['port']}/api/v1"
+    headers = actor("H-1", role="ORG_ADMIN")
+
+    with httpx.Client(base_url=base, headers=headers, timeout=60) as api:
+        cycle = api.post(
+            "/schedule/cycles",
+            json={
+                "cycle_label": "Ingest",
+                "date_bounds_start": "2031-01-06",
+                "date_bounds_end": "2031-04-24",
+            },
+        )
+        assert cycle.status_code == 200, cycle.text
+        res = api.post(
+            "/ingestion/upload-csv",
+            params={"cycle_id": cycle.json()["id"]},
+            files={"file": ("matrix.csv", b"a,b\n", "text/csv")},
+        )
+    assert res.status_code == 422, res.text
+    assert "Missing columns" in res.json()["detail"]
     assert child.leave() == 0
