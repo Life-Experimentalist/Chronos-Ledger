@@ -2,8 +2,8 @@
 
 <!-- Copyright 2026 Chronos Ledger Contributors (Apache 2.0) -->
 
-Current release: 0.13.1, with 0.14 merged and waiting for its tag. This page
-plans the releases after it. The plan is detailed on purpose: each item has a scope, the files it touches and
+Current release: 0.14.0, with 0.15 next. This page plans the releases after
+it. The plan is detailed on purpose: each item has a scope, the files it touches and
 a check that says when it is done, so it can be picked up without
 re-deciding anything.
 
@@ -21,9 +21,9 @@ is the hardest case in scope, so meeting it covers the simpler ones
 (colleges, offices, clinics). An integrator embeds the engine behind its own
 product and talks to it only through the HTTP API and the SDKs.
 
-Integrators pin to tagged releases, never to `main`. A release can migrate the
-database forward, and the changelog for each tag is the contract they upgrade
-against.
+Integrators pin to tagged releases, never to `main`. There are no migrations
+before the first real deployment, so a schema change means recreating the
+database, and the changelog for each tag is the contract they upgrade against.
 
 ## At a glance
 
@@ -31,8 +31,8 @@ against.
 |---|---|---|
 | 0.13 | Platform: contract check, hardening, `chronos` CLI and channels, first SDKs, ledger range queries, audit log | No |
 | 0.14 | Roles renamed, guest desk (visit expiry, configurable approver, change feed), federated identity | Yes |
-| 0.15 | Standalone engine (no Docker or Redis, on a local PostgreSQL or a SQLite file), embedded flavour for a host program, PostgreSQL in CI; engine, part 1: resource modes, conflict report, rolling horizon, Go and Rust SDKs, Helm | Additive |
-| 0.16 | Engine, part 2: recurrence rules, editable timetable, exclusion on instances | Yes |
+| 0.15 | Standalone engine (`chronos-engine`, no Docker or Redis, on PostgreSQL or a SQLite file), embedded flavour with the host clock, Alembic removed (the models own the schema, `SCHEMA_VERSION`), PostgreSQL-first `--database-url`, optional Cloudflare tunnel compose profile, psycopg 3 and SQLAlchemy 2.1 | Yes |
+| 0.16 | Engine: resource modes, conflict report, rolling horizon, Go and Rust SDKs, Helm; then recurrence rules, editable timetable, exclusion on instances | Yes |
 | Designed, waiting for approval | Integration contract: error codes, idempotency on every write, export and import, per-organization uniqueness | Mostly additive |
 | Waiting on a decision | Webhooks, activities CRUD, reservation external reference | n/a |
 
@@ -162,8 +162,7 @@ against the spec. Publishing to npm and PyPI is added on request.
   `backend/app/core/redis_client.py`, `backend/app/core/schema.py`,
   `backend/app/main.py`, `backend/pyproject.toml`, `docs/standalone.md`.
 - **Done when:** 40 concurrent overlapping bookings give one `201` and 39
-  `409`; an installed wheel starts on a fresh folder. Built on
-  `feat/standalone-engine`, merged after the 0.14 tag.
+  `409`; an installed wheel starts on a fresh folder. On main, in 0.15.
 
 ### S-2. CI upgrades a SQLite file (dropped)
 
@@ -179,12 +178,12 @@ against the spec. Publishing to npm and PyPI is added on request.
 
 - **Scope:** the main suite runs on in-memory SQLite, so the tests that prove
   the no-overlap guarantees (the `*_pg.py` files: exclusion constraints, one
-  ledger day per slot, refresh-token families, booking races) skipped in CI.
+  ledger day per slot, booking races) skipped in CI.
   A job now starts PostgreSQL 17, the version the compose files run, and runs
   each of those files against an empty database of its own.
 - **Touches:** `.github/workflows/ci.yml`.
 - **Done when:** the job is green and none of those tests skip.
-- **Status:** added on `feat/standalone-engine`.
+- **Status:** on main, in 0.15.
 
 ### S-4. The integrated flavour: `chronos-engine embedded`
 
@@ -204,11 +203,11 @@ against the spec. Publishing to npm and PyPI is added on request.
 - **Done when:** the SQLite tests cover the secret, the actor mapping and
   the stripped routes; `tests/test_embedded_pg.py` proves that every table
   and constraint lands in the named schema next to a host table of the same
-  name. Built on `feat/integrated-flavour`.
+  name. On main, in 0.15.
 
 ---
 
-## 0.15: Engine, part 1
+## 0.16: Engine, part 1
 
 Background: a schedule in Chronos is a set of intervals on resources. Today a
 resource is a room or a person and every booking takes the whole resource.

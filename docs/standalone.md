@@ -41,8 +41,10 @@ chronos-engine serve --data-dir ~/chronos-data
 ```
 
 Pin to a tag (`git checkout vX.Y.Z`) rather than `main`. A program that embeds
-the engine should move between tagged releases on purpose, because a release
-can migrate the data file forward and an older release then refuses to open it.
+the engine should move between tagged releases on purpose. There are no
+migrations before the first real deployment, so a release does not bring an
+older data file forward when the schema has changed (see Upgrading), and a
+database Chronos 0.14 or earlier made is refused at start.
 
 The `standalone` extra adds one package, `fakeredis`, which keeps the rate
 limit counters and the federated replay cache in memory.
