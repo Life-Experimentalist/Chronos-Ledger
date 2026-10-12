@@ -20,7 +20,7 @@ it done before the server starts.
 import secrets
 import sys
 
-from sqlalchemy import inspect, select
+from sqlalchemy import inspect, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -32,17 +32,27 @@ from app.core.database import Base
 # their database looks like without either reading its catalog.
 SCHEMA_VERSION = "1"
 
+# Two replicas starting together would both find the tables missing and both
+# try to make them. On PostgreSQL the first one to start holds this advisory
+# lock for its transaction and the other waits, then finds everything there.
+# Any fixed number does; this one is "chronos" in hex.
+SCHEMA_LOCK_KEY = 0x6368726F6E6F73
+
 
 def ensure_schema(engine: Engine) -> str:
     """Build whatever the database lacks, then make sure somebody can log in.
 
     Returns "created" when the users table had to be made, "current" when it
-    was already there. Both runs end in the same state.
+    was already there. Both runs end in the same state, and so do two runs at
+    once: on PostgreSQL they take turns, on SQLite the file lock already makes
+    them.
     """
     import app.models.db  # noqa: F401 (registers every table with the metadata)
 
-    had_users = inspect(engine).has_table("users")
     with engine.begin() as connection:
+        if connection.dialect.name == "postgresql":
+            connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": SCHEMA_LOCK_KEY})
+        had_users = inspect(connection).has_table("users")
         Base.metadata.create_all(connection)
         _seed_administrator(connection)
     return "current" if had_users else "created"

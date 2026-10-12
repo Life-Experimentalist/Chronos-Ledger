@@ -17,6 +17,8 @@ Point TEST_DATABASE_URL at an empty database:
 
 import datetime
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from sqlalchemy import create_engine, func, select, text
@@ -24,6 +26,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.bootstrap import SEEDED_ADMIN_ID
+from app.core.database import Base
 from app.core.schema import ensure_schema
 from app.models.db import (
     InstitutionalRole,
@@ -118,3 +121,32 @@ def test_the_schema_is_built_once_and_the_administrator_seeded_once(engine, buil
     assert admins == 1
     assert admin.role_type == InstitutionalRole.ORG_ADMIN
     assert admin.initial_login_state
+
+
+def test_two_replicas_starting_together_build_the_schema_once(engine):
+    """Two servers start on one empty database at the same moment.
+
+    Without the advisory lock both find the tables missing, both run CREATE
+    TABLE and CREATE EXTENSION, both insert the administrator, and one of them
+    crashes. With it they take turns: one builds, the other finds everything
+    there, and nothing is made twice.
+    """
+    Base.metadata.drop_all(engine)
+    with engine.begin() as connection:
+        connection.execute(text("DROP EXTENSION IF EXISTS btree_gist"))
+
+    together = threading.Barrier(2)
+
+    def start() -> str:
+        together.wait()
+        return ensure_schema(engine)
+
+    with ThreadPoolExecutor(max_workers=2) as replicas:
+        results = sorted(replicas.map(lambda _: start(), range(2)))
+
+    assert results == ["created", "current"]
+    with Session(engine) as session:
+        admins = session.execute(
+            select(func.count()).select_from(User).where(User.id == SEEDED_ADMIN_ID)
+        ).scalar()
+    assert admins == 1
