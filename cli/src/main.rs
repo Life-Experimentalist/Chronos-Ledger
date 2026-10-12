@@ -62,7 +62,7 @@ enum Command {
         #[arg(long, short)]
         yes: bool,
     },
-    /// Dump the database into backups/, with the migration it was taken at.
+    /// Dump the database into backups/, with the schema version it was taken at.
     Backup,
     /// Replace the database with a backup taken by `chronos backup`.
     Restore {

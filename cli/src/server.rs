@@ -13,7 +13,7 @@ use anyhow::{Context, Result, bail};
 
 use crate::channel::{self, Channel};
 use crate::env_file;
-use crate::project::{self, BackupInfo, DB_NAME, DB_USER, Project};
+use crate::project::{self, BackupInfo, DB_NAME, DB_USER, Health, Project};
 use crate::release::{self, compare_versions};
 
 /// The compose file and env template of the release this CLI was built from.
@@ -95,9 +95,9 @@ pub fn up(project: &Project) -> Result<()> {
     project.compose_run(&["up", "-d"])?;
     let health = project.wait_ready(READY_TIMEOUT)?;
     println!(
-        "Chronos Ledger {} is ready (migration {}).",
+        "Chronos Ledger {} is ready (schema version {}).",
         health.version,
-        health.migration_revision.as_deref().unwrap_or("none")
+        health.schema_version.as_deref().unwrap_or("none")
     );
     Ok(())
 }
@@ -106,9 +106,9 @@ pub fn status(project: &Project) -> Result<()> {
     project.compose_run(&["ps"])?;
     match project.health() {
         Some(h) => println!(
-            "\nServer {} at migration {}. CLI {}.",
+            "\nServer {} at schema version {}. CLI {}.",
             h.version,
-            h.migration_revision.as_deref().unwrap_or("none"),
+            h.schema_version.as_deref().unwrap_or("none"),
             crate::VERSION
         ),
         None => println!("\nThe backend is not answering /health."),
@@ -117,7 +117,7 @@ pub fn status(project: &Project) -> Result<()> {
 }
 
 /// Refuse to manage a server newer than this CLI: its compose file and its
-/// migrations are ones this build has never seen.
+/// schema are ones this build has never seen.
 fn require_cli_not_older(server_version: &str) -> Result<()> {
     if compare_versions(crate::VERSION, server_version) == Some(Ordering::Less) {
         bail!(
@@ -151,9 +151,10 @@ pub fn upgrade(project: &Project, to: Option<&str>, yes: bool) -> Result<()> {
             println!("Already on {}.", tag_for(&target));
             return Ok(());
         }
-        // Migrations only move forward. Going back needs the backup from before.
+        // Going back means going back to the data as it was: the backup from before.
         Some(Ordering::Less) => bail!(
-            "{} is older than the pinned {current}. Downgrading does not undo migrations; restore the backup taken before the upgrade instead (chronos restore).",
+            "{} is older than the pinned {current}. To go back, set VERSION={} in .env, run `chronos up`, then restore the backup taken on it (chronos restore).",
+            tag_for(&target),
             tag_for(&target)
         ),
         _ => {}
@@ -181,16 +182,20 @@ pub fn upgrade(project: &Project, to: Option<&str>, yes: bool) -> Result<()> {
         &project.env_path(),
         &env_file::set(&env, "VERSION", &tag_for(&target)),
     )?;
-    refresh_compose_file(project, &target)?;
     project.compose_run(&["pull"])?;
+    if let Err(e) = require_target_fits(project, &health, &target) {
+        write_private(&project.env_path(), &env)?;
+        bail!("{e:#}\nThe pin is back on {current}; nothing was restarted.");
+    }
+    refresh_compose_file(project, &target)?;
     project.compose_run(&["up", "-d"])?;
 
     match project.wait_ready(READY_TIMEOUT) {
         Ok(h) if compare_versions(&h.version, &target) == Some(Ordering::Equal) => {
             println!(
-                "Upgraded to {} (migration {}).",
+                "Upgraded to {} (schema version {}).",
                 h.version,
-                h.migration_revision.as_deref().unwrap_or("none")
+                h.schema_version.as_deref().unwrap_or("none")
             );
             Ok(())
         }
@@ -199,9 +204,41 @@ pub fn upgrade(project: &Project, to: Option<&str>, yes: bool) -> Result<()> {
             h.version
         ),
         Err(e) => bail!(
-            "{e:#}\nThe backup from before the upgrade is {}. To go back: set VERSION={current} in .env, then chronos restore {}",
+            "{e:#}\nThe backup from before the upgrade is {}. To go back: set VERSION={current} in .env, chronos up, then chronos restore {}",
             dump.display(),
             dump.display()
+        ),
+    }
+}
+
+/// There are no migrations, so the release moving in must describe the same
+/// tables the database already has. Asked of the image `pull` just fetched.
+fn require_target_fits(project: &Project, health: &Health, target: &str) -> Result<()> {
+    let next = project.image_schema_version()?;
+    if Some(next.as_str()) == health.schema_version.as_deref() {
+        return Ok(());
+    }
+    bail!(
+        "{} describes schema version {next} and this database was built at {}. Nothing carries data across before the first deployment: export what you need, then start the new release on an empty database (chronos down, remove the database volume, chronos up).",
+        tag_for(target),
+        health.schema_version.as_deref().unwrap_or("none")
+    )
+}
+
+/// A backup fits only a server whose models describe the schema it was taken
+/// at. With no migrations, nothing carries it across to another.
+fn require_same_schema(info: &BackupInfo, health: &Health) -> Result<()> {
+    match (&info.schema_version, &health.schema_version) {
+        (Some(taken), Some(running)) if taken == running => Ok(()),
+        (Some(taken), Some(running)) => bail!(
+            "the backup was taken at schema version {taken} and this server is at {running}. There is no upgrade path between the two before the first deployment: restore it on the release it was taken on ({}), or export what you need and start again on an empty database.",
+            info.server_version.as_deref().unwrap_or("unknown")
+        ),
+        (None, _) => bail!(
+            "the backup records no schema version, so an earlier CLI took it, and there is no path from its tables to this server's."
+        ),
+        (_, None) => bail!(
+            "the server reports no schema version in /health, so this CLI cannot check the backup against it."
         ),
     }
 }
@@ -229,8 +266,14 @@ fn refresh_compose_file(project: &Project, target: &str) -> Result<()> {
 
 pub fn backup(project: &Project) -> Result<PathBuf> {
     project.require_initialised()?;
-    let revision = project.database_revision()?;
-    let server_version = project.health().map(|h| h.version).or_else(|| {
+    // The running server knows its schema version. When it is down, the pinned
+    // image is the thing that built the database, so it is asked instead.
+    let health = project.health();
+    let schema_version = match health.as_ref().and_then(|h| h.schema_version.clone()) {
+        Some(version) => version,
+        None => project.image_schema_version()?,
+    };
+    let server_version = health.map(|h| h.version).or_else(|| {
         project
             .read_env()
             .ok()
@@ -238,10 +281,9 @@ pub fn backup(project: &Project) -> Result<PathBuf> {
     });
     fs::create_dir_all(project.backups_dir())?;
     let stamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
-    let dump = project.backups_dir().join(format!(
-        "chronos-{stamp}-rev{}.dump",
-        revision.as_deref().unwrap_or("none")
-    ));
+    let dump = project
+        .backups_dir()
+        .join(format!("chronos-{stamp}-schema{schema_version}.dump"));
 
     let file =
         fs::File::create(&dump).with_context(|| format!("could not create {}", dump.display()))?;
@@ -269,7 +311,7 @@ pub fn backup(project: &Project) -> Result<PathBuf> {
 
     let info = BackupInfo {
         server_version,
-        migration_revision: revision,
+        schema_version: Some(schema_version),
         created_at: chrono::Utc::now().to_rfc3339(),
     };
     fs::write(
@@ -285,7 +327,7 @@ pub fn restore(project: &Project, file: &Path, yes: bool) -> Result<()> {
     let info: BackupInfo = serde_json::from_str(
         &fs::read_to_string(project::backup_info_path(file)).with_context(|| {
             format!(
-                "{} has no {} beside it, so the migration it was taken at is unknown. Only backups from `chronos backup` can be restored this way.",
+                "{} has no {} beside it, so the schema version it was taken at is unknown. Only backups from `chronos backup` can be restored this way.",
                 file.display(),
                 project::backup_info_path(file).display()
             )
@@ -293,20 +335,11 @@ pub fn restore(project: &Project, file: &Path, yes: bool) -> Result<()> {
     )?;
     let Some(health) = project.health() else {
         bail!(
-            "the server is not running. Start it with `chronos up` so its migration can be checked first."
+            "the server is not running. Start it with `chronos up` so its schema version can be checked first."
         );
     };
     require_cli_not_older(&health.version)?;
-
-    if let (Some(backup_rev), Some(server_rev)) =
-        (&info.migration_revision, &health.migration_revision)
-        && project::compare_revisions(backup_rev, server_rev) == Some(Ordering::Greater)
-    {
-        bail!(
-            "the backup is at migration {backup_rev}, newer than this server's {server_rev}. It was taken on {}; upgrade to that version first (chronos upgrade --to ...).",
-            info.server_version.as_deref().unwrap_or("a newer release")
-        );
-    }
+    require_same_schema(&info, &health)?;
 
     if !crate::confirm(
         &format!(
@@ -320,8 +353,8 @@ pub fn restore(project: &Project, file: &Path, yes: bool) -> Result<()> {
 
     project.compose_run(&["stop", "chronos-proxy", "chronos-app"])?;
     // Drop and recreate rather than pg_restore --clean: --clean only drops what
-    // the dump contains, so tables a later migration added would survive and
-    // break the migrations that run again on start.
+    // the dump contains, so a table the dump lacks would survive beside the
+    // restored ones.
     for sql in [
         format!("DROP DATABASE IF EXISTS {DB_NAME} WITH (FORCE)"),
         format!("CREATE DATABASE {DB_NAME} OWNER {DB_USER}"),
@@ -368,7 +401,8 @@ pub fn restore(project: &Project, file: &Path, yes: bool) -> Result<()> {
             "pg_restore failed. The database is empty; run the restore again, or restore another backup."
         );
     }
-    // Starting the backend migrates an older backup forward to this release.
+    // The schema versions match, so starting the backend changes nothing in
+    // the restored database.
     up(project)
 }
 
@@ -448,15 +482,15 @@ pub fn doctor(project: &Project) -> Result<()> {
     match project.health() {
         None => {
             r.warn("the backend is not answering /health. `chronos up`, then `docker compose logs chronos-app` if it stays down.");
-            if let Ok(Some(rev)) = project.database_revision() {
-                println!("        the database is at migration {rev}");
+            if let Ok(version) = project.image_schema_version() {
+                println!("        the pinned image describes schema version {version}");
             }
         }
         Some(h) => {
             r.ok(&format!(
-                "server {} at migration {}",
+                "server {} at schema version {}",
                 h.version,
-                h.migration_revision.as_deref().unwrap_or("none")
+                h.schema_version.as_deref().unwrap_or("none")
             ));
             if compare_versions(&h.version, &pinned) != Some(Ordering::Equal)
                 && compare_versions(&pinned, "0.0.0").is_some()
@@ -602,5 +636,35 @@ mod tests {
     fn the_embedded_compose_file_reads_version_from_env() {
         assert!(COMPOSE.contains("chronos-ledger-backend:${VERSION:-latest}"));
         assert!(COMPOSE.contains("chronos-db:"));
+    }
+
+    fn taken_at(schema: Option<&str>) -> BackupInfo {
+        BackupInfo {
+            server_version: Some("0.14.0".into()),
+            schema_version: schema.map(Into::into),
+            created_at: String::new(),
+        }
+    }
+
+    fn running_at(schema: Option<&str>) -> Health {
+        Health {
+            version: "0.14.0".into(),
+            schema_version: schema.map(Into::into),
+        }
+    }
+
+    #[test]
+    fn a_backup_restores_only_onto_the_schema_it_was_taken_at() {
+        assert!(require_same_schema(&taken_at(Some("1")), &running_at(Some("1"))).is_ok());
+
+        let refused = require_same_schema(&taken_at(Some("1")), &running_at(Some("2")))
+            .unwrap_err()
+            .to_string();
+        assert!(refused.contains("taken at schema version 1"));
+        assert!(refused.contains("no upgrade path"));
+        assert!(refused.contains("0.14.0"));
+
+        assert!(require_same_schema(&taken_at(None), &running_at(Some("1"))).is_err());
+        assert!(require_same_schema(&taken_at(Some("1")), &running_at(None)).is_err());
     }
 }

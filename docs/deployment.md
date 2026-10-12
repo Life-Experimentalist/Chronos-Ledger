@@ -134,7 +134,9 @@ already there, so a database made by a release with one `schema_version` is
 not upgraded to the next: 0.15 does not upgrade a 0.14 database. When the
 number changes between releases, either restore a backup taken on the
 matching release (see Database Backup) or recreate the database (remove the
-volume, or drop and create it) and start again on an empty one.
+volume, or drop and create it) and start again on an empty one. Several
+replicas may start together on PostgreSQL: the schema step takes a lock, so
+they take turns and the later ones find everything in place.
 
 ### 4. First login
 

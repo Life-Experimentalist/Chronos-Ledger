@@ -134,10 +134,12 @@ This is the drift that breaks a running server.
 | Server running a different version than `.env` pins | `doctor` | Warning with `chronos up` |
 | Compose file differs from the release's copy | `doctor` | Warning; `upgrade` keeps the old file as `docker-compose.yml.before-upgrade` |
 | Images pulled but not restarted | `doctor` compares running container image digests with the pulled ones | Warning with `chronos up` |
-| Backup taken on a newer schema version than the target server | `restore` reads the schema version stored in the backup | Refuses, names the version needed |
+| Backup taken at a different schema version from the server's | `restore` compares the schema version stored in the backup with `/health` | Refuses; there are no migrations before the first deployment, so it names the release to restore on, or export and recreate |
+| Upgrade to a release whose schema version differs | `upgrade` asks the pulled image for its schema version before starting it | Refuses and puts the pin back; export what you need and start the new release on an empty database |
 
 Two small server changes make 3b work: `/health` reports `version` and
-`schema_version`, and every backup records the schema version it was taken at.
+`schema_version`, and every backup records the schema version it was taken at
+(from `/health`, or from the pinned image when the server is down).
 
 ## 4. Signing
 
