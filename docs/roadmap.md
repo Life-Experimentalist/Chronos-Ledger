@@ -355,6 +355,18 @@ whether and when.
 
 ---
 
+## Host clock (shipped on `feat/sim-clock`)
+
+A simulation host that embeds the engine can run it on a clock of its own.
+`CLOCK_MODE=host` freezes the application's time at `CLOCK_START`, the
+nightly jobs run as the host advances the clock rather than on a schedule,
+and `ID_SEED` makes the non-secret identifiers repeat, so the same script
+writes the same rows twice. Nothing changes for a deployment on the default
+system clock. The design, the real-time exceptions and the limits of the
+guarantee are in [clock.md](clock.md). Still open: a way for a host program
+in a separate process to advance the clock, which waits on the host
+authentication question.
+
 ## Waiting on a decision
 
 These were requested for integrations. They are designed enough to estimate
