@@ -7,6 +7,8 @@ import io
 import json
 import os
 import sqlite3
+import sys
+import threading
 import time
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -488,6 +490,39 @@ def test_the_parent_going_away_stops_the_server():
 def test_parent_alive_tells_a_live_process_from_a_gone_one():
     assert standalone.parent_alive(os.getpid())
     assert not standalone.parent_alive(2**31 - 1)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the pipe poller is the Windows watcher")
+def test_the_pipe_poller_drains_what_the_host_writes_and_notices_it_leaving():
+    reading, writing = os.pipe()
+    stopped = []
+    os.write(writing, b"a line the host wrote\n")
+    watcher = threading.Thread(
+        target=standalone.watch_stdin_pipe, args=(reading, lambda: stopped.append(True), 0.01)
+    )
+    watcher.start()
+    time.sleep(0.1)
+    assert not stopped
+    os.write(writing, b"another\n")
+    os.close(writing)
+    watcher.join(timeout=5)
+    os.close(reading)
+    assert stopped == [True]
+
+
+def test_the_watcher_blocks_in_a_read_except_on_a_windows_pipe():
+    assert standalone.stdin_watcher(io.StringIO(""))[0] is standalone.watch_stdin
+    reading, writing = os.pipe()
+    try:
+        with os.fdopen(reading, closefd=False) as stream:
+            target, source = standalone.stdin_watcher(stream)
+    finally:
+        os.close(writing)
+        os.close(reading)
+    if sys.platform == "win32":
+        assert (target, source) == (standalone.watch_stdin_pipe, reading)
+    else:
+        assert target is standalone.watch_stdin
 
 
 def test_the_entry_point_builds_the_file_the_flag_names(tmp_path, embedded_process):

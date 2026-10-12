@@ -31,6 +31,7 @@ import logging
 import os
 import secrets
 import sqlite3
+import stat
 import sys
 import threading
 import time
@@ -266,6 +267,48 @@ def watch_stdin(stream, stop) -> None:
     stop()
 
 
+def watch_stdin_pipe(fd: int, stop, interval: float = 0.5) -> None:
+    """Windows: poll the stdin pipe instead of leaving a read pending on it.
+
+    A read left pending on the pipe blocks other calls on that handle from
+    any thread, and loading numpy's bundled OpenBLAS makes one of those
+    calls, so with a reader thread blocked here an import of numpy or pandas
+    on another thread never returned. PeekNamedPipe does not pend: it says
+    how many bytes are waiting, or fails once the host's end is closed. The
+    bytes it reports are read and dropped so the pipe never fills.
+    """
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    peek = ctypes.windll.kernel32.PeekNamedPipe
+    peek.argtypes = [wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD] + [wintypes.LPDWORD] * 3
+    handle = msvcrt.get_osfhandle(fd)
+    available = wintypes.DWORD()
+    while peek(handle, None, 0, None, ctypes.byref(available), None):
+        if available.value:
+            os.read(fd, available.value)
+        time.sleep(interval)
+    stop()
+
+
+def stdin_watcher(stream):
+    """The thread target and its argument for noticing this stdin closing.
+
+    The poller is for a pipe on Windows. A console, NUL, a file, or a stream
+    with no descriptor at all keeps the blocking read, where end of file
+    means what it always did.
+    """
+    if sys.platform == "win32":
+        try:
+            fd = stream.fileno()
+            if stat.S_ISFIFO(os.fstat(fd).st_mode):
+                return watch_stdin_pipe, fd
+        except OSError:
+            pass
+    return watch_stdin, stream
+
+
 def parent_alive(pid: int) -> bool:
     if sys.platform == "win32":
         import ctypes
@@ -319,7 +362,8 @@ def run_embedded(application, args) -> int:
         server.should_exit = True
 
     if sys.stdin is not None:
-        threading.Thread(target=watch_stdin, args=(sys.stdin, stop), daemon=True).start()
+        target, source = stdin_watcher(sys.stdin)
+        threading.Thread(target=target, args=(source, stop), daemon=True).start()
     if args.parent_pid is not None:
         threading.Thread(target=watch_parent, args=(args.parent_pid, stop), daemon=True).start()
     # SIGINT, SIGTERM and, on Windows, CTRL_BREAK are uvicorn's to handle.
