@@ -31,7 +31,7 @@ against.
 |---|---|---|
 | 0.13 | Platform: contract check, hardening, `chronos` CLI and channels, first SDKs, ledger range queries, audit log | No |
 | 0.14 | Roles renamed, guest desk (visit expiry, configurable approver, change feed), federated identity | Yes |
-| 0.15 | Standalone engine (no Docker or Redis, on a local PostgreSQL or a SQLite file), PostgreSQL in CI; engine, part 1: resource modes, conflict report, rolling horizon, Go and Rust SDKs, Helm | Additive |
+| 0.15 | Standalone engine (no Docker or Redis, on a local PostgreSQL or a SQLite file), embedded flavour for a host program, PostgreSQL in CI; engine, part 1: resource modes, conflict report, rolling horizon, Go and Rust SDKs, Helm | Additive |
 | 0.16 | Engine, part 2: recurrence rules, editable timetable, exclusion on instances | Yes |
 | Designed, waiting for approval | Integration contract: error codes, idempotency on every write, export and import, per-organization uniqueness | Mostly additive |
 | Waiting on a decision | Webhooks, activities CRUD, reservation external reference | n/a |
@@ -185,6 +185,26 @@ against the spec. Publishing to npm and PyPI is added on request.
 - **Touches:** `.github/workflows/ci.yml`.
 - **Done when:** the job is green and none of those tests skip.
 - **Status:** added on `feat/standalone-engine`.
+
+### S-4. The integrated flavour: `chronos-engine embedded`
+
+- **Scope:** Chronos as a hidden child process of a host program, which
+  starts it, reads one ready line from stdout for the port, and talks to it
+  over loopback with a shared secret and the caller's identity in headers
+  (`Authorization: Host`, `X-Chronos-Actor`, `X-Chronos-Actor-Role`). No
+  Chronos logins: the routes for sessions, passwords, API keys, feed tokens
+  and federation are not mounted, and accounts are made as the host asserts
+  them. On the host's PostgreSQL, Chronos keeps to one schema of its own
+  (`--schema`), so the host's tables are never touched. The process exits
+  when the host does (stdin EOF, or `--parent-pid`). `serve` and the
+  container are unchanged.
+- **Touches:** `backend/app/embedded.py`, `backend/app/core/host_identity.py`,
+  `backend/app/core/database.py`, `backend/app/standalone.py`,
+  `docs/embedded.md`.
+- **Done when:** the SQLite tests cover the secret, the actor mapping and
+  the stripped routes; `tests/test_embedded_pg.py` proves that every table
+  and constraint lands in the named schema next to a host table of the same
+  name. Built on `feat/integrated-flavour`.
 
 ---
 
