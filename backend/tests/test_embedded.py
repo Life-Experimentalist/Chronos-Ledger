@@ -7,11 +7,14 @@ import io
 import json
 import os
 import sqlite3
+import sys
+import threading
 import time
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
+import httpx
 import pytest
 import uvicorn
 from fastapi.testclient import TestClient
@@ -543,6 +546,39 @@ def test_parent_alive_tells_a_live_process_from_a_gone_one():
     assert not standalone.parent_alive(2**31 - 1)
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="the pipe poller is the Windows watcher")
+def test_the_pipe_poller_drains_what_the_host_writes_and_notices_it_leaving():
+    reading, writing = os.pipe()
+    stopped = []
+    os.write(writing, b"a line the host wrote\n")
+    watcher = threading.Thread(
+        target=standalone.watch_stdin_pipe, args=(reading, lambda: stopped.append(True), 0.01)
+    )
+    watcher.start()
+    time.sleep(0.1)
+    assert not stopped
+    os.write(writing, b"another\n")
+    os.close(writing)
+    watcher.join(timeout=5)
+    os.close(reading)
+    assert stopped == [True]
+
+
+def test_the_watcher_blocks_in_a_read_except_on_a_windows_pipe():
+    assert standalone.stdin_watcher(io.StringIO(""))[0] is standalone.watch_stdin
+    reading, writing = os.pipe()
+    try:
+        with os.fdopen(reading, closefd=False) as stream:
+            target, source = standalone.stdin_watcher(stream)
+    finally:
+        os.close(writing)
+        os.close(reading)
+    if sys.platform == "win32":
+        assert (target, source) == (standalone.watch_stdin_pipe, reading)
+    else:
+        assert target is standalone.watch_stdin
+
+
 def test_the_entry_point_builds_the_file_the_flag_names(tmp_path, embedded_process):
     """The real entry point in a fresh interpreter, where nothing is cached yet.
 
@@ -578,4 +614,36 @@ def test_the_entry_point_builds_the_file_the_flag_names(tmp_path, embedded_proce
     assert not decoy.exists()
 
     # The host going away: stdin closes, the process leaves on its own.
+    assert child.leave() == 0
+
+
+def test_an_ingestion_request_is_answered_while_the_host_holds_stdin(tmp_path, embedded_process):
+    """pandas is imported on the first ingestion request, long after startup.
+
+    On Windows that import hung for as long as the stdin watcher sat in a
+    read on the host's pipe, so the request never got an answer. The
+    answer here is a refusal, since the file has none of the columns, but
+    a refusal from pandas is one that has been through the import.
+    """
+    child = embedded_process("--data-dir", str(tmp_path), "--port", "0")
+    base = f"http://127.0.0.1:{child.ready()['port']}/api/v1"
+    headers = actor("H-1", role="ORG_ADMIN")
+
+    with httpx.Client(base_url=base, headers=headers, timeout=60) as api:
+        cycle = api.post(
+            "/schedule/cycles",
+            json={
+                "cycle_label": "Ingest",
+                "date_bounds_start": "2031-01-06",
+                "date_bounds_end": "2031-04-24",
+            },
+        )
+        assert cycle.status_code == 200, cycle.text
+        res = api.post(
+            "/ingestion/upload-csv",
+            params={"cycle_id": cycle.json()["id"]},
+            files={"file": ("matrix.csv", b"a,b\n", "text/csv")},
+        )
+    assert res.status_code == 422, res.text
+    assert "Missing columns" in res.json()["detail"]
     assert child.leave() == 0
