@@ -312,6 +312,101 @@ absolute paths (`/usr/bin/docker`, `/usr/bin/certbot`) or set
 
 ---
 
+## Cloudflare Tunnel (optional)
+
+Chronos usually runs on the same machine as the host program that uses it.
+When the two are on different machines, the tunnel lets that host program
+reach Chronos without any inbound port being opened on Chronos's machine: a
+`cloudflared` container dials out to Cloudflare, and requests for the
+tunnel's public hostname come back down that connection to `chronos-proxy`.
+It is off by default. Nothing starts, and nothing is pulled, until the
+`tunnel` compose profile is turned on.
+
+### Cloudflare side
+
+In the Cloudflare Zero Trust dashboard, in generic terms:
+
+1. Create a tunnel with the `cloudflared` connector and copy the token it
+   shows. That token is the only credential involved on this side.
+2. Give the tunnel a public hostname and set its service to
+   `http://chronos-proxy:80`. `chronos-proxy` is the compose service name,
+   which the tunnel container resolves on the compose network. Cloudflare
+   terminates TLS at its edge, so nothing goes in `certs/` for this path.
+3. Put Cloudflare Access in front of that hostname: create a service token,
+   then an Access application for the hostname whose policy allows that
+   token and nothing else. This step is not optional. Without it the
+   hostname is open to the whole internet and Chronos's own API key is the
+   only thing between it and the data; with it, a request that carries no
+   valid service token is refused at Cloudflare's edge and never reaches
+   the tunnel.
+
+### Chronos side
+
+In `.env`:
+
+```bash
+CLOUDFLARE_TUNNEL_TOKEN=<the token from step 1>
+COMPOSE_PROFILES=tunnel
+```
+
+Compose reads `COMPOSE_PROFILES` from `.env`, so the usual
+`docker compose up -d` (and `chronos up`) now starts the `chronos-tunnel`
+service alongside the stack; `--profile tunnel` on the command line does the
+same for one run. The token reaches the container as `TUNNEL_TOKEN`, and an
+empty one makes `cloudflared` exit and say so. Confirm it connected:
+
+```bash
+docker compose -f docker-compose.prod.yml logs chronos-tunnel | grep -i "registered tunnel connection"
+```
+
+Everything that arrives through the tunnel reaches nginx from the tunnel
+container's address, so the sign-in rate limit counts all of it as one
+caller. That is right when the only caller is one host program using an API
+key. If people will use the browser interface through the tunnel as well,
+the "another proxy in front" guidance in `nginx/chronos-common.conf` applies,
+with `CF-Connecting-IP` as the header to trust; leave `FORWARDED_ALLOW_IPS`
+alone either way.
+
+### Publishing no host ports
+
+The tunnel and the host ports are separate choices. A stack that also
+serves people on the LAN keeps `80` and `443` published. One whose only
+caller is the host program can publish nothing at all by adding
+`docker-compose.tunnel.yml` after the compose file in use:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.tunnel.yml up -d
+```
+
+It holds a single `ports: !reset []` on `chronos-proxy`. It is a separate
+file because a later compose file appends to `ports` rather than replacing
+them, so `ports: []` would be a no-op, and `EDGE_HTTP_PORT` can move a
+mapping but not remove one. The `!reset` tag needs Docker Compose 2.24 or
+newer, later than the 2.20 the rest of the stack asks for. Set
+`COMPOSE_FILE=docker-compose.prod.yml:docker-compose.tunnel.yml` in `.env`
+to make it the default. `chronos up` passes its own `-f`, which overrides
+`COMPOSE_FILE`, so with the CLI the ports stay published unless you take
+them out of its `docker-compose.yml` by hand (`chronos doctor` notes the
+difference, which is fine).
+
+### What the host program sends
+
+Every request carries the two Access headers for the service token, and
+Chronos's own API key as usual:
+
+```bash
+curl https://chronos.example.edu/api/v1/auth/me \
+  -H "CF-Access-Client-Id: <service token id>" \
+  -H "CF-Access-Client-Secret: <service token secret>" \
+  -H "X-API-Key: <chronos api key>"
+```
+
+Cloudflare checks the first two at its edge; the third passes through
+untouched, so Chronos authenticates the request exactly as it would one
+from the LAN.
+
+---
+
 ## Scaling
 
 How far one machine goes, with load test numbers, is in [hardware.md](hardware.md).
