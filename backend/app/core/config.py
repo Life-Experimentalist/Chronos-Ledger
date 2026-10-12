@@ -33,11 +33,10 @@ PUBLISHED_DB_PASSWORDS = frozenset(
         "change_me_password",
     }
 )
-# The password migration 001 used to seed for the administrator account,
-# and the placeholder .env.example carries in its place. Either one lets
-# whoever reaches the instance first take an ORG_ADMIN account, so this is
-# the same exposure as a published signing key and gets the same refusal.
-# Migration 014 rotates a database that still holds the first of them.
+# The password an early release seeded for the administrator account, and
+# the placeholder .env.example carries in its place. Either one lets whoever
+# reaches the instance first take an ORG_ADMIN account, so this is the same
+# exposure as a published signing key and gets the same refusal.
 PUBLISHED_ADMIN_PASSWORDS = frozenset(
     {
         "ChronosAdmin2026!",

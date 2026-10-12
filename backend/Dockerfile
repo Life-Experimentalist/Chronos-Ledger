@@ -9,8 +9,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock* ./
 
 # Install dependencies only (no dev deps). The project itself is installed
-# after the source is copied: its wheel config pulls in alembic/, which is not
-# here yet.
+# after the source is copied.
 RUN uv sync --frozen --no-dev --no-install-project
 
 EXPOSE 8000
@@ -18,8 +17,8 @@ EXPOSE 8000
 # Baked in rather than left to compose, so anyone who pulls this image gets
 # a working probe without copying our compose file. /health is on the app
 # root, outside /api/v1, so it needs no token and no API key. start-period
-# covers `alembic upgrade head`, which runs before uvicorn binds and takes
-# longest on a database that has never been migrated.
+# covers the schema step, which runs before uvicorn binds and takes longest
+# on an empty database.
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')" || exit 1
 
@@ -27,7 +26,10 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
 COPY . .
 RUN uv sync --frozen --no-dev
 
-# Run alembic migrations then start server. --no-sync: the venv is baked
-# at build time; without it uv re-syncs on start, pulling dev deps from
-# PyPI at runtime (network-dependent boot, mutated venv).
-CMD ["sh", "-c", "uv run --no-sync python -m app.core.migrations && uv run --no-sync alembic upgrade head && uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# Build the schema from the models, then start the server. The server runs the
+# same step itself on start; doing it first stops the container with the
+# error when the database cannot be reached, rather than uvicorn binding a
+# port and the probe reporting it. --no-sync: the venv is baked at build time;
+# without it uv re-syncs on start, pulling dev deps from PyPI at runtime
+# (network-dependent boot, mutated venv).
+CMD ["sh", "-c", "uv run --no-sync python -m app.core.schema && uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port 8000"]

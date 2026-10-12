@@ -129,8 +129,8 @@ def test_a_cycle_is_not_opened_over_a_day_already_generated(client, db, seed_use
 
     The route keeps the ones carrying attendance or a note, and a flag
     written by hand keeps them all. Those days are the rows that put somebody at a door, and they are still
-    in the table however their cycle is flagged. Migration 013 refuses a
-    second row on top of one, so an open that ignored them would turn a
+    in the table however their cycle is flagged. ex_daily_ledger_no_overlap
+    refuses a second row on top of one, so an open that ignored them would turn a
     refusal the admin could act on into a 500 at 23:00.
     """
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)

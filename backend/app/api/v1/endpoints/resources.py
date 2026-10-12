@@ -40,7 +40,7 @@ ALREADY_TAKEN = "the resource is already taken for part of that window"
 KEY_REUSED = "that Idempotency-Key was used for a different request"
 NOT_YOUR_HOLD = "only the caller that took a hold may cancel it"
 CODE_TAKEN = "a resource with that code already exists"
-# The name migration 010 gave the exclusion constraint. Postgres puts it in
+# The name of the exclusion constraint on reservations. Postgres puts it in
 # the error text, which is how an overlap is told apart from the unique key
 # on the idempotency key: both arrive here as one IntegrityError.
 OVERLAP_CONSTRAINT = "ex_reservations_no_overlap"
@@ -336,8 +336,8 @@ def create_reservation(
 
     The check and the insert are not one atomic step, and two callers can both
     pass the check before either inserts. Hold against hold, that no longer
-    decides anything: migration 010 put an exclusion constraint on the table
-    and the database refuses the second row whatever the timing was. The loser
+    decides anything: the table carries an exclusion constraint and the
+    database refuses the second row whatever the timing was. The loser
     is told 409, the same as if the check had caught it.
 
     Hold against timetable is still the check plus the row lock. A slot lives

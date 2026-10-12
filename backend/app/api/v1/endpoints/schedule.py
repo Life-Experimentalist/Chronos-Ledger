@@ -115,9 +115,10 @@ def _refuse_if_a_day_is_there(
     been marked on them, and a day that has been marked stays.
 
     The days are not gated by cycle, for the same reason: a day is in the
-    table whatever its cycle now says, and migration 013 will refuse a second
-    row on top of it whatever anybody thinks about the cycle. A check that
-    disagreed with the constraint would turn a refusal into a 500. cycle is
+    table whatever its cycle now says, and ex_daily_ledger_no_overlap will
+    refuse a second row on top of it whatever anybody thinks about the cycle.
+    A check that disagreed with the constraint would turn a refusal into a
+    500. cycle is
     the new slot's own, and only limits the dates it will run on; whether it
     is open does not matter here.
 

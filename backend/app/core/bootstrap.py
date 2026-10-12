@@ -3,14 +3,14 @@
 
 """The first password for the seeded administrator account.
 
-Migration 001 seeds one ORG_ADMIN, because an instance with no way in is not
-a deployment. It used to seed that account with a password written into the
-migration file, in a public repository, which is the same as seeding no
-password at all: whoever reached the instance first could read the password out
-of the source and take the account before its owner arrived. It now seeds a
-hash of a random string it throws away, so the account exists and nothing can
-log into it, and the operator says what the first password is through
-INITIAL_ADMIN_PASSWORD.
+app.core.schema.ensure_schema seeds one ORG_ADMIN, because an instance with
+no way in is not a deployment. An early release seeded that account with a
+password written into the source, in a public repository, which is the same
+as seeding no password at all: whoever reached the instance first could read
+the password out of the source and take the account before its owner arrived.
+The seed is now a hash of a random string it throws away, so the account
+exists and nothing can log into it, and the operator says what the first
+password is through INITIAL_ADMIN_PASSWORD.
 
 Applied on every boot, which is safe because of the one condition below: the
 variable can open an account that is still waiting for a password, and cannot
@@ -23,8 +23,7 @@ from app.core.security import hash_password, verify_password
 
 logger = logging.getLogger(__name__)
 
-# The account migration 001 seeds. Migration 004 renames its email and
-# migration 014 rotates its hash, both by this id.
+# The account ensure_schema seeds, found by this id ever after.
 SEEDED_ADMIN_ID = "ADMIN001"
 
 

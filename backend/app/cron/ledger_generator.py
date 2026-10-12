@@ -12,8 +12,8 @@ the cycle's own dates, both ends included. availability.occupied applies the
 same two tests, so what the API reports as taken is what this will write.
 
 Two slots can be on one room at one hour despite every check in the API, so
-this has to survive finding out. Migration 013 puts an exclusion constraint on
-daily_ledger, which means the second insert on a taken window is refused by
+this has to survive finding out. daily_ledger carries an exclusion constraint
+on PostgreSQL, which means the second insert on a taken window is refused by
 the database rather than accepted. Without a savepoint around each insert the
 refusal would poison the whole transaction and the night's other classes would
 be lost with it, so each row gets its own and a refused one is skipped.
@@ -112,7 +112,7 @@ def generate_daily_ledger_entries(target_date: datetime.date, db: Session) -> in
             # This is also what closes the gap between the query above and the
             # insert. Two runs of this job against one database both find no
             # existing row and both insert; the second is refused here, by the
-            # one-day-per-slot key from migration 017, instead of quietly
+            # one-day-per-slot key uq_daily_ledger_slot_date, instead of quietly
             # doubling every day of the week.
             with db.begin_nested():
                 db.add(entry)

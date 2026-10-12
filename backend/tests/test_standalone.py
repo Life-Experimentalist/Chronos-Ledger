@@ -8,8 +8,7 @@ import sqlite3
 from types import SimpleNamespace
 
 import pytest
-from alembic.runtime.migration import MigrationContext
-from sqlalchemy import inspect, text
+from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
 import app.main as main
@@ -18,7 +17,6 @@ from app.core import redis_client
 from app.core.bootstrap import SEEDED_ADMIN_ID
 from app.core.config import get_settings
 from app.core.database import sqlite_engine
-from app.core.migrations import _scripts
 
 
 @pytest.fixture(autouse=True)
@@ -72,82 +70,18 @@ def test_a_transaction_takes_the_write_lock_when_it_begins(tmp_path):
         engine.dispose()
 
 
-def test_a_new_file_is_built_seeded_and_stamped(file_engine):
+def test_a_new_file_is_built_and_seeded(file_engine):
     assert standalone.prepare_database(file_engine) == "created"
 
     with file_engine.connect() as connection:
-        revision = MigrationContext.configure(connection).get_current_revision()
         admin = connection.execute(
             text("SELECT role_type, initial_login_state FROM users WHERE id = :id"),
             {"id": SEEDED_ADMIN_ID},
         ).one()
-    assert revision == _scripts().get_current_head()
     assert admin.role_type == "ORG_ADMIN"
     assert admin.initial_login_state
 
     assert standalone.prepare_database(file_engine) == "current"
-
-
-def test_an_older_file_is_upgraded_with_the_migrations(file_engine, monkeypatch):
-    """A file stamped at 029 gets 030 from its script, not from the models."""
-    standalone.prepare_database(file_engine)
-    with file_engine.begin() as connection:
-        connection.exec_driver_sql("DROP INDEX ix_daily_ledger_resource_date")
-        connection.exec_driver_sql("DROP INDEX ix_daily_ledger_lead_date")
-        MigrationContext.configure(connection).stamp(_scripts(), "029")
-    # env.py prefers DATABASE_URL to the URL it is handed.
-    monkeypatch.setenv("DATABASE_URL", file_engine.url.render_as_string(hide_password=False))
-
-    assert standalone.prepare_database(file_engine) == "upgraded"
-
-    indexes = {index["name"] for index in inspect(file_engine).get_indexes("daily_ledger")}
-    assert {"ix_daily_ledger_resource_date", "ix_daily_ledger_lead_date"} <= indexes
-    assert standalone.prepare_database(file_engine) == "current"
-
-
-def test_tables_without_a_stamp_are_refused(file_engine):
-    with file_engine.begin() as connection:
-        connection.exec_driver_sql("CREATE TABLE users (id TEXT PRIMARY KEY)")
-    with pytest.raises(SystemExit, match="no migration stamp"):
-        standalone.prepare_database(file_engine)
-
-
-def test_a_newer_file_is_refused(file_engine):
-    with file_engine.begin() as connection:
-        connection.exec_driver_sql("CREATE TABLE alembic_version (version_num VARCHAR(32))")
-        connection.exec_driver_sql("INSERT INTO alembic_version VALUES ('999')")
-    with pytest.raises(SystemExit, match="newer"):
-        standalone.prepare_database(file_engine)
-
-
-def test_postgresql_is_built_by_the_migrations_never_from_the_models(monkeypatch):
-    """The exclusion constraints exist only in the migrations.
-
-    A PostgreSQL schema made by create_all would take bookings that overlap,
-    so an empty PostgreSQL database must go through alembic like the
-    container's does.
-    """
-    import sqlalchemy
-
-    from app.core import migrations
-    from app.core.database import Base
-
-    monkeypatch.setattr(migrations, "unknown_revision_message", lambda engine: None)
-    monkeypatch.setattr(migrations, "database_revision", lambda engine: None)
-    monkeypatch.setattr(
-        sqlalchemy, "inspect", lambda engine: SimpleNamespace(has_table=lambda name: False)
-    )
-    upgraded = []
-    monkeypatch.setattr(standalone, "_upgrade", upgraded.append)
-
-    def _refuse(*args, **kwargs):
-        raise AssertionError("create_all ran against PostgreSQL")
-
-    monkeypatch.setattr(Base.metadata, "create_all", _refuse)
-    engine = SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
-
-    assert standalone.prepare_database(engine) == "created"
-    assert upgraded == [engine]
 
 
 def test_a_database_url_is_used_instead_of_the_file(data_dir, monkeypatch):
@@ -360,14 +294,3 @@ def test_backup_is_reachable_from_the_command_line(data_dir, tmp_path):
     argv = ["backup", "--data-dir", str(data_dir), "--to", str(target)]
     assert standalone.main(argv) == 0
     assert target.exists()
-
-
-def test_an_installed_wheel_finds_its_own_migrations(tmp_path, monkeypatch):
-    """Installed, the folder beside app/ is site-packages, and its alembic/ is
-    the library, not these migrations."""
-    from app.core import migrations
-
-    (tmp_path / "alembic").mkdir()
-    monkeypatch.setattr(migrations, "BACKEND", tmp_path)
-    assert migrations.script_location().name == "_migrations"
-    assert migrations.script_location().parent.name == "app"

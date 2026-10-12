@@ -5,8 +5,9 @@
 Two things used to be true. Two accounts could exist differing only by case,
 and somebody whose stored address carries a capital got a 401 for typing their
 own address in lower case, which reads as a wrong password and is not one.
-Migration 029 closes the first with a unique index on lower(email_address);
-these pin down the second and the writers that now agree on a stored case.
+uq_users_email_address_lower closes the first with a unique index on
+lower(email_address); these pin down the second and the writers that now agree
+on a stored case.
 
 Every address here varies in its local part. The domain half proves nothing:
 email-validator lowercases it before a schema is ever handed one.

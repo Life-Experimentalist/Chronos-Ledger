@@ -50,8 +50,8 @@ def sync_detailed(
 ) -> Response[HealthCheckResponse200]:
     """Health check
 
-     Liveness: answers without touching the database. Also names the running release and the migration
-    the database was at when the process started.
+     Liveness: answers without touching the database. Also names the running release and the version of
+    the schema its models describe.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -76,8 +76,8 @@ def sync(
 ) -> HealthCheckResponse200 | None:
     """Health check
 
-     Liveness: answers without touching the database. Also names the running release and the migration
-    the database was at when the process started.
+     Liveness: answers without touching the database. Also names the running release and the version of
+    the schema its models describe.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -98,8 +98,8 @@ async def asyncio_detailed(
 ) -> Response[HealthCheckResponse200]:
     """Health check
 
-     Liveness: answers without touching the database. Also names the running release and the migration
-    the database was at when the process started.
+     Liveness: answers without touching the database. Also names the running release and the version of
+    the schema its models describe.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -122,8 +122,8 @@ async def asyncio(
 ) -> HealthCheckResponse200 | None:
     """Health check
 
-     Liveness: answers without touching the database. Also names the running release and the migration
-    the database was at when the process started.
+     Liveness: answers without touching the database. Also names the running release and the version of
+    the schema its models describe.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.

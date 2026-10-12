@@ -1,11 +1,9 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
-"""The tests for migration 018 that need a real PostgreSQL.
+"""The tests for verification_ledger's RESTRICT key that need a real PostgreSQL.
 
-The suite's SQLite database does not enforce foreign keys, and the migration
-only swaps the key on PostgreSQL, so whether deleting a user with attendance
-on file is really refused, and whether a downgrade puts the cascade back, can
-only be seen here.
+The suite's SQLite database does not enforce foreign keys, so whether deleting
+a user with attendance on file is really refused can only be seen here.
 
 Point TEST_DATABASE_URL at an empty database:
 
@@ -21,7 +19,7 @@ from sqlalchemy import create_engine, delete, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from alembic import command
+from app.core.schema import ensure_schema
 from app.models.db import (
     Activity,
     DailyLedger,
@@ -31,7 +29,6 @@ from app.models.db import (
     VerificationLedger,
     VerificationMetric,
 )
-from tests.test_admin_rotation_pg import _alembic
 
 DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
@@ -49,9 +46,8 @@ DAY = datetime.date(2031, 3, 4)
 
 @pytest.fixture(scope="module")
 def engine():
-    with _alembic() as config:
-        command.upgrade(config, "head")
     built = create_engine(DATABASE_URL)
+    ensure_schema(built)
     yield built
     built.dispose()
 
@@ -128,7 +124,7 @@ def test_the_key_restricts_and_the_column_is_there(engine):
     member = _key_on(engine, "member_id")
     assert member["name"] == FK
     assert member["options"].get("ondelete") == "RESTRICT"
-    # The table's other key to users is not the one 018 changes.
+    # The table's other key to users has no delete rule, and must not gain one.
     assert _key_on(engine, "authorizing_agent_id")["options"].get("ondelete") is None
     assert "deactivated_at" in _user_columns(engine)
 
@@ -146,16 +142,3 @@ def test_a_user_with_no_attendance_can_still_be_deleted(db):
     _user(db, "PG018-UNMARKED")
     db.execute(delete(User).where(User.id == "PG018-UNMARKED"))
     assert db.query(User).filter(User.id == "PG018-UNMARKED").first() is None
-
-
-def test_the_downgrade_puts_the_cascade_back(engine):
-    with _alembic() as config:
-        command.downgrade(config, "017")
-        try:
-            assert _key_on(engine, "member_id")["options"].get("ondelete") == "CASCADE"
-            assert "deactivated_at" not in _user_columns(engine)
-        finally:
-            command.upgrade(config, "head")
-    member = _key_on(engine, "member_id")
-    assert member["name"] == FK
-    assert member["options"].get("ondelete") == "RESTRICT"

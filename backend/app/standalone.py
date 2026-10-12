@@ -74,94 +74,17 @@ def configure_environment(data_dir: Path, url: str | None = None) -> None:
 
 
 def prepare_database(engine) -> str:
-    """Bring the database to the schema this code expects. Returns what it did.
+    """Build the schema from the models, on either dialect. Returns what it did.
 
-    On PostgreSQL the migrations build and upgrade the schema, exactly as in
-    the container. Never create_all there: the exclusion constraints that stop
-    double booking exist only in the migrations, and a schema built from the
-    models would quietly lack them.
-
-    A new SQLite file gets the schema from the models in one transaction, the
-    seeded administrator migration 001 would have written, and a stamp at the
-    newest migration. The early migrations are written for PostgreSQL and are
-    not replayed on SQLite. Later ones are kept runnable there on a best
-    effort basis, which is how a file made by one release is upgraded by the
-    next.
+    The same step the server runs on start (app.core.schema.ensure_schema),
+    done here first so a database that cannot be built stops the process with
+    the error before uvicorn binds a port. A new SQLite file gets every table
+    and the seeded administrator; an existing one is left as it is. There are
+    no migrations: a file made by an older release is not upgraded.
     """
-    from alembic.runtime.migration import MigrationContext
-    from sqlalchemy import inspect
+    from app.core.schema import ensure_schema
 
-    from app.core.migrations import _scripts, database_revision, unknown_revision_message
-
-    message = unknown_revision_message(engine)
-    if message:
-        raise SystemExit(message)
-
-    scripts = _scripts()
-    head = scripts.get_current_head()
-    revision = database_revision(engine)
-    if revision == head:
-        return "current"
-    if revision is not None:
-        _upgrade(engine)
-        return "upgraded"
-    if inspect(engine).has_table("users"):
-        raise SystemExit(
-            "The database has tables but no migration stamp, so it was not made by "
-            "Chronos Ledger. Point chronos-engine at an empty database."
-        )
-    if engine.dialect.name != "sqlite":
-        _upgrade(engine)
-        return "created"
-
-    import app.models.db  # noqa: F401 (registers every table with the metadata)
-    from app.core.database import Base
-
-    with engine.begin() as connection:
-        Base.metadata.create_all(connection)
-        _seed_administrator(connection)
-        MigrationContext.configure(connection).stamp(scripts, head)
-    return "created"
-
-
-def _seed_administrator(connection) -> None:
-    """The account migration 001 seeds, as migration 004 left it.
-
-    Its password is random and unknown, as there: INITIAL_ADMIN_PASSWORD opens
-    it on the first start (app/core/bootstrap.py).
-    """
-    from sqlalchemy.orm import Session
-
-    from app.core.bootstrap import SEEDED_ADMIN_ID
-    from app.core.security import hash_password
-    from app.models.db import InstitutionalRole, User
-
-    session = Session(bind=connection)
-    session.add(
-        User(
-            id=SEEDED_ADMIN_ID,
-            full_name="Organization Administrator",
-            email_address="admin@org.internal",
-            credential_secure_hash=hash_password(secrets.token_urlsafe(32)),
-            role_type=InstitutionalRole.ORG_ADMIN,
-            initial_login_state=True,
-        )
-    )
-    session.flush()
-
-
-def _upgrade(engine) -> None:
-    from alembic.config import Config
-
-    from alembic import command
-    from app.core.migrations import script_location
-
-    # No alembic.ini: it carries only logging setup, which would replace the
-    # app's, and a PostgreSQL URL that env.py overrides anyway.
-    config = Config()
-    config.set_main_option("script_location", str(script_location()))
-    config.set_main_option("sqlalchemy.url", engine.url.render_as_string(hide_password=False))
-    command.upgrade(config, "head")
+    return ensure_schema(engine)
 
 
 def _warn_about_synced_folders(data_dir: Path) -> None:

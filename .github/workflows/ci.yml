@@ -80,9 +80,9 @@ jobs:
   # ── Backend: the tests that need PostgreSQL ─────────────────────────────────
   # The suite above runs on in-memory SQLite, which has no exclusion
   # constraints, so the guarantees production leans on (no double booking, one
-  # ledger day per slot, refresh-token families) are only proven here. Each
-  # file gets an empty database because each one builds its schema by running
-  # the migrations, and several step them down and back up.
+  # ledger day per slot, attendance outliving its account) are only proven
+  # here. Each file gets an empty database because each one builds the schema
+  # from the models and then asks the catalog what arrived.
   backend-test-postgres:
     name: Backend tests on PostgreSQL
     runs-on: ubuntu-latest

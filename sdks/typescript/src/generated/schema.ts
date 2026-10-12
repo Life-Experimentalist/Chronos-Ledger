@@ -1373,7 +1373,7 @@ export interface paths {
         };
         /**
          * Health check
-         * @description Liveness: answers without touching the database. Also names the running release and the migration the database was at when the process started.
+         * @description Liveness: answers without touching the database. Also names the running release and the version of the schema its models describe.
          */
         get: operations["health.check"];
         put?: never;
@@ -4964,10 +4964,10 @@ export interface operations {
                         /** @example 0.13.0 */
                         version?: string;
                         /**
-                         * @description Null before the first migration.
-                         * @example 022
+                         * @description Bumped by the maintainers when the models change. There are no migrations: a database built by one schema version is not upgraded to the next.
+                         * @example 1
                          */
-                        migration_revision?: string | null;
+                        schema_version?: string;
                     };
                 };
             };

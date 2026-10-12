@@ -43,9 +43,9 @@ def sqlite_engine(
 ) -> Engine:
     """An engine on a SQLite file, set up for the standalone profile.
 
-    Postgres keeps the schedule honest with exclusion constraints, which exist
-    only in the migrations and which SQLite has no equivalent of, so the
-    OVERLAP_CONSTRAINT branch in the reservations route never fires here. What
+    Postgres keeps the schedule honest with exclusion constraints, which the
+    models declare for that dialect only because SQLite has no equivalent, so
+    the OVERLAP_CONSTRAINT branch in the reservations route never fires here. What
     takes their place is that every transaction starts with BEGIN IMMEDIATE:
     it takes the write lock before the first read, so the conflict check and
     the insert that follows it run with nobody else between them, and the

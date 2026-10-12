@@ -20,9 +20,9 @@ from app.core.bootstrap import apply_initial_admin_password
 from app.core.concurrency import ConcurrencyGate
 from app.core.config import docs_are_published, get_settings
 from app.core.database import POOL_CAPACITY, SessionLocal, engine, is_sqlite
-from app.core.migrations import database_revision, unknown_revision_message
 from app.core.pagination import TOTAL_COUNT_HEADER
 from app.core.redis_client import get_redis, is_memory
+from app.core.schema import SCHEMA_VERSION, ensure_schema
 from app.core.time import org_now, org_timezone, org_tomorrow
 from app.core.websocket_manager import socket_broker
 from app.cron.guest_overstay import announce_overstayed_visits
@@ -44,13 +44,13 @@ settings = get_settings()
 # so it leans on this as well.
 scheduler = AsyncIOScheduler(timezone=org_timezone(), job_defaults={"misfire_grace_time": 1800})
 NIGHTLY_LEDGER_HOUR = 23
-# Read once at startup, so /health can report it without touching the database.
-migration_state: dict[str, str | None] = {"revision": None}
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    _check_the_database_revision()
+    # Before the admin account is opened, because on an empty database the
+    # schema step is what puts that account there.
+    logging.getLogger(__name__).info("Schema %s: %s", SCHEMA_VERSION, ensure_schema(engine))
     _open_the_admin_account()
     if is_memory(settings.redis_url):
         # Now rather than at the first rate-limited request, so a missing
@@ -116,27 +116,11 @@ async def lifespan(_app: FastAPI):
         _fold_the_write_ahead_log()
 
 
-def _check_the_database_revision():
-    """Refuse to start on a database migrated by a newer release.
-
-    The container start command runs the same check before alembic, so this
-    matters for a process started some other way. Raising here stops uvicorn
-    with the message rather than serving requests against a schema this code
-    does not know.
-    """
-    message = unknown_revision_message(engine)
-    if message:
-        logging.getLogger(__name__).critical(message)
-        raise RuntimeError(message)
-    migration_state["revision"] = database_revision(engine)
-
-
 def _open_the_admin_account():
     """Apply INITIAL_ADMIN_PASSWORD before the first request arrives.
 
-    Here rather than in the migration because a migration cannot read the
-    application's settings, and the container runs alembic before uvicorn
-    binds, so by the time this runs the seeded row exists.
+    Here rather than in the schema step because that step knows nothing of the
+    application's settings, and it has already run, so the seeded row exists.
 
     Failures are logged and swallowed on purpose. Nothing here is load
     bearing for a running instance: the consequence of skipping it is that
@@ -281,7 +265,7 @@ async def health_check():
         "status": "healthy",
         "service": "chronos-ledger",
         "version": app.version,
-        "migration_revision": migration_state["revision"],
+        "schema_version": SCHEMA_VERSION,
     }
 
 

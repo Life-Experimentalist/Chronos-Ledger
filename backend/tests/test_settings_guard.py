@@ -65,7 +65,7 @@ def test_production_refuses_a_published_database_password(published, host):
 
 @pytest.mark.parametrize("published", sorted(PUBLISHED_ADMIN_PASSWORDS))
 def test_production_refuses_a_published_admin_password(published):
-    """The literal migration 001 used to seed, and the .env.example placeholder.
+    """The literal an early release seeded, and the .env.example placeholder.
 
     Either one hands a SUPER_ADMIN account to whoever reaches the instance
     first, which is the same exposure as a signing key anybody can read.

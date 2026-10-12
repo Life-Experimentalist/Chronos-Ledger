@@ -129,11 +129,11 @@ def test_a_monday_outside_the_cycle_generates_nothing(db, seed_users, outside):
 
 
 def test_one_slot_cannot_have_two_days_on_one_date(db, seed_users):
-    """The key the existence check leans on, from migration 017.
+    """The key the existence check leans on, uq_daily_ledger_slot_date.
 
-    This slot has no room, so the overlap constraint from migration 013 does
-    not see it. Without the key, two runs that both got past the check would
-    both write the day.
+    This slot has no room, so the overlap constraint on PostgreSQL would not
+    see it either. Without the key, two runs that both got past the check
+    would both write the day.
     """
     slot = _build_slot(db, seed_users)
     assert generate_daily_ledger_entries(MONDAY, db) == 1
