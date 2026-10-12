@@ -215,12 +215,13 @@ pub fn upgrade(project: &Project, to: Option<&str>, yes: bool) -> Result<()> {
 /// tables the database already has. Asked of the image `pull` just fetched.
 fn require_target_fits(project: &Project, health: &Health, target: &str) -> Result<()> {
     let next = project.image_schema_version()?;
-    if Some(next.as_str()) == health.schema_version.as_deref() {
+    if next == health.schema_version {
         return Ok(());
     }
     bail!(
-        "{} describes schema version {next} and this database was built at {}. Nothing carries data across before the first deployment: export what you need, then start the new release on an empty database (chronos down, remove the database volume, chronos up).",
+        "{} describes schema version {} and this database was built at {}. Nothing carries data across before the first deployment: export what you need, then start the new release on an empty database (chronos down, remove the database volume, chronos up).",
         tag_for(target),
+        next.as_deref().unwrap_or("none"),
         health.schema_version.as_deref().unwrap_or("none")
     )
 }
@@ -235,7 +236,7 @@ fn require_same_schema(info: &BackupInfo, health: &Health) -> Result<()> {
             info.server_version.as_deref().unwrap_or("unknown")
         ),
         (None, _) => bail!(
-            "the backup records no schema version, so an earlier CLI took it, and there is no path from its tables to this server's."
+            "the backup records no schema version, so it came from a release before 0.15 or an earlier CLI, and there is no path from its tables to this server's."
         ),
         (_, None) => bail!(
             "the server reports no schema version in /health, so this CLI cannot check the backup against it."
@@ -266,11 +267,13 @@ fn refresh_compose_file(project: &Project, target: &str) -> Result<()> {
 
 pub fn backup(project: &Project) -> Result<PathBuf> {
     project.require_initialised()?;
-    // The running server knows its schema version. When it is down, the pinned
-    // image is the thing that built the database, so it is asked instead.
+    // The running server knows its schema version. When it is down, or reports
+    // none (a 0.14 server), the pinned image is asked instead. A release before
+    // 0.15 has none to give, and its backup is taken all the same: the sidecar
+    // records no schema version, which restore then refuses to match.
     let health = project.health();
     let schema_version = match health.as_ref().and_then(|h| h.schema_version.clone()) {
-        Some(version) => version,
+        Some(version) => Some(version),
         None => project.image_schema_version()?,
     };
     let server_version = health.map(|h| h.version).or_else(|| {
@@ -281,9 +284,10 @@ pub fn backup(project: &Project) -> Result<PathBuf> {
     });
     fs::create_dir_all(project.backups_dir())?;
     let stamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
-    let dump = project
-        .backups_dir()
-        .join(format!("chronos-{stamp}-schema{schema_version}.dump"));
+    let dump = project.backups_dir().join(format!(
+        "chronos-{stamp}-schema{}.dump",
+        schema_version.as_deref().unwrap_or("none")
+    ));
 
     let file =
         fs::File::create(&dump).with_context(|| format!("could not create {}", dump.display()))?;
@@ -311,7 +315,7 @@ pub fn backup(project: &Project) -> Result<PathBuf> {
 
     let info = BackupInfo {
         server_version,
-        schema_version: Some(schema_version),
+        schema_version,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
     fs::write(

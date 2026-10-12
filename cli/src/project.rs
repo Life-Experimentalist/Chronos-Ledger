@@ -148,7 +148,11 @@ impl Project {
     /// crash-looping, which is when it matters. The database records no version
     /// of its own: it has whatever tables the image that started on it built,
     /// so the image is the answer.
-    pub fn image_schema_version(&self) -> Result<String> {
+    ///
+    /// None means the image has no schema version to give: a release before
+    /// 0.15 has no `app.core.schema` module, so the probe fails on the import.
+    /// That is an answer, not an error. Only failing to run docker at all is.
+    pub fn image_schema_version(&self) -> Result<Option<String>> {
         let out = self.compose_output(&[
             "run",
             "--rm",
@@ -162,18 +166,17 @@ impl Project {
             "-c",
             PRINT_SCHEMA_VERSION,
         ])?;
-        if !out.status.success() {
-            bail!(
-                "could not read the schema version from the backend image: {}",
-                String::from_utf8_lossy(&out.stderr).trim()
-            );
-        }
-        let version = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if version.is_empty() {
-            bail!("the backend image printed no schema version");
-        }
-        Ok(version)
+        Ok(schema_version_from_probe(
+            out.status.success(),
+            &String::from_utf8_lossy(&out.stdout),
+        ))
     }
+}
+
+/// What the probe printed, or None when it failed or printed nothing.
+fn schema_version_from_probe(succeeded: bool, stdout: &str) -> Option<String> {
+    let version = stdout.trim();
+    (succeeded && !version.is_empty()).then(|| version.to_string())
 }
 
 /// The sidecar written beside every backup.
@@ -202,6 +205,14 @@ mod tests {
         .unwrap();
         assert_eq!(info.schema_version, None);
         assert_eq!(info.server_version.as_deref(), Some("0.13.0"));
+    }
+
+    #[test]
+    fn a_failed_or_empty_probe_means_no_schema_version() {
+        assert_eq!(schema_version_from_probe(true, "1\n"), Some("1".into()));
+        assert_eq!(schema_version_from_probe(false, ""), None);
+        assert_eq!(schema_version_from_probe(false, "1\n"), None);
+        assert_eq!(schema_version_from_probe(true, "\n"), None);
     }
 
     #[test]
