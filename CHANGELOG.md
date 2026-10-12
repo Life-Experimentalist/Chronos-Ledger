@@ -10,6 +10,32 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.15.0](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.14.0...v0.15.0) (2026-10-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* **db:** psycopg2 is no longer installed, so a DATABASE_URL written as postgresql+psycopg2:// must become postgresql:// or postgresql+psycopg://.
+* **engine:** there are no migrations before the first real deployment, so a database made by 0.14 is not upgraded by 0.15 and a schema change means recreating the database. The database also no longer stamps its own time: columns that had server_default=func.now() are filled by the application, and a row inserted by hand without a value fails the NOT NULL constraint.
+* **engine:** there are no migrations before the first real deployment, so a database made by 0.14 is not upgraded by 0.15 and a schema change means recreating the database. The database also no longer stamps its own time: columns that had server_default=func.now() are filled by the application, and a row inserted by hand without a value fails the NOT NULL constraint.
+
+### Features
+
+* **deploy:** optional Cloudflare Tunnel behind a compose profile ([#67](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/67)) ([57587af](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/57587afab099fcecd29f7877a6b48e35008bf91a))
+* **engine:** chronos-engine, the standalone profile (one SQLite file, no Redis, no Docker) ([c02ee2f](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/c02ee2f0ac73f3405c7519cbd592bee9b821d8ea))
+* **engine:** integrated flavour, schema without migrations, simulation clock ([1e07321](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/1e0732193b791029375b9de14d83bc7b531461c8))
+* **engine:** integrated flavour, schema without migrations, simulation clock ([9d8cd6d](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/9d8cd6d0d74d8f10c3ce435d15f7a26bd5901e04))
+
+
+### Bug Fixes
+
+* pre-release fixes for 0.15 ([#69](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/69)) ([edbb95c](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/edbb95ccbaeee578f173ea52dfe1e870cf3f63b3))
+
+
+### Code Refactoring
+
+* **db:** psycopg 3 replaces psycopg2, and SQLAlchemy 2.1 ([2883ce5](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/2883ce50c926497aaf90f2bf4a0208e4d474aff2))
+
 ## [0.14.0](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.13.1...v0.14.0) (2026-10-11)
 
 
