@@ -383,9 +383,13 @@ nightly jobs run as the host advances the clock rather than on a schedule,
 and `ID_SEED` makes the non-secret identifiers repeat, so the same script
 writes the same rows twice. Nothing changes for a deployment on the default
 system clock. The design, the real-time exceptions and the limits of the
-guarantee are in [clock.md](clock.md). Still open: a way for a host program
-in a separate process to advance the clock, which waits on the host
-authentication question.
+guarantee are in [clock.md](clock.md). A host program in a separate process
+drives it through the embedded flavour (S-4): `chronos-engine embedded
+--clock-start` starts the process on a host clock, `--id-seed` seeds the
+ids, and `POST /api/v1/clock/advance`, open to the host's own actor
+`system` alone, moves it. The host owns time across restarts by passing the
+saved instant back as `--clock-start`. Neither route exists in `serve` or the
+container ([embedded.md](embedded.md)).
 
 ## Waiting on a decision
 

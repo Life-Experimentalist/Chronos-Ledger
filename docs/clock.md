@@ -38,10 +38,17 @@ Two things change under a host clock:
   the host clock, so "today" in the organization's zone is the day the
   host says it is.
 
-There is no HTTP route for advancing the clock. A host that runs the engine
-in its own process calls `advance`; a host that runs it as a separate
-process has no way to move the clock yet, and that is deliberate until the
-host authentication question is settled.
+A host that runs the engine in its own process calls `advance` directly. A
+host that runs it as a separate process uses the embedded flavour
+([embedded.md](embedded.md)): `chronos-engine embedded --clock-start
+<instant>` puts the process in host mode, `--id-seed` seeds the ids, and
+`POST /api/v1/clock/advance` calls `advance` on the host's behalf. Only the
+host itself, the reserved actor `system`, may call it; anyone the host names
+may read the clock at `GET /api/v1/clock`. The other flavours (`serve`, the
+container) have no such route: nothing a deployment serves can move its
+clock. The engine keeps no record of where the clock stood, so a host that
+restores a save starts the process again with the saved instant as
+`--clock-start`.
 
 ## What is stamped from the clock
 

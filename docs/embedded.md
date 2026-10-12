@@ -32,6 +32,8 @@ CHRONOS_HOST_SECRET=... chronos-engine embedded --data-dir ./chronos-data
 | `--secret-from-stdin` | off | Read the host secret from the first line of stdin instead of the environment. |
 | `--parent-pid N` | none | Also exit when this process is gone (polled once a second). |
 | `--log-level LEVEL` | `info` | Logs go to stderr. |
+| `--clock-start INSTANT` | none | Run on a host clock that starts at this ISO 8601 instant with an offset, and moves only when the host says so ([the clock](#the-clock)). Without it, the system clock. |
+| `--id-seed N` | none | Seed the identifiers that are not secrets, so a replayed day writes the same ids (`ID_SEED` in [clock.md](clock.md)). |
 
 The process binds 127.0.0.1 only, serves no frontend, no `/docs` and no
 OpenAPI document, and sends no CORS headers. There is nothing for a browser
@@ -52,11 +54,13 @@ When the process is listening, with the schema built and the scheduler
 running, it prints exactly one line to stdout and nothing else, ever:
 
 ```json
-{"chronos": "ready", "port": 54321, "schema_version": "1"}
+{"chronos": "ready", "port": 54321, "schema_version": "1", "clock": "system"}
 ```
 
 With `--socket` the line carries `"socket": "/path"` in place of `"port"`.
 `schema_version` is what `/health` reports (`backend/app/core/schema.py::SCHEMA_VERSION`).
+`clock` is `"host"` when the process was started with `--clock-start` and
+`"system"` otherwise, so a host can tell at once whether it owns the time.
 Logs go to stderr, so a host can read stdout line by line and treat the first
 line as the announcement. Until it arrives, `GET /health` is also answered,
 without the secret.
@@ -123,10 +127,57 @@ What the host asserts is the truth:
 Audit records carry the actor id the host sent, exactly as a logged-in user's
 id is carried in the other flavours.
 
+## The clock
+
+A host that simulates time, or replays a recorded day, starts the engine
+with `--clock-start`. The process is then in host mode
+([clock.md](clock.md)): every timestamp it writes reads from a clock that
+stands at that instant until the host moves it, the nightly jobs run as the
+clock passes their hour rather than on a schedule, and with `--id-seed` the
+same sequence of requests writes the same rows. Without the flag the process
+is on the system clock and none of this applies.
+
+Two routes exist only in this flavour (`backend/app/api/v1/endpoints/clock.py`,
+mounted by `backend/app/embedded.py::build_app`):
+
+| Route | Who | Returns |
+|---|---|---|
+| `GET /api/v1/clock` | any actor | `{"mode": "host" \| "system", "now": "<ISO 8601, UTC>"}` |
+| `POST /api/v1/clock/advance` with `{"to": "<ISO 8601 with offset>"}` | the actor `system` only | `{"now": "<ISO 8601, UTC>", "ran": ["<job>", ...]}` |
+
+`advance` moves the clock to `to`, running on the way every job that came
+due, in the order it would have run, and names them in `ran`
+(`nightly_ledger_gen`, `refresh_token_purge`, `guest_retention_purge`,
+`guest_overstay_notice`, as `backend/app/cron/scheduled.py::JOBS` lists
+them). `now` comes back in UTC whatever offset `to` carried. The answers:
+
+- `403` for any actor but `system`. An administrator the host names is a
+  user of the host, not the host.
+- `409` when the process is on the system clock. Start it with
+  `--clock-start` instead.
+- `422` for an instant without an offset, or one earlier than the clock
+  reads. The clock does not go backwards; to replay, start a fresh process.
+  Advancing to the instant the clock already reads is allowed, runs nothing
+  and returns `"ran": []`.
+
+One advance runs at a time: a second call made while one is in progress
+waits for it, so two advances can never interleave their job runs. The jobs
+run inside the request, so a call that crosses 23:00 returns when the
+nightly ledger run has finished.
+
+The host owns time across restarts. The engine does not remember where the
+clock stood: when the host restores a save it starts the process with
+`--clock-start` set to the instant it saved, and the same `--id-seed` if the
+ids are to carry on from a replay. A process restarted without
+`--clock-start` is on the system clock, and rows it writes are stamped with
+real time.
+
 ## What is not mounted
 
-The API is a subset of the one in [openapi.yaml](openapi.yaml), so the SDKs
-work as they are. Decided route by route
+The API is a subset of the one in [openapi.yaml](openapi.yaml), plus the two
+clock routes above, which the published document does not describe because
+the ordinary application does not have them. The SDKs work as they are for
+everything else. Decided route by route
 (`backend/app/embedded.py::STRIPPED_OPERATIONS`); everything not listed here
 is mounted as it is.
 
