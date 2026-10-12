@@ -18,6 +18,7 @@ models, the same way the server does:
 
 import datetime
 import os
+from contextlib import contextmanager
 
 import pytest
 from fastapi.testclient import TestClient
@@ -26,7 +27,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.v1.endpoints import resources
-from app.core.database import get_db
+from app.core.database import get_db, get_session_opener
 from app.core.schema import ensure_schema
 from app.core.security import hash_password
 from app.main import app
@@ -287,7 +288,14 @@ def test_the_database_refuses_an_overlap_the_endpoint_did_not_see(db, resource, 
     def override_get_db():
         yield db
 
+    @contextmanager
+    def override_open_session():
+        # AuditMiddleware records every write in a session of its own. Left
+        # alone it opens one on the configured database_url, not this one.
+        yield db
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_session_opener] = lambda: override_open_session
     try:
         client = TestClient(app)
         token = client.post(
@@ -360,7 +368,14 @@ def test_the_409_for_an_overnight_loser_still_names_what_beat_it(db, resource, m
     def override_get_db():
         yield db
 
+    @contextmanager
+    def override_open_session():
+        # AuditMiddleware records every write in a session of its own. Left
+        # alone it opens one on the configured database_url, not this one.
+        yield db
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_session_opener] = lambda: override_open_session
     try:
         client = TestClient(app)
         token = client.post(
