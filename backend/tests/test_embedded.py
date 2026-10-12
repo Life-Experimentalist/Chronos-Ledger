@@ -171,7 +171,7 @@ def test_the_system_actor_ignores_the_unit_header(embedded, db):
 
 
 def test_a_unit_administrator_given_a_unit_sees_only_that_unit(embedded):
-    """The unit from the header is what security.in_unit_scope reads."""
+    """The header lands in User.unit_code, which the unit scope checks read."""
     embedded.get(AUDIT, headers=actor("U-6", role="STAFF", unit="CSE"))
     embedded.get(AUDIT, headers=actor("U-7", role="STAFF", unit="ECE"))
     res = embedded.get("/api/v1/users/", headers=actor("U-8", role="UNIT_ADMIN", unit="CSE"))
