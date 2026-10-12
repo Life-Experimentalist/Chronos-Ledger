@@ -4,6 +4,8 @@
 from functools import lru_cache
 
 import redis
+from redis.backoff import ExponentialBackoff
+from redis.retry import Retry
 
 from app.core.config import get_settings
 
@@ -22,7 +24,15 @@ def get_redis() -> redis.Redis:
     settings = get_settings()
     if is_memory(settings.redis_url):
         return _memory_redis()
-    return redis.from_url(settings.redis_url, decode_responses=True)
+    # Callers fall back when Redis is down, so fail in about two seconds rather
+    # than sitting through redis-py 8's defaults (5 s timeouts, 10 retries).
+    return redis.from_url(
+        settings.redis_url,
+        decode_responses=True,
+        socket_connect_timeout=1,
+        socket_timeout=1,
+        retry=Retry(ExponentialBackoff(), 2),
+    )
 
 
 def _memory_redis() -> redis.Redis:
