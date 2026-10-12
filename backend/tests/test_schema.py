@@ -13,10 +13,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from sqlalchemy import func, select
+import pytest
+from sqlalchemy import func, inspect, select, text
 
 from app.core.bootstrap import SEEDED_ADMIN_ID
-from app.core.database import sqlite_engine
+from app.core.database import Base, sqlite_engine
 from app.core.schema import SCHEMA_VERSION, ensure_schema
 from app.models.db import InstitutionalRole, User
 
@@ -48,6 +49,50 @@ def test_an_empty_database_is_built_and_seeded_once(tmp_path):
         # The same step on every start: nothing to build, nothing to seed.
         assert ensure_schema(engine) == "current"
         assert len(_administrators(engine)) == 1
+    finally:
+        engine.dispose()
+
+
+def _alembic_version(engine) -> None:
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
+        connection.execute(text("INSERT INTO alembic_version VALUES ('030')"))
+
+
+def test_a_database_made_by_0_14_is_refused(tmp_path):
+    """Its Alembic history sits beside Chronos's tables; 0.15 will not touch it."""
+    engine = sqlite_engine(_url(tmp_path))
+    try:
+        Base.metadata.create_all(engine)
+        _alembic_version(engine)
+        with pytest.raises(RuntimeError, match="Chronos 0.14 or earlier"):
+            ensure_schema(engine)
+        # Refused before anything was seeded.
+        assert _administrators(engine) == []
+    finally:
+        engine.dispose()
+
+
+def test_a_host_programs_own_alembic_version_is_not_refused(tmp_path):
+    """The embedded flavour shares a database; alembic_version alone proves nothing."""
+    engine = sqlite_engine(_url(tmp_path))
+    try:
+        _alembic_version(engine)
+        assert ensure_schema(engine) == "created"
+        assert inspect(engine).has_table("alembic_version")
+        assert len(_administrators(engine)) == 1
+    finally:
+        engine.dispose()
+
+
+def test_a_host_table_called_reservations_does_not_look_like_chronos(tmp_path):
+    engine = sqlite_engine(_url(tmp_path))
+    try:
+        _alembic_version(engine)
+        with engine.begin() as connection:
+            connection.execute(text("CREATE TABLE reservations (id INTEGER PRIMARY KEY)"))
+        # Only one marker table is the host's; create_all then leaves it alone.
+        assert ensure_schema(engine) == "created"
     finally:
         engine.dispose()
 
