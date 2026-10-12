@@ -129,15 +129,15 @@ This is the drift that breaks a running server.
 
 | Mismatch | Detected by | Result |
 |---|---|---|
-| Database migrated by a newer server than the image now running (someone rolled the tag back) | Backend start: `alembic upgrade head` cannot find the revision | Today the container restarts in a loop. Planned: the backend exits once with `database is at revision X, newer than this build; run chronos upgrade --to <version that has X>` and `doctor` names the version |
+| Database made by a newer server than the image now running (someone rolled the tag back) | Nothing yet: there are no migrations before the first real deployment, and the backend builds only what is missing | The code may not fit the tables. Restore the backup taken on the matching version, or recreate the database |
 | CLI older than the server it manages | CLI compares its own version with the server's `/health` version | Refuses `upgrade` and `restore`, tells the person to run `chronos self update` |
 | Server running a different version than `.env` pins | `doctor` | Warning with `chronos up` |
 | Compose file differs from the release's copy | `doctor` | Warning; `upgrade` keeps the old file as `docker-compose.yml.before-upgrade` |
 | Images pulled but not restarted | `doctor` compares running container image digests with the pulled ones | Warning with `chronos up` |
-| Backup taken on a newer migration revision than the target server | `restore` reads the revision stored in the backup | Refuses, names the version needed |
+| Backup taken on a newer schema version than the target server | `restore` reads the schema version stored in the backup | Refuses, names the version needed |
 
-Two small server changes make 3b work: `/health` reports `version` and the
-Alembic revision, and every backup records the revision it was taken at.
+Two small server changes make 3b work: `/health` reports `version` and
+`schema_version`, and every backup records the schema version it was taken at.
 
 ## 4. Signing
 
@@ -188,7 +188,7 @@ not.
 
 ## 6. Order of work
 
-1. Done: `/health` reports version and migration revision; backups record the revision.
+1. Done: `/health` reports version and schema version; backups record it.
 2. Done: the CLI with `init`, `up`, `down`, `status`, `upgrade`, `backup`, `restore`, `doctor`.
 3. Done: channel detection, receipt, `self update`, `self uninstall`.
 4. Done: release jobs for the CLI: build matrix, sidecars, attestations, formula and manifest.
@@ -204,7 +204,7 @@ once the CLI has been through one release.
 - Installing through any two channels, `chronos doctor` lists both copies and prints commands that leave exactly one.
 - `chronos self uninstall` from each channel leaves no binary, receipt or PATH entry behind, and the owning manager no longer lists it.
 - Running the install script twice for the same version changes nothing, and uninstalling afterwards still removes the PATH entry.
-- Rolling the image tag back past a migration makes the backend print which version is needed instead of looping.
+- Rolling the image tag back past a schema change means restoring the backup taken on that version; nothing upgrades or downgrades a database in place.
 - `gh attestation verify` passes for every binary and image of a release.
 - A fresh `chronos init && chronos up` on Linux, macOS and Windows reaches a healthy `/health`.
 

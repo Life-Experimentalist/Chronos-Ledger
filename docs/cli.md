@@ -47,7 +47,7 @@ another one.
 | `chronos down` | Stops the stack. Data stays in its volumes. |
 | `chronos status` | Container states and what `/health` reports. |
 | `chronos upgrade [--to X.Y.Z] [--yes]` | Backs up, moves the pinned tag, pulls, starts, waits until ready and checks the version. On failure it prints how to go back. |
-| `chronos backup` | Dumps the database to `backups/` with a `.json` file recording the version and migration revision. |
+| `chronos backup` | Dumps the database to `backups/` with a `.json` file recording the version and schema version. |
 | `chronos restore <file> [--yes]` | Replaces the database with that backup. Refuses a backup newer than the server. |
 | `chronos doctor` | Reports problems and how to fix each. Changes nothing. |
 | `chronos self update` | Updates the CLI through the channel that installed it. |

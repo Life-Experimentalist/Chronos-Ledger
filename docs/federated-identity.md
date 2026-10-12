@@ -262,8 +262,7 @@ anyone who is not writing SQL and curl.
   the map. It does not refuse a second `STAFF` entry whose `unit_code` differs
   from an existing one: that pair is the ordinary case, and the tie is broken
   at sign-in instead, for the reason recorded under the claims table below.
-- **Touches:** `backend/app/models/db.py`,
-  `backend/alembic/versions/028_*.py`, `docs/data-model.md`.
+- **Touches:** `backend/app/models/db.py`, `docs/data-model.md`.
 - **Done when:** a registration with two keys whose validity windows overlap
   verifies notes signed by either, and the map refuses an admin role with a
   422 naming the field.
@@ -334,7 +333,7 @@ false and would quietly turn the replay check off for the whole suite.
   The link's `user_id` cascades on delete: `users.py` has a hard-delete path,
   and a link left pointing at a deleted account would refuse that person
   forever rather than letting them arrive as somebody new.
-- **Touches:** `backend/app/models/db.py`, migration `028`,
+- **Touches:** `backend/app/models/db.py`,
   `backend/app/services/federated_identity.py`, `docs/data-model.md`.
 - **Done when:** the second sign-in reuses the first account, a role changed by
   an administrator survives the next sign-in, an account promoted to either admin

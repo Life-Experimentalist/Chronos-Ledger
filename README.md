@@ -150,7 +150,7 @@ Drop a member-centric CSV on the Admin dashboard. One upload creates/updates use
 
 | Layer          | Technology                                                          |
 | -------------- | ------------------------------------------------------------------- |
-| Backend        | Python 3.11 · FastAPI 0.141 · SQLAlchemy 2 · Alembic · APScheduler  |
+| Backend        | Python 3.11 · FastAPI 0.141 · SQLAlchemy 2 · APScheduler            |
 | Auth           | PyJWT 2.14 · bcrypt 5.0 (no CVE-affected packages)                  |
 | Database       | PostgreSQL 17                                                       |
 | Cache / PubSub | Redis 7.4                                                           |
@@ -181,7 +181,6 @@ chronos-ledger/
 │   └── Icon.png            # App icon
 ├── backend/                # FastAPI application (uv managed)
 │   ├── pyproject.toml
-│   ├── alembic/            # DB migrations
 │   └── app/
 │       ├── core/           # Config, DB, security, Redis, WebSocket manager
 │       ├── models/         # SQLAlchemy ORM (9 tables)
@@ -228,8 +227,7 @@ chronos-ledger/
 ```bash
 cd backend
 uv sync                         # install deps (including dev)
-uv run alembic upgrade head     # apply migrations
-uv run uvicorn app.main:app --reload --port 8000
+uv run uvicorn app.main:app --reload --port 8000   # builds the schema on start
 ```
 
 API: `http://localhost:8000` · Swagger: `http://localhost:8000/docs`
@@ -341,8 +339,8 @@ See [`.env.example`](.env.example) for the full template.
 
 ## First Boot Credentials
 
-The Alembic seed migration creates one organization admin. It seeds a hash of a
-random string it throws away, so the account exists, nothing can log into
+The schema step the server runs on start creates one organization admin. It
+seeds a hash of a random string it throws away, so the account exists, nothing can log into
 it, and this repository publishes no password for anyone to find. What the
 first password is comes from your `.env`:
 
