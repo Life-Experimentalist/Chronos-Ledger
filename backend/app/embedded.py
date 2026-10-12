@@ -13,7 +13,9 @@ app.api.v1.router), middleware and lifespan as app.main, minus everything
 that only makes sense with Chronos-owned logins. It is a separate FastAPI instance so the ordinary
 application, which the published OpenAPI document describes route for route,
 is untouched. STRIPPED_OPERATIONS is the list of what is left out, by
-operation id, and docs/embedded.md explains each entry.
+operation id, and docs/embedded.md explains each entry. CLOCK_OPERATIONS is
+the one thing added: the clock routes (app.api.v1.endpoints.clock), which
+only a host program has any business with.
 """
 
 from fastapi import APIRouter, FastAPI
@@ -25,6 +27,7 @@ from sqlalchemy.exc import TimeoutError as PoolTimeout
 from sqlalchemy.orm import Session
 
 import app.main as main
+from app.api.v1.endpoints import clock as clock_endpoints
 from app.api.v1.router import ROUTERS
 from app.core import security
 from app.core.audit import AuditMiddleware
@@ -84,6 +87,10 @@ STRIPPED_OPERATIONS = frozenset(
     }
 )
 
+# Routes the embedded flavour has and the ordinary application does not: the
+# host clock (docs/clock.md), read by any actor and advanced by `system`.
+CLOCK_OPERATIONS = frozenset({"clock.read", "clock.advance"})
+
 
 def build_app(secret: str) -> FastAPI:
     """The embedded application, bound to one host secret."""
@@ -115,6 +122,7 @@ def build_app(secret: str) -> FastAPI:
             ]
         )
         embedded.include_router(kept, prefix=f"/api/v1{prefix}", tags=[tag])
+    embedded.include_router(clock_endpoints.router, prefix="/api/v1/clock", tags=["Clock"])
     embedded.add_exception_handler(PoolTimeout, main.pool_exhausted)
     embedded.add_api_route("/health", main.health_check, operation_id="health.check")
     embedded.add_api_route("/health/ready", main.readiness_check, operation_id="health.ready")
