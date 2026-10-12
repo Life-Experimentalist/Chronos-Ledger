@@ -10,6 +10,36 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.14.0](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.13.1...v0.14.0) (2026-10-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* **roles:** the SUPER_ADMIN role is now ORG_ADMIN. A client that sends or compares the literal string has to change with it, including the role field on a user payload and any role check an integrator makes.
+
+### Features
+
+* **changes:** what changed about the rooms and the bookings, since a cursor ([a81a4a0](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/a81a4a01d7107dad0158a1dfd4e8b7041318bff3))
+* **federation:** a linked account that becomes an admin loses the shortcut ([80b256f](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/80b256fb24ce6ee2e18de2288ed8756a56d17686))
+* **federation:** a note can be traded for a session, and the trade is on record ([27a690c](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/27a690c421ce78d60d54d9c5870bbe25e75b32a0))
+* **federation:** a note from an outside issuer is verified, or refused ([a80f5fb](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/a80f5fb03347dcbe5cdcd42b3f07a79ff7286ee9))
+* **federation:** a person sent here with a note lands signed in, or told why ([8d7a700](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/8d7a700f850254d684c323dd3fc527e2580e0d97))
+* **federation:** a verified note becomes an account, or is refused ([ae4552f](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/ae4552f35c5c8f09f4f4ea3a127cd740f4299f8d))
+* **federation:** an operator decides which issuers exist and what they may say ([0e403cc](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/0e403cc790ede23beed29dcbf9d456fd6da215a1))
+* **federation:** an outside issuer can be registered ([5dc3ae3](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/5dc3ae327a79cd360f32ae8ad6076320c18978a2))
+* **frontend:** the desk sees a visit run over, and the visitor sees the time ([aa7e2da](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/aa7e2da8289e7ff8f6860ef2a0c6fe0c0fb131e6))
+* **guest:** a visit can run out of time ([29f383b](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/29f383be92763b95ebf2f465742be33dbb83ecda))
+* **guest:** a visit code can stop working ([1a9d08a](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/1a9d08af971d664e8bee14892607584713d79553))
+* **guest:** an admin can decide a visit, if an operator says so ([fd3b775](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/fd3b7759b399ddd14f4a626353c6a5a2335230d1))
+* **roles:** SUPER_ADMIN is now ORG_ADMIN ([f03714e](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/f03714e1218147dd1b262d6e52b908f63c7aa6a7))
+
+
+### Bug Fixes
+
+* **deps:** next 16.3.6, which closes GHSA-vcvr-r3jv-pc5j ([3c8f76b](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/3c8f76b0181e7405254cd34a7540240f218f2be9))
+* **users:** 029 names the remedy that actually clears a collision ([a418379](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/a41837969b3b7c5f720800aee76676de41278439))
+* **users:** an address names one account, whatever case it is written in ([9a93b66](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/9a93b662b0ddf06a8817b4bbc99dc21b3d84bda9))
+
 ## [0.13.1](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.13.0...v0.13.1) (2026-09-19)
 
 
