@@ -8,8 +8,10 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Copy dependency files first for layer caching
 COPY pyproject.toml uv.lock* ./
 
-# Install dependencies (no editable install, no dev deps)
-RUN uv sync --frozen --no-dev
+# Install dependencies only (no dev deps). The project itself is installed
+# after the source is copied: its wheel config pulls in alembic/, which is not
+# here yet.
+RUN uv sync --frozen --no-dev --no-install-project
 
 EXPOSE 8000
 
@@ -23,6 +25,7 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
 
 # Copy application source
 COPY . .
+RUN uv sync --frozen --no-dev
 
 # Run alembic migrations then start server. --no-sync: the venv is baked
 # at build time; without it uv re-syncs on start, pulling dev deps from

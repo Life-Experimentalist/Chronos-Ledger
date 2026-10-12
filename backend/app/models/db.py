@@ -258,6 +258,11 @@ class DailyLedger(Base):
     # One day per slot per date. See migration 017.
     __table_args__ = (
         UniqueConstraint("target_date", "master_slot_id", name="uq_daily_ledger_slot_date"),
+        # The two ways the ledger is read by range: one room across some days
+        # (availability, the room calendar) and one person's days (a staff
+        # member's schedule, the location resolver). Migration 030.
+        Index("ix_daily_ledger_resource_date", "resource_id", "target_date"),
+        Index("ix_daily_ledger_lead_date", "active_lead_id", "target_date"),
     )
 
     id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
@@ -351,6 +356,10 @@ class Reservation(Base):
     __tablename__ = "reservations"
     __table_args__ = (
         CheckConstraint("time_window_end <> time_window_start", name="ck_reservations_window"),
+        # The conflict check reads one resource on one date. Migration 009
+        # made this on PostgreSQL; declared here so the models say so too,
+        # and so the standalone profile, which builds from the models, has it.
+        Index("ix_reservations_resource_date", "resource_id", "reserved_date"),
     )
 
     id = Column(Integer, primary_key=True)

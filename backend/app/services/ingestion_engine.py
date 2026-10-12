@@ -5,7 +5,6 @@ import datetime
 import logging
 from typing import Any
 
-import pandas as pd
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -91,6 +90,11 @@ class ChronosIngestionEngine:
         self.db = db
 
     def process_member_centric_matrix(self, file_path: str, cycle_id: int) -> dict[str, Any]:
+        # Here and not at the top: pandas is a third of the time the app takes
+        # to import and most of its memory, for a route an organization calls
+        # a few times a term.
+        import pandas as pd
+
         try:
             # Every cell as the text it was typed as. Left to guess, pandas read
             # a blank cell as NaN, which str() turned into the word "nan", so a

@@ -77,6 +77,62 @@ jobs:
       - name: Run pytest
         run: uv run python -m pytest tests/ -q --cov=app --cov-report=term --cov-fail-under=93
 
+  # ── Backend: the tests that need PostgreSQL ─────────────────────────────────
+  # The suite above runs on in-memory SQLite, which has no exclusion
+  # constraints, so the guarantees production leans on (no double booking, one
+  # ledger day per slot, refresh-token families) are only proven here. Each
+  # file gets an empty database because each one builds its schema by running
+  # the migrations, and several step them down and back up.
+  backend-test-postgres:
+    name: Backend tests on PostgreSQL
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        # The version the compose files run.
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: chronos_ci
+          POSTGRES_PASSWORD: chronos_ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U chronos_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: chronos_ci
+      PGPASSWORD: chronos_ci
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --frozen --dev
+
+      - name: Run the PostgreSQL tests, one empty database each
+        run: |
+          status=0
+          for file in tests/*_pg.py; do
+            name="ci_$(basename "$file" .py)"
+            psql -d postgres -qc "CREATE DATABASE $name"
+            TEST_DATABASE_URL="postgresql://chronos_ci:chronos_ci@localhost:5432/$name" \
+              uv run python -m pytest "$file" -q -rs || status=1
+          done
+          exit $status
+
   # ── Frontend: lint + type-check + build ───────────────────────────────────
   frontend-check:
     name: Frontend, lint + type-check + build
