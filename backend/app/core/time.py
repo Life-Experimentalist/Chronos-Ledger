@@ -82,9 +82,9 @@ def window_span(
 
     That encoding is the whole of it: there is no column saying which day the
     end falls on, only the two times and the rule that a backwards pair means
-    the next day. Reservations and weekly slots read the same way, and
-    migration 010 writes the same rule in SQL for the exclusion constraint on
-    reservations.
+    the next day. Reservations and weekly slots read the same way, and the
+    exclusion constraints on reservations and daily_ledger write the same rule
+    in SQL.
 
     Naive, because a slot and a reservation both store naive wall clock in the
     organisation's own zone and carry nothing that says which zone. Comparing
