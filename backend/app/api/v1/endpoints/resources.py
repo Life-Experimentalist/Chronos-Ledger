@@ -9,7 +9,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core import change_feed
+from app.core import change_feed, clock
 from app.core.database import get_db
 from app.core.pagination import Page
 from app.core.security import get_current_user, require_roles
@@ -458,7 +458,7 @@ def cancel_reservation(
 
     if reservation.status is not ReservationStatus.CANCELLED:
         reservation.status = ReservationStatus.CANCELLED
-        reservation.cancelled_at = datetime.datetime.now(datetime.UTC)
+        reservation.cancelled_at = clock.now()
         change_feed.record(db, change_feed.RESERVATION, reservation.id, change_feed.UPDATED)
         db.commit()
         db.refresh(reservation)

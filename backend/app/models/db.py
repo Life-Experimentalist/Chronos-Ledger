@@ -3,7 +3,6 @@
 
 import enum
 import secrets
-from datetime import UTC, datetime
 
 from sqlalchemy import (
     DDL,
@@ -29,6 +28,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ExcludeConstraint
 from sqlalchemy.orm import relationship, validates
 
+from app.core import clock
 from app.core.database import Base
 from app.core.emails import normalize_email
 
@@ -452,8 +452,7 @@ class Reservation(Base):
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
-        server_default=func.now(),
+        default=clock.now,
     )
     cancelled_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -499,9 +498,7 @@ class VerificationLedger(Base):
     member_id = Column(String(50), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     marking_status = Column(Enum(VerificationMetric, name="verification_metric"), nullable=False)
     authorizing_agent_id = Column(String(50), ForeignKey("users.id"), nullable=True)
-    modification_timestamp = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC), server_default=func.now()
-    )
+    modification_timestamp = Column(DateTime(timezone=True), default=clock.now)
 
     ledger_instance = relationship("DailyLedger", back_populates="verification_records")
     member = relationship("User", foreign_keys=[member_id])
@@ -518,9 +515,7 @@ class LedgerAnnotation(Base):
     creator_id = Column(String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     classification_tag = Column(String(30), nullable=False)
     annotation_payload = Column(Text, nullable=False)
-    distribution_timestamp = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC), server_default=func.now()
-    )
+    distribution_timestamp = Column(DateTime(timezone=True), default=clock.now)
 
     ledger_instance = relationship("DailyLedger", back_populates="annotations")
     creator = relationship("User", foreign_keys=[creator_id])
@@ -540,9 +535,7 @@ class GuestGateRegistry(Base):
         default=LogVerificationState.PENDING_VERIFICATION,
         server_default="PENDING_VERIFICATION",
     )
-    timestamp_marked = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC), server_default=func.now()
-    )
+    timestamp_marked = Column(DateTime(timezone=True), default=clock.now)
     # What GET /guest/visit/{code} finds the check-in by. The code itself is
     # shown to the visitor once and kept nowhere. Null on the check-ins made
     # before there were codes.
@@ -593,7 +586,7 @@ class RefreshToken(Base):
     family_id = Column(String(36), nullable=False, index=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     consumed_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime(timezone=True), default=clock.now)
 
 
 # A key holding this instead of a scope list may do anything its bound user
@@ -630,7 +623,7 @@ class ApiKey(Base):
     # Null means the key never expires, which is what every key issued before
     # this column existed was.
     expires_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime(timezone=True), default=clock.now)
 
 
 class AuditRecord(Base):
@@ -690,7 +683,7 @@ class ChangeMarker(Base):
     change_kind = Column(String(10), nullable=False)
     # Not indexed. The feed reads by id and never by time, and this is here
     # to be shown to a consumer rather than to be filtered on.
-    at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    at = Column(DateTime(timezone=True), nullable=False, default=clock.now)
 
 
 class FederatedIssuer(Base):
@@ -715,7 +708,7 @@ class FederatedIssuer(Base):
     # parties gives each one its own, so a note for one is refused by the rest.
     audience = Column(String(255), nullable=False)
     enabled = Column(Boolean, nullable=False, default=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime(timezone=True), default=clock.now)
 
     keys = relationship(
         "FederatedIssuerKey", back_populates="issuer_row", cascade="all, delete-orphan"
@@ -752,7 +745,7 @@ class FederatedIssuerKey(Base):
     # Null is a key with no planned retirement. A rotation sets it on the old
     # key rather than deleting it, so notes already in flight still verify.
     not_after = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime(timezone=True), default=clock.now)
 
     issuer_row = relationship("FederatedIssuer", back_populates="keys")
 
@@ -825,6 +818,6 @@ class FederatedIdentity(Base):
     user_id = Column(
         String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime(timezone=True), default=clock.now)
 
     __table_args__ = (UniqueConstraint("issuer_id", "subject", name="uq_federated_identity"),)

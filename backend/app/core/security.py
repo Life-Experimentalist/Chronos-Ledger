@@ -3,7 +3,7 @@
 
 import hashlib
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, timedelta
 from typing import Any
 
 import bcrypt
@@ -13,6 +13,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import InvalidTokenError
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.db import WILDCARD_SCOPE
@@ -52,7 +53,10 @@ def generate_password() -> str:
 
 
 def create_access_token(subject: str, extra: dict[str, Any] | None = None) -> str:
-    expire = datetime.now(UTC) + timedelta(minutes=settings.jwt_access_token_expire_minutes)
+    # Real time on purpose: PyJWT checks exp against the system clock when the
+    # token comes back, so a token stamped from a host clock set in the past
+    # would be dead on arrival (docs/clock.md).
+    expire = clock.wall_now() + timedelta(minutes=settings.jwt_access_token_expire_minutes)
     payload = {"sub": subject, "exp": expire, **(extra or {})}
     return jwt.encode(payload, settings.jwt_secret_signing_key, algorithm=settings.jwt_algorithm)
 
@@ -183,7 +187,7 @@ def get_current_user_id(
             expires_at = (
                 row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=UTC)
             )
-            if expires_at <= datetime.now(UTC):
+            if expires_at <= clock.now():
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="API key expired",

@@ -3,9 +3,9 @@
 """What day and time it is where the organization is.
 
 Not where the server is. A container runs UTC unless somebody tells it
-otherwise, and the code used to ask the container: date.today() and
-datetime.now() with no zone read the process clock, so "today" meant today in
-UTC no matter where the people using the system were standing.
+otherwise, and the code used to ask the container for the date with no zone,
+so "today" meant today in UTC no matter where the people using the system
+were standing.
 
 The size of the damage is exactly the UTC offset, in whichever direction the
 offset runs. At UTC+5:30 the server still calls it yesterday from midnight
@@ -16,9 +16,11 @@ UTC it is the mirror image: at UTC-5 the server has rolled into tomorrow from
 still running.
 
 Timestamps are a different question and are not touched here. created_at and
-the rest are datetime.now(UTC) throughout the models, which is right: an
-instant is an instant. What needed a zone is the calendar, because a calendar
-day is a local idea and the schedule is made of calendar days.
+the rest are UTC instants read from app.core.clock throughout the models,
+which is right: an instant is an instant. What needed a zone is the calendar,
+because a calendar day is a local idea and the schedule is made of calendar
+days. The instant itself comes from the same clock, so under a host clock
+(docs/clock.md) the organization's day moves only when the host moves it.
 
 The other thing here is window_span, which is about the calendar rather than
 the clock. It turns a date and a pair of wall clock readings into the two
@@ -31,6 +33,7 @@ stated here once instead of three times slightly differently.
 import datetime
 from zoneinfo import ZoneInfo
 
+from app.core import clock
 from app.core.config import get_settings
 
 
@@ -51,7 +54,7 @@ def org_now() -> datetime.datetime:
     off it to compare against a Time column, which stores a wall clock
     reading with no zone of its own.
     """
-    return datetime.datetime.now(org_timezone())
+    return clock.now().astimezone(org_timezone())
 
 
 def org_today() -> datetime.date:

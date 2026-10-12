@@ -2,7 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 
 import logging
-import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -10,7 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core import rate_limit
+from app.core import clock, ids, rate_limit
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.emails import normalize_email
@@ -64,8 +63,8 @@ def _mint_refresh_token(db: Session, user_id: str, family_id: str | None = None)
         RefreshToken(
             token_hash=hash_refresh_token(raw),
             user_id=user_id,
-            family_id=family_id or str(uuid.uuid4()),
-            expires_at=datetime.now(UTC) + timedelta(days=settings.jwt_refresh_token_expire_days),
+            family_id=family_id or str(ids.new_uuid()),
+            expires_at=clock.now() + timedelta(days=settings.jwt_refresh_token_expire_days),
         )
     )
     return raw
@@ -264,7 +263,7 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         )
 
-    now = datetime.now(UTC)
+    now = clock.now()
     if row.consumed_at is not None:
         if now - _as_utc(row.consumed_at) > REUSE_GRACE:
             # Two parties hold one token and nothing here says which is the

@@ -2,12 +2,12 @@
 # Licensed under the Apache License, Version 2.0
 
 from collections import Counter
-from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import get_current_user, in_unit_scope
@@ -227,7 +227,7 @@ def _write_marks(
         elif row.marking_status != record.marking_status:
             row.marking_status = record.marking_status
             row.authorizing_agent_id = agent_id
-            row.modification_timestamp = datetime.now(UTC)
+            row.modification_timestamp = clock.now()
     db.commit()
 
 

@@ -1,10 +1,11 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
+from datetime import datetime
 from functools import lru_cache
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.vocabulary import LABEL_KEYS
@@ -356,6 +357,36 @@ class Settings(BaseSettings):
                 "not an offset like '+05:30'."
             ) from bad
         return name
+
+    # Simulation clock (docs/clock.md). Kept as one block, fields and
+    # validator together, so it merges cleanly with other settings work.
+    # CLOCK_MODE=system is the default and changes nothing. CLOCK_MODE=host
+    # freezes the clock at CLOCK_START until a host advances it and keeps
+    # the scheduler off; ID_SEED makes the non-secret identifiers repeat.
+    clock_mode: str = "system"
+    clock_start: str = ""
+    id_seed: int | None = None
+
+    @model_validator(mode="after")
+    def _host_clock_has_a_start(self) -> "Settings":
+        if self.clock_mode not in ("system", "host"):
+            raise ValueError(f"CLOCK_MODE={self.clock_mode!r} is not one of 'system' or 'host'.")
+        if self.clock_mode == "host":
+            if not self.clock_start:
+                raise ValueError("CLOCK_MODE=host needs CLOCK_START, an ISO 8601 instant.")
+            try:
+                start = datetime.fromisoformat(self.clock_start)
+            except ValueError as bad:
+                raise ValueError(
+                    f"CLOCK_START={self.clock_start!r} is not an ISO 8601 instant "
+                    "such as '2026-09-07T08:00:00+00:00'."
+                ) from bad
+            if start.tzinfo is None or start.utcoffset() is None:
+                raise ValueError(
+                    f"CLOCK_START={self.clock_start!r} has no timezone offset; "
+                    "write it like '2026-09-07T08:00:00+00:00'."
+                )
+        return self
 
 
 def label_overrides(settings: Settings) -> dict[str, str]:

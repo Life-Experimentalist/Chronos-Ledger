@@ -49,6 +49,7 @@ import redis
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core import clock, ids
 from app.core.config import get_settings
 from app.core.emails import normalize_email
 from app.core.redis_client import get_redis
@@ -230,7 +231,9 @@ def verify_note(token: str, db: Session) -> VerifiedNote:
 
     skew = settings.federated_clock_skew_seconds
     cap = settings.federated_token_max_lifetime_seconds
-    now = datetime.now(UTC)
+    # Real time on purpose: the issuer stamped exp, nbf and iat from its own
+    # clock, and PyJWT checks them against this process's (docs/clock.md).
+    now = clock.wall_now()
 
     try:
         header = jwt.get_unverified_header(token)
@@ -367,7 +370,7 @@ def _mint_user_id() -> str:
     glance why an account has no password. Sixty-four bits against a primary
     key, which is how `generate_feed_token` already treats a unique column.
     """
-    return f"FED-{secrets.token_hex(8).upper()}"
+    return f"FED-{ids.new_hex(8).upper()}"
 
 
 def account_for(note: VerifiedNote, db: Session) -> User:
