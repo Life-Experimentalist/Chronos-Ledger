@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.database import get_db
 from app.core.security import require_roles
 from app.models.db import (
@@ -213,7 +214,9 @@ def add_key(
         )
     # Normalised before the comparison below, so the window this check passed
     # is the window stored.
-    not_before = _as_utc(payload.not_before) if payload.not_before else datetime.now(UTC)
+    # Real time, like the verification in services/federated_identity.py that
+    # reads this window: the issuer's notes carry real-time claims.
+    not_before = _as_utc(payload.not_before) if payload.not_before else clock.wall_now()
     not_after = _as_utc(payload.not_after) if payload.not_after else None
     if not_after is not None and not_after <= not_before:
         raise HTTPException(

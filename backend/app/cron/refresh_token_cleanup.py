@@ -12,10 +12,11 @@ The day of slack keeps this from deleting a row out from under a refresh
 request that is looking at it at the moment it lapses.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.models.db import RefreshToken
 
 SLACK = timedelta(days=1)
@@ -23,7 +24,7 @@ SLACK = timedelta(days=1)
 
 def purge_expired_refresh_tokens(db: Session) -> int:
     """Delete every refresh token that expired more than SLACK ago; return the count."""
-    cutoff = datetime.now(UTC) - SLACK
+    cutoff = clock.now() - SLACK
     purged = (
         db.query(RefreshToken)
         .filter(RefreshToken.expires_at < cutoff)

@@ -14,10 +14,10 @@ not take every write in the application down with it.
 """
 
 import logging
-from datetime import UTC, datetime
 
 from starlette.concurrency import run_in_threadpool
 
+from app.core import clock
 from app.core.database import get_session_opener
 
 logger = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ def _write(scope, actor_id, api_key_id, status_code):
         with opener() as db:
             db.add(
                 AuditRecord(
-                    at=datetime.now(UTC),
+                    at=clock.now(),
                     actor_id=actor_id,
                     api_key_id=api_key_id,
                     method=scope["method"],

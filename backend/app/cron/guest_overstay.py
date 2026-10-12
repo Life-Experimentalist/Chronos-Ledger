@@ -12,10 +12,9 @@ was told, and an extension clears it, which is what makes a second overrun
 announce itself as the first did.
 """
 
-from datetime import UTC, datetime
-
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.websocket_manager import socket_broker
 from app.models.db import GuestGateRegistry, LogVerificationState
 
@@ -25,7 +24,7 @@ async def announce_overstayed_visits(db: Session) -> int:
 
     Returns how many visits were announced.
     """
-    now = datetime.now(UTC)
+    now = clock.now()
     overdue = (
         db.query(GuestGateRegistry)
         .filter(
