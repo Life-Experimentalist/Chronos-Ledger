@@ -10,8 +10,11 @@ every start costs one round of catalog lookups and nothing else.
 
 What it does not do is change a table that already exists. Until the first
 real deployment a schema change means recreating the database, and a release
-does not upgrade the database the one before it made. Migrations come back as
-a fresh baseline when there is a deployment worth upgrading.
+does not upgrade the database the one before it made. Chronos 0.14 and
+earlier did keep an Alembic history, and a database made by them is refused
+at start (_refuse_pre_015_database) rather than left half upgraded.
+Migrations come back as a fresh baseline when there is a deployment worth
+upgrading.
 
 `python -m app.core.schema` builds the schema and exits, for anyone who wants
 it done before the server starts.
@@ -38,6 +41,10 @@ SCHEMA_VERSION = "1"
 # Any fixed number does; this one is "chronos" in hex.
 SCHEMA_LOCK_KEY = 0x6368726F6E6F73
 
+# Tables only Chronos makes. An alembic_version table next to all of them is
+# Chronos 0.14's; next to none of them it is a host program's own.
+_CHRONOS_MARKER_TABLES = ("reservations", "daily_ledger", "structural_master_slots")
+
 
 def ensure_schema(engine: Engine) -> str:
     """Build whatever the database lacks, then make sure somebody can log in.
@@ -52,10 +59,35 @@ def ensure_schema(engine: Engine) -> str:
     with engine.begin() as connection:
         if connection.dialect.name == "postgresql":
             connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": SCHEMA_LOCK_KEY})
+        _refuse_pre_015_database(connection)
         had_users = inspect(connection).has_table("users")
         Base.metadata.create_all(connection)
         _seed_administrator(connection)
     return "current" if had_users else "created"
+
+
+def _refuse_pre_015_database(connection) -> None:
+    """Stop on a database Chronos 0.14 or earlier made, before create_all.
+
+    Those releases migrated with Alembic and left an alembic_version table.
+    create_all would find their tables present, leave them alone and start
+    cleanly on a schema this release never upgraded. The lookup is unqualified,
+    so on PostgreSQL it sees only the schema the engine is confined to
+    (app.core.database.use_schema) or the default one, and never a host's
+    tables elsewhere. A host program may keep its own alembic_version in that
+    same database, so it only counts when Chronos's own tables are beside it.
+    """
+    inspector = inspect(connection)
+    if not inspector.has_table("alembic_version"):
+        return
+    if not all(inspector.has_table(name) for name in _CHRONOS_MARKER_TABLES):
+        return
+    raise RuntimeError(
+        "This database was made by Chronos 0.14 or earlier (it has an alembic_version "
+        "table beside Chronos's tables), and 0.15 does not upgrade it in place. There are "
+        "no migrations before the first real deployment. Export what you need, then "
+        "recreate the database and start again on an empty one."
+    )
 
 
 def _seed_administrator(connection) -> None:

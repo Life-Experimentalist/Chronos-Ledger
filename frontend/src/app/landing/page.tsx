@@ -112,7 +112,7 @@ export default function LandingPage() {
               { text: '[+] Running 5/5', color: 'text-chronos-emerald' },
               { text: ' ✔ chronos-db         Started', color: 'text-chronos-teal' },
               { text: ' ✔ chronos-cache      Started', color: 'text-chronos-teal' },
-              { text: ' ✔ chronos-app        Healthy (migrations applied)', color: 'text-chronos-teal' },
+              { text: ' ✔ chronos-app        Healthy (schema ready)', color: 'text-chronos-teal' },
               { text: ' ✔ chronos-frontend   Built → static files ready', color: 'text-chronos-teal' },
               { text: ' ✔ chronos-proxy      Listening on :80', color: 'text-chronos-teal' },
               { text: '', color: '' },
