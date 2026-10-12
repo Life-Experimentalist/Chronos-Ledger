@@ -15,17 +15,33 @@ starts here can move to the container later without changing a call.
     chronos-engine backup --data-dir ./chronos-data --to backup.db
 
 docs/standalone.md has what this profile gives up for being one process.
+
+`chronos-engine embedded` is the same process started by another program as
+a hidden child: loopback only, the host's secret on every request, the
+host's users asserted by header, and an exit when the host goes away.
+docs/embedded.md has the contract.
+
+    CHRONOS_HOST_SECRET=... chronos-engine embedded --data-dir ./chronos-data --parent-pid 1234
+    chronos-engine embedded --database-url postgresql://... --schema chronos --secret-from-stdin
 """
 
 import argparse
+import json
 import logging
 import os
 import secrets
 import sqlite3
 import sys
+import threading
+import time
 from pathlib import Path
 
+import uvicorn
+
 DATABASE_FILE = "chronos.db"
+DEFAULT_SCHEMA = "chronos"
+# GetExitCodeProcess answers this for a process that is still running.
+STILL_ACTIVE = 259
 SIGNING_KEY_FILE = "signing.key"
 # Folders a sync client rewrites underneath an open database. SQLite's locks
 # do not survive that, and the usual outcome is a corrupt file.
@@ -104,8 +120,6 @@ def serve(args) -> int:
     _warn_about_synced_folders(data_dir)
     configure_environment(data_dir, args.database_url)
 
-    import uvicorn
-
     from app.core.database import engine
 
     log.info(
@@ -124,6 +138,149 @@ def serve(args) -> int:
         log_level=args.log_level,
         proxy_headers=args.behind_proxy,
     )
+    return 0
+
+
+def read_host_secret(args, stdin) -> str | None:
+    """From the environment, or the first line of stdin. Never from argv."""
+    from app.core.host_identity import HOST_SECRET_ENV
+
+    if args.secret_from_stdin:
+        return stdin.readline().rstrip("\r\n")
+    return os.environ.get(HOST_SECRET_ENV)
+
+
+def embedded(args) -> int:
+    from app.core.host_identity import check_host_secret
+
+    try:
+        secret = check_host_secret(read_host_secret(args, sys.stdin))
+    except ValueError as problem:
+        print(f"chronos-engine embedded: {problem}", file=sys.stderr)
+        return 2
+    if args.socket and sys.platform == "win32":
+        print("chronos-engine embedded: --socket needs a POSIX platform", file=sys.stderr)
+        return 2
+
+    data_dir = Path(args.data_dir).resolve()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    _warn_about_synced_folders(data_dir)
+    configure_environment(data_dir, args.database_url)
+
+    from app.core.database import engine, is_sqlite, use_schema
+
+    schema = None
+    if is_sqlite(str(engine.url)):
+        log.info("A SQLite file has no schemas; --schema is not used")
+    else:
+        schema = args.schema
+        use_schema(engine, schema)
+
+    from app.embedded import build_app, prepare_database
+
+    log.info(
+        "Database %s, schema %s: %s",
+        engine.url.render_as_string(hide_password=True),
+        schema or "(none)",
+        prepare_database(engine, schema),
+    )
+    return run_embedded(build_app(secret), args)
+
+
+def ready_line(server: uvicorn.Server) -> str:
+    """The one line the host reads from stdout. Nothing else is written there."""
+    from app.core.schema import SCHEMA_VERSION
+
+    if server.config.uds:
+        where = {"socket": server.config.uds}
+    else:
+        where = {"port": server.servers[0].sockets[0].getsockname()[1]}
+    return json.dumps({"chronos": "ready", **where, "schema_version": SCHEMA_VERSION})
+
+
+class AnnouncingServer(uvicorn.Server):
+    """uvicorn's server, which tells the host when it listens.
+
+    After startup, not before: by then the lifespan has run, so the schema is
+    built and the scheduler is up, and with --port 0 the port is known.
+    """
+
+    async def startup(self, sockets=None) -> None:
+        await super().startup(sockets)
+        if self.started:
+            print(ready_line(self), flush=True)
+
+
+def watch_stdin(stream, stop) -> None:
+    """Block until the host closes our stdin, then ask the server to stop.
+
+    The portable way to notice a parent going away: a pipe closes when the
+    process holding the other end exits, on every platform, whether it exited
+    cleanly or not. Lines the host writes are read and ignored.
+    """
+    while stream.readline():
+        pass
+    stop()
+
+
+def parent_alive(pid: int) -> bool:
+    if sys.platform == "win32":
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        process_query_limited_information = 0x1000
+        handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+        if not handle:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return False
+            return code.value == STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def watch_parent(pid: int, stop, alive=parent_alive, interval: float = 1.0) -> None:
+    """Poll for the host once a second and ask the server to stop when it is gone."""
+    while alive(pid):
+        time.sleep(interval)
+    stop()
+
+
+def run_embedded(application, args) -> int:
+    # log_config=None: uvicorn's own configuration writes access lines to
+    # stdout, which belongs to the ready line. Without it every logger
+    # propagates to the root handler main() set up, on stderr.
+    config = uvicorn.Config(
+        application,
+        host="127.0.0.1",
+        port=args.port,
+        uds=args.socket,
+        workers=1,
+        log_level=args.log_level,
+        log_config=None,
+    )
+    server = AnnouncingServer(config)
+
+    def stop() -> None:
+        log.info("The host went away; stopping")
+        # Read by uvicorn's main loop, which then runs the lifespan shutdown.
+        server.should_exit = True
+
+    if sys.stdin is not None:
+        threading.Thread(target=watch_stdin, args=(sys.stdin, stop), daemon=True).start()
+    if args.parent_pid is not None:
+        threading.Thread(target=watch_parent, args=(args.parent_pid, stop), daemon=True).start()
+    # SIGINT, SIGTERM and, on Windows, CTRL_BREAK are uvicorn's to handle.
+    server.run()
     return 0
 
 
@@ -177,6 +334,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="trust X-Forwarded-* headers from the proxy in front",
     )
     run.set_defaults(handler=serve)
+
+    child = commands.add_parser(
+        "embedded", help="run as a hidden child of a host program (docs/embedded.md)"
+    )
+    child.add_argument(
+        "--data-dir",
+        default="chronos-data",
+        help="where the signing key lives, and the SQLite file when there is no --database-url",
+    )
+    child.add_argument(
+        "--database-url",
+        help="the host's PostgreSQL; without one the engine uses a SQLite file in --data-dir",
+    )
+    child.add_argument(
+        "--schema",
+        default=DEFAULT_SCHEMA,
+        help="the PostgreSQL schema every Chronos table lives in, made if missing",
+    )
+    child.add_argument("--port", type=int, default=0, help="port on 127.0.0.1; 0 picks a free one")
+    child.add_argument("--socket", help="listen on this Unix socket instead of a port (POSIX only)")
+    child.add_argument(
+        "--secret-from-stdin",
+        action="store_true",
+        help="read the host secret from the first line of stdin instead of CHRONOS_HOST_SECRET",
+    )
+    child.add_argument(
+        "--parent-pid", type=int, help="also stop when this process is gone (checked every second)"
+    )
+    child.add_argument("--log-level", default="info")
+    child.set_defaults(handler=embedded)
 
     copy = commands.add_parser(
         "backup", help="copy the SQLite file while it runs (on PostgreSQL, use pg_dump)"
