@@ -13,7 +13,12 @@ authors = [
 dependencies = [
     "fastapi>=0.115.6",
     "uvicorn[standard]>=0.34.0",
-    "sqlalchemy>=2.0.36",
+    # SQLAlchemy 2.1 changed the default PostgreSQL driver from psycopg2 to
+    # psycopg (3). A bare postgresql:// URL, which the config default, both
+    # compose files and the CI PostgreSQL job all use, would then import a
+    # driver that is not installed. Lift the cap by either installing
+    # psycopg[binary] or writing postgresql+psycopg2:// everywhere.
+    "sqlalchemy>=2.0.36,<2.1",
     "asyncpg>=0.30.0",
     "psycopg2-binary>=2.9.10",
     "redis>=5.2.1",
