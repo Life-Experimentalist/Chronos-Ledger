@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 import uvicorn
 from fastapi.testclient import TestClient
+from sqlalchemy import insert
 from starlette.websockets import WebSocketDisconnect
 
 import app.embedded as embedded_module
@@ -137,6 +138,63 @@ def test_an_email_another_account_has_is_refused(embedded, db, seed_users):
     assert res.status_code == 409
     db.rollback()
     assert db.get(User, "H-3") is None
+
+
+def _already_made(db, actor_id, role=InstitutionalRole.MEMBER):
+    """The other request's row, committed through its own session.
+
+    A Core insert, so the row is not in this session's identity map and the
+    request below really does try to insert a second one.
+    """
+    db.execute(
+        insert(User).values(
+            id=actor_id,
+            full_name=actor_id,
+            email_address=f"{actor_id.lower()}@host.invalid",
+            credential_secure_hash="not a hash",
+            role_type=role,
+            initial_login_state=False,
+        )
+    )
+    db.commit()
+
+
+def _stale_once(db, monkeypatch, actor_id):
+    """This request's look at the account came back empty a moment too early."""
+    real_get = db.get
+    seen = []
+
+    def stale_get(entity, ident, *args, **kwargs):
+        if entity is User and ident == actor_id and not seen:
+            seen.append(ident)
+            return None
+        return real_get(entity, ident, *args, **kwargs)
+
+    monkeypatch.setattr(db, "get", stale_get)
+    return real_get
+
+
+def test_the_loser_of_a_first_sight_race_carries_on(embedded, db, monkeypatch):
+    """Two first requests for one id both insert; the later one is refused on
+    the primary key, which is not an email clash and must not fail the request."""
+    _already_made(db, "H-7")
+    real_get = _stale_once(db, monkeypatch, "H-7")
+
+    res = embedded.get(AUDIT, headers=actor("H-7", role="ORG_ADMIN", name="Pat Host"))
+    assert res.status_code == 200, res.text
+    user = real_get(User, "H-7")
+    assert user.role_type == InstitutionalRole.ORG_ADMIN
+    assert user.full_name == "Pat Host"
+
+
+def test_a_lost_race_still_refuses_a_taken_email(embedded, db, seed_users, monkeypatch):
+    _already_made(db, "H-8")
+    real_get = _stale_once(db, monkeypatch, "H-8")
+
+    res = embedded.get(AUDIT, headers=actor("H-8", email="admin@test.internal"))
+    assert res.status_code == 409
+    db.rollback()
+    assert real_get(User, "H-8").email_address == "h-8@host.invalid"
 
 
 def test_an_unusable_email_is_refused(embedded):

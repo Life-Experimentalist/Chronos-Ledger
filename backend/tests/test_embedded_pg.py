@@ -17,14 +17,15 @@ Point TEST_DATABASE_URL at an empty database:
 
 import datetime
 import os
+from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, delete, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import use_schema
-from app.core.host_identity import SYSTEM_ACTOR_ID
+from app.core.host_identity import SYSTEM_ACTOR_ID, host_actor
 from app.embedded import prepare_database
 from app.models.db import (
     InstitutionalRole,
@@ -162,6 +163,57 @@ def test_two_overlapping_holds_are_still_refused_inside_the_schema(db):
     with pytest.raises(IntegrityError) as refused:
         db.flush()
     assert "ex_reservations_no_overlap" in str(refused.value.orig)
+
+
+def test_the_loser_of_a_first_sight_race_carries_on(engine, built, monkeypatch):
+    """Two first-sight requests for one id, on PostgreSQL.
+
+    The winner's row is committed through its own session while the loser's
+    look at the account has already come back empty. The loser's insert is
+    refused on the primary key; the request still succeeds, with the winner's
+    row brought up to date.
+    """
+    winner = Session(engine)
+    loser = Session(engine)
+    real_get = loser.get
+    seen = []
+
+    def stale_get(entity, ident, *args, **kwargs):
+        if entity is User and ident == "race-1" and not seen:
+            seen.append(ident)
+            return None
+        return real_get(entity, ident, *args, **kwargs)
+
+    try:
+        winner.add(
+            User(
+                id="race-1",
+                full_name="race-1",
+                email_address="race-1@host.invalid",
+                credential_secure_hash="not a hash",
+                role_type=InstitutionalRole.MEMBER,
+                initial_login_state=False,
+            )
+        )
+        winner.commit()
+        monkeypatch.setattr(loser, "get", stale_get)
+
+        request = SimpleNamespace(state=SimpleNamespace())
+        actor = host_actor(
+            request, actor_id="race-1", role="STAFF", name="Second Sight", email=None, db=loser
+        )
+        assert actor == "race-1"
+        assert request.state.actor_id == "race-1"
+        assert seen == ["race-1"]
+        winner.expire_all()
+        user = winner.get(User, "race-1")
+        assert user.role_type == InstitutionalRole.STAFF
+        assert user.full_name == "Second Sight"
+    finally:
+        loser.close()
+        winner.execute(delete(User).where(User.id == "race-1"))
+        winner.commit()
+        winner.close()
 
 
 def test_the_system_account_is_seeded_once(engine, built, db):

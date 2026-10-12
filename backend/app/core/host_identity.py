@@ -141,7 +141,17 @@ def host_actor(
 
     user = db.get(User, actor_id)
     if user is None:
-        user = User(
+        _provision(db, actor_id, role_type, name, email)
+    elif _bring_up_to_date(user, role_type, name, email):
+        _save(db)
+    request.state.actor_id = actor_id
+    return actor_id
+
+
+def _provision(db: Session, actor_id: str, role_type: InstitutionalRole, name, email) -> None:
+    """The account for an id seen for the first time."""
+    db.add(
+        User(
             id=actor_id,
             full_name=name or actor_id,
             email_address=email or f"{actor_id}@{PLACEHOLDER_EMAIL_DOMAIN}",
@@ -152,12 +162,22 @@ def host_actor(
             role_type=role_type,
             initial_login_state=False,
         )
-        db.add(user)
-        _save(db)
-    elif _bring_up_to_date(user, role_type, name, email):
-        _save(db)
-    request.state.actor_id = actor_id
-    return actor_id
+    )
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        # Two first-sight requests for one id can arrive together: both found
+        # no account, both inserted, and the later insert is refused on the
+        # primary key. The account is there now, so this request carries on
+        # as one for a known actor, which may still find the email taken.
+        # Only when the account is still absent was the refusal about the
+        # email in the first place.
+        user = db.get(User, actor_id)
+        if user is None:
+            raise _email_taken() from None
+        if _bring_up_to_date(user, role_type, name, email):
+            _save(db)
 
 
 def _bring_up_to_date(user: User, role_type: InstitutionalRole, name, email) -> bool:
@@ -190,10 +210,14 @@ def _save(db: Session) -> None:
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="X-Chronos-Actor-Email already belongs to another account",
-        ) from None
+        raise _email_taken() from None
+
+
+def _email_taken() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail="X-Chronos-Actor-Email already belongs to another account",
+    )
 
 
 def seed_system_account(db: Session) -> None:
