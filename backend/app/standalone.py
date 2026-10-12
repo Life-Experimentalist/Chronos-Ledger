@@ -2,12 +2,16 @@
 # Licensed under the Apache License, Version 2.0
 """chronos-engine: Chronos Ledger as one process on one SQLite file.
 
-No Docker, no PostgreSQL, no Redis. For running the engine beside another
-program on the same machine, a laptop, or a small site with no server room.
+No Docker and no Redis. For running the engine beside another program on the
+same machine, a laptop, or a small site with no server room. PostgreSQL is
+the database to use for anything real (--database-url, pointing at a local
+install); with no URL it falls back to a SQLite file, which is for trying the
+engine out and for tests.
 The HTTP API is the same one the container serves, so an integrator that
 starts here can move to the container later without changing a call.
 
     chronos-engine serve --data-dir ./chronos-data
+    chronos-engine serve --database-url postgresql://user:pass@localhost/chronos
     chronos-engine backup --data-dir ./chronos-data --to backup.db
 
 docs/standalone.md has what this profile gives up for being one process.
@@ -51,18 +55,18 @@ def _signing_key(data_dir: Path) -> str:
     return key
 
 
-def configure_environment(data_dir: Path) -> None:
+def configure_environment(data_dir: Path, url: str | None = None) -> None:
     """Point the settings at this data directory, before anything reads them.
 
     get_settings is cached on first use and app.core.database builds its
     engine at import, so this has to run before either is imported.
 
-    DATABASE_URL and REDIS_URL are set outright: this command is the SQLite
-    profile, and a DATABASE_URL left over from a container setup must not
-    quietly send it somewhere else. Everything else is a default the operator
-    can override in the environment.
+    DATABASE_URL and REDIS_URL are set outright, from --database-url or the
+    data directory: a DATABASE_URL left over from a container setup must not
+    quietly send this process somewhere else. Everything else is a default
+    the operator can override in the environment.
     """
-    os.environ["DATABASE_URL"] = database_url(data_dir)
+    os.environ["DATABASE_URL"] = url or database_url(data_dir)
     os.environ["REDIS_URL"] = "memory://"
     os.environ.setdefault("APP_ENV", "production")
     if "JWT_SECRET_SIGNING_KEY" not in os.environ:
@@ -72,12 +76,17 @@ def configure_environment(data_dir: Path) -> None:
 def prepare_database(engine) -> str:
     """Bring the database to the schema this code expects. Returns what it did.
 
-    A new file gets the schema from the models in one transaction, the seeded
-    administrator migration 001 would have written, and a stamp at the newest
-    migration. The migrations themselves are not replayed on SQLite: the early
-    ones are written for PostgreSQL and use what only it has. Migrations from
-    030 on run on both, which is how a file made by this release is upgraded
-    by the next one.
+    On PostgreSQL the migrations build and upgrade the schema, exactly as in
+    the container. Never create_all there: the exclusion constraints that stop
+    double booking exist only in the migrations, and a schema built from the
+    models would quietly lack them.
+
+    A new SQLite file gets the schema from the models in one transaction, the
+    seeded administrator migration 001 would have written, and a stamp at the
+    newest migration. The early migrations are written for PostgreSQL and are
+    not replayed on SQLite. Later ones are kept runnable there on a best
+    effort basis, which is how a file made by one release is upgraded by the
+    next.
     """
     from alembic.runtime.migration import MigrationContext
     from sqlalchemy import inspect
@@ -99,8 +108,11 @@ def prepare_database(engine) -> str:
     if inspect(engine).has_table("users"):
         raise SystemExit(
             "The database has tables but no migration stamp, so it was not made by "
-            "chronos-engine. Point --data-dir at an empty folder."
+            "Chronos Ledger. Point chronos-engine at an empty database."
         )
+    if engine.dialect.name != "sqlite":
+        _upgrade(engine)
+        return "created"
 
     import app.models.db  # noqa: F401 (registers every table with the metadata)
     from app.core.database import Base
@@ -167,13 +179,17 @@ def serve(args) -> int:
     data_dir = Path(args.data_dir).resolve()
     data_dir.mkdir(parents=True, exist_ok=True)
     _warn_about_synced_folders(data_dir)
-    configure_environment(data_dir)
+    configure_environment(data_dir, args.database_url)
 
     import uvicorn
 
     from app.core.database import engine
 
-    log.info("Database %s: %s", data_dir / DATABASE_FILE, prepare_database(engine))
+    log.info(
+        "Database %s: %s",
+        engine.url.render_as_string(hide_password=True),
+        prepare_database(engine),
+    )
     # One worker, always. Two processes would each keep their own rate limits
     # and their own scheduler, so the nightly jobs would run twice and the
     # limits would be twice as loose. There is no flag for more on purpose.
@@ -220,7 +236,15 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
 
     run = commands.add_parser("serve", help="run the API on a SQLite file")
-    run.add_argument("--data-dir", default="chronos-data", help="where the database lives")
+    run.add_argument(
+        "--data-dir",
+        default="chronos-data",
+        help="where the signing key lives, and the SQLite file when there is no --database-url",
+    )
+    run.add_argument(
+        "--database-url",
+        help="a PostgreSQL URL; without one the engine uses a SQLite file in --data-dir",
+    )
     run.add_argument("--host", default="127.0.0.1", help="address to listen on")
     run.add_argument("--port", type=int, default=8000)
     run.add_argument("--log-level", default="info")
@@ -231,7 +255,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.set_defaults(handler=serve)
 
-    copy = commands.add_parser("backup", help="copy the database while it runs")
+    copy = commands.add_parser(
+        "backup", help="copy the SQLite file while it runs (on PostgreSQL, use pg_dump)"
+    )
     copy.add_argument("--data-dir", default="chronos-data")
     copy.add_argument("--to", required=True, help="new file to write the copy to")
     copy.set_defaults(handler=backup)

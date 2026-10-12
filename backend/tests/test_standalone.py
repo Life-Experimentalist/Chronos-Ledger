@@ -120,6 +120,46 @@ def test_a_newer_file_is_refused(file_engine):
         standalone.prepare_database(file_engine)
 
 
+def test_postgresql_is_built_by_the_migrations_never_from_the_models(monkeypatch):
+    """The exclusion constraints exist only in the migrations.
+
+    A PostgreSQL schema made by create_all would take bookings that overlap,
+    so an empty PostgreSQL database must go through alembic like the
+    container's does.
+    """
+    import sqlalchemy
+
+    from app.core import migrations
+    from app.core.database import Base
+
+    monkeypatch.setattr(migrations, "unknown_revision_message", lambda engine: None)
+    monkeypatch.setattr(migrations, "database_revision", lambda engine: None)
+    monkeypatch.setattr(
+        sqlalchemy, "inspect", lambda engine: SimpleNamespace(has_table=lambda name: False)
+    )
+    upgraded = []
+    monkeypatch.setattr(standalone, "_upgrade", upgraded.append)
+
+    def _refuse(*args, **kwargs):
+        raise AssertionError("create_all ran against PostgreSQL")
+
+    monkeypatch.setattr(Base.metadata, "create_all", _refuse)
+    engine = SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
+
+    assert standalone.prepare_database(engine) == "created"
+    assert upgraded == [engine]
+
+
+def test_a_database_url_is_used_instead_of_the_file(data_dir, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://left-over/from-a-container")
+    data_dir.mkdir()
+
+    standalone.configure_environment(data_dir, "postgresql://localhost/chronos")
+
+    assert os.environ["DATABASE_URL"] == "postgresql://localhost/chronos"
+    assert os.environ["REDIS_URL"] == "memory://"
+
+
 def test_the_environment_points_at_the_data_directory(data_dir, monkeypatch):
     for name in ("DATABASE_URL", "REDIS_URL", "APP_ENV", "JWT_SECRET_SIGNING_KEY"):
         monkeypatch.delenv(name, raising=False)
@@ -287,6 +327,19 @@ def test_serve_prepares_the_file_then_runs_one_worker(tmp_path, monkeypatch):
     assert options["host"] == "127.0.0.1"
     assert options["proxy_headers"] is False
     assert (tmp_path / "d" / standalone.SIGNING_KEY_FILE).exists()
+
+
+def test_serve_passes_a_database_url_through(tmp_path, monkeypatch):
+    monkeypatch.setattr(standalone, "prepare_database", lambda engine: "current")
+    import uvicorn
+
+    monkeypatch.setattr(uvicorn, "run", lambda app, **options: None)
+    seen = []
+    monkeypatch.setattr(standalone, "configure_environment", lambda data_dir, url: seen.append(url))
+
+    standalone.main(["serve", "--data-dir", str(tmp_path), "--database-url", "postgresql://h/db"])
+
+    assert seen == ["postgresql://h/db"]
 
 
 def test_a_synced_folder_is_warned_about(tmp_path, caplog):

@@ -31,9 +31,14 @@ against.
 |---|---|---|
 | 0.13 | Platform: contract check, hardening, `chronos` CLI and channels, first SDKs, ledger range queries, audit log | No |
 | 0.14 | Roles renamed, guest desk (visit expiry, configurable approver, change feed), federated identity | Yes |
-| 0.15 | Standalone engine (one SQLite file, no Docker or Redis); engine, part 1: resource modes, conflict report, rolling horizon, Go and Rust SDKs, Helm | Additive |
+| 0.15 | Standalone engine (no Docker or Redis, on a local PostgreSQL or a SQLite file), PostgreSQL in CI; engine, part 1: resource modes, conflict report, rolling horizon, Go and Rust SDKs, Helm | Additive |
 | 0.16 | Engine, part 2: recurrence rules, editable timetable, exclusion on instances | Yes |
+| Designed, waiting for approval | Integration contract: error codes, idempotency on every write, export and import, per-organization uniqueness | Mostly additive |
 | Waiting on a decision | Webhooks, activities CRUD, reservation external reference | n/a |
+
+PostgreSQL is the database Chronos is designed for. SQLite exists so the
+engine can be tried and tested with no setup; a behaviour that works only on
+SQLite is a bug, and no PostgreSQL design is bent to suit it.
 
 Detailed designs: [distribution.md](distribution.md) for installers, channels,
 drift and signing; [sdks.md](sdks.md) for client libraries;
@@ -141,15 +146,18 @@ against the spec. Publishing to npm and PyPI is added on request.
 
 ## 0.15: Standalone engine
 
-### S-1. `chronos-engine`: one process, one SQLite file
+### S-1. `chronos-engine`: one process, no Docker, no Redis
 
-- **Scope:** run the same HTTP API as the container with no Docker, no
-  PostgreSQL and no Redis, for a program that embeds Chronos on the same
-  machine. `chronos-engine serve` and `chronos-engine backup`, SQLite in WAL
-  mode with every transaction opened by `BEGIN IMMEDIATE` (standing in for
-  row locks and the exclusion constraint), rate limits and the replay cache
-  in memory, the WAL folded into the file on a clean stop, and a wheel that
-  carries its own migrations. Migrations from 030 on run on both databases.
+- **Scope:** run the same HTTP API as the container with no Docker and no
+  Redis, for a program that embeds Chronos on the same machine.
+  `chronos-engine serve --database-url` points it at a local PostgreSQL, whose
+  schema is built by the migrations so the exclusion constraints are there.
+  Without a URL it uses a SQLite file for trials and tests: WAL mode with
+  every transaction opened by `BEGIN IMMEDIATE` (standing in for row locks and
+  the exclusion constraint), the WAL folded into the file on a clean stop, and
+  `chronos-engine backup`. Rate limits and the replay cache live in memory,
+  and the wheel carries its own migrations. Migrations from 030 on are kept
+  runnable on SQLite as a best effort.
 - **Touches:** `backend/app/standalone.py`, `backend/app/core/database.py`,
   `backend/app/core/redis_client.py`, `backend/app/core/migrations.py`,
   `backend/app/main.py`, `backend/alembic/env.py`, `backend/pyproject.toml`,
@@ -167,6 +175,17 @@ against the spec. Publishing to npm and PyPI is added on request.
 - **Touches:** `.github/workflows/ci.yml`.
 - **Done when:** a migration using a PostgreSQL-only operation without the
   dialect guard fails the job.
+
+### S-3. The PostgreSQL tests run in CI
+
+- **Scope:** the main suite runs on in-memory SQLite, so the tests that prove
+  the no-overlap guarantees (the `*_pg.py` files: exclusion constraints, one
+  ledger day per slot, refresh-token families, booking races) skipped in CI.
+  A job now starts PostgreSQL 17, the version the compose files run, and runs
+  each of those files against an empty database of its own.
+- **Touches:** `.github/workflows/ci.yml`.
+- **Done when:** the job is green and none of those tests skip.
+- **Status:** added on `feat/standalone-engine`.
 
 ---
 
@@ -260,6 +279,80 @@ in CI against it, versioned with the server's tags.
   no-overlap guarantee moves entirely to materialized instances, and
   template-level checks expand rules in the application before saving.
 - **Done when:** two rules that only collide on one date in the horizon are refused at save time and cannot be forced in through the ledger.
+
+---
+
+## Integration contract (designed, waiting for approval)
+
+The HTTP contract is what integrators build against, from any language, so
+it has to be predictable enough to code against without reading Chronos
+source. These items are designed but not built; the maintainer decides
+whether and when.
+
+### C-1. A stable error code on every error
+
+- **Scope:** every error body gains a machine `code` (`RESOURCE_CONFLICT`,
+  `IDEMPOTENCY_KEY_REUSED`, `SCOPE_MISSING`, `NOT_FOUND`, ...) beside the
+  human `detail`, which stays. Codes are listed in `docs/openapi.yaml` as an
+  enum and never renamed; a new failure gets a new code. The 409 conflict body
+  keeps its `conflicts` list.
+- **Touches:** a small error type and handler in `backend/app/main.py`, the
+  `HTTPException` raises in `backend/app/api/v1/endpoints/`, `docs/api.md`,
+  `docs/openapi.yaml`, the SDKs' error types.
+- **Done when:** a test walks every route's documented errors and finds a
+  listed code on each; the contract check fails on an unlisted code.
+- **Breaking:** no; `detail` is unchanged.
+
+### C-2. Idempotency-Key on every write
+
+- **Scope:** today only reservation create takes `Idempotency-Key`. Every
+  `POST`, `PATCH` and `DELETE` accepts it. A new table keeps, per API key or
+  user, the key, a hash of the request, the status and the stored response,
+  for a retention window (24 hours by default). A repeat with the same body
+  returns the stored response; the same key with a different body is a 409
+  with `IDEMPOTENCY_KEY_REUSED`. Two concurrent first uses are settled by the
+  table's unique constraint. Reservation create keeps its current behaviour
+  and moves onto the shared mechanism; its key, globally unique today,
+  becomes unique per caller.
+- **Touches:** a model and a migration, a new
+  `backend/app/core/idempotency.py` dependency applied to write routes,
+  `backend/app/api/v1/endpoints/resources.py`, a cleanup in the nightly job.
+- **Done when:** retrying any write after a dropped response neither
+  duplicates nor fails; a concurrent double submit gives one effect.
+
+### C-3. Export and import
+
+- **Scope:** a versioned, documented archive of an organization's data
+  (units, people, resources, cycles, slots, enrollments, ledger, reservations,
+  holds, absences, audit) as JSON Lines with a manifest carrying the format
+  version and the migration revision. `GET /api/v1/admin/export` and
+  `chronos-engine export`; `chronos-engine import` into an empty database.
+  Secrets (password hashes, API key hashes, the signing key) are left out
+  unless asked for. The same archive moves data between SQLite and
+  PostgreSQL.
+- **Touches:** a new `backend/app/services/portability.py`, an admin route,
+  `backend/app/standalone.py`, a doc page for the format.
+- **Done when:** export, import into an empty PostgreSQL, export again gives
+  the same archive; an archive from an older format version imports or is
+  refused with a clear message.
+
+### C-4. Uniqueness scoped to an organization
+
+- **Scope:** today one deployment serves one hospital: there is no
+  organization record, and some keys are unique across the whole database
+  (`Resource.code` is the main one). Before 1.0, an organization table is
+  added, existing data migrates into one default organization, every such key
+  becomes unique per organization, and every query is filtered by the
+  caller's organization, so several hospitals can share one deployment
+  without colliding.
+- **Touches:** a new model and migration, an `organization_id` on the
+  scoped tables and in each affected constraint (the exclusion constraints
+  included), `backend/app/core/security.py` to carry the caller's
+  organization, the query helpers that load by code.
+- **Done when:** two organizations can each create room `101` and book it at
+  the same time; neither can read or book the other's.
+- **Breaking:** for anyone relying on a code being unique across
+  organizations.
 
 ---
 
