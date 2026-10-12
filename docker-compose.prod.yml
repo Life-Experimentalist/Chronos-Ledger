@@ -200,6 +200,37 @@ services:
         max-size: "5m"
         max-file: "2"
 
+  # ── Cloudflare Tunnel (optional, profile "tunnel") ─────────────────────────
+  # Off until the profile is on (COMPOSE_PROFILES=tunnel in .env, or --profile
+  # tunnel). For a host program on another machine that has to reach Chronos
+  # with no inbound port open here: cloudflared dials out to Cloudflare, and
+  # requests for the tunnel's hostname come back down that connection to
+  # chronos-proxy, so this service publishes nothing. The token is a credential
+  # and comes only from .env. docs/deployment.md, "Cloudflare Tunnel".
+  # docker-compose.tunnel.yml takes the proxy's host ports away for a machine
+  # whose only way in is the tunnel.
+  chronos-tunnel:
+    <<: [*restart, *chronos-net]
+    image: cloudflare/cloudflared:2026.10.0
+    profiles:
+      - tunnel
+    command: tunnel --no-autoupdate run
+    environment:
+      # cloudflared reads the token under this name, which keeps it off the
+      # command line. Not :? like the secrets above: compose interpolates
+      # the whole file before it looks at profiles, so a required marker
+      # here would stop every deploy, tunnel or not. An empty token makes
+      # cloudflared exit and say so.
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      chronos-proxy:
+        condition: service_started
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
 volumes:
   chronos_data:
     driver: local

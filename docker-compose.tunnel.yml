@@ -1,0 +1,19 @@
+# Copyright 2026 Chronos Ledger Contributors
+# Licensed under the Apache License, Version 2.0
+#
+# Takes the edge proxy's host ports away, for a machine whose only way in is
+# the Cloudflare Tunnel. Add it after whichever compose file is in use:
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.tunnel.yml up -d
+#
+# A separate file because a later compose file appends to `ports` rather than
+# replacing them, so `ports: []` in an override is a no-op, and EDGE_HTTP_PORT
+# can move a mapping but not remove one. `!reset` is the one way Compose
+# offers, and it needs Compose 2.24 or newer. The tunnel itself is the
+# "tunnel" profile in the main compose files; this file is independent of it,
+# so a stack can run the tunnel and still serve the LAN on 80 and 443 by
+# leaving this file out. docs/deployment.md, "Cloudflare Tunnel".
+
+services:
+  chronos-proxy:
+    ports: !reset []
