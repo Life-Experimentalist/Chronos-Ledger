@@ -10,6 +10,9 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # So a branch without a pull request can be checked by hand. Publishing
+  # stays gated on a push to main below.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
