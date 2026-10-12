@@ -31,7 +31,7 @@ against.
 |---|---|---|
 | 0.13 | Platform: contract check, hardening, `chronos` CLI and channels, first SDKs, ledger range queries, audit log | No |
 | 0.14 | Roles renamed, guest desk (visit expiry, configurable approver, change feed), federated identity | Yes |
-| 0.15 | Standalone engine (no Docker or Redis, on a local PostgreSQL or a SQLite file), PostgreSQL in CI; engine, part 1: resource modes, conflict report, rolling horizon, Go and Rust SDKs, Helm | Additive |
+| 0.15 | Standalone engine (no Docker or Redis, on a local PostgreSQL or a SQLite file), embedded flavour for a host program, PostgreSQL in CI; engine, part 1: resource modes, conflict report, rolling horizon, Go and Rust SDKs, Helm | Additive |
 | 0.16 | Engine, part 2: recurrence rules, editable timetable, exclusion on instances | Yes |
 | Designed, waiting for approval | Integration contract: error codes, idempotency on every write, export and import, per-organization uniqueness | Mostly additive |
 | Waiting on a decision | Webhooks, activities CRUD, reservation external reference | n/a |
@@ -58,14 +58,16 @@ drift and signing; [sdks.md](sdks.md) for client libraries;
 - **Done when:** removing a route from the YAML fails CI, and every operation
   has an `operationId` of the form `<area>.<verb>`.
 
-### P-2. Health reports version and migration revision
+### P-2. Health reports version and schema version
 
-- **Scope:** `/health` returns `version` and `migration_revision`. The backend
-  refuses to start, with one clear message, when the database revision is
-  newer than the code knows.
-- **Touches:** `backend/app/main.py`, `backend/Dockerfile` start command.
-- **Done when:** a test starting against a database stamped with an unknown
-  revision exits non-zero with that message instead of retrying.
+- **Scope:** `/health` returns `version` and `schema_version`, a constant in
+  `backend/app/core/schema.py` the maintainers bump when the models change.
+- **Touches:** `backend/app/main.py`, `backend/app/core/schema.py`.
+- **Done when:** `/health` carries both and a test checks it.
+- **Status:** shipped. It first reported the migration revision, and refused
+  to start on a database migrated by a newer release; both went with the
+  migrations. There are none before the first real deployment, and a release
+  does not upgrade the database the one before it made.
 
 ### P-3. Readiness depends only on what must be up
 
@@ -136,7 +138,7 @@ against the spec. Publishing to npm and PyPI is added on request.
   `audit:read`.
 - **Not in scope:** before and after snapshots of the changed rows. The path
   and status say what was done; the rows say what it is now.
-- **Touches:** a new model and migration, `backend/app/main.py` middleware,
+- **Touches:** a new model, `backend/app/main.py` middleware,
   `backend/app/core/security.py`, a new `audit` router, `docs/api.md`,
   `docs/openapi.yaml`.
 - **Done when:** a login, a reservation and a refused write each leave one
@@ -151,30 +153,27 @@ against the spec. Publishing to npm and PyPI is added on request.
 - **Scope:** run the same HTTP API as the container with no Docker and no
   Redis, for a program that embeds Chronos on the same machine.
   `chronos-engine serve --database-url` points it at a local PostgreSQL, whose
-  schema is built by the migrations so the exclusion constraints are there.
-  Without a URL it uses a SQLite file for trials and tests: WAL mode with
-  every transaction opened by `BEGIN IMMEDIATE` (standing in for row locks and
-  the exclusion constraint), the WAL folded into the file on a clean stop, and
-  `chronos-engine backup`. Rate limits and the replay cache live in memory,
-  and the wheel carries its own migrations. Migrations from 030 on are kept
-  runnable on SQLite as a best effort.
+  schema is built from the models, exclusion constraints included. Without a
+  URL it uses a SQLite file for trials and tests: WAL mode with every
+  transaction opened by `BEGIN IMMEDIATE` (standing in for row locks and the
+  exclusion constraint), the WAL folded into the file on a clean stop, and
+  `chronos-engine backup`. Rate limits and the replay cache live in memory.
 - **Touches:** `backend/app/standalone.py`, `backend/app/core/database.py`,
-  `backend/app/core/redis_client.py`, `backend/app/core/migrations.py`,
-  `backend/app/main.py`, `backend/alembic/env.py`, `backend/pyproject.toml`,
-  `docs/standalone.md`.
+  `backend/app/core/redis_client.py`, `backend/app/core/schema.py`,
+  `backend/app/main.py`, `backend/pyproject.toml`, `docs/standalone.md`.
 - **Done when:** 40 concurrent overlapping bookings give one `201` and 39
-  `409`; a file made by one release is upgraded by the next; an installed
-  wheel starts on a fresh folder. Built on `feat/standalone-engine`, merged
-  after the 0.14 tag.
+  `409`; an installed wheel starts on a fresh folder. Built on
+  `feat/standalone-engine`, merged after the 0.14 tag.
 
-### S-2. CI upgrades a SQLite file
+### S-2. CI upgrades a SQLite file (dropped)
 
 - **Scope:** a CI job builds a standalone file with the previous tag's wheel,
   then starts the current code on it, so a migration that only works on
   PostgreSQL fails the build instead of a user's upgrade.
-- **Touches:** `.github/workflows/ci.yml`.
-- **Done when:** a migration using a PostgreSQL-only operation without the
-  dialect guard fails the job.
+- **Status:** dropped. There are no migrations before the first real
+  deployment: the models are the schema, and a release does not upgrade the
+  database the one before it made, so there is no upgrade to test. Comes
+  back with the migrations.
 
 ### S-3. The PostgreSQL tests run in CI
 
@@ -186,6 +185,26 @@ against the spec. Publishing to npm and PyPI is added on request.
 - **Touches:** `.github/workflows/ci.yml`.
 - **Done when:** the job is green and none of those tests skip.
 - **Status:** added on `feat/standalone-engine`.
+
+### S-4. The integrated flavour: `chronos-engine embedded`
+
+- **Scope:** Chronos as a hidden child process of a host program, which
+  starts it, reads one ready line from stdout for the port, and talks to it
+  over loopback with a shared secret and the caller's identity in headers
+  (`Authorization: Host`, `X-Chronos-Actor`, `X-Chronos-Actor-Role`). No
+  Chronos logins: the routes for sessions, passwords, API keys, feed tokens
+  and federation are not mounted, and accounts are made as the host asserts
+  them. On the host's PostgreSQL, Chronos keeps to one schema of its own
+  (`--schema`), so the host's tables are never touched. The process exits
+  when the host does (stdin EOF, or `--parent-pid`). `serve` and the
+  container are unchanged.
+- **Touches:** `backend/app/embedded.py`, `backend/app/core/host_identity.py`,
+  `backend/app/core/database.py`, `backend/app/standalone.py`,
+  `docs/embedded.md`.
+- **Done when:** the SQLite tests cover the secret, the actor mapping and
+  the stripped routes; `tests/test_embedded_pg.py` proves that every table
+  and constraint lands in the named schema next to a host table of the same
+  name. Built on `feat/integrated-flavour`.
 
 ---
 
@@ -234,11 +253,11 @@ This release lets a resource be consumed in three ways.
   `target_absence_date`. Approving it marks the requester's ledger rows
   `ON_LEAVE` on every day in the range, and reversing it restores them. A
   request without `end_date` behaves as today.
-- **Touches:** `ReverseRsvpLog` model and a migration, the absence schema,
+- **Touches:** `ReverseRsvpLog` model, the absence schema,
   `backend/app/services/reverse_rsvp.py`, `docs/api.md`, `docs/openapi.yaml`.
 - **Done when:** approving a three-day request marks three days of rows and
   reversing it restores them; single-day requests pass their existing tests.
-- **Status:** shipped ahead of plan, migration 022.
+- **Status:** shipped ahead of plan.
 
 ### E-4. Go and Rust SDKs, Helm chart, deb/rpm
 
@@ -314,7 +333,7 @@ whether and when.
   table's unique constraint. Reservation create keeps its current behaviour
   and moves onto the shared mechanism; its key, globally unique today,
   becomes unique per caller.
-- **Touches:** a model and a migration, a new
+- **Touches:** a model, a new
   `backend/app/core/idempotency.py` dependency applied to write routes,
   `backend/app/api/v1/endpoints/resources.py`, a cleanup in the nightly job.
 - **Done when:** retrying any write after a dropped response neither
@@ -325,7 +344,7 @@ whether and when.
 - **Scope:** a versioned, documented archive of an organization's data
   (units, people, resources, cycles, slots, enrollments, ledger, reservations,
   holds, absences, audit) as JSON Lines with a manifest carrying the format
-  version and the migration revision. `GET /api/v1/admin/export` and
+  version and the schema version. `GET /api/v1/admin/export` and
   `chronos-engine export`; `chronos-engine import` into an empty database.
   Secrets (password hashes, API key hashes, the signing key) are left out
   unless asked for. The same archive moves data between SQLite and
@@ -345,7 +364,7 @@ whether and when.
   becomes unique per organization, and every query is filtered by the
   caller's organization, so several hospitals can share one deployment
   without colliding.
-- **Touches:** a new model and migration, an `organization_id` on the
+- **Touches:** a new model, an `organization_id` on the
   scoped tables and in each affected constraint (the exclusion constraints
   included), `backend/app/core/security.py` to carry the caller's
   organization, the query helpers that load by code.
@@ -355,6 +374,22 @@ whether and when.
   organizations.
 
 ---
+
+## Host clock
+
+A simulation host that embeds the engine can run it on a clock of its own.
+`CLOCK_MODE=host` freezes the application's time at `CLOCK_START`, the
+nightly jobs run as the host advances the clock rather than on a schedule,
+and `ID_SEED` makes the non-secret identifiers repeat, so the same script
+writes the same rows twice. Nothing changes for a deployment on the default
+system clock. The design, the real-time exceptions and the limits of the
+guarantee are in [clock.md](clock.md). A host program in a separate process
+drives it through the embedded flavour (S-4): `chronos-engine embedded
+--clock-start` starts the process on a host clock, `--id-seed` seeds the
+ids, and `POST /api/v1/clock/advance`, open to the host's own actor
+`system` alone, moves it. The host owns time across restarts by passing the
+saved instant back as `--clock-start`. Neither route exists in `serve` or the
+container ([embedded.md](embedded.md)).
 
 ## Waiting on a decision
 

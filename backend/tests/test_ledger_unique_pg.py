@@ -1,12 +1,11 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
-"""The tests for migration 017 that need a real PostgreSQL.
+"""The tests for uq_daily_ledger_slot_date that need a real PostgreSQL.
 
 The key itself is checked on SQLite too, in test_ledger_generator, because
-create_all builds it from the model. What SQLite cannot show is what the key
-is for: two sessions writing one day at once, where the second has to wait on
-the first's uncommitted row and then find it, and an upgrade meeting a table
-that already has the duplicates.
+create_all builds it from the model there as well. What SQLite cannot show is
+what the key is for: two sessions writing one day at once, where the second
+has to wait on the first's uncommitted row and then find it.
 
 Point TEST_DATABASE_URL at an empty database:
 
@@ -25,10 +24,9 @@ from sqlalchemy import create_engine, delete, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from alembic import command
+from app.core.schema import ensure_schema
 from app.cron.ledger_generator import generate_daily_ledger_entries
 from app.models.db import Activity, DailyLedger, PlanningCycle, StructuralMasterSlot
-from tests.test_admin_rotation_pg import _alembic
 
 DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
@@ -46,9 +44,8 @@ DAY = datetime.date(2031, 3, 4)
 
 @pytest.fixture(scope="module")
 def engine():
-    with _alembic() as config:
-        command.upgrade(config, "head")
     built = create_engine(DATABASE_URL)
+    ensure_schema(built)
     yield built
     built.dispose()
 
@@ -68,7 +65,7 @@ def db(engine):
 
 
 def _slot(db, code):
-    """A slot on DAY's weekday with no room, the case migration 013 never saw."""
+    """A slot on DAY's weekday with no room, which the overlap constraint ignores."""
     cycle = PlanningCycle(
         cycle_label=code,
         date_bounds_start=datetime.date(2031, 1, 1),
@@ -95,8 +92,8 @@ def _slot(db, code):
 def committed(engine):
     """A slot that is really in the table, and taken out again afterwards.
 
-    Committed because the tests that use it open a second session or run
-    alembic, and neither can see into a transaction the test has open.
+    Committed because the test that uses it opens a second session, which
+    cannot see into a transaction the test has open.
     """
     with Session(engine) as session:
         slot = _slot(session, "PG-UNIQUE-COMMITTED")
@@ -132,7 +129,7 @@ def test_the_key_is_actually_on_the_table(db):
             " AND conrelid = 'daily_ledger'::regclass"
         )
     ).scalar()
-    assert found == "u", "migration 017 did not leave a unique key behind"
+    assert found == "u", "create_all did not put the unique key on the table"
 
 
 def test_a_slot_with_no_room_still_gets_one_day_per_date(db):
@@ -194,30 +191,3 @@ def test_two_runs_at_once_write_the_day_once_and_say_nothing(engine, committed, 
         written = check.query(DailyLedger).filter(DailyLedger.master_slot_id == slot_id)
         assert written.count() == 1
     assert "no day written" not in caplog.text
-
-
-def test_the_upgrade_stops_on_a_table_that_already_has_duplicates(engine, committed):
-    """What a database two instances had already raced on looks like.
-
-    Nothing in 017 picks which of two rows to keep, because attendance may be
-    marked against either, so the upgrade has to fail rather than guess.
-    """
-    slot_id, activity_id = committed
-    with _alembic() as config:
-        command.downgrade(config, "016")
-        try:
-            with Session(engine) as session:
-                for _ in range(2):
-                    session.add(
-                        DailyLedger(
-                            target_date=DAY, master_slot_id=slot_id, activity_id=activity_id
-                        )
-                    )
-                session.commit()
-            with pytest.raises(IntegrityError):
-                command.upgrade(config, "017")
-        finally:
-            with Session(engine) as session:
-                session.execute(delete(DailyLedger).where(DailyLedger.master_slot_id == slot_id))
-                session.commit()
-            command.upgrade(config, "head")

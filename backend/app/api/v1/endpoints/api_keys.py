@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.database import get_db
 from app.core.security import generate_api_key, hash_api_key, require_roles
 from app.models.db import WILDCARD_SCOPE, ApiKey, User
@@ -92,7 +93,7 @@ def create_api_key(
     if expires_at is not None:
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=UTC)
-        if expires_at <= datetime.now(UTC):
+        if expires_at <= clock.now():
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="expires_at is in the past; the key would be dead on arrival",

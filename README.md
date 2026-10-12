@@ -150,7 +150,7 @@ Drop a member-centric CSV on the Admin dashboard. One upload creates/updates use
 
 | Layer          | Technology                                                          |
 | -------------- | ------------------------------------------------------------------- |
-| Backend        | Python 3.11 · FastAPI 0.141 · SQLAlchemy 2 · Alembic · APScheduler  |
+| Backend        | Python 3.11 · FastAPI 0.141 · SQLAlchemy 2 · APScheduler            |
 | Auth           | PyJWT 2.14 · bcrypt 5.0 (no CVE-affected packages)                  |
 | Database       | PostgreSQL 17                                                       |
 | Cache / PubSub | Redis 7.4                                                           |
@@ -181,7 +181,6 @@ chronos-ledger/
 │   └── Icon.png            # App icon
 ├── backend/                # FastAPI application (uv managed)
 │   ├── pyproject.toml
-│   ├── alembic/            # DB migrations
 │   └── app/
 │       ├── core/           # Config, DB, security, Redis, WebSocket manager
 │       ├── models/         # SQLAlchemy ORM (9 tables)
@@ -228,8 +227,7 @@ chronos-ledger/
 ```bash
 cd backend
 uv sync                         # install deps (including dev)
-uv run alembic upgrade head     # apply migrations
-uv run uvicorn app.main:app --reload --port 8000
+uv run uvicorn app.main:app --reload --port 8000   # builds the schema on start
 ```
 
 API: `http://localhost:8000` · Swagger: `http://localhost:8000/docs`
@@ -324,6 +322,9 @@ the buildkit attestations that ride along inside the image itself.
 | `FEDERATED_IDENTITY_ENABLED` | optional | Whether a registered outside issuer may vouch for a person, so somebody already signed in there reaches `POST /auth/federated` and arrives here without a second password, default off. Off, the route answers `404` rather than `403`: whether an instance has an integration is not something probing it should reveal. On is not enough on its own, because nothing verifies until an `ORG_ADMIN` registers an issuer and a signing key, and neither admin role can be reached from outside at all. `docs/federated-identity.md` is the design, threat model first. |
 | `FEDERATED_TOKEN_MAX_LIFETIME_SECONDS` | optional | The longest life this instance accepts in one of those notes, in seconds, counted from when it arrives, default 120. The note says how long it should work and this is the second opinion: an issuer that sets that a year out has minted a bearer token for a year. Two minutes is long enough for a browser to hand a note over and short enough that a stolen one is worth little. Refused below 1, because a cap of 0 refuses every note rather than turning anything off. |
 | `FEDERATED_CLOCK_SKEW_SECONDS` | optional | How far this instance and that issuer may disagree about the time before a good note is refused, in seconds, default 60. Not symmetric: a note may have expired this recently, or claim to have been minted this far ahead, and there is no limit on how old it may claim to be because its own expiry already answers that. Widening it widens the window a stolen note can be replayed in by the same amount, so an operator running NTP everywhere can set it lower. Refused below 0. |
+| `CLOCK_MODE`             | optional    | `system`, the default, reads the real clock and runs the nightly jobs on APScheduler. `host` freezes the application's clock at `CLOCK_START` until a host program embedding the engine moves it with `backend/app/cron/scheduled.py::advance`, or with `POST /api/v1/clock/advance` in the embedded flavour (`docs/embedded.md`), which also runs the jobs that came due on the way; APScheduler does not start. For simulation and replay, not for a deployment. `docs/clock.md` says what moves with the clock and what stays on real time. |
+| `CLOCK_START`            | optional    | The instant the host clock starts at, as ISO 8601 with an offset, such as `2026-09-07T08:00:00+00:00`. Required when `CLOCK_MODE=host`, ignored otherwise. Refused without an offset. |
+| `ID_SEED`                | optional    | An integer. Set, the identifiers that are not secrets (a refresh token family id, a federated account id) follow one fixed sequence, so the same script writes the same rows twice. Secrets stay random whatever this is set to. Unset, those identifiers are random. |
 | `DOCS_ENABLED`           | optional    | Whether `/docs`, `/redoc` and `/openapi.json` are served. Blank follows `APP_ENV`: off in production, on everywhere else. Set `true` to publish them from a production instance anyway. |
 | `FORWARDED_ALLOW_IPS`    | optional    | Which upstream addresses uvicorn believes `X-Forwarded-For` from, default `*`. The app container publishes no ports, so nginx is the only way in. The sign-in limit needs it to tell callers apart from the proxy, and the proxy overwrites that header rather than appending to it, so a caller cannot forge an address. |
 | `VAPID_PUBLIC_KEY`       | recommended | Web Push: `npx web-push generate-vapid-keys`               |
@@ -341,8 +342,8 @@ See [`.env.example`](.env.example) for the full template.
 
 ## First Boot Credentials
 
-The Alembic seed migration creates one organization admin. It seeds a hash of a
-random string it throws away, so the account exists, nothing can log into
+The schema step the server runs on start creates one organization admin. It
+seeds a hash of a random string it throws away, so the account exists, nothing can log into
 it, and this repository publishes no password for anyone to find. What the
 first password is comes from your `.env`:
 
@@ -378,6 +379,7 @@ the first login is the only thing it can do: use Admin Portal → Profile
 | [`docs/distribution.md`](docs/distribution.md) | Planned installer, channels, drift handling and signing              |
 | [`docs/sdks.md`](docs/sdks.md)                 | Planned TypeScript, Python, Go and Rust client libraries             |
 | [`docs/federated-identity.md`](docs/federated-identity.md) | Planned sign-in from a registered outside issuer, threat model first |
+| [`docs/clock.md`](docs/clock.md)               | The one clock the backend reads, the host clock a simulation drives, seeded ids |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md)           | Development setup, commit conventions, PR checklist                    |
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)     | Community standards and enforcement                                    |
 | [`SECURITY.md`](SECURITY.md)                   | Vulnerability reporting and disclosure policy                          |

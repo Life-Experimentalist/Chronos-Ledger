@@ -9,7 +9,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core import change_feed
+from app.core import change_feed, clock
 from app.core.database import get_db
 from app.core.pagination import Page
 from app.core.security import get_current_user, require_roles
@@ -40,7 +40,7 @@ ALREADY_TAKEN = "the resource is already taken for part of that window"
 KEY_REUSED = "that Idempotency-Key was used for a different request"
 NOT_YOUR_HOLD = "only the caller that took a hold may cancel it"
 CODE_TAKEN = "a resource with that code already exists"
-# The name migration 010 gave the exclusion constraint. Postgres puts it in
+# The name of the exclusion constraint on reservations. Postgres puts it in
 # the error text, which is how an overlap is told apart from the unique key
 # on the idempotency key: both arrive here as one IntegrityError.
 OVERLAP_CONSTRAINT = "ex_reservations_no_overlap"
@@ -336,8 +336,8 @@ def create_reservation(
 
     The check and the insert are not one atomic step, and two callers can both
     pass the check before either inserts. Hold against hold, that no longer
-    decides anything: migration 010 put an exclusion constraint on the table
-    and the database refuses the second row whatever the timing was. The loser
+    decides anything: the table carries an exclusion constraint and the
+    database refuses the second row whatever the timing was. The loser
     is told 409, the same as if the check had caught it.
 
     Hold against timetable is still the check plus the row lock. A slot lives
@@ -458,7 +458,7 @@ def cancel_reservation(
 
     if reservation.status is not ReservationStatus.CANCELLED:
         reservation.status = ReservationStatus.CANCELLED
-        reservation.cancelled_at = datetime.datetime.now(datetime.UTC)
+        reservation.cancelled_at = clock.now()
         change_feed.record(db, change_feed.RESERVATION, reservation.id, change_feed.UPDATED)
         db.commit()
         db.refresh(reservation)

@@ -1,6 +1,6 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
-"""The tests for migration 013, which cannot run on SQLite.
+"""The tests for ex_daily_ledger_no_overlap, which cannot run on SQLite.
 
 Same reason as test_reservation_overlap_pg: an exclusion constraint is a
 Postgres construct, the rest of the suite builds its schema with create_all
@@ -8,13 +8,13 @@ against in-memory SQLite, and a test written the usual way would pass against
 a table that has no constraint on it.
 
 daily_ledger is the table that puts somebody at a door. Two rows naming one
-room at one hour is two groups arriving at the same place, and until this
-migration nothing in the database said no: the API checked the timetable and
+room at one hour is two groups arriving at the same place, and before this
+constraint nothing in the database said no: the API checked the timetable and
 the bookings before writing a slot, and the nightly job checked for a row it
 had already written, and neither of those is the same as the room being free.
 
-Point TEST_DATABASE_URL at an empty database and these build the schema by
-running the migrations:
+Point TEST_DATABASE_URL at an empty database and these build the schema from
+the models:
 
     TEST_DATABASE_URL=postgresql://user:pass@localhost:5432/chronos_test \\
         pytest tests/test_ledger_overlap_pg.py
@@ -22,6 +22,7 @@ running the migrations:
 
 import datetime
 import os
+from contextlib import contextmanager
 
 import pytest
 from fastapi.testclient import TestClient
@@ -30,7 +31,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.v1.endpoints import schedule
-from app.core.database import get_db
+from app.core.database import get_db, get_session_opener
+from app.core.schema import ensure_schema
 from app.core.security import hash_password
 from app.core.time import org_today
 from app.cron.ledger_generator import generate_daily_ledger_entries
@@ -80,24 +82,9 @@ def _next_monday() -> datetime.date:
 
 @pytest.fixture(scope="module")
 def engine():
-    """A database with the migrations run against it, not create_all."""
-    from alembic.config import Config
-
-    from alembic import command
-
-    previous = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = DATABASE_URL
-    try:
-        config = Config("alembic.ini")
-        config.set_main_option("sqlalchemy.url", DATABASE_URL)
-        command.upgrade(config, "head")
-    finally:
-        if previous is None:
-            os.environ.pop("DATABASE_URL", None)
-        else:
-            os.environ["DATABASE_URL"] = previous
-
+    """The schema the server builds on start, on an empty PostgreSQL."""
     built = create_engine(DATABASE_URL)
+    ensure_schema(built)
     yield built
     built.dispose()
 
@@ -214,7 +201,7 @@ def test_the_constraint_is_actually_on_the_table(db):
             " AND conrelid = 'daily_ledger'::regclass"
         )
     ).scalar()
-    assert found == "x", "migration 013 did not leave an exclusion constraint behind"
+    assert found == "x", "create_all did not put the exclusion constraint on the table"
 
 
 def test_two_days_on_one_room_cannot_share_an_hour(db, room, cycle):
@@ -254,12 +241,13 @@ def test_the_same_window_on_another_date_is_not_a_clash(db, room, cycle):
 
 
 def test_two_days_cannot_share_an_hour_across_midnight(db, room, cycle):
-    """The CASE in the migration, which is the overnight rule a third time.
+    """The CASE in the constraint, which is the overnight rule a third time.
 
     A day running 22:00 to 06:00 finishes on the date after the one it is
     dated, so it and a day dated the next morning at five are one clash on
-    two rows on two dates. window_span says so in Python and migration 010
-    says so for reservations; this says so for generated days.
+    two rows on two dates. window_span says so in Python and
+    ex_reservations_no_overlap says so for reservations; this says so for
+    generated days.
     """
     activity = _activity(db, cycle.id, "PG-NIGHT")
     db.add(_day(activity.id, room.id, MONDAY, 22, 6))
@@ -284,8 +272,8 @@ def test_a_day_may_begin_where_an_overnight_one_ends(db, room, cycle):
 def test_days_with_no_window_do_not_occupy_anything(db, room, cycle):
     """The reason the predicate names the two time columns and not only the room.
 
-    An ad-hoc day has no window by design, and so does every day orphaned
-    before migration 012 gave the table its own times. tsrange(NULL, NULL)
+    An ad-hoc day has no window by design, and so does a day whose slot was
+    deleted before the table carried its own times. tsrange(NULL, NULL)
     is not NULL and overlaps everything, so without the IS NOT NULL clauses
     the first such row would claim the room for all of time and the second
     would be refused:
@@ -447,7 +435,14 @@ def test_the_endpoint_returns_409_when_the_database_refuses_the_propagate(
     def override_get_db():
         yield db
 
+    @contextmanager
+    def override_open_session():
+        # AuditMiddleware records every write in a session of its own. Left
+        # alone it opens one on the configured database_url, not this one.
+        yield db
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_session_opener] = lambda: override_open_session
     try:
         client = TestClient(app)
         token = client.post(
@@ -525,7 +520,14 @@ def test_the_endpoint_refuses_the_move_before_it_writes_anything(db, room, cycle
     def override_get_db():
         yield db
 
+    @contextmanager
+    def override_open_session():
+        # AuditMiddleware records every write in a session of its own. Left
+        # alone it opens one on the configured database_url, not this one.
+        yield db
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_session_opener] = lambda: override_open_session
     try:
         client = TestClient(app)
         token = client.post(

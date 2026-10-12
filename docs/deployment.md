@@ -120,23 +120,23 @@ host already owns those ports, or when Chronos is going behind an outer
 reverse proxy. The container itself always listens on 80 and 443, so
 nothing inside the stack changes.
 
-`/health` names the running release and the migration the database is at,
-which is the quickest way to confirm an upgrade landed:
+`/health` names the running release and the version of the schema its models
+describe, which is the quickest way to confirm an upgrade landed:
 
 ```json
-{"status": "healthy", "service": "chronos-ledger", "version": "0.13.0", "migration_revision": "022"}
+{"status": "healthy", "service": "chronos-ledger", "version": "0.13.0", "schema_version": "1"}
 ```
 
-Migrations only move forward. Going back to an older image after a newer one
-has migrated the database does not work, and the app container says so and
-exits instead of restarting in a loop:
-
-```
-The database is at migration 023, which this version of Chronos Ledger does not know (its newest is 022). ...
-```
-
-Restore the backup taken before the upgrade (see Database Backup), or run the
-newer release again.
+There are no migrations before the first real deployment. The app container
+builds whatever tables are missing when it starts
+(`backend/app/core/schema.py::ensure_schema`) and changes nothing that is
+already there, so a database made by a release with one `schema_version` is
+not upgraded to the next: 0.15 does not upgrade a 0.14 database. When the
+number changes between releases, either restore a backup taken on the
+matching release (see Database Backup) or recreate the database (remove the
+volume, or drop and create it) and start again on an empty one. Several
+replicas may start together on PostgreSQL: the schema step takes a lock, so
+they take turns and the later ones find everything in place.
 
 ### 4. First login
 
@@ -147,7 +147,7 @@ Navigate to `http://<server-ip>` and log in as the administrator:
   `setup.sh` generates one and prints it once, in its summary.
 
 Nothing can log in as the administrator until that variable is set: the
-seed migration stores a hash of a random string it throws away, so there
+schema step stores a hash of a random string it throws away, so there
 is no install-wide password to find. **Choose your own before the server
 is reachable from any network.** Until you have, the account is refused by
 every endpoint except the password change itself, so the first login is
@@ -163,8 +163,7 @@ Wizard, which opens on its own.
 cd backend
 uv sync
 cp .env.example .env          # set DATABASE_URL, REDIS_URL, JWT_SECRET_SIGNING_KEY
-uv run alembic upgrade head
-uv run uvicorn app.main:app --reload --port 8000
+uv run uvicorn app.main:app --reload --port 8000   # builds the schema on start
 
 # Frontend (separate terminal)
 cd frontend
@@ -173,15 +172,16 @@ npm run dev
 ```
 
 The frontend dev server proxies `/api/v1` to `localhost:8000` via `next.config.js`.
-Alembic reads `DATABASE_URL` from the environment, override the `alembic.ini`
-default by exporting `DATABASE_URL` before running migrations.
+`python -m app.core.schema` builds the schema and exits, for anyone who wants
+it done before the server starts; the server runs the same step itself.
 
-Migration 010 runs `CREATE EXTENSION IF NOT EXISTS btree_gist` before it adds
-the constraint that stops two holds overlapping on one resource. On PostgreSQL
-13 and later btree_gist is a trusted extension, so the database owner can
-install it and no superuser is involved. On an older server, or on a managed
-host that restricts extensions, run `CREATE EXTENSION btree_gist;` once as a
-superuser against the target database and then run the migration again.
+The schema step runs `CREATE EXTENSION IF NOT EXISTS btree_gist` before it
+adds the constraints that stop two holds overlapping on one resource. On
+PostgreSQL 13 and later btree_gist is a trusted extension, so the database
+owner can install it and no superuser is involved. On an older server, or on
+a managed host that restricts extensions, run `CREATE EXTENSION btree_gist;`
+once as a superuser against the target database and then start the server
+again.
 
 ---
 
@@ -321,4 +321,4 @@ The FastAPI layer is stateless beyond DB/Redis. To scale horizontally:
 1. Point every instance at the same Redis. Each relays its WebSocket events, and the close that follows a deactivation, through a Redis channel, so a socket gets them whichever instance it is connected to. An instance that cannot reach Redis still reaches its own sockets; the other instances' sockets miss what it sends until Redis is back.
 2. Place a load balancer in front of the app containers. Sticky sessions are not required: a WebSocket can land on any instance.
 3. The PostgreSQL connection pool (`pool_size=10`, `max_overflow=20` in `core/database.py`) handles typical single-organization loads without change. Each process works on at most 30 API requests at once, the size of its pool; the rest wait up to 10 seconds for a slot and then get `503` with `Retry-After`, so a flood slows the app down instead of stalling it.
-4. Every instance runs the nightly ledger job, and the catch-up when it starts. That needs no leader: the database allows one generated day per slot per date (migration 017), and a run that finds another instance got there first skips the day without logging it.
+4. Every instance runs the nightly ledger job, and the catch-up when it starts. That needs no leader: the database allows one generated day per slot per date (`uq_daily_ledger_slot_date`), and a run that finds another instance got there first skips the day without logging it.

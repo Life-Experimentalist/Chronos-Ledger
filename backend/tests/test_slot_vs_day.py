@@ -16,9 +16,9 @@ their room and their hour.
 
 Either way the room reads as free to the availability endpoint and the
 database refuses the second row anyway. Being refused with a 409 that names
-what is in the way is the point of these tests; migration 013 is what makes
-the refusal true rather than merely polite, and test_ledger_overlap_pg
-covers that end. Everything here is a query and some Python, so it runs on
+what is in the way is the point of these tests; ex_daily_ledger_no_overlap is
+what makes the refusal true rather than merely polite, and
+test_ledger_overlap_pg covers that end. Everything here is a query and some Python, so it runs on
 SQLite, which is the suite CI actually runs.
 
 A CSV upload is the third way a slot reaches the database, and the one

@@ -624,8 +624,8 @@ def test_a_taken_address_in_a_different_case_is_still_taken(federation, db, on_f
     An exact match here would let an issuer step past the refusal by sending
     one capital letter, and land a second account whose address reads the same
     as an administrator's. The row goes in as raw SQL because every writer
-    folds now: an account that actually holds a capital is one made before
-    migration 029, and that is the only shape the second direction is real in.
+    folds now: an account that actually holds a capital is one made before the
+    writers folded, and that is the only shape the second direction is real in.
     """
     db.execute(
         text(
@@ -767,8 +767,8 @@ def test_the_link_is_declared_to_go_with_the_account(federation, db):
     """Checked as a declaration, because SQLite is not enforcing it here.
 
     These tests run on SQLite with foreign keys off, so deleting a user does
-    not actually cascade in this process; the enforcement lives in migration
-    028 on Postgres. What is worth pinning here is that the declaration says
+    not actually cascade in this process; Postgres is what enforces the
+    declaration. What is worth pinning here is that the declaration says
     CASCADE, since a link left pointing at a deleted account would refuse that
     person forever (the test below) instead of letting them arrive as somebody
     new.

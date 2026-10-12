@@ -593,8 +593,8 @@ def test_the_link_is_declared_to_go_with_its_issuer(client, admin, db):
 
     There is no ORM relationship from the issuer to its links, and these tests
     run on SQLite with foreign keys off, so deleting the registration in this
-    process leaves the link row behind. The enforcement lives in migration 028
-    on Postgres, and what is worth pinning is that the column says CASCADE: a
+    process leaves the link row behind. Postgres is what enforces the
+    declaration, and what is worth pinning is that the column says CASCADE: a
     link pointing at a deleted issuer would refuse that person forever.
     """
     issuer_fk = next(iter(FederatedIdentity.__table__.c.issuer_id.foreign_keys))

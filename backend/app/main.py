@@ -15,20 +15,26 @@ from sqlalchemy import text
 from sqlalchemy.exc import TimeoutError as PoolTimeout
 
 from app.api.v1.router import api_router
+from app.core import clock
 from app.core.audit import AuditMiddleware
 from app.core.bootstrap import apply_initial_admin_password
 from app.core.concurrency import ConcurrencyGate
 from app.core.config import docs_are_published, get_settings
 from app.core.database import POOL_CAPACITY, SessionLocal, engine, is_sqlite
-from app.core.migrations import database_revision, unknown_revision_message
 from app.core.pagination import TOTAL_COUNT_HEADER
 from app.core.redis_client import get_redis, is_memory
-from app.core.time import org_now, org_timezone, org_tomorrow
+from app.core.schema import SCHEMA_VERSION, ensure_schema
+from app.core.time import org_timezone
 from app.core.websocket_manager import socket_broker
-from app.cron.guest_overstay import announce_overstayed_visits
-from app.cron.guest_retention import purge_old_guest_check_ins
-from app.cron.ledger_generator import generate_daily_ledger_entries, missed_ledger_dates
-from app.cron.refresh_token_cleanup import purge_expired_refresh_tokens
+from app.cron.scheduled import (
+    NIGHTLY_LEDGER_HOUR,
+    OVERSTAY_INTERVAL,
+    announce_guest_overstays,
+    catch_up_ledger,
+    purge_guest_check_ins,
+    purge_refresh_tokens,
+    run_ledger_generator,
+)
 
 settings = get_settings()
 # Pinned to the organization's zone, not the container's. Unpinned, "23:00"
@@ -43,23 +49,48 @@ settings = get_settings()
 # catch-up job is due the moment it is added, before the scheduler starts,
 # so it leans on this as well.
 scheduler = AsyncIOScheduler(timezone=org_timezone(), job_defaults={"misfire_grace_time": 1800})
-NIGHTLY_LEDGER_HOUR = 23
-# Read once at startup, so /health can report it without touching the database.
-migration_state: dict[str, str | None] = {"revision": None}
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    _check_the_database_revision()
+    # Before the admin account is opened, because on an empty database the
+    # schema step is what puts that account there.
+    logging.getLogger(__name__).info("Schema %s: %s", SCHEMA_VERSION, ensure_schema(engine))
     _open_the_admin_account()
     if is_memory(settings.redis_url):
         # Now rather than at the first rate-limited request, so a missing
         # standalone extra stops the process with a message instead of
         # failing sign-ins one at a time.
         get_redis()
+    if clock.is_host():
+        # A host clock moves only when the host says so, and the jobs run
+        # from cron/scheduled.py::run_due_jobs as it moves. The catch-up still
+        # happens once, so the day the clock starts in has its rows.
+        catch_up_ledger()
+    else:
+        _start_the_scheduler()
+    # Socket events and closes for people connected to another instance, and
+    # the presence the connection count reads. Harmless with one instance, and
+    # skipped where Redis is this process's own memory: there is only one
+    # instance and nobody else to hear it.
+    relay = None
+    if not is_memory(settings.redis_url):
+        relay = asyncio.create_task(socket_broker.run_relay(settings.redis_url))
+    yield
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
+    if relay is not None:
+        relay.cancel()
+        with suppress(asyncio.CancelledError):
+            await relay
+    if is_sqlite(settings.database_url):
+        _fold_the_write_ahead_log()
+
+
+def _start_the_scheduler():
     # Schedule nightly ledger generation at 23:00
     scheduler.add_job(
-        _run_ledger_generator,
+        run_ledger_generator,
         "cron",
         hour=NIGHTLY_LEDGER_HOUR,
         minute=0,
@@ -67,10 +98,10 @@ async def lifespan(_app: FastAPI):
         replace_existing=True,
     )
     # Once, now: whatever the nightly job missed while this process was down.
-    scheduler.add_job(_catch_up_ledger, id="ledger_catch_up", replace_existing=True)
+    scheduler.add_job(catch_up_ledger, id="ledger_catch_up", replace_existing=True)
     # Daily, away from the ledger run.
     scheduler.add_job(
-        _purge_refresh_tokens,
+        purge_refresh_tokens,
         "cron",
         hour=3,
         minute=0,
@@ -79,7 +110,7 @@ async def lifespan(_app: FastAPI):
     )
     # Daily, after the token purge. Deletes nothing while GUEST_RETENTION_DAYS is 0.
     scheduler.add_job(
-        _purge_guest_check_ins,
+        purge_guest_check_ins,
         "cron",
         hour=3,
         minute=30,
@@ -92,51 +123,20 @@ async def lifespan(_app: FastAPI):
     # which is a short list or an empty one. Announces nothing while
     # GUEST_VISIT_LENGTH_MINUTES is 0, since then no visit has an end.
     scheduler.add_job(
-        _announce_guest_overstays,
+        announce_guest_overstays,
         "interval",
-        minutes=5,
+        seconds=int(OVERSTAY_INTERVAL.total_seconds()),
         id="guest_overstay_notice",
         replace_existing=True,
     )
     scheduler.start()
-    # Socket events and closes for people connected to another instance, and
-    # the presence the connection count reads. Harmless with one instance, and
-    # skipped where Redis is this process's own memory: there is only one
-    # instance and nobody else to hear it.
-    relay = None
-    if not is_memory(settings.redis_url):
-        relay = asyncio.create_task(socket_broker.run_relay(settings.redis_url))
-    yield
-    scheduler.shutdown(wait=False)
-    if relay is not None:
-        relay.cancel()
-        with suppress(asyncio.CancelledError):
-            await relay
-    if is_sqlite(settings.database_url):
-        _fold_the_write_ahead_log()
-
-
-def _check_the_database_revision():
-    """Refuse to start on a database migrated by a newer release.
-
-    The container start command runs the same check before alembic, so this
-    matters for a process started some other way. Raising here stops uvicorn
-    with the message rather than serving requests against a schema this code
-    does not know.
-    """
-    message = unknown_revision_message(engine)
-    if message:
-        logging.getLogger(__name__).critical(message)
-        raise RuntimeError(message)
-    migration_state["revision"] = database_revision(engine)
 
 
 def _open_the_admin_account():
     """Apply INITIAL_ADMIN_PASSWORD before the first request arrives.
 
-    Here rather than in the migration because a migration cannot read the
-    application's settings, and the container runs alembic before uvicorn
-    binds, so by the time this runs the seeded row exists.
+    Here rather than in the schema step because that step knows nothing of the
+    application's settings, and it has already run, so the seeded row exists.
 
     Failures are logged and swallowed on purpose. Nothing here is load
     bearing for a running instance: the consequence of skipping it is that
@@ -174,60 +174,6 @@ def _fold_the_write_ahead_log():
             connection.close()
     except Exception:
         logging.getLogger(__name__).exception("Could not checkpoint the SQLite write-ahead log.")
-
-
-def _run_ledger_generator():
-    tomorrow = org_tomorrow()
-    db = SessionLocal()
-    try:
-        generate_daily_ledger_entries(tomorrow, db)
-    finally:
-        db.close()
-
-
-def _catch_up_ledger():
-    """Write the days the nightly job would have written while nothing ran.
-
-    The scheduler forgets a run it missed across a restart, so a deploy over
-    23:00 left tomorrow empty until somebody called generate-ledger by hand.
-    missed_ledger_dates says which dates, and why never earlier ones.
-
-    Every instance does this when it starts, and two at once is safe: the
-    database refuses a second day for one slot and date, and the run that
-    loses skips it without a word.
-    """
-    db = SessionLocal()
-    try:
-        for day in missed_ledger_dates(org_now(), NIGHTLY_LEDGER_HOUR):
-            generate_daily_ledger_entries(day, db)
-    finally:
-        db.close()
-
-
-def _purge_refresh_tokens():
-    db = SessionLocal()
-    try:
-        purge_expired_refresh_tokens(db)
-    finally:
-        db.close()
-
-
-def _purge_guest_check_ins():
-    db = SessionLocal()
-    try:
-        purge_old_guest_check_ins(db, settings.guest_retention_days)
-    finally:
-        db.close()
-
-
-async def _announce_guest_overstays():
-    # Async, unlike its neighbours: the notice goes out over the socket, which
-    # belongs to this loop, and the scheduler runs in the same process.
-    db = SessionLocal()
-    try:
-        await announce_overstayed_visits(db)
-    finally:
-        db.close()
 
 
 # Off in production unless DOCS_ENABLED says otherwise. All three go
@@ -281,7 +227,7 @@ async def health_check():
         "status": "healthy",
         "service": "chronos-ledger",
         "version": app.version,
-        "migration_revision": migration_state["revision"],
+        "schema_version": SCHEMA_VERSION,
     }
 
 

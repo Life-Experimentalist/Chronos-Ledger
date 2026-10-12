@@ -1,16 +1,16 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
-"""The tests for migration 010, which cannot run on SQLite.
+"""The tests for ex_reservations_no_overlap, which cannot run on SQLite.
 
 The rest of the suite builds its schema with create_all against an in-memory
 SQLite database. That is fast and it is blind to this: an exclusion constraint
-is a Postgres construct, SQLite has none, and create_all does not run
-migrations anyway. A test written the usual way would pass against a table
-that has no constraint on it and prove nothing.
+is a Postgres construct, SQLite has none, and the model declares it for
+PostgreSQL only. A test written the usual way would pass against a table that
+has no constraint on it and prove nothing.
 
 So these run against a real PostgreSQL and skip when there is not one. Point
-TEST_DATABASE_URL at an empty database and they build the schema by running
-the migrations, which is also the only thing in this suite that runs them:
+TEST_DATABASE_URL at an empty database and they build the schema from the
+models, the same way the server does:
 
     TEST_DATABASE_URL=postgresql://user:pass@localhost:5432/chronos_test \\
         pytest tests/test_reservation_overlap_pg.py
@@ -18,6 +18,7 @@ the migrations, which is also the only thing in this suite that runs them:
 
 import datetime
 import os
+from contextlib import contextmanager
 
 import pytest
 from fastapi.testclient import TestClient
@@ -26,7 +27,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.v1.endpoints import resources
-from app.core.database import get_db
+from app.core.database import get_db, get_session_opener
+from app.core.schema import ensure_schema
 from app.core.security import hash_password
 from app.main import app
 from app.models.db import (
@@ -56,35 +58,9 @@ def _at(hour: int) -> datetime.time:
 
 @pytest.fixture(scope="module")
 def engine():
-    """A database with the migrations run against it, not create_all.
-
-    create_all would build a reservations table with no exclusion constraint
-    on it, and every test here would fail for the wrong reason. The constraint
-    exists only because migration 010 says so, so the migrations are what has
-    to run.
-
-    DATABASE_URL is set because alembic's env.py reads it and lets it win over
-    anything the config carries. A developer with that variable already
-    pointing at their own database would otherwise have these migrations run
-    against that one.
-    """
-    from alembic.config import Config
-
-    from alembic import command
-
-    previous = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = DATABASE_URL
-    try:
-        config = Config("alembic.ini")
-        config.set_main_option("sqlalchemy.url", DATABASE_URL)
-        command.upgrade(config, "head")
-    finally:
-        if previous is None:
-            os.environ.pop("DATABASE_URL", None)
-        else:
-            os.environ["DATABASE_URL"] = previous
-
+    """The schema the server builds on start, on an empty PostgreSQL."""
     built = create_engine(DATABASE_URL)
+    ensure_schema(built)
     yield built
     built.dispose()
 
@@ -167,7 +143,7 @@ def test_the_constraint_is_actually_on_the_table(db):
             " AND conrelid = 'reservations'::regclass"
         )
     ).scalar()
-    assert found == "x", "migration 010 did not leave an exclusion constraint behind"
+    assert found == "x", "create_all did not put the exclusion constraint on the table"
 
 
 def test_two_holds_on_one_resource_cannot_share_an_hour(db, resource):
@@ -240,10 +216,10 @@ def test_the_same_window_on_another_date_is_not_a_clash(db, resource):
 
 
 def test_a_hold_may_run_past_midnight(db, resource):
-    """The row migration 009's constraint refused and 011 allows.
+    """An end before the start is a window that crosses midnight, not an error.
 
     Worth a test of its own rather than only a step inside the overlap ones:
-    if the check constraint were still >, every test below would fail for
+    if ck_reservations_window were >, every test below would fail for
     that reason instead of the one it was written for.
     """
     db.add(_hold(resource.id, 22, 6, "night-shift"))
@@ -253,7 +229,7 @@ def test_a_hold_may_run_past_midnight(db, resource):
 
 
 def test_two_holds_cannot_share_an_hour_across_midnight(db, resource):
-    """Migration 010's CASE, exercised by a row for the first time.
+    """The CASE in the constraint's expression, exercised by a row.
 
     It was written before anything could produce a window that needed it,
     which meant the expression was checked and its effect was not. A hold
@@ -312,7 +288,14 @@ def test_the_database_refuses_an_overlap_the_endpoint_did_not_see(db, resource, 
     def override_get_db():
         yield db
 
+    @contextmanager
+    def override_open_session():
+        # AuditMiddleware records every write in a session of its own. Left
+        # alone it opens one on the configured database_url, not this one.
+        yield db
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_session_opener] = lambda: override_open_session
     try:
         client = TestClient(app)
         token = client.post(
@@ -385,7 +368,14 @@ def test_the_409_for_an_overnight_loser_still_names_what_beat_it(db, resource, m
     def override_get_db():
         yield db
 
+    @contextmanager
+    def override_open_session():
+        # AuditMiddleware records every write in a session of its own. Left
+        # alone it opens one on the configured database_url, not this one.
+        yield db
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_session_opener] = lambda: override_open_session
     try:
         client = TestClient(app)
         token = client.post(

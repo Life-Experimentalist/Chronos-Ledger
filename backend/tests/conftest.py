@@ -1,8 +1,14 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
+import json
 import os
+import queue
+import subprocess
+import sys
+import threading
 from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -178,3 +184,91 @@ def login(client, email, password):
     res = client.post("/api/v1/auth/login", json={"email_address": email, "password": password})
     assert res.status_code == 200, res.text
     return {"Authorization": f"Bearer {res.json()['access_token']}"}
+
+
+# The embedded entry point in a fresh interpreter. Everything in this process
+# runs on settings cached at import, so the order in which chronos-engine
+# configures the environment and imports the application can only be checked
+# from outside.
+
+BACKEND = Path(__file__).resolve().parents[1]
+HOST_SECRET = "h" * 40
+
+
+class EmbeddedProcess:
+    """`python -m app.standalone embedded ...` with the secret on its stdin.
+
+    The ready line is read on a thread, because a pipe cannot be read with
+    a timeout on Windows, and stderr is kept for the failure message.
+    """
+
+    def __init__(self, argv, env):
+        self.process = subprocess.Popen(
+            [sys.executable, "-m", "app.standalone", "embedded", "--secret-from-stdin", *argv],
+            cwd=BACKEND,
+            env=env,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        self.lines: queue.Queue = queue.Queue()
+        self.stderr: list[str] = []
+        threading.Thread(target=self._read_stdout, daemon=True).start()
+        threading.Thread(
+            target=lambda: self.stderr.extend(self.process.stderr), daemon=True
+        ).start()
+        self.process.stdin.write(f"{HOST_SECRET}\n")
+        self.process.stdin.flush()
+
+    def _read_stdout(self):
+        for line in self.process.stdout:
+            self.lines.put(line)
+        self.lines.put(None)
+
+    def ready(self, timeout=90) -> dict:
+        """The parsed ready line, or a failure that carries the child's stderr."""
+        try:
+            line = self.lines.get(timeout=timeout)
+        except queue.Empty:
+            line = None
+        if line is None:
+            pytest.fail(
+                f"no ready line within {timeout}s (exit code {self.process.poll()}); stderr:\n"
+                + "".join(self.stderr[-30:])
+            )
+        return json.loads(line)
+
+    def leave(self, timeout=30) -> int:
+        """Close stdin, the way a host going away does, and return the exit code."""
+        self.process.stdin.close()
+        return self.process.wait(timeout=timeout)
+
+    def kill(self):
+        if self.process.poll() is not None:
+            return
+        if sys.platform == "win32":
+            # Under a uv virtualenv sys.executable is a launcher whose child
+            # is the interpreter; killing the launcher alone leaves the
+            # interpreter running with the database file open.
+            subprocess.run(
+                ["taskkill", "/PID", str(self.process.pid), "/T", "/F"], capture_output=True
+            )
+        else:
+            self.process.kill()
+        self.process.wait()
+
+
+@pytest.fixture()
+def embedded_process():
+    """A callable that starts the entry point; whatever is still running is killed after."""
+    started = []
+
+    def start(*argv, env=None) -> EmbeddedProcess:
+        child = EmbeddedProcess(argv, {**os.environ, **(env or {})})
+        started.append(child)
+        return child
+
+    yield start
+    for child in started:
+        child.kill()

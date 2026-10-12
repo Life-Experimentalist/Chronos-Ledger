@@ -91,7 +91,7 @@ def test_a_failed_audit_write_does_not_fail_the_request(client, db, seed_users, 
     def broken(*_args, **_kwargs):
         raise RuntimeError("audit table unavailable")
 
-    monkeypatch.setattr("app.core.audit.datetime", type("Broken", (), {"now": broken}))
+    monkeypatch.setattr("app.core.audit.clock", type("Broken", (), {"now": broken}))
     assert client.post(CYCLES, headers=headers, json=_cycle()).status_code == 200
     assert _records(db) == []
 

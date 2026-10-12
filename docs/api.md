@@ -47,7 +47,7 @@ domain preset behind them, so the words above are one deployment's choices and
 not a mode you can select. Labels are display only: no field name in this
 document changes with them.
 
-`version` is the same string `GET /health` reports. The database revision is
+`version` is the same string `GET /health` reports. The schema version is
 not here: that is an operator's number, and this route answers before anyone
 has signed in.
 
@@ -1040,8 +1040,8 @@ against other holds.
 
 Two callers racing for the same window are serialized by a row lock on the
 resource, two copies of one request collide on the unique key index, and
-underneath both sits an exclusion constraint over the window itself, added
-by migration 010. The second row is refused whatever order the two callers
+underneath both sits an exclusion constraint over the window itself,
+`ex_reservations_no_overlap`. The second row is refused whatever order the two callers
 arrive in. When the constraint is what catches it, the window is looked up
 again and the `409` names the hold that won rather than only saying this
 one lost.
@@ -1776,7 +1776,8 @@ remembered. That catch-up never writes a date that has already passed.
 
 A slot gets a day only while its cycle is open and the date is inside the
 cycle's own dates. Running this again for a date is harmless: a slot has at
-most one day per date, and the database refuses a second (migration 017).
+most one day per date, and the database refuses a second
+(`uq_daily_ledger_slot_date`).
 
 ---
 

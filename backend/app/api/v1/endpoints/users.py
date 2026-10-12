@@ -1,13 +1,13 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
-from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.api.v1.endpoints.websocket import CLOSE_UNAUTHENTICATED
+from app.core import clock
 from app.core.database import get_db
 from app.core.emails import normalize_email
 from app.core.pagination import Page
@@ -359,7 +359,7 @@ def deactivate_user(
     if user.id == current_user.id:
         raise HTTPException(status_code=422, detail="You cannot deactivate your own account")
     if user.deactivated_at is None:
-        user.deactivated_at = datetime.now(UTC)
+        user.deactivated_at = clock.now()
         user.calendar_feed_token = generate_feed_token()
         db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
         # Deleted rather than held. A key kept on an account nobody answers

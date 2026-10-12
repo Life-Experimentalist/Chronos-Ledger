@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, cast
+from typing import Any, TypeVar
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
@@ -18,13 +18,15 @@ class HealthCheckResponse200:
         status (str | Unset):  Example: healthy.
         service (str | Unset):  Example: chronos-ledger.
         version (str | Unset):  Example: 0.13.0.
-        migration_revision (None | str | Unset): Null before the first migration. Example: 022.
+        schema_version (str | Unset): Bumped by the maintainers when the models change. There are no migrations: a
+            database built by one schema version is not upgraded to the next.
+             Example: 1.
     """
 
     status: str | Unset = UNSET
     service: str | Unset = UNSET
     version: str | Unset = UNSET
-    migration_revision: None | str | Unset = UNSET
+    schema_version: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -34,11 +36,7 @@ class HealthCheckResponse200:
 
         version = self.version
 
-        migration_revision: None | str | Unset
-        if isinstance(self.migration_revision, Unset):
-            migration_revision = UNSET
-        else:
-            migration_revision = self.migration_revision
+        schema_version = self.schema_version
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -49,8 +47,8 @@ class HealthCheckResponse200:
             field_dict["service"] = service
         if version is not UNSET:
             field_dict["version"] = version
-        if migration_revision is not UNSET:
-            field_dict["migration_revision"] = migration_revision
+        if schema_version is not UNSET:
+            field_dict["schema_version"] = schema_version
 
         return field_dict
 
@@ -63,20 +61,13 @@ class HealthCheckResponse200:
 
         version = d.pop("version", UNSET)
 
-        def _parse_migration_revision(data: object) -> None | str | Unset:
-            if data is None:
-                return data
-            if isinstance(data, Unset):
-                return data
-            return cast(None | str | Unset, data)
-
-        migration_revision = _parse_migration_revision(d.pop("migration_revision", UNSET))
+        schema_version = d.pop("schema_version", UNSET)
 
         health_check_response_200 = cls(
             status=status,
             service=service,
             version=version,
-            migration_revision=migration_revision,
+            schema_version=schema_version,
         )
 
         health_check_response_200.additional_properties = d

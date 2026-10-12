@@ -8,7 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from sqlalchemy import or_, select, true
 from sqlalchemy.orm import Session
 
-from app.core import rate_limit
+from app.core import clock, rate_limit
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.pagination import TOTAL_COUNT_HEADER
@@ -91,7 +91,7 @@ def process_guest_entry(
         visitation_intent=payload.visitation_intent,
         visit_code_hash=hash_visit_code(visit_code),
         visit_code_expires_at=(
-            datetime.now(UTC) + timedelta(minutes=ttl_minutes) if ttl_minutes > 0 else None
+            clock.now() + timedelta(minutes=ttl_minutes) if ttl_minutes > 0 else None
         ),
     )
     db.add(entry)
@@ -177,7 +177,7 @@ def decide_guest_entry(
     length = get_settings().guest_visit_length_minutes
     approved = payload.decision == LogVerificationState.VERIFIED_APPROVED
     entry.visit_expires_at = (
-        datetime.now(UTC) + timedelta(minutes=length) if approved and length > 0 else None
+        clock.now() + timedelta(minutes=length) if approved and length > 0 else None
     )
     entry.overstay_notified_at = None
     db.commit()
@@ -237,7 +237,7 @@ def extend_guest_visit(
 
     # From the later of now and the end it already has, so a visit half an hour
     # over gets the whole grant rather than a window that has already gone.
-    start = max(_as_utc(entry.visit_expires_at), datetime.now(UTC))
+    start = max(_as_utc(entry.visit_expires_at), clock.now())
     entry.visit_expires_at = start + timedelta(minutes=payload.minutes)
     # So that running over a second time announces itself as the first did.
     entry.overstay_notified_at = None
@@ -267,9 +267,10 @@ def get_visit_status(code: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="No visit with that code")
     # An expired code reads as one that was never issued. Saying "expired"
     # instead would confirm to whoever is trying codes that this one was real.
-    if entry.visit_code_expires_at is not None and _as_utc(
-        entry.visit_code_expires_at
-    ) <= datetime.now(UTC):
+    if (
+        entry.visit_code_expires_at is not None
+        and _as_utc(entry.visit_code_expires_at) <= clock.now()
+    ):
         raise HTTPException(status_code=404, detail="No visit with that code")
     return entry
 
@@ -316,7 +317,7 @@ def get_overstayed_visits(
             _decidable_by(current_user),
             GuestGateRegistry.handshake_status == LogVerificationState.VERIFIED_APPROVED,
             GuestGateRegistry.visit_expires_at.isnot(None),
-            GuestGateRegistry.visit_expires_at <= datetime.now(UTC),
+            GuestGateRegistry.visit_expires_at <= clock.now(),
         )
         .order_by(GuestGateRegistry.visit_expires_at)
         .all()

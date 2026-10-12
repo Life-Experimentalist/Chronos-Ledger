@@ -20,19 +20,26 @@ from app.api.v1.endpoints import (
     websocket,
 )
 
-api_router = APIRouter()
+# Every router under /api/v1, with its prefix and tag. One table rather than
+# a list of include_router calls so another assembly of the same routes
+# (app.embedded, which leaves some out) cannot drift from this one.
+ROUTERS = (
+    (org_config.router, "/config", "Configuration"),
+    (auth.router, "/auth", "Authentication"),
+    (api_keys.router, "/api-keys", "API Keys"),
+    (users.router, "/users", "Users"),
+    (resources.router, "/resources", "Resources"),
+    (schedule.router, "/schedule", "Schedule"),
+    (attendance.router, "/attendance", "Attendance"),
+    (guest.router, "/guest", "Guest Gate"),
+    (ingestion.router, "/ingestion", "Data Ingestion"),
+    (websocket.router, "", "WebSocket"),
+    (calendar_sync.router, "/sync", "Calendar Sync"),
+    (audit.router, "/audit", "Audit"),
+    (changes.router, "/changes", "Changes"),
+    (federation.router, "/federation", "Federation"),
+)
 
-api_router.include_router(org_config.router, prefix="/config", tags=["Configuration"])
-api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
-api_router.include_router(api_keys.router, prefix="/api-keys", tags=["API Keys"])
-api_router.include_router(users.router, prefix="/users", tags=["Users"])
-api_router.include_router(resources.router, prefix="/resources", tags=["Resources"])
-api_router.include_router(schedule.router, prefix="/schedule", tags=["Schedule"])
-api_router.include_router(attendance.router, prefix="/attendance", tags=["Attendance"])
-api_router.include_router(guest.router, prefix="/guest", tags=["Guest Gate"])
-api_router.include_router(ingestion.router, prefix="/ingestion", tags=["Data Ingestion"])
-api_router.include_router(websocket.router, tags=["WebSocket"])
-api_router.include_router(calendar_sync.router, prefix="/sync", tags=["Calendar Sync"])
-api_router.include_router(audit.router, prefix="/audit", tags=["Audit"])
-api_router.include_router(changes.router, prefix="/changes", tags=["Changes"])
-api_router.include_router(federation.router, prefix="/federation", tags=["Federation"])
+api_router = APIRouter()
+for router, prefix, tag in ROUTERS:
+    api_router.include_router(router, prefix=prefix, tags=[tag])

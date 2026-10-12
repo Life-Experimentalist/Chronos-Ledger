@@ -18,6 +18,11 @@ integrates against `chronos-engine` can later point at a container deployment
 by changing the base URL and nothing else. The SDKs in [sdks.md](sdks.md) work
 against either.
 
+A program that wants to run Chronos as its own hidden child process, with no
+Chronos logins and the identity of each caller asserted by the program, uses
+`chronos-engine embedded` instead: see [embedded.md](embedded.md). Everything
+on this page about the database, backups and upgrading applies to it too.
+
 ## Install
 
 From a checkout, with [uv](https://github.com/astral-sh/uv):
@@ -52,10 +57,10 @@ create an empty database and a user that owns it, then:
 chronos-engine serve --data-dir ./chronos-data --database-url postgresql://chronos:PASSWORD@localhost:5432/chronos
 ```
 
-On an empty database the engine runs every migration, exactly as the
-container does, so the schema has the exclusion constraints that make double
-booking impossible. `--data-dir` then holds only `signing.key`. Back up with
-`pg_dump`; `chronos-engine backup` is for the SQLite file.
+On an empty database the engine builds the schema from the models, exactly as
+the container does, so the schema has the exclusion constraints that make
+double booking impossible. `--data-dir` then holds only `signing.key`. Back up
+with `pg_dump`; `chronos-engine backup` is for the SQLite file.
 
 ## First start
 
@@ -148,31 +153,32 @@ constraints as the container.
 
 ## Upgrading
 
-Stop the engine, take a backup, move to the new tag, start it again. A new
-file is built straight from the models and stamped at the newest migration. An
-existing file is brought forward by the migration scripts, which run on SQLite
-from migration 030 onwards. The engine refuses to start on a file migrated by
-a newer release, and says so, rather than guessing.
+There are no migrations before the first real deployment. The engine builds
+whatever tables a database lacks when it starts
+(`backend/app/core/schema.py::ensure_schema`) and changes nothing that is
+already there, so a file made by one release is not brought forward by the
+next when the schema has changed: 0.15 does not upgrade a 0.14 file. A schema
+change means recreating the database. `/health` reports `schema_version`,
+which the maintainers bump when the models change; when the new release's
+number differs from the one your file was made with, stop the engine, move
+the old file aside (or recreate the PostgreSQL database), and start again on
+an empty one. Migrations come back as a fresh baseline when there is a
+deployment worth upgrading.
 
-A file not made by `chronos-engine` (tables but no migration stamp) is refused
-too. Point `--data-dir` at an empty folder.
-
-## For contributors: migrations are written for PostgreSQL
+## For contributors: the models are the schema
 
 PostgreSQL is the target; schema, queries, locking and time handling are
 designed for it, and the tests that prove the no-overlap guarantees run
-against a real PostgreSQL in CI. SQLite is a convenience. A new SQLite file is
-built from the models, never from the early migrations. Migrations from 030 on
-are kept runnable on SQLite as well, so a SQLite file made by one release can
-still be upgraded by the next, but that never bends a PostgreSQL design. In
+against a real PostgreSQL in CI. SQLite is a convenience. Both are built from
+the same models by `create_all`, and that never bends a PostgreSQL design. In
 practice:
 
-- Use `op.create_index`, `op.add_column` and friends. `alembic/env.py` turns on
-  batch mode on SQLite, which copies the table where SQLite cannot alter it in
-  place.
-- Anything PostgreSQL-only (exclusion constraints, GiST, partial indexes using
-  PostgreSQL operators, `ALTER TYPE`) goes behind
-  `if op.get_bind().dialect.name == "postgresql":`, with the model kept in step
-  so a file built from the models matches.
-- `tests/test_standalone.py::test_an_older_file_is_upgraded_with_the_migrations`
-  runs the newest migration against a SQLite file.
+- Anything PostgreSQL-only (exclusion constraints, `btree_gist`, partial
+  indexes using PostgreSQL operators) is declared on the model behind a
+  dialect guard, `ddl_if(dialect="postgresql")` on the constraint or
+  `DDL(...).execute_if(dialect="postgresql")` on a metadata event, so SQLite
+  builds the same models without it. `backend/app/models/db.py::_no_overlap`
+  is the pattern.
+- Bump `backend/app/core/schema.py::SCHEMA_VERSION` when the models change.
+- `tests/test_schema_pg.py` checks what `create_all` leaves on an empty
+  PostgreSQL, and `tests/test_schema.py` the step itself on SQLite.

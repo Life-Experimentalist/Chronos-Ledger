@@ -50,4 +50,4 @@ def test_the_version_is_published_so_an_integrator_need_not_leave_the_api_prefix
     uses, rather than fetching /health on a different base path for one field."""
     res = client.get("/api/v1/config")
     assert res.json()["version"] == app.version
-    assert "migration_revision" not in res.json()
+    assert "schema_version" not in res.json()

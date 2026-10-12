@@ -6,7 +6,7 @@ import datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app import main
+from app.cron import scheduled
 from app.cron.ledger_generator import generate_daily_ledger_entries, missed_ledger_dates
 from app.models.db import (
     Activity,
@@ -129,11 +129,11 @@ def test_a_monday_outside_the_cycle_generates_nothing(db, seed_users, outside):
 
 
 def test_one_slot_cannot_have_two_days_on_one_date(db, seed_users):
-    """The key the existence check leans on, from migration 017.
+    """The key the existence check leans on, uq_daily_ledger_slot_date.
 
-    This slot has no room, so the overlap constraint from migration 013 does
-    not see it. Without the key, two runs that both got past the check would
-    both write the day.
+    This slot has no room, so the overlap constraint on PostgreSQL would not
+    see it either. Without the key, two runs that both got past the check
+    would both write the day.
     """
     slot = _build_slot(db, seed_users)
     assert generate_daily_ledger_entries(MONDAY, db) == 1
@@ -175,12 +175,12 @@ def test_the_startup_catch_up_writes_what_a_restart_missed(db, seed_users, monke
     db.add(tuesday)
     db.commit()
     expected = {(monday.id, MONDAY), (tuesday.id, MONDAY + datetime.timedelta(days=1))}
-    monkeypatch.setattr(main, "SessionLocal", lambda: db)
+    monkeypatch.setattr(scheduled, "SessionLocal", lambda: db)
     monkeypatch.setattr(
-        main, "org_now", lambda: datetime.datetime.combine(MONDAY, datetime.time(23, 30))
+        scheduled, "org_now", lambda: datetime.datetime.combine(MONDAY, datetime.time(23, 30))
     )
 
-    main._catch_up_ledger()
+    scheduled.catch_up_ledger()
 
     written = {(day.master_slot_id, day.target_date) for day in db.query(DailyLedger).all()}
     assert written == expected

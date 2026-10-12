@@ -2,15 +2,15 @@
 # Licensed under the Apache License, Version 2.0
 """The seeded administrator's first password comes from the environment.
 
-Migration 001 seeds that account with a hash of a random string it throws away,
+ensure_schema seeds that account with a hash of a random string it throws away,
 so nothing can log in as the administrator until an operator says what the
 password is. These cover the one function that reads the variable, and in
 particular the two things it must not do: reset a password somebody is already
 using, and rewrite the column on every restart.
 
 There is no seeded admin in this suite's database. The rest of the tests build
-their schema with create_all rather than by running the migrations, so the row
-001 inserts is not there and each test here makes its own.
+their schema with create_all alone and never run ensure_schema, so the row it
+inserts is not there and each test here makes its own.
 """
 
 from app.core.bootstrap import SEEDED_ADMIN_ID, apply_initial_admin_password

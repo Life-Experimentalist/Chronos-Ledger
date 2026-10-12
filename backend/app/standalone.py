@@ -15,17 +15,35 @@ starts here can move to the container later without changing a call.
     chronos-engine backup --data-dir ./chronos-data --to backup.db
 
 docs/standalone.md has what this profile gives up for being one process.
+
+`chronos-engine embedded` is the same process started by another program as
+a hidden child: loopback only, the host's secret on every request, the
+host's users asserted by header, and an exit when the host goes away.
+docs/embedded.md has the contract.
+
+    CHRONOS_HOST_SECRET=... chronos-engine embedded --data-dir ./chronos-data --parent-pid 1234
+    chronos-engine embedded --database-url postgresql://... --schema chronos --secret-from-stdin
 """
 
 import argparse
+import json
 import logging
 import os
 import secrets
 import sqlite3
+import stat
 import sys
+import threading
+import time
+from datetime import datetime
 from pathlib import Path
 
+import uvicorn
+
 DATABASE_FILE = "chronos.db"
+DEFAULT_SCHEMA = "chronos"
+# GetExitCodeProcess answers this for a process that is still running.
+STILL_ACTIVE = 259
 SIGNING_KEY_FILE = "signing.key"
 # Folders a sync client rewrites underneath an open database. SQLite's locks
 # do not survive that, and the usual outcome is a corrupt file.
@@ -74,94 +92,17 @@ def configure_environment(data_dir: Path, url: str | None = None) -> None:
 
 
 def prepare_database(engine) -> str:
-    """Bring the database to the schema this code expects. Returns what it did.
+    """Build the schema from the models, on either dialect. Returns what it did.
 
-    On PostgreSQL the migrations build and upgrade the schema, exactly as in
-    the container. Never create_all there: the exclusion constraints that stop
-    double booking exist only in the migrations, and a schema built from the
-    models would quietly lack them.
-
-    A new SQLite file gets the schema from the models in one transaction, the
-    seeded administrator migration 001 would have written, and a stamp at the
-    newest migration. The early migrations are written for PostgreSQL and are
-    not replayed on SQLite. Later ones are kept runnable there on a best
-    effort basis, which is how a file made by one release is upgraded by the
-    next.
+    The same step the server runs on start (app.core.schema.ensure_schema),
+    done here first so a database that cannot be built stops the process with
+    the error before uvicorn binds a port. A new SQLite file gets every table
+    and the seeded administrator; an existing one is left as it is. There are
+    no migrations: a file made by an older release is not upgraded.
     """
-    from alembic.runtime.migration import MigrationContext
-    from sqlalchemy import inspect
+    from app.core.schema import ensure_schema
 
-    from app.core.migrations import _scripts, database_revision, unknown_revision_message
-
-    message = unknown_revision_message(engine)
-    if message:
-        raise SystemExit(message)
-
-    scripts = _scripts()
-    head = scripts.get_current_head()
-    revision = database_revision(engine)
-    if revision == head:
-        return "current"
-    if revision is not None:
-        _upgrade(engine)
-        return "upgraded"
-    if inspect(engine).has_table("users"):
-        raise SystemExit(
-            "The database has tables but no migration stamp, so it was not made by "
-            "Chronos Ledger. Point chronos-engine at an empty database."
-        )
-    if engine.dialect.name != "sqlite":
-        _upgrade(engine)
-        return "created"
-
-    import app.models.db  # noqa: F401 (registers every table with the metadata)
-    from app.core.database import Base
-
-    with engine.begin() as connection:
-        Base.metadata.create_all(connection)
-        _seed_administrator(connection)
-        MigrationContext.configure(connection).stamp(scripts, head)
-    return "created"
-
-
-def _seed_administrator(connection) -> None:
-    """The account migration 001 seeds, as migration 004 left it.
-
-    Its password is random and unknown, as there: INITIAL_ADMIN_PASSWORD opens
-    it on the first start (app/core/bootstrap.py).
-    """
-    from sqlalchemy.orm import Session
-
-    from app.core.bootstrap import SEEDED_ADMIN_ID
-    from app.core.security import hash_password
-    from app.models.db import InstitutionalRole, User
-
-    session = Session(bind=connection)
-    session.add(
-        User(
-            id=SEEDED_ADMIN_ID,
-            full_name="Organization Administrator",
-            email_address="admin@org.internal",
-            credential_secure_hash=hash_password(secrets.token_urlsafe(32)),
-            role_type=InstitutionalRole.ORG_ADMIN,
-            initial_login_state=True,
-        )
-    )
-    session.flush()
-
-
-def _upgrade(engine) -> None:
-    from alembic.config import Config
-
-    from alembic import command
-    from app.core.migrations import script_location
-
-    # No alembic.ini: it carries only logging setup, which would replace the
-    # app's, and a PostgreSQL URL that env.py overrides anyway.
-    config = Config()
-    config.set_main_option("script_location", str(script_location()))
-    config.set_main_option("sqlalchemy.url", engine.url.render_as_string(hide_password=False))
-    command.upgrade(config, "head")
+    return ensure_schema(engine)
 
 
 def _warn_about_synced_folders(data_dir: Path) -> None:
@@ -181,8 +122,6 @@ def serve(args) -> int:
     _warn_about_synced_folders(data_dir)
     configure_environment(data_dir, args.database_url)
 
-    import uvicorn
-
     from app.core.database import engine
 
     log.info(
@@ -201,6 +140,234 @@ def serve(args) -> int:
         log_level=args.log_level,
         proxy_headers=args.behind_proxy,
     )
+    return 0
+
+
+def read_host_secret(args, stdin) -> str | None:
+    """From the environment, or the first line of stdin. Never from argv."""
+    from app.core.host_identity import HOST_SECRET_ENV
+
+    if args.secret_from_stdin:
+        return stdin.readline().rstrip("\r\n")
+    return os.environ.get(HOST_SECRET_ENV)
+
+
+def configure_clock(clock_start: str | None, id_seed: int | None) -> None:
+    """Put the clock settings in the environment, before anything reads them.
+
+    --clock-start is the one switch into host mode: CLOCK_MODE is set
+    outright either way, so a CLOCK_MODE left in the environment cannot put
+    the process on a clock the host did not ask for. A start without an
+    offset is a ValueError here rather than a settings error later, so the
+    message names the flag.
+    """
+    if clock_start is None:
+        os.environ["CLOCK_MODE"] = "system"
+    else:
+        try:
+            start = datetime.fromisoformat(clock_start)
+        except ValueError:
+            start = None
+        if start is None or start.tzinfo is None or start.utcoffset() is None:
+            raise ValueError(
+                f"--clock-start {clock_start!r} is not an ISO 8601 instant with an offset, "
+                "such as 2026-09-07T08:00:00+00:00"
+            )
+        os.environ["CLOCK_MODE"] = "host"
+        os.environ["CLOCK_START"] = clock_start
+    if id_seed is not None:
+        os.environ["ID_SEED"] = str(id_seed)
+
+
+def embedded(args) -> int:
+    # Before the first `app.` import: app.core.config caches its settings on
+    # first use, the clock is built from them, and app.core.database builds
+    # its engine from them at import. Nothing under `app.` is imported until
+    # configure_environment has run, host_identity included: it imports the
+    # database module.
+    try:
+        configure_clock(args.clock_start, args.id_seed)
+    except ValueError as problem:
+        print(f"chronos-engine embedded: {problem}", file=sys.stderr)
+        return 2
+    if args.socket and sys.platform == "win32":
+        print("chronos-engine embedded: --socket needs a POSIX platform", file=sys.stderr)
+        return 2
+
+    data_dir = Path(args.data_dir).resolve()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    _warn_about_synced_folders(data_dir)
+    configure_environment(data_dir, args.database_url)
+
+    from app.core.host_identity import check_host_secret
+
+    try:
+        secret = check_host_secret(read_host_secret(args, sys.stdin))
+    except ValueError as problem:
+        print(f"chronos-engine embedded: {problem}", file=sys.stderr)
+        return 2
+
+    from app.core.database import engine, is_sqlite, use_schema
+
+    schema = None
+    if is_sqlite(str(engine.url)):
+        log.info("A SQLite file has no schemas; --schema is not used")
+    else:
+        schema = args.schema
+        use_schema(engine, schema)
+
+    from app.embedded import build_app, prepare_database
+
+    log.info(
+        "Database %s, schema %s: %s",
+        engine.url.render_as_string(hide_password=True),
+        schema or "(none)",
+        prepare_database(engine, schema),
+    )
+    return run_embedded(build_app(secret), args)
+
+
+def ready_line(server: uvicorn.Server) -> str:
+    """The one line the host reads from stdout. Nothing else is written there."""
+    from app.core import clock
+    from app.core.schema import SCHEMA_VERSION
+
+    if server.config.uds:
+        where = {"socket": server.config.uds}
+    else:
+        where = {"port": server.servers[0].sockets[0].getsockname()[1]}
+    mode = "host" if clock.is_host() else "system"
+    return json.dumps(
+        {"chronos": "ready", **where, "schema_version": SCHEMA_VERSION, "clock": mode}
+    )
+
+
+class AnnouncingServer(uvicorn.Server):
+    """uvicorn's server, which tells the host when it listens.
+
+    After startup, not before: by then the lifespan has run, so the schema is
+    built and the scheduler is up, and with --port 0 the port is known.
+    """
+
+    async def startup(self, sockets=None) -> None:
+        await super().startup(sockets)
+        if self.started:
+            print(ready_line(self), flush=True)
+
+
+def watch_stdin(stream, stop) -> None:
+    """Block until the host closes our stdin, then ask the server to stop.
+
+    The portable way to notice a parent going away: a pipe closes when the
+    process holding the other end exits, on every platform, whether it exited
+    cleanly or not. Lines the host writes are read and ignored.
+    """
+    while stream.readline():
+        pass
+    stop()
+
+
+def watch_stdin_pipe(fd: int, stop, interval: float = 0.5) -> None:
+    """Windows: poll the stdin pipe instead of leaving a read pending on it.
+
+    A read left pending on the pipe blocks other calls on that handle from
+    any thread, and loading numpy's bundled OpenBLAS makes one of those
+    calls, so with a reader thread blocked here an import of numpy or pandas
+    on another thread never returned. PeekNamedPipe does not pend: it says
+    how many bytes are waiting, or fails once the host's end is closed. The
+    bytes it reports are read and dropped so the pipe never fills.
+    """
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    peek = ctypes.windll.kernel32.PeekNamedPipe
+    peek.argtypes = [wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD] + [wintypes.LPDWORD] * 3
+    handle = msvcrt.get_osfhandle(fd)
+    available = wintypes.DWORD()
+    while peek(handle, None, 0, None, ctypes.byref(available), None):
+        if available.value:
+            os.read(fd, available.value)
+        time.sleep(interval)
+    stop()
+
+
+def stdin_watcher(stream):
+    """The thread target and its argument for noticing this stdin closing.
+
+    The poller is for a pipe on Windows. A console, NUL, a file, or a stream
+    with no descriptor at all keeps the blocking read, where end of file
+    means what it always did.
+    """
+    if sys.platform == "win32":
+        try:
+            fd = stream.fileno()
+            if stat.S_ISFIFO(os.fstat(fd).st_mode):
+                return watch_stdin_pipe, fd
+        except OSError:
+            pass
+    return watch_stdin, stream
+
+
+def parent_alive(pid: int) -> bool:
+    if sys.platform == "win32":
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        process_query_limited_information = 0x1000
+        handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+        if not handle:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return False
+            return code.value == STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def watch_parent(pid: int, stop, alive=parent_alive, interval: float = 1.0) -> None:
+    """Poll for the host once a second and ask the server to stop when it is gone."""
+    while alive(pid):
+        time.sleep(interval)
+    stop()
+
+
+def run_embedded(application, args) -> int:
+    # log_config=None: uvicorn's own configuration writes access lines to
+    # stdout, which belongs to the ready line. Without it every logger
+    # propagates to the root handler main() set up, on stderr.
+    config = uvicorn.Config(
+        application,
+        host="127.0.0.1",
+        port=args.port,
+        uds=args.socket,
+        workers=1,
+        log_level=args.log_level,
+        log_config=None,
+    )
+    server = AnnouncingServer(config)
+
+    def stop() -> None:
+        log.info("The host went away; stopping")
+        # Read by uvicorn's main loop, which then runs the lifespan shutdown.
+        server.should_exit = True
+
+    if sys.stdin is not None:
+        target, source = stdin_watcher(sys.stdin)
+        threading.Thread(target=target, args=(source, stop), daemon=True).start()
+    if args.parent_pid is not None:
+        threading.Thread(target=watch_parent, args=(args.parent_pid, stop), daemon=True).start()
+    # SIGINT, SIGTERM and, on Windows, CTRL_BREAK are uvicorn's to handle.
+    server.run()
     return 0
 
 
@@ -254,6 +421,45 @@ def build_parser() -> argparse.ArgumentParser:
         help="trust X-Forwarded-* headers from the proxy in front",
     )
     run.set_defaults(handler=serve)
+
+    child = commands.add_parser(
+        "embedded", help="run as a hidden child of a host program (docs/embedded.md)"
+    )
+    child.add_argument(
+        "--data-dir",
+        default="chronos-data",
+        help="where the signing key lives, and the SQLite file when there is no --database-url",
+    )
+    child.add_argument(
+        "--database-url",
+        help="the host's PostgreSQL; without one the engine uses a SQLite file in --data-dir",
+    )
+    child.add_argument(
+        "--schema",
+        default=DEFAULT_SCHEMA,
+        help="the PostgreSQL schema every Chronos table lives in, made if missing",
+    )
+    child.add_argument("--port", type=int, default=0, help="port on 127.0.0.1; 0 picks a free one")
+    child.add_argument("--socket", help="listen on this Unix socket instead of a port (POSIX only)")
+    child.add_argument(
+        "--secret-from-stdin",
+        action="store_true",
+        help="read the host secret from the first line of stdin instead of CHRONOS_HOST_SECRET",
+    )
+    child.add_argument(
+        "--parent-pid", type=int, help="also stop when this process is gone (checked every second)"
+    )
+    child.add_argument("--log-level", default="info")
+    child.add_argument(
+        "--clock-start",
+        metavar="INSTANT",
+        help="run on a host clock that starts at this ISO 8601 instant with an offset, "
+        "moved by POST /api/v1/clock/advance (docs/clock.md); without it, the system clock",
+    )
+    child.add_argument(
+        "--id-seed", type=int, metavar="N", help="seed the non-secret identifiers (ID_SEED)"
+    )
+    child.set_defaults(handler=embedded)
 
     copy = commands.add_parser(
         "backup", help="copy the SQLite file while it runs (on PostgreSQL, use pg_dump)"

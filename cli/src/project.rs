@@ -14,12 +14,18 @@ pub const COMPOSE_FILE: &str = "docker-compose.yml";
 pub const DB_USER: &str = "chronos_admin";
 pub const DB_NAME: &str = "chronos_ledger";
 
-/// What `/health` reports.
+/// What `/health` reports. `schema_version` names the shape of the tables the
+/// running models describe; there are no migrations, so a database fits a build
+/// only when the two agree.
 #[derive(Debug, Deserialize)]
 pub struct Health {
     pub version: String,
-    pub migration_revision: Option<String>,
+    pub schema_version: Option<String>,
 }
+
+/// Prints the backend's SCHEMA_VERSION constant, run inside its image.
+const PRINT_SCHEMA_VERSION: &str =
+    "from app.core.schema import SCHEMA_VERSION; print(SCHEMA_VERSION)";
 
 pub struct Project {
     pub dir: PathBuf,
@@ -137,43 +143,44 @@ impl Project {
         }
     }
 
-    /// The migration the database is at, read from the database container. Works
-    /// while the backend is stopped or crash-looping, which is when it matters.
-    pub fn database_revision(&self) -> Result<Option<String>> {
+    /// The schema version of the image the compose file points at, asked of a
+    /// throwaway container of that image. Works while the backend is stopped or
+    /// crash-looping, which is when it matters. The database records no version
+    /// of its own: it has whatever tables the image that started on it built,
+    /// so the image is the answer.
+    pub fn image_schema_version(&self) -> Result<String> {
         let out = self.compose_output(&[
-            "exec",
+            "run",
+            "--rm",
+            "--no-deps",
             "-T",
-            "chronos-db",
-            "psql",
-            "-U",
-            DB_USER,
-            "-d",
-            DB_NAME,
-            "-tAc",
-            "SELECT version_num FROM alembic_version",
+            "chronos-app",
+            "uv",
+            "run",
+            "--no-sync",
+            "python",
+            "-c",
+            PRINT_SCHEMA_VERSION,
         ])?;
         if !out.status.success() {
             bail!(
-                "could not read the migration from the database: {}",
+                "could not read the schema version from the backend image: {}",
                 String::from_utf8_lossy(&out.stderr).trim()
             );
         }
-        let rev = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        Ok((!rev.is_empty()).then_some(rev))
+        let version = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if version.is_empty() {
+            bail!("the backend image printed no schema version");
+        }
+        Ok(version)
     }
-}
-
-/// Order two Alembic revisions. This project numbers them ("021", "022"), so they
-/// compare as integers. None when either is not a number.
-pub fn compare_revisions(a: &str, b: &str) -> Option<std::cmp::Ordering> {
-    Some(a.parse::<u64>().ok()?.cmp(&b.parse::<u64>().ok()?))
 }
 
 /// The sidecar written beside every backup.
 #[derive(Debug, serde::Serialize, Deserialize)]
 pub struct BackupInfo {
     pub server_version: Option<String>,
-    pub migration_revision: Option<String>,
+    pub schema_version: Option<String>,
     pub created_at: String,
 }
 
@@ -186,13 +193,15 @@ pub fn backup_info_path(dump: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cmp::Ordering;
 
     #[test]
-    fn revisions_compare_numerically() {
-        assert_eq!(compare_revisions("022", "021"), Some(Ordering::Greater));
-        assert_eq!(compare_revisions("9", "010"), Some(Ordering::Less));
-        assert_eq!(compare_revisions("abc123", "022"), None);
+    fn a_sidecar_from_before_schema_versions_has_none() {
+        let info: BackupInfo = serde_json::from_str(
+            r#"{"server_version": "0.13.0", "migration_revision": "030", "created_at": "2026-01-01T00:00:00Z"}"#,
+        )
+        .unwrap();
+        assert_eq!(info.schema_version, None);
+        assert_eq!(info.server_version.as_deref(), Some("0.13.0"));
     }
 
     #[test]

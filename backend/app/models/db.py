@@ -3,9 +3,9 @@
 
 import enum
 import secrets
-from datetime import UTC, datetime
 
 from sqlalchemy import (
+    DDL,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -21,12 +21,54 @@ from sqlalchemy import (
     Text,
     Time,
     UniqueConstraint,
+    event,
     func,
+    text,
 )
+from sqlalchemy.dialects.postgresql import ExcludeConstraint
 from sqlalchemy.orm import relationship, validates
 
+from app.core import clock
 from app.core.database import Base
 from app.core.emails import normalize_email
+
+# The two exclusion constraints below compare an integer with = inside a gist
+# index, which PostgreSQL can only do with btree_gist loaded. Created ahead of
+# the tables, and only there: SQLite has no extensions and no exclusion
+# constraints, and skips both.
+event.listen(
+    Base.metadata,
+    "before_create",
+    DDL("CREATE EXTENSION IF NOT EXISTS btree_gist").execute_if(dialect="postgresql"),
+)
+
+
+def _no_overlap(name: str, date_column: str, where: str) -> ExcludeConstraint:
+    """Two rows on one resource may not cover the same moment.
+
+    A window is the date plus its two times, and an end at or before the start
+    means the window runs past midnight into the next date; the same rule
+    app.core.time.window_span applies in Python. Half open, so a window that
+    ends at 10:00 does not collide with one that starts at 10:00.
+
+    PostgreSQL only, by ddl_if: SQLite cannot express it, and the standalone
+    profile holds the same line with BEGIN IMMEDIATE instead
+    (app.core.database.sqlite_engine).
+    """
+    return ExcludeConstraint(
+        ("resource_id", "="),
+        (
+            text(
+                f"tsrange({date_column} + time_window_start, {date_column} + time_window_end"
+                " + CASE WHEN time_window_end <= time_window_start THEN INTERVAL '1 day'"
+                " ELSE INTERVAL '0' END, '[)')"
+            ),
+            "&&",
+        ),
+        name=name,
+        using="gist",
+        where=text(where),
+    ).ddl_if(dialect="postgresql")
 
 
 def generate_feed_token() -> str:
@@ -109,7 +151,9 @@ class PlanningCycle(Base):
     cycle_label = Column(String(50), nullable=False)
     date_bounds_start = Column(Date, nullable=False)
     date_bounds_end = Column(Date, nullable=False)
-    operational_status = Column(Boolean, default=False, nullable=False)
+    operational_status = Column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
 
     activities = relationship("Activity", back_populates="cycle", cascade="all, delete-orphan")
 
@@ -123,8 +167,7 @@ class User(Base):
     credential_secure_hash = Column(String(255), nullable=False)
     # Unlike every other __table_args__ in this file this one cannot sit at the
     # top of the class, because the expression needs the Column above it. The
-    # column's own `unique=True` stays: it costs nothing and it is what a
-    # database migrated before 029 has.
+    # column's own `unique=True` stays: it costs nothing.
     __table_args__ = (
         Index("uq_users_email_address_lower", func.lower(email_address), unique=True),
     )
@@ -132,18 +175,20 @@ class User(Base):
     unit_code = Column(String(50), nullable=True)
     assigned_base_station = Column(String(100))
     current_occupancy_index = Column(
-        Enum(AccessReadiness, name="access_readiness"), default=AccessReadiness.OPEN_AD_HOC
+        Enum(AccessReadiness, name="access_readiness"),
+        default=AccessReadiness.OPEN_AD_HOC,
+        server_default="OPEN_AD_HOC",
     )
     reporting_line_manager = Column(
         String(50), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    initial_login_state = Column(Boolean, default=True)
+    initial_login_state = Column(Boolean, default=True, server_default=text("true"))
     calendar_feed_token = Column(
         String(64), unique=True, index=True, nullable=True, default=generate_feed_token
     )
     # Set by POST /users/{id}/deactivate and cleared by reactivate. Somebody who
     # leaves is deactivated rather than deleted, so the attendance recorded
-    # against them stays; see migration 018.
+    # against them stays (verification_ledger.member_id is ON DELETE RESTRICT).
     deactivated_at = Column(DateTime(timezone=True), nullable=True)
 
     @validates("email_address")
@@ -214,7 +259,10 @@ class Resource(Base):
     code = Column(String(30), nullable=False, unique=True, index=True)
     label = Column(String(120), nullable=False)
     resource_type = Column(
-        Enum(ResourceType, name="resource_type"), nullable=False, default=ResourceType.ROOM
+        Enum(ResourceType, name="resource_type"),
+        nullable=False,
+        default=ResourceType.ROOM,
+        server_default="ROOM",
     )
     unit_code = Column(String(50), nullable=True)
     capacity = Column(Integer, nullable=True)
@@ -224,7 +272,7 @@ class Resource(Base):
     latitude = Column(Numeric(10, 8), nullable=True)
     longitude = Column(Numeric(11, 8), nullable=True)
     altitude_target = Column(Numeric(6, 2), nullable=True)
-    active = Column(Boolean, default=True, nullable=False)
+    active = Column(Boolean, default=True, server_default=text("true"), nullable=False)
 
 
 class StructuralMasterSlot(Base):
@@ -255,14 +303,24 @@ class StructuralMasterSlot(Base):
 
 class DailyLedger(Base):
     __tablename__ = "daily_ledger"
-    # One day per slot per date. See migration 017.
+    # One day per slot per date.
     __table_args__ = (
         UniqueConstraint("target_date", "master_slot_id", name="uq_daily_ledger_slot_date"),
         # The two ways the ledger is read by range: one room across some days
         # (availability, the room calendar) and one person's days (a staff
-        # member's schedule, the location resolver). Migration 030.
+        # member's schedule, the location resolver).
         Index("ix_daily_ledger_resource_date", "resource_id", "target_date"),
         Index("ix_daily_ledger_lead_date", "active_lead_id", "target_date"),
+        # Two generated days may not put one room to two uses at once. Only
+        # rows that name a room and a window take part: an ad-hoc day with no
+        # window, or a day with no room, has nothing to collide with. The
+        # ledger generator matches the name in the IntegrityError it gets.
+        _no_overlap(
+            "ex_daily_ledger_no_overlap",
+            "target_date",
+            "resource_id IS NOT NULL AND time_window_start IS NOT NULL"
+            " AND time_window_end IS NOT NULL",
+        ),
     )
 
     id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
@@ -290,15 +348,19 @@ class DailyLedger(Base):
     resource_id = Column(Integer, ForeignKey("resources.id"), nullable=True, index=True)
     target_room_identifier = Column(String(30), nullable=True)
     delivery_format = Column(
-        Enum(ExecutionMode, name="execution_mode"), default=ExecutionMode.PHYSICAL
+        Enum(ExecutionMode, name="execution_mode"),
+        default=ExecutionMode.PHYSICAL,
+        server_default="PHYSICAL",
     )
     virtual_connection_string = Column(Text, nullable=True)
     latitude_target = Column(Numeric(10, 8), nullable=True)
     longitude_target = Column(Numeric(11, 8), nullable=True)
     altitude_target = Column(Numeric(6, 2), nullable=True)
-    precision_radius_meters = Column(Integer, default=15)
+    precision_radius_meters = Column(Integer, default=15, server_default="15")
     operational_state = Column(
-        Enum(DynamicState, name="dynamic_state"), default=DynamicState.SCHEDULED
+        Enum(DynamicState, name="dynamic_state"),
+        default=DynamicState.SCHEDULED,
+        server_default="SCHEDULED",
     )
 
     master_slot = relationship("StructuralMasterSlot", back_populates="daily_ledger_entries")
@@ -333,33 +395,31 @@ class Reservation(Base):
     says so: 22:00 to 06:00 is a night shift of eight hours, and reserved_date
     is the day it opens on. There is no column holding the date it ends on,
     only that rule, and app.core.time.window_span is where the rule is
-    applied. Equal times are refused, by ck_reservations_window since
-    migration 011, because 09:00 to 09:00 could mean nothing at all or a full
-    day and the row does not say which.
+    applied. Equal times are refused, by ck_reservations_window, because
+    09:00 to 09:00 could mean nothing at all or a full day and the row does
+    not say which.
 
     A weekly slot reads its two times by the same rule, so a night shift can
     be a recurring slot and not only a one off booking, and a booking that
     runs past midnight is compared against the whole timetable.
 
-    Two HELD rows on one resource may not overlap, and the database refuses
-    them: an EXCLUDE USING gist constraint named ex_reservations_no_overlap,
-    added by migration 010. It is not in __table_args__ and cannot be. An
-    exclusion constraint is a Postgres construct, the test suite builds its
-    schema with create_all on SQLite, and SQLite has no compiler for one, so
-    putting it here would stop the suite from starting. The cost of that is
-    real and worth naming: this class no longer describes the whole table, and
-    a reader who trusts it will not know the rule is there. Read migration 010
-    for the expression, and note that the tests which prove it only run
-    against a real PostgreSQL.
+    Two HELD rows on one resource may not overlap, and on PostgreSQL the
+    database refuses them: ex_reservations_no_overlap below, an EXCLUDE USING
+    gist constraint. SQLite has no such thing, so there the constraint is
+    skipped and the route's own conflict check, run under BEGIN IMMEDIATE, is
+    the whole of the protection. The tests that prove the constraint only run
+    against a real PostgreSQL (tests/*_pg.py).
     """
 
     __tablename__ = "reservations"
     __table_args__ = (
         CheckConstraint("time_window_end <> time_window_start", name="ck_reservations_window"),
-        # The conflict check reads one resource on one date. Migration 009
-        # made this on PostgreSQL; declared here so the models say so too,
-        # and so the standalone profile, which builds from the models, has it.
+        # The conflict check reads one resource on one date.
         Index("ix_reservations_resource_date", "resource_id", "reserved_date"),
+        # A cancelled hold keeps its row and frees its window, so only HELD
+        # rows take part. The reservations route matches the name in the
+        # IntegrityError it gets and answers 409.
+        _no_overlap("ex_reservations_no_overlap", "reserved_date", "status = 'HELD'"),
     )
 
     id = Column(Integer, primary_key=True)
@@ -387,8 +447,13 @@ class Reservation(Base):
         Enum(ReservationStatus, name="reservation_status"),
         nullable=False,
         default=ReservationStatus.HELD,
+        server_default="HELD",
     )
-    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=clock.now,
+    )
     cancelled_at = Column(DateTime(timezone=True), nullable=True)
 
     resource = relationship("Resource")
@@ -408,6 +473,7 @@ class ReverseRsvpLog(Base):
     approval_state = Column(
         Enum(LogVerificationState, name="log_verification_state"),
         default=LogVerificationState.PENDING_VERIFICATION,
+        server_default="PENDING_VERIFICATION",
     )
     authorized_by_user_id = Column(
         String(50), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -432,7 +498,7 @@ class VerificationLedger(Base):
     member_id = Column(String(50), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     marking_status = Column(Enum(VerificationMetric, name="verification_metric"), nullable=False)
     authorizing_agent_id = Column(String(50), ForeignKey("users.id"), nullable=True)
-    modification_timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    modification_timestamp = Column(DateTime(timezone=True), default=clock.now)
 
     ledger_instance = relationship("DailyLedger", back_populates="verification_records")
     member = relationship("User", foreign_keys=[member_id])
@@ -449,7 +515,7 @@ class LedgerAnnotation(Base):
     creator_id = Column(String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     classification_tag = Column(String(30), nullable=False)
     annotation_payload = Column(Text, nullable=False)
-    distribution_timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    distribution_timestamp = Column(DateTime(timezone=True), default=clock.now)
 
     ledger_instance = relationship("DailyLedger", back_populates="annotations")
     creator = relationship("User", foreign_keys=[creator_id])
@@ -467,8 +533,9 @@ class GuestGateRegistry(Base):
     handshake_status = Column(
         Enum(LogVerificationState, name="log_verification_state"),
         default=LogVerificationState.PENDING_VERIFICATION,
+        server_default="PENDING_VERIFICATION",
     )
-    timestamp_marked = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    timestamp_marked = Column(DateTime(timezone=True), default=clock.now)
     # What GET /guest/visit/{code} finds the check-in by. The code itself is
     # shown to the visitor once and kept nowhere. Null on the check-ins made
     # before there were codes.
@@ -519,7 +586,7 @@ class RefreshToken(Base):
     family_id = Column(String(36), nullable=False, index=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     consumed_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime(timezone=True), default=clock.now)
 
 
 # A key holding this instead of a scope list may do anything its bound user
@@ -546,7 +613,7 @@ class ApiKey(Base):
     )
     # Comma separated, one entry per allowed "<area>:<read|write>". The single
     # entry "*" is every area, which is what a key without scopes has always
-    # been and what the migration backfills. Bound as a string rather than a
+    # been. Bound as a string rather than a
     # table because a scope is never queried across keys: it is read once,
     # with the key, on the request the key authenticates. Text rather than a
     # width because a key naming every area twice is already 265 characters,
@@ -556,7 +623,7 @@ class ApiKey(Base):
     # Null means the key never expires, which is what every key issued before
     # this column existed was.
     expires_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime(timezone=True), default=clock.now)
 
 
 class AuditRecord(Base):
@@ -607,7 +674,7 @@ class ChangeMarker(Base):
     # ordering is the whole of what a cursor needs.
     id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     # "resource" or "reservation". A string and not an enum so that a router
-    # gaining a feed does not need a migration to say so.
+    # gaining a feed does not need a schema change to say so.
     entity_kind = Column(String(20), nullable=False)
     entity_id = Column(Integer, nullable=False)
     # "created" or "updated". There is no "deleted": nothing the feed carries
@@ -616,7 +683,7 @@ class ChangeMarker(Base):
     change_kind = Column(String(10), nullable=False)
     # Not indexed. The feed reads by id and never by time, and this is here
     # to be shown to a consumer rather than to be filtered on.
-    at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    at = Column(DateTime(timezone=True), nullable=False, default=clock.now)
 
 
 class FederatedIssuer(Base):
@@ -641,7 +708,7 @@ class FederatedIssuer(Base):
     # parties gives each one its own, so a note for one is refused by the rest.
     audience = Column(String(255), nullable=False)
     enabled = Column(Boolean, nullable=False, default=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime(timezone=True), default=clock.now)
 
     keys = relationship(
         "FederatedIssuerKey", back_populates="issuer_row", cascade="all, delete-orphan"
@@ -678,7 +745,7 @@ class FederatedIssuerKey(Base):
     # Null is a key with no planned retirement. A rotation sets it on the old
     # key rather than deleting it, so notes already in flight still verify.
     not_after = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime(timezone=True), default=clock.now)
 
     issuer_row = relationship("FederatedIssuer", back_populates="keys")
 
@@ -751,6 +818,6 @@ class FederatedIdentity(Base):
     user_id = Column(
         String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime(timezone=True), default=clock.now)
 
     __table_args__ = (UniqueConstraint("issuer_id", "subject", name="uq_federated_identity"),)

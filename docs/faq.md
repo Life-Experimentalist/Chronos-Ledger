@@ -61,18 +61,13 @@ The most common cause is a password mismatch. Run `docker compose down -v` to wi
 
 ---
 
-### Alembic migration fails with `relation already exists`
+### The server fails on a database made by an older release
 
-You are running migrations against a database that already has tables from a previous partial run. Options:
+There are no migrations before the first real deployment. The server builds the tables that are missing when it starts and changes none that exist, so a database made with an older `schema_version` (see `/health`) keeps its old shape and the new code does not fit it. Wipe it and start again (dev only):
 
 ```bash
-# Wipe the database and start clean (dev only)
 docker compose down -v
 docker compose up
-
-# Or stamp the current state and skip the failed migration
-cd backend
-uv run alembic stamp head
 ```
 
 ---
@@ -125,18 +120,18 @@ Also ensure `APP_CORS_ORIGINS` in `.env` includes `http://192.168.1.10`.
 
 ### Login fails with "Invalid credentials" after setup.sh
 
-Usually `INITIAL_ADMIN_PASSWORD` is empty or missing from `.env`. The seed migration stores a hash of a random string it throws away, so the administrator is deliberately unreachable until that variable gives it a password, and `docker compose logs chronos-app` says `INITIAL_ADMIN_PASSWORD is not set` on boot. Set it and restart:
+Usually `INITIAL_ADMIN_PASSWORD` is empty or missing from `.env`. The schema step stores a hash of a random string it throws away, so the administrator is deliberately unreachable until that variable gives it a password, and `docker compose logs chronos-app` says `INITIAL_ADMIN_PASSWORD is not set` on boot. Set it and restart:
 
 ```bash
 docker compose up -d --force-recreate chronos-app
 ```
 
-Otherwise the account may not exist at all. The seed migration creates it during `alembic upgrade head`; if migrations did not run (check `docker compose logs chronos-app`), there is nothing to log into.
+Otherwise the account may not exist at all. The schema step creates it when the server starts; if the server never got that far (check `docker compose logs chronos-app`), there is nothing to log into.
 
-Force migrations:
+Run the step by hand:
 
 ```bash
-docker compose exec chronos-app uv run --no-sync alembic upgrade head
+docker compose exec chronos-app uv run --no-sync python -m app.core.schema
 ```
 
 ---

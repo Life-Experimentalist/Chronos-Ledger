@@ -1,6 +1,7 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
+import re
 from contextlib import contextmanager
 
 from sqlalchemy import create_engine, event
@@ -43,9 +44,9 @@ def sqlite_engine(
 ) -> Engine:
     """An engine on a SQLite file, set up for the standalone profile.
 
-    Postgres keeps the schedule honest with exclusion constraints, which exist
-    only in the migrations and which SQLite has no equivalent of, so the
-    OVERLAP_CONSTRAINT branch in the reservations route never fires here. What
+    Postgres keeps the schedule honest with exclusion constraints, which the
+    models declare for that dialect only because SQLite has no equivalent, so
+    the OVERLAP_CONSTRAINT branch in the reservations route never fires here. What
     takes their place is that every transaction starts with BEGIN IMMEDIATE:
     it takes the write lock before the first read, so the conflict check and
     the insert that follows it run with nobody else between them, and the
@@ -84,6 +85,42 @@ def sqlite_engine(
         connection.exec_driver_sql("BEGIN IMMEDIATE")
 
     return engine
+
+
+SCHEMA_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
+
+
+def use_schema(engine: Engine, name: str) -> None:
+    """Keep every connection of this engine inside one PostgreSQL schema.
+
+    For the embedded flavour (app.embedded), where Chronos lives in a host
+    program's database and must not touch the host's tables. Every pooled
+    connection gets `search_path` set to that schema alone, so an unqualified
+    name resolves there and nowhere else: create_all puts the tables, types
+    and constraints in it, has_table looks only in it, and a host table of
+    the same name in `public` is neither seen nor touched. The btree_gist
+    extension is database-wide; if the host already has it, in whatever
+    schema, CREATE EXTENSION IF NOT EXISTS is a no-op and the exclusion
+    constraints still find its operator classes, since the default class for
+    an index is looked up by type, not by search_path.
+
+    Attach before the first connection is made.
+    """
+    if not SCHEMA_NAME.match(name):
+        raise ValueError(f"{name!r} is not a plain schema name (letters, digits, underscores)")
+
+    @event.listens_for(engine, "connect")
+    def _set_search_path(dbapi_connection, _record):
+        # Outside a transaction: the pool rolls back whatever is open when a
+        # connection comes back, and SET inside that transaction goes with it.
+        previous = dbapi_connection.autocommit
+        dbapi_connection.autocommit = True
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute(f'SET search_path TO "{name}"')
+        finally:
+            cursor.close()
+        dbapi_connection.autocommit = previous
 
 
 if is_sqlite(settings.database_url):

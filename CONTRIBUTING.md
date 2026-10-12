@@ -31,8 +31,7 @@ Be respectful. Treat other contributors the way you would want to be treated. Is
 ```bash
 cd backend
 uv sync --dev                       # install all deps including dev tools
-uv run alembic upgrade head         # apply migrations
-uv run uvicorn app.main:app --reload --port 8000
+uv run uvicorn app.main:app --reload --port 8000   # builds the schema on start
 ```
 
 ### Frontend
@@ -88,7 +87,6 @@ Before opening a PR, verify all of the following locally:
 cd backend
 uv run ruff format .          # auto-format (run this first)
 uv run ruff check .           # zero lint errors
-uv run alembic check          # no pending migrations
 ```
 
 **Frontend**
@@ -124,17 +122,13 @@ frontend/src/
 
 ---
 
-## Database Migrations
+## Database Schema
 
-Always create a migration for any model change:
+There are no migrations. The models in `backend/app/models/db.py` are the schema, and `backend/app/core/schema.py::ensure_schema` builds whatever is missing with `create_all` on every start, on PostgreSQL and SQLite alike. When you change a model:
 
-```bash
-cd backend
-uv run alembic revision --autogenerate -m "describe the change"
-uv run alembic upgrade head
-```
-
-Review the generated file in `backend/alembic/versions/` before committing. Autogenerate is not perfect, check for missing `server_default`, wrong `nullable`, or dropped-index regressions.
+- Bump `SCHEMA_VERSION` in `backend/app/core/schema.py`. `/health` reports it.
+- Keep anything PostgreSQL-only (exclusion constraints, `btree_gist`, partial indexes with PostgreSQL operators) behind a dialect guard on the model, `ddl_if(dialect="postgresql")` or `DDL(...).execute_if(dialect="postgresql")`, so SQLite builds the same models without it. `backend/tests/test_schema_pg.py` checks what arrives on PostgreSQL.
+- Recreate your database. Until the first real deployment a schema change means a new database, and a release does not upgrade the database the one before it made. Migrations come back as a fresh baseline then.
 
 ---
 

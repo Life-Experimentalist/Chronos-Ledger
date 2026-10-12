@@ -46,9 +46,9 @@ another one.
 | `chronos up` | Starts the stack and waits until `/health/ready` answers. |
 | `chronos down` | Stops the stack. Data stays in its volumes. |
 | `chronos status` | Container states and what `/health` reports. |
-| `chronos upgrade [--to X.Y.Z] [--yes]` | Backs up, moves the pinned tag, pulls, starts, waits until ready and checks the version. On failure it prints how to go back. |
-| `chronos backup` | Dumps the database to `backups/` with a `.json` file recording the version and migration revision. |
-| `chronos restore <file> [--yes]` | Replaces the database with that backup. Refuses a backup newer than the server. |
+| `chronos upgrade [--to X.Y.Z] [--yes]` | Backs up, moves the pinned tag, pulls, checks that the new release describes the same schema version as the running one, starts, waits until ready and checks the version. On failure it prints how to go back. |
+| `chronos backup` | Dumps the database to `backups/` with a `.json` file recording the version and schema version. |
+| `chronos restore <file> [--yes]` | Replaces the database with that backup. Refuses a backup taken at a schema version other than the server's. |
 | `chronos doctor` | Reports problems and how to fix each. Changes nothing. |
 | `chronos self update` | Updates the CLI through the channel that installed it. |
 | `chronos self uninstall [--yes]` | Removes the CLI through the channel that installed it. |
@@ -60,6 +60,16 @@ scripts must pass `--yes`.
 compose file it writes comes from the CLI's release. Run `chronos self update`
 first. If the compose file was edited by hand, the old one is kept as
 `docker-compose.yml.before-upgrade`.
+
+There are no migrations before the first real deployment, so `upgrade` and
+`restore` work only within one schema version (the `schema_version` that
+`/health` reports). `upgrade` pulls the new image, asks it for its schema
+version, and refuses to start it when the number differs from the running
+server's, putting the pin back. `restore` refuses a backup whose recorded
+schema version is not the server's. In both cases the way across is to export
+what you need and start the new release on an empty database. The schema
+version a backup records comes from `/health`; when the server is down it
+comes from the pinned image, which is what built the database.
 
 ## Updating and removing the CLI
 

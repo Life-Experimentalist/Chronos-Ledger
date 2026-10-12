@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.core import rate_limit
+from app.core import clock, rate_limit
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -214,7 +214,7 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
     # RFC 5545 requires DTSTAMP on every VEVENT, and strict parsers reject a
     # component without one. It is when this copy of the event was written,
     # not when the session runs, so one reading serves the whole response.
-    written_at = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
+    written_at = clock.now().strftime("%Y%m%dT%H%M%SZ")
 
     for entry in ledger_entries:
         offering = entry.activity

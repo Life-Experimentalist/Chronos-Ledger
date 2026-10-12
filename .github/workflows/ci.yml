@@ -10,6 +10,9 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # So a branch without a pull request can be checked by hand. Publishing
+  # stays gated on a push to main below.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -80,9 +83,9 @@ jobs:
   # ── Backend: the tests that need PostgreSQL ─────────────────────────────────
   # The suite above runs on in-memory SQLite, which has no exclusion
   # constraints, so the guarantees production leans on (no double booking, one
-  # ledger day per slot, refresh-token families) are only proven here. Each
-  # file gets an empty database because each one builds its schema by running
-  # the migrations, and several step them down and back up.
+  # ledger day per slot, attendance outliving its account) are only proven
+  # here. Each file gets an empty database because each one builds the schema
+  # from the models and then asks the catalog what arrived.
   backend-test-postgres:
     name: Backend tests on PostgreSQL
     runs-on: ubuntu-latest
@@ -100,7 +103,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U chronos_ci"
+          --health-cmd "pg_isready -U chronos_ci -d postgres"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -132,6 +135,33 @@ jobs:
               uv run python -m pytest "$file" -q -rs || status=1
           done
           exit $status
+
+  # ── Backend: the embedded flavour on Windows ────────────────────────────────
+  # The only place the Windows branches of the stdin watcher and parent_alive
+  # run. A subset of the suite, so no coverage floor here.
+  backend-test-windows:
+    name: Backend, the embedded flavour on Windows
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --frozen --dev
+
+      - name: Run the embedded tests
+        run: uv run python -m pytest tests/test_embedded.py tests/test_embedded_clock.py -q -rs
 
   # ── Frontend: lint + type-check + build ───────────────────────────────────
   frontend-check:
