@@ -355,7 +355,7 @@ whether and when.
 
 ---
 
-## Host clock (shipped on `feat/sim-clock`)
+## Host clock
 
 A simulation host that embeds the engine can run it on a clock of its own.
 `CLOCK_MODE=host` freezes the application's time at `CLOCK_START`, the
