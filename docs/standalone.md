@@ -18,6 +18,11 @@ integrates against `chronos-engine` can later point at a container deployment
 by changing the base URL and nothing else. The SDKs in [sdks.md](sdks.md) work
 against either.
 
+A program that wants to run Chronos as its own hidden child process, with no
+Chronos logins and the identity of each caller asserted by the program, uses
+`chronos-engine embedded` instead: see [embedded.md](embedded.md). Everything
+on this page about the database, backups and upgrading applies to it too.
+
 ## Install
 
 From a checkout, with [uv](https://github.com/astral-sh/uv):
