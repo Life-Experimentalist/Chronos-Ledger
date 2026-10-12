@@ -200,7 +200,13 @@ def test_the_loser_of_a_first_sight_race_carries_on(engine, built, monkeypatch):
 
         request = SimpleNamespace(state=SimpleNamespace())
         actor = host_actor(
-            request, actor_id="race-1", role="STAFF", name="Second Sight", email=None, db=loser
+            request,
+            actor_id="race-1",
+            role="STAFF",
+            name="Second Sight",
+            email=None,
+            unit=None,
+            db=loser,
         )
         assert actor == "race-1"
         assert request.state.actor_id == "race-1"

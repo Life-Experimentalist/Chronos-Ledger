@@ -80,6 +80,7 @@ and on every request that needs an account (nearly all of them):
 X-Chronos-Actor-Role: ORG_ADMIN | UNIT_ADMIN | STAFF | MEMBER
 X-Chronos-Actor-Name: <display name>            optional
 X-Chronos-Actor-Email: <address>                optional
+X-Chronos-Actor-Unit: <unit code>               optional
 ```
 
 The secret is compared in constant time by
@@ -105,14 +106,21 @@ What the host asserts is the truth:
 - The actor id is the Chronos user id, up to 50 characters. The first time an
   id is seen an account is made for it with the role and name from the
   headers; there is no password to set or remember. After that the role,
-  name and email are brought up to date from the headers on every request,
-  and a change on the host's side takes effect on the next call.
+  name, email and unit are brought up to date from the headers on every
+  request, and a change on the host's side takes effect on the next call.
 - `X-Chronos-Actor-Role` is required for every id except `system`, and must
   be an `InstitutionalRole` name; anything else is `400`. Scope rules apply
   as they do everywhere: a `UNIT_ADMIN` sees their unit, a `MEMBER` their own
-  rows. A unit is not asserted by header; set `unit_code` with
-  `PATCH /api/v1/users/{id}` as an administrator when the host first sees a
-  unit administrator.
+  rows.
+- `X-Chronos-Actor-Unit` is optional and says which unit the actor belongs
+  to, so a `UNIT_ADMIN` or `STAFF` actor is scoped without a separate call.
+  Present with a code, it sets the account's `unit_code`; present and empty,
+  it clears it; absent, the unit is left as it is, so a host that sets it
+  with `PATCH /api/v1/users/{id}` keeps working. A host that sends the header
+  is authoritative: it overrides a `PATCH` on the next call. The code is
+  checked the way the users API checks one, against the column width only
+  (there is no unit registry); more than 50 characters is `400`. The header
+  is ignored for `system`.
 - `X-Chronos-Actor-Email` is optional. Without it the account gets a
   placeholder address under `host.invalid`, which cannot receive mail. An
   address already on another account is `409`.
