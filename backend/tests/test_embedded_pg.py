@@ -222,3 +222,39 @@ def test_the_system_account_is_seeded_once(engine, built, db):
     assert system.initial_login_state is False
     # Nothing to do the second time, on the same schema.
     assert prepare_database(engine, SCHEMA) == "current"
+
+
+def test_the_entry_point_builds_the_schema_the_flags_name(tmp_path, host_tables, embedded_process):
+    """The real entry point in a fresh interpreter, on --database-url and --schema.
+
+    This is the case an early `app.` import breaks: the engine would be built
+    from the DATABASE_URL in the environment, here a decoy SQLite file, and
+    the host's database would never see a table.
+    """
+    schema = "chronos_subprocess_schema"
+    decoy = tmp_path / "elsewhere.db"
+    child = embedded_process(
+        "--data-dir",
+        str(tmp_path),
+        "--database-url",
+        DATABASE_URL,
+        "--schema",
+        schema,
+        "--port",
+        "0",
+        env={"DATABASE_URL": f"sqlite:///{decoy.as_posix()}"},
+    )
+    catalog = create_engine(DATABASE_URL)
+    try:
+        assert child.ready()["chronos"] == "ready"
+        with catalog.connect() as connection:
+            assert {"users", "reservations", "resources", "audit_records"} <= _tables(
+                connection, schema
+            )
+        assert not decoy.exists()
+        assert child.leave() == 0
+    finally:
+        child.kill()
+        with catalog.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        catalog.dispose()

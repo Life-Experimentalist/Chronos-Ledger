@@ -6,6 +6,7 @@ import asyncio
 import io
 import json
 import os
+import sqlite3
 import time
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -486,3 +487,41 @@ def test_the_parent_going_away_stops_the_server():
 def test_parent_alive_tells_a_live_process_from_a_gone_one():
     assert standalone.parent_alive(os.getpid())
     assert not standalone.parent_alive(2**31 - 1)
+
+
+def test_the_entry_point_builds_the_file_the_flag_names(tmp_path, embedded_process):
+    """The real entry point in a fresh interpreter, where nothing is cached yet.
+
+    Importing anything under `app.` before configure_environment runs would
+    build the engine from whatever DATABASE_URL the host's environment
+    carries, and the in-process tests cannot see that: their settings were
+    cached long before. So a decoy URL goes in the environment, and the file
+    has to appear under --data-dir and nowhere else.
+    """
+    data_dir = tmp_path / "d"
+    decoy = tmp_path / "elsewhere.db"
+    child = embedded_process(
+        "--data-dir",
+        str(data_dir),
+        "--port",
+        "0",
+        env={"DATABASE_URL": f"sqlite:///{decoy.as_posix()}"},
+    )
+
+    ready = child.ready()
+    assert ready["chronos"] == "ready"
+    assert ready["port"] > 0
+    assert ready["clock"] == "system"
+
+    connection = sqlite3.connect(data_dir / standalone.DATABASE_FILE)
+    try:
+        tables = {name for (name,) in connection.execute("SELECT name FROM sqlite_master")}
+        users = {user_id for (user_id,) in connection.execute("SELECT id FROM users")}
+    finally:
+        connection.close()
+    assert "users" in tables
+    assert SYSTEM_ACTOR_ID in users
+    assert not decoy.exists()
+
+    # The host going away: stdin closes, the process leaves on its own.
+    assert child.leave() == 0
