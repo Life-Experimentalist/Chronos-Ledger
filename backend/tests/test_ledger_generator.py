@@ -6,7 +6,7 @@ import datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app import main
+from app.cron import scheduled
 from app.cron.ledger_generator import generate_daily_ledger_entries, missed_ledger_dates
 from app.models.db import (
     Activity,
@@ -175,12 +175,12 @@ def test_the_startup_catch_up_writes_what_a_restart_missed(db, seed_users, monke
     db.add(tuesday)
     db.commit()
     expected = {(monday.id, MONDAY), (tuesday.id, MONDAY + datetime.timedelta(days=1))}
-    monkeypatch.setattr(main, "SessionLocal", lambda: db)
+    monkeypatch.setattr(scheduled, "SessionLocal", lambda: db)
     monkeypatch.setattr(
-        main, "org_now", lambda: datetime.datetime.combine(MONDAY, datetime.time(23, 30))
+        scheduled, "org_now", lambda: datetime.datetime.combine(MONDAY, datetime.time(23, 30))
     )
 
-    main._catch_up_ledger()
+    scheduled.catch_up_ledger()
 
     written = {(day.master_slot_id, day.target_date) for day in db.query(DailyLedger).all()}
     assert written == expected
