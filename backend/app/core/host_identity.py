@@ -11,6 +11,7 @@ user is, and it says so on every request:
     X-Chronos-Actor-Role: <role>          an InstitutionalRole name
     X-Chronos-Actor-Name: <name>          optional
     X-Chronos-Actor-Email: <address>      optional
+    X-Chronos-Actor-Unit: <unit code>     optional; empty clears, absent leaves it
 
 The secret is checked by HostSecretMiddleware on every request but the health
 checks, including routes that need no account. host_actor replaces
@@ -21,8 +22,8 @@ left that reads one.
 
 The actor id is the Chronos user id. No link table: the host's ids are
 stable by contract, an account is made the first time an id is seen, and
-the host is authoritative for the role and the name, which are brought up to
-date on every request. The federated-identity mapping was not reused because
+the host is authoritative for the role, the name and the unit, which are
+brought up to date on every request. The federated-identity mapping was not reused because
 it does the opposite on each count: it refuses administrators, never changes
 a role after the first sign-in, and needs an email address.
 
@@ -46,10 +47,12 @@ from app.models.db import InstitutionalRole, User
 HOST_SECRET_ENV = "CHRONOS_HOST_SECRET"
 MINIMUM_HOST_SECRET_LENGTH = 32
 SYSTEM_ACTOR_ID = "system"
-# users.id, users.full_name and users.email_address column widths.
+# users.id, users.full_name, users.email_address and users.unit_code column
+# widths. The unit limit is checked here because SQLite does not enforce it.
 ACTOR_ID_LIMIT = 50
 NAME_LIMIT = 120
 EMAIL_LIMIT = 120
+UNIT_LIMIT = 50
 # A domain that can never receive mail (RFC 2606), for accounts the host
 # names without an address. The column is NOT NULL and unique.
 PLACEHOLDER_EMAIL_DOMAIN = "host.invalid"
@@ -104,6 +107,7 @@ def host_actor(
     role: str | None = Header(default=None, alias="X-Chronos-Actor-Role"),
     name: str | None = Header(default=None, alias="X-Chronos-Actor-Name"),
     email: str | None = Header(default=None, alias="X-Chronos-Actor-Email"),
+    unit: str | None = Header(default=None, alias="X-Chronos-Actor-Unit"),
     db: Session = Depends(get_db),
 ) -> str:
     """The account the host says is calling, made or brought up to date.
@@ -119,8 +123,10 @@ def host_actor(
             detail=f"X-Chronos-Actor is required, at most {ACTOR_ID_LIMIT} characters",
         )
     if actor_id == SYSTEM_ACTOR_ID:
-        # The host itself: the seeded administrator, whatever role it sends.
+        # The host itself: the seeded administrator, whatever role or unit
+        # it sends.
         role_type = InstitutionalRole.ORG_ADMIN
+        unit = None
     else:
         try:
             role_type = InstitutionalRole((role or "").strip())
@@ -138,17 +144,26 @@ def host_actor(
                 detail=f"X-Chronos-Actor-Email must be an address of at most {EMAIL_LIMIT} characters",
             )
     name = (name or "").strip()[:NAME_LIMIT] or None
+    # Three states: absent leaves the unit as it is, so a host that sets it
+    # through the users API keeps working; empty clears it; a code sets it.
+    if unit is not None:
+        unit = unit.strip()
+        if len(unit) > UNIT_LIMIT:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"X-Chronos-Actor-Unit must be a unit code of at most {UNIT_LIMIT} characters",
+            )
 
     user = db.get(User, actor_id)
     if user is None:
-        _provision(db, actor_id, role_type, name, email)
-    elif _bring_up_to_date(user, role_type, name, email):
+        _provision(db, actor_id, role_type, name, email, unit)
+    elif _bring_up_to_date(user, role_type, name, email, unit):
         _save(db)
     request.state.actor_id = actor_id
     return actor_id
 
 
-def _provision(db: Session, actor_id: str, role_type: InstitutionalRole, name, email) -> None:
+def _provision(db: Session, actor_id: str, role_type: InstitutionalRole, name, email, unit) -> None:
     """The account for an id seen for the first time."""
     db.add(
         User(
@@ -160,6 +175,7 @@ def _provision(db: Session, actor_id: str, role_type: InstitutionalRole, name, e
             # password that fails to verify rather than one that fails to parse.
             credential_secure_hash=hash_password(secrets.token_urlsafe(32)),
             role_type=role_type,
+            unit_code=unit or None,
             initial_login_state=False,
         )
     )
@@ -176,11 +192,11 @@ def _provision(db: Session, actor_id: str, role_type: InstitutionalRole, name, e
         user = db.get(User, actor_id)
         if user is None:
             raise _email_taken() from None
-        if _bring_up_to_date(user, role_type, name, email):
+        if _bring_up_to_date(user, role_type, name, email, unit):
             _save(db)
 
 
-def _bring_up_to_date(user: User, role_type: InstitutionalRole, name, email) -> bool:
+def _bring_up_to_date(user: User, role_type: InstitutionalRole, name, email, unit) -> bool:
     """Apply what the host asserts. True when something changed.
 
     Only then does the request commit: on the SQLite profile every commit
@@ -195,6 +211,9 @@ def _bring_up_to_date(user: User, role_type: InstitutionalRole, name, email) -> 
         changed = True
     if email and user.email_address != email:
         user.email_address = email
+        changed = True
+    if unit is not None and user.unit_code != (unit or None):
+        user.unit_code = unit or None
         changed = True
     # The first-login gate in get_current_user is for Chronos-issued
     # passwords, which no account here has. Also clears it for an account

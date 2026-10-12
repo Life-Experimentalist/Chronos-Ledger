@@ -125,6 +125,60 @@ def test_the_role_and_name_follow_the_host(embedded, db):
     assert user.email_address == "sam@host.example"
 
 
+def _unit_of(db, actor_id):
+    db.expire_all()
+    return db.get(User, actor_id).unit_code
+
+
+def test_the_unit_is_set_on_first_sight(embedded, db):
+    assert embedded.get(AUDIT, headers=actor("U-1", role="STAFF", unit=" CSE ")).status_code == 403
+    assert _unit_of(db, "U-1") == "CSE"
+
+
+def test_the_unit_follows_the_host(embedded, db):
+    embedded.get(AUDIT, headers=actor("U-2", role="STAFF", unit="CSE"))
+    embedded.get(AUDIT, headers=actor("U-2", role="STAFF", unit="ECE"))
+    assert _unit_of(db, "U-2") == "ECE"
+
+
+def test_an_empty_unit_header_clears_the_unit(embedded, db):
+    embedded.get(AUDIT, headers=actor("U-3", role="STAFF", unit="CSE"))
+    embedded.get(AUDIT, headers=actor("U-3", role="STAFF", unit=""))
+    assert _unit_of(db, "U-3") is None
+
+
+def test_no_unit_header_leaves_the_unit_alone(embedded, db):
+    """A host that sets the unit through the users API keeps working."""
+    embedded.get(AUDIT, headers=actor("U-4", role="STAFF"))
+    db.get(User, "U-4").unit_code = "CSE"
+    db.commit()
+    embedded.get(AUDIT, headers=actor("U-4", role="STAFF"))
+    assert _unit_of(db, "U-4") == "CSE"
+
+
+def test_a_unit_code_past_the_column_is_refused(embedded, db):
+    res = embedded.get(AUDIT, headers=actor("U-5", role="STAFF", unit="c" * 51))
+    assert res.status_code == 400
+    assert "X-Chronos-Actor-Unit" in res.json()["detail"]
+    assert db.get(User, "U-5") is None
+
+
+def test_the_system_actor_ignores_the_unit_header(embedded, db):
+    seed_system_account(db)
+    res = embedded.get(AUDIT, headers=actor(SYSTEM_ACTOR_ID, unit="CSE"))
+    assert res.status_code == 200
+    assert _unit_of(db, SYSTEM_ACTOR_ID) is None
+
+
+def test_a_unit_administrator_given_a_unit_sees_only_that_unit(embedded):
+    """The unit from the header is what security.in_unit_scope reads."""
+    embedded.get(AUDIT, headers=actor("U-6", role="STAFF", unit="CSE"))
+    embedded.get(AUDIT, headers=actor("U-7", role="STAFF", unit="ECE"))
+    res = embedded.get("/api/v1/users/", headers=actor("U-8", role="UNIT_ADMIN", unit="CSE"))
+    assert res.status_code == 200, res.text
+    assert {row["id"] for row in res.json()} == {"U-6", "U-8"}
+
+
 def test_a_seeded_account_the_host_asserts_is_let_in(embedded, db, seed_users):
     seed_users["staff"].initial_login_state = True
     db.commit()
