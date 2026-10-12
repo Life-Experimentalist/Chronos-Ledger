@@ -482,9 +482,8 @@ pub fn doctor(project: &Project) -> Result<()> {
     match project.health() {
         None => {
             r.warn("the backend is not answering /health. `chronos up`, then `docker compose logs chronos-app` if it stays down.");
-            if let Ok(version) = project.image_schema_version() {
-                println!("        the pinned image describes schema version {version}");
-            }
+            // Asking the image would start a container, and doctor changes nothing.
+            println!("        schema version unknown while the backend is down");
         }
         Some(h) => {
             r.ok(&format!(
