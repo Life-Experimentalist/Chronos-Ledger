@@ -299,6 +299,16 @@ def watch_parent(pid: int, stop, alive=parent_alive, interval: float = 1.0) -> N
 
 
 def run_embedded(application, args) -> int:
+    from app.core.config import get_settings
+    from app.core.redis_client import get_redis, is_memory
+
+    # The in-process Redis is made here, before the watcher threads exist,
+    # rather than in the lifespan: fakeredis imports numpy when it is
+    # installed, and on Windows that import hangs while another thread is
+    # blocked reading a pipe. The host's stdin is one.
+    if is_memory(get_settings().redis_url):
+        get_redis()
+
     # log_config=None: uvicorn's own configuration writes access lines to
     # stdout, which belongs to the ready line. Without it every logger
     # propagates to the root handler main() set up, on stderr.
