@@ -25,10 +25,14 @@ from datetime import UTC, datetime, time, timedelta
 from app.core import clock
 from app.core.config import get_settings
 from app.core.database import SessionLocal
-from app.core.time import org_now, org_timezone, org_tomorrow
+from app.core.time import org_now, org_timezone
 from app.cron.guest_overstay import announce_overstayed_visits
 from app.cron.guest_retention import purge_old_guest_check_ins
-from app.cron.ledger_generator import generate_daily_ledger_entries, missed_ledger_dates
+from app.cron.ledger_generator import (
+    generate_daily_ledger_entries,
+    materialize_horizon,
+    missed_ledger_dates,
+)
 from app.cron.refresh_token_cleanup import purge_expired_refresh_tokens
 
 NIGHTLY_LEDGER_HOUR = 23
@@ -36,10 +40,16 @@ OVERSTAY_INTERVAL = timedelta(minutes=5)
 
 
 def run_ledger_generator():
-    tomorrow = org_tomorrow()
+    """Keep LEDGER_HORIZON_DAYS of days written, counted from tomorrow.
+
+    Only the missing ones are written, so a night that finds the horizon full
+    writes the one new day at its far end, and a run after a stretch with no
+    jobs (a host that advanced the clock several days, or a process that was
+    down) fills the whole gap.
+    """
     db = SessionLocal()
     try:
-        generate_daily_ledger_entries(tomorrow, db)
+        materialize_horizon(db)
     finally:
         db.close()
 

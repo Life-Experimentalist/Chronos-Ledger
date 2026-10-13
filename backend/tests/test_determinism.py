@@ -181,9 +181,11 @@ def test_the_same_day_twice_writes_the_same_rows(host_clock, monkeypatch):
     second = _run_the_day(monkeypatch)
 
     assert first == second
-    # The script did what it says: a day was laid down by the nightly run,
-    # two holds were taken and one let go, and every request was audited.
-    assert len(first["daily_ledger"]) == 1
+    # The script did what it says: the nightly run laid down the Tuesdays of
+    # the next four weeks (the 8th, 15th, 22nd and 29th, as the horizon ends
+    # on 5 October), two holds were taken and one let go, and every request
+    # was audited.
+    assert len(first["daily_ledger"]) == 4
     assert len(first["reservations"]) == 2
     assert len(first["audit_records"]) == 4
 

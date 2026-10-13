@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 
 import datetime
+import logging
 import os
 import tempfile
 
@@ -12,8 +13,11 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import require_roles
 from app.core.time import org_tomorrow
+from app.cron.ledger_generator import materialize_horizon
 from app.models.db import PlanningCycle
 from app.services.ingestion_engine import ChronosIngestionEngine
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -63,6 +67,17 @@ def upload_csv(
 
         if result["status"] == "FAILED":
             raise HTTPException(status_code=422, detail=result["error_log"])
+
+        # The import is committed by now, so a failure here must not read as
+        # a failed import. The nightly job writes the same days if this does
+        # not, which is why it is only logged.
+        try:
+            materialize_horizon(db, cycle_id)
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "ledger: filling the horizon after importing cycle %s failed", cycle_id
+            )
 
         return result
     finally:
