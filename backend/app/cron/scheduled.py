@@ -25,6 +25,7 @@ from datetime import UTC, datetime, time, timedelta
 from app.core import clock
 from app.core.config import get_settings
 from app.core.database import SessionLocal
+from app.core.idempotency import purge_expired
 from app.core.time import org_now, org_timezone
 from app.cron.guest_overstay import announce_overstayed_visits
 from app.cron.guest_retention import purge_old_guest_check_ins
@@ -89,6 +90,14 @@ def purge_guest_check_ins():
         db.close()
 
 
+def purge_idempotency_records():
+    db = SessionLocal()
+    try:
+        purge_expired(db)
+    finally:
+        db.close()
+
+
 async def announce_guest_overstays():
     # Async, unlike its neighbours: the notice goes out over the socket, which
     # belongs to this loop, and the scheduler runs in the same process.
@@ -148,6 +157,7 @@ JOBS: tuple[Job, ...] = (
     Job("nightly_ledger_gen", run_ledger_generator, daily_at(NIGHTLY_LEDGER_HOUR, 0)),
     Job("refresh_token_purge", purge_refresh_tokens, daily_at(3, 0)),
     Job("guest_retention_purge", purge_guest_check_ins, daily_at(3, 30)),
+    Job("idempotency_purge", purge_idempotency_records, daily_at(3, 45)),
     Job("guest_overstay_notice", announce_guest_overstays, every(OVERSTAY_INTERVAL)),
 )
 

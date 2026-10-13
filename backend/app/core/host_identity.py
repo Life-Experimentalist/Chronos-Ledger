@@ -42,7 +42,8 @@ from starlette.responses import JSONResponse
 from app.core.database import get_db
 from app.core.emails import normalize_email
 from app.core.errors import ChronosError, ErrorCode, error_body
-from app.core.security import hash_password
+from app.core.idempotency import claim
+from app.core.security import caller_identity, hash_password
 from app.models.db import InstitutionalRole, User
 
 HOST_SECRET_ENV = "CHRONOS_HOST_SECRET"
@@ -165,6 +166,7 @@ def host_actor(
     elif _bring_up_to_date(user, role_type, name, email, unit):
         _save(db)
     request.state.actor_id = actor_id
+    claim(request, db, caller_identity(request))
     return actor_id
 
 

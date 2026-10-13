@@ -8,14 +8,17 @@ from ...client import AuthenticatedClient, Client
 from ...models.attendance_mark_request import AttendanceMarkRequest
 from ...models.attendance_mark_response_200 import AttendanceMarkResponse200
 from ...models.error_response import ErrorResponse
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     *,
     body: AttendanceMarkRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -74,6 +77,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: AttendanceMarkRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[AttendanceMarkResponse200 | ErrorResponse]:
     """Mark single member attendance
 
@@ -88,6 +92,7 @@ def sync_detailed(
     status rather than adding a second row.
 
     Args:
+        idempotency_key (str | Unset):
         body (AttendanceMarkRequest):
 
     Raises:
@@ -100,6 +105,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -113,6 +119,7 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     body: AttendanceMarkRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> AttendanceMarkResponse200 | ErrorResponse | None:
     """Mark single member attendance
 
@@ -127,6 +134,7 @@ def sync(
     status rather than adding a second row.
 
     Args:
+        idempotency_key (str | Unset):
         body (AttendanceMarkRequest):
 
     Raises:
@@ -140,6 +148,7 @@ def sync(
     return sync_detailed(
         client=client,
         body=body,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -147,6 +156,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: AttendanceMarkRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[AttendanceMarkResponse200 | ErrorResponse]:
     """Mark single member attendance
 
@@ -161,6 +171,7 @@ async def asyncio_detailed(
     status rather than adding a second row.
 
     Args:
+        idempotency_key (str | Unset):
         body (AttendanceMarkRequest):
 
     Raises:
@@ -173,6 +184,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -184,6 +196,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     body: AttendanceMarkRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> AttendanceMarkResponse200 | ErrorResponse | None:
     """Mark single member attendance
 
@@ -198,6 +211,7 @@ async def asyncio(
     status rather than adding a second row.
 
     Args:
+        idempotency_key (str | Unset):
         body (AttendanceMarkRequest):
 
     Raises:
@@ -212,5 +226,6 @@ async def asyncio(
         await asyncio_detailed(
             client=client,
             body=body,
+            idempotency_key=idempotency_key,
         )
     ).parsed

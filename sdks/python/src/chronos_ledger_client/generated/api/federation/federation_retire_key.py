@@ -9,7 +9,7 @@ from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
 from ...models.issuer_key_response import IssuerKeyResponse
 from ...models.issuer_key_retire import IssuerKeyRetire
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
@@ -17,8 +17,11 @@ def _get_kwargs(
     key_id: int,
     *,
     body: IssuerKeyRetire,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "patch",
@@ -87,6 +90,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: IssuerKeyRetire,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | IssuerKeyResponse]:
     """Give a key an end
 
@@ -97,6 +101,7 @@ def sync_detailed(
     Args:
         issuer_id (int):
         key_id (int):
+        idempotency_key (str | Unset):
         body (IssuerKeyRetire):
 
     Raises:
@@ -111,6 +116,7 @@ def sync_detailed(
         issuer_id=issuer_id,
         key_id=key_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -126,6 +132,7 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     body: IssuerKeyRetire,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | IssuerKeyResponse | None:
     """Give a key an end
 
@@ -136,6 +143,7 @@ def sync(
     Args:
         issuer_id (int):
         key_id (int):
+        idempotency_key (str | Unset):
         body (IssuerKeyRetire):
 
     Raises:
@@ -151,6 +159,7 @@ def sync(
         key_id=key_id,
         client=client,
         body=body,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -160,6 +169,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: IssuerKeyRetire,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | IssuerKeyResponse]:
     """Give a key an end
 
@@ -170,6 +180,7 @@ async def asyncio_detailed(
     Args:
         issuer_id (int):
         key_id (int):
+        idempotency_key (str | Unset):
         body (IssuerKeyRetire):
 
     Raises:
@@ -184,6 +195,7 @@ async def asyncio_detailed(
         issuer_id=issuer_id,
         key_id=key_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -197,6 +209,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     body: IssuerKeyRetire,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | IssuerKeyResponse | None:
     """Give a key an end
 
@@ -207,6 +220,7 @@ async def asyncio(
     Args:
         issuer_id (int):
         key_id (int):
+        idempotency_key (str | Unset):
         body (IssuerKeyRetire):
 
     Raises:
@@ -223,5 +237,6 @@ async def asyncio(
             key_id=key_id,
             client=client,
             body=body,
+            idempotency_key=idempotency_key,
         )
     ).parsed

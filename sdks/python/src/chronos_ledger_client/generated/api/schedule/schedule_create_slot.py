@@ -9,14 +9,17 @@ from ...models.error_response import ErrorResponse
 from ...models.master_slot_create import MasterSlotCreate
 from ...models.reservation_conflict import ReservationConflict
 from ...models.schedule_create_slot_response_200 import ScheduleCreateSlotResponse200
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     *,
     body: MasterSlotCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -80,6 +83,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: MasterSlotCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | ReservationConflict | ScheduleCreateSlotResponse200]:
     """Add a master slot
 
@@ -99,6 +103,7 @@ def sync_detailed(
     one has no cycle gate on either side.
 
     Args:
+        idempotency_key (str | Unset):
         body (MasterSlotCreate):
 
     Raises:
@@ -111,6 +116,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -124,6 +130,7 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     body: MasterSlotCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | ReservationConflict | ScheduleCreateSlotResponse200 | None:
     """Add a master slot
 
@@ -143,6 +150,7 @@ def sync(
     one has no cycle gate on either side.
 
     Args:
+        idempotency_key (str | Unset):
         body (MasterSlotCreate):
 
     Raises:
@@ -156,6 +164,7 @@ def sync(
     return sync_detailed(
         client=client,
         body=body,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -163,6 +172,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: MasterSlotCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | ReservationConflict | ScheduleCreateSlotResponse200]:
     """Add a master slot
 
@@ -182,6 +192,7 @@ async def asyncio_detailed(
     one has no cycle gate on either side.
 
     Args:
+        idempotency_key (str | Unset):
         body (MasterSlotCreate):
 
     Raises:
@@ -194,6 +205,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -205,6 +217,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     body: MasterSlotCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | ReservationConflict | ScheduleCreateSlotResponse200 | None:
     """Add a master slot
 
@@ -224,6 +237,7 @@ async def asyncio(
     one has no cycle gate on either side.
 
     Args:
+        idempotency_key (str | Unset):
         body (MasterSlotCreate):
 
     Raises:
@@ -238,5 +252,6 @@ async def asyncio(
         await asyncio_detailed(
             client=client,
             body=body,
+            idempotency_key=idempotency_key,
         )
     ).parsed

@@ -8,14 +8,17 @@ from ...client import AuthenticatedClient, Client
 from ...models.annotation_create import AnnotationCreate
 from ...models.annotation_response import AnnotationResponse
 from ...models.error_response import ErrorResponse
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     *,
     body: AnnotationCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -69,6 +72,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: AnnotationCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[AnnotationResponse | ErrorResponse]:
     """Create a ledger annotation
 
@@ -76,6 +80,7 @@ def sync_detailed(
     meaning the assigned lead, the substitute, an organization admin, or a unit admin inside that unit.
 
     Args:
+        idempotency_key (str | Unset):
         body (AnnotationCreate):
 
     Raises:
@@ -88,6 +93,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -101,6 +107,7 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     body: AnnotationCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> AnnotationResponse | ErrorResponse | None:
     """Create a ledger annotation
 
@@ -108,6 +115,7 @@ def sync(
     meaning the assigned lead, the substitute, an organization admin, or a unit admin inside that unit.
 
     Args:
+        idempotency_key (str | Unset):
         body (AnnotationCreate):
 
     Raises:
@@ -121,6 +129,7 @@ def sync(
     return sync_detailed(
         client=client,
         body=body,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -128,6 +137,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: AnnotationCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[AnnotationResponse | ErrorResponse]:
     """Create a ledger annotation
 
@@ -135,6 +145,7 @@ async def asyncio_detailed(
     meaning the assigned lead, the substitute, an organization admin, or a unit admin inside that unit.
 
     Args:
+        idempotency_key (str | Unset):
         body (AnnotationCreate):
 
     Raises:
@@ -147,6 +158,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -158,6 +170,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     body: AnnotationCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> AnnotationResponse | ErrorResponse | None:
     """Create a ledger annotation
 
@@ -165,6 +178,7 @@ async def asyncio(
     meaning the assigned lead, the substitute, an organization admin, or a unit admin inside that unit.
 
     Args:
+        idempotency_key (str | Unset):
         body (AnnotationCreate):
 
     Raises:
@@ -179,5 +193,6 @@ async def asyncio(
         await asyncio_detailed(
             client=client,
             body=body,
+            idempotency_key=idempotency_key,
         )
     ).parsed

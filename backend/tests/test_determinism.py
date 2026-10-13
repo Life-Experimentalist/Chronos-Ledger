@@ -157,6 +157,7 @@ def _run_the_day(monkeypatch):
             "nightly_ledger_gen",
             "refresh_token_purge",
             "guest_retention_purge",
+            "idempotency_purge",
             "guest_overstay_notice",
         ]
 

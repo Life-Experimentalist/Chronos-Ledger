@@ -8,14 +8,17 @@ from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
 from ...models.reverse_rsvp_create import ReverseRsvpCreate
 from ...models.reverse_rsvp_response import ReverseRsvpResponse
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     *,
     body: ReverseRsvpCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -69,6 +72,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: ReverseRsvpCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | ReverseRsvpResponse]:
     """Submit an absence request (Reverse RSVP)
 
@@ -79,6 +83,7 @@ def sync_detailed(
     frame.
 
     Args:
+        idempotency_key (str | Unset):
         body (ReverseRsvpCreate):
 
     Raises:
@@ -91,6 +96,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -104,6 +110,7 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     body: ReverseRsvpCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | ReverseRsvpResponse | None:
     """Submit an absence request (Reverse RSVP)
 
@@ -114,6 +121,7 @@ def sync(
     frame.
 
     Args:
+        idempotency_key (str | Unset):
         body (ReverseRsvpCreate):
 
     Raises:
@@ -127,6 +135,7 @@ def sync(
     return sync_detailed(
         client=client,
         body=body,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -134,6 +143,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: ReverseRsvpCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | ReverseRsvpResponse]:
     """Submit an absence request (Reverse RSVP)
 
@@ -144,6 +154,7 @@ async def asyncio_detailed(
     frame.
 
     Args:
+        idempotency_key (str | Unset):
         body (ReverseRsvpCreate):
 
     Raises:
@@ -156,6 +167,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -167,6 +179,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     body: ReverseRsvpCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | ReverseRsvpResponse | None:
     """Submit an absence request (Reverse RSVP)
 
@@ -177,6 +190,7 @@ async def asyncio(
     frame.
 
     Args:
+        idempotency_key (str | Unset):
         body (ReverseRsvpCreate):
 
     Raises:
@@ -191,5 +205,6 @@ async def asyncio(
         await asyncio_detailed(
             client=client,
             body=body,
+            idempotency_key=idempotency_key,
         )
     ).parsed

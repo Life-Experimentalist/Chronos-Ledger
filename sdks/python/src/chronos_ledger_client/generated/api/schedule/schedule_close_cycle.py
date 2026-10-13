@@ -8,12 +8,17 @@ from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
 from ...models.schedule_close_cycle_response_200 import ScheduleCloseCycleResponse200
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     cycle_id: int,
+    *,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
+    headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "patch",
@@ -22,6 +27,7 @@ def _get_kwargs(
         ),
     }
 
+    _kwargs["headers"] = headers
     return _kwargs
 
 
@@ -59,6 +65,7 @@ def sync_detailed(
     cycle_id: int,
     *,
     client: AuthenticatedClient | Client,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | ScheduleCloseCycleResponse200]:
     """Take a planning cycle out of service
 
@@ -71,6 +78,7 @@ def sync_detailed(
 
     Args:
         cycle_id (int):
+        idempotency_key (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -82,6 +90,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         cycle_id=cycle_id,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -95,6 +104,7 @@ def sync(
     cycle_id: int,
     *,
     client: AuthenticatedClient | Client,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | ScheduleCloseCycleResponse200 | None:
     """Take a planning cycle out of service
 
@@ -107,6 +117,7 @@ def sync(
 
     Args:
         cycle_id (int):
+        idempotency_key (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -119,6 +130,7 @@ def sync(
     return sync_detailed(
         cycle_id=cycle_id,
         client=client,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -126,6 +138,7 @@ async def asyncio_detailed(
     cycle_id: int,
     *,
     client: AuthenticatedClient | Client,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | ScheduleCloseCycleResponse200]:
     """Take a planning cycle out of service
 
@@ -138,6 +151,7 @@ async def asyncio_detailed(
 
     Args:
         cycle_id (int):
+        idempotency_key (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -149,6 +163,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         cycle_id=cycle_id,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -160,6 +175,7 @@ async def asyncio(
     cycle_id: int,
     *,
     client: AuthenticatedClient | Client,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | ScheduleCloseCycleResponse200 | None:
     """Take a planning cycle out of service
 
@@ -172,6 +188,7 @@ async def asyncio(
 
     Args:
         cycle_id (int):
+        idempotency_key (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -185,5 +202,6 @@ async def asyncio(
         await asyncio_detailed(
             cycle_id=cycle_id,
             client=client,
+            idempotency_key=idempotency_key,
         )
     ).parsed

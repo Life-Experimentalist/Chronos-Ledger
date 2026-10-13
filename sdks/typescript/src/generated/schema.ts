@@ -537,7 +537,7 @@ export interface paths {
         put?: never;
         /**
          * Create a room
-         * @description Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response reads the room back with `GET /api/v1/resources/?code=`: the code already identifies it, so no Idempotency-Key is taken.
+         * @description Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
          */
         post: operations["resources.create"];
         delete?: never;
@@ -2388,7 +2388,7 @@ export interface components {
          * @example NOT_FOUND
          * @enum {string}
          */
-        ErrorCode: "BAD_REQUEST" | "NOT_AUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "STATE_CONFLICT" | "PAYLOAD_TOO_LARGE" | "INVALID_VALUE" | "RATE_LIMITED" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE" | "VALIDATION_FAILED" | "INVALID_CREDENTIALS" | "TOKEN_INVALID" | "API_KEY_INVALID" | "API_KEY_EXPIRED" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_DEACTIVATED" | "REFRESH_TOKEN_INVALID" | "REFRESH_TOKEN_EXPIRED" | "REFRESH_TOKEN_USED" | "REFRESH_TOKEN_REUSED" | "FEDERATED_TOKEN_INVALID" | "FEDERATED_EMAIL_MISSING" | "FEDERATED_ADMIN_REFUSED" | "FEDERATION_UNAVAILABLE" | "CURRENT_PASSWORD_INCORRECT" | "PASSWORD_UNCHANGED" | "PASSWORD_CHANGE_REQUIRED" | "INSUFFICIENT_ROLE" | "SCOPE_MISSING" | "OUTSIDE_UNIT" | "RESOURCE_CONFLICT" | "ALREADY_EXISTS" | "EMAIL_TAKEN" | "USER_DEACTIVATED" | "IDEMPOTENCY_KEY_REUSED" | "LOCATION_REQUIRED" | "LOCATION_TOO_COARSE" | "OUTSIDE_GEOFENCE" | "MANAGER_NOT_SET" | "IMPORT_REJECTED" | "CHANGE_FEED_DISABLED" | "SERVER_BUSY";
+        ErrorCode: "BAD_REQUEST" | "NOT_AUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "STATE_CONFLICT" | "PAYLOAD_TOO_LARGE" | "INVALID_VALUE" | "RATE_LIMITED" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE" | "VALIDATION_FAILED" | "INVALID_CREDENTIALS" | "TOKEN_INVALID" | "API_KEY_INVALID" | "API_KEY_EXPIRED" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_DEACTIVATED" | "REFRESH_TOKEN_INVALID" | "REFRESH_TOKEN_EXPIRED" | "REFRESH_TOKEN_USED" | "REFRESH_TOKEN_REUSED" | "FEDERATED_TOKEN_INVALID" | "FEDERATED_EMAIL_MISSING" | "FEDERATED_ADMIN_REFUSED" | "FEDERATION_UNAVAILABLE" | "CURRENT_PASSWORD_INCORRECT" | "PASSWORD_UNCHANGED" | "PASSWORD_CHANGE_REQUIRED" | "INSUFFICIENT_ROLE" | "SCOPE_MISSING" | "OUTSIDE_UNIT" | "RESOURCE_CONFLICT" | "ALREADY_EXISTS" | "EMAIL_TAKEN" | "USER_DEACTIVATED" | "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_KEY_IN_PROGRESS" | "LOCATION_REQUIRED" | "LOCATION_TOO_COARSE" | "OUTSIDE_GEOFENCE" | "MANAGER_NOT_SET" | "IMPORT_REJECTED" | "CHANGE_FEED_DISABLED" | "SERVER_BUSY";
     };
     responses: {
         /** @description Missing or invalid JWT. */
@@ -2453,11 +2453,15 @@ export interface components {
         Limit: number;
         /** @description Skip this many rows first. Rows come in id order. */
         Offset: number;
+        /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+        IdempotencyKey: string;
     };
     requestBodies: never;
     headers: {
         /** @description How many rows matched the request's filters before limit and offset cut the page. Sent whether or not the request paged. */
         XTotalCount: number;
+        /** @description `true` when this response is the stored answer to an earlier request with the same Idempotency-Key, sent again rather than made again. Absent otherwise. */
+        IdempotencyReplayed: "true";
     };
     pathItems: never;
 }
@@ -2765,7 +2769,10 @@ export interface operations {
     "users.create": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -2778,6 +2785,7 @@ export interface operations {
             /** @description User created. */
             201: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2874,7 +2882,10 @@ export interface operations {
     "users.update": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 user_id: string;
             };
@@ -2889,6 +2900,7 @@ export interface operations {
             /** @description Updated user. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2952,7 +2964,10 @@ export interface operations {
     "users.deactivate": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 user_id: string;
             };
@@ -2963,6 +2978,7 @@ export interface operations {
             /** @description The account, with `deactivated_at` set and what it leaves behind. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2986,7 +3002,10 @@ export interface operations {
     "users.reactivate": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 user_id: string;
             };
@@ -2997,6 +3016,7 @@ export interface operations {
             /** @description The account, with `deactivated_at` null. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3011,7 +3031,10 @@ export interface operations {
     "users.updateStatus": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 user_id: string;
             };
@@ -3026,6 +3049,7 @@ export interface operations {
             /** @description Status updated. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3115,7 +3139,10 @@ export interface operations {
     "apiKeys.revoke": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 key_id: number;
             };
@@ -3126,6 +3153,7 @@ export interface operations {
             /** @description Revoked. */
             204: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -3159,7 +3187,10 @@ export interface operations {
     "federation.createIssuer": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3172,6 +3203,7 @@ export interface operations {
             /** @description Registered. */
             201: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3195,7 +3227,10 @@ export interface operations {
     "federation.deleteIssuer": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 issuer_id: number;
             };
@@ -3206,6 +3241,7 @@ export interface operations {
             /** @description Removed. */
             204: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -3218,7 +3254,10 @@ export interface operations {
     "federation.updateIssuer": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 issuer_id: number;
             };
@@ -3233,6 +3272,7 @@ export interface operations {
             /** @description Changed. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3273,7 +3313,10 @@ export interface operations {
     "federation.addKey": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 issuer_id: number;
             };
@@ -3288,6 +3331,7 @@ export interface operations {
             /** @description Added. */
             201: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3320,7 +3364,10 @@ export interface operations {
     "federation.deleteKey": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 issuer_id: number;
                 key_id: number;
@@ -3332,6 +3379,7 @@ export interface operations {
             /** @description Removed. */
             204: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -3344,7 +3392,10 @@ export interface operations {
     "federation.retireKey": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 issuer_id: number;
                 key_id: number;
@@ -3360,6 +3411,7 @@ export interface operations {
             /** @description Retired at the moment given. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3408,7 +3460,10 @@ export interface operations {
     "federation.addRoleMapEntry": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 issuer_id: number;
             };
@@ -3423,6 +3478,7 @@ export interface operations {
             /** @description Mapped. */
             201: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3455,7 +3511,10 @@ export interface operations {
     "federation.deleteRoleMapEntry": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 issuer_id: number;
                 entry_id: number;
@@ -3467,6 +3526,7 @@ export interface operations {
             /** @description Unmapped. */
             204: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -3506,7 +3566,10 @@ export interface operations {
     "federation.createLink": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3519,6 +3582,7 @@ export interface operations {
             /** @description Linked. The next note carrying that pair is this account. */
             201: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3551,7 +3615,10 @@ export interface operations {
     "federation.deleteLink": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 link_id: number;
             };
@@ -3562,6 +3629,7 @@ export interface operations {
             /** @description Unlinked. */
             204: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -3604,7 +3672,10 @@ export interface operations {
     "resources.create": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3617,6 +3688,7 @@ export interface operations {
             /** @description The room as created. */
             201: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3648,7 +3720,10 @@ export interface operations {
     "resources.update": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 resource_id: number;
             };
@@ -3663,6 +3738,7 @@ export interface operations {
             /** @description The resource as it now stands. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3725,7 +3801,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Unique across every caller and every resource. A UUID is the right shape. Required rather than optional because a booking client retries, and a retry that books a second room is worse than one that fails. */
+                /** @description Unique per caller across every resource. A UUID is the right shape. Required rather than optional because a booking client retries, and a retry that books a second room is worse than one that fails. This route keeps the answers it gave before the shared Idempotency-Key: a reused key is `422`, not `409`, and a retry gets the hold as it is now with `200`, not a replay. */
                 "Idempotency-Key": string;
             };
             path: {
@@ -3783,7 +3859,10 @@ export interface operations {
     "resources.cancelReservation": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 resource_id: number;
                 reservation_id: number;
@@ -3795,6 +3874,7 @@ export interface operations {
             /** @description The cancelled hold. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3837,7 +3917,10 @@ export interface operations {
     "schedule.createSlot": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3850,6 +3933,7 @@ export interface operations {
             /** @description The slot's id. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3891,7 +3975,10 @@ export interface operations {
     "schedule.deleteSlot": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 slot_id: number;
             };
@@ -3902,6 +3989,7 @@ export interface operations {
             /** @description What was removed and what was kept. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3916,7 +4004,10 @@ export interface operations {
     "schedule.updateSlot": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 slot_id: number;
             };
@@ -3931,6 +4022,7 @@ export interface operations {
             /** @description What the change reached and what it left alone. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4054,7 +4146,10 @@ export interface operations {
     "schedule.updateLedgerEntry": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 ledger_id: number;
             };
@@ -4069,6 +4164,7 @@ export interface operations {
             /** @description The entry was updated. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4177,7 +4273,10 @@ export interface operations {
     "schedule.createCycle": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -4190,6 +4289,7 @@ export interface operations {
             /** @description Cycle created. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4203,7 +4303,10 @@ export interface operations {
     "schedule.closeCycle": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 cycle_id: number;
             };
@@ -4214,6 +4317,7 @@ export interface operations {
             /** @description Cycle closed. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4233,7 +4337,10 @@ export interface operations {
     "schedule.openCycle": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 cycle_id: number;
             };
@@ -4244,6 +4351,7 @@ export interface operations {
             /** @description Cycle opened, or already open. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4268,7 +4376,10 @@ export interface operations {
     "schedule.cloneCycle": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 old_id: number;
                 new_id: number;
@@ -4280,6 +4391,7 @@ export interface operations {
             /** @description Clone complete. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4306,7 +4418,10 @@ export interface operations {
     "attendance.mark": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -4319,6 +4434,7 @@ export interface operations {
             /** @description Attendance marked. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4354,7 +4470,10 @@ export interface operations {
     "attendance.markBatch": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -4367,6 +4486,7 @@ export interface operations {
             /** @description Every record written. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4426,7 +4546,10 @@ export interface operations {
     "attendance.submitAbsence": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -4439,6 +4562,7 @@ export interface operations {
             /** @description Absence request created. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4480,7 +4604,10 @@ export interface operations {
     "attendance.decideAbsence": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 log_id: number;
             };
@@ -4495,6 +4622,7 @@ export interface operations {
             /** @description Decision recorded. Approval turns the submitter's sessions that day `ON_LEAVE`, and either decision sends them an `ABSENCE_DECISION` WebSocket frame. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4518,7 +4646,10 @@ export interface operations {
     "attendance.createAnnotation": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -4531,6 +4662,7 @@ export interface operations {
             /** @description Annotation created. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4712,7 +4844,10 @@ export interface operations {
     "guest.decide": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 entry_id: number;
             };
@@ -4727,6 +4862,7 @@ export interface operations {
             /** @description Decision recorded. The kiosk reads it from `/guest/visit/{code}`. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4752,7 +4888,10 @@ export interface operations {
     "guest.extendVisit": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 entry_id: number;
             };
@@ -4767,6 +4906,7 @@ export interface operations {
             /** @description The visit's new end. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4878,7 +5018,10 @@ export interface operations {
                 /** @description Date to generate. Defaults to tomorrow. */
                 target_date?: string;
             };
-            header?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -4887,6 +5030,7 @@ export interface operations {
             /** @description Generation complete. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {

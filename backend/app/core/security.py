@@ -17,6 +17,7 @@ from app.core import clock
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.errors import ChronosError, ErrorCode
+from app.core.idempotency import claim
 from app.models.db import WILDCARD_SCOPE
 
 settings = get_settings()
@@ -165,6 +166,7 @@ def get_current_user_id(
             )
         # Read by the audit log once the response has gone out.
         request.state.actor_id = payload["sub"]
+        claim(request, db, caller_identity(request))
         return payload["sub"]
 
     if api_key:
@@ -203,6 +205,7 @@ def get_current_user_id(
                 detail=f"API key is not scoped for {needed or 'this request'}",
                 code=ErrorCode.SCOPE_MISSING,
             )
+        claim(request, db, caller_identity(request))
         return row.user_id
 
     raise ChronosError(
@@ -211,6 +214,19 @@ def get_current_user_id(
         headers={"WWW-Authenticate": "Bearer"},
         code=ErrorCode.NOT_AUTHENTICATED,
     )
+
+
+def caller_identity(request: Request) -> str:
+    """Who an Idempotency-Key belongs to: the API key when one was used, else the user.
+
+    A key and the person it is bound to are separate callers, so two services
+    holding keys for one service account cannot answer each other's retries.
+    Read after get_current_user_id (or host_actor) has filled in the state.
+    """
+    api_key_id = getattr(request.state, "api_key_id", None)
+    if api_key_id is not None:
+        return f"key:{api_key_id}"
+    return f"user:{request.state.actor_id}"
 
 
 # While an admin still holds the seeded initial password, only these paths work.

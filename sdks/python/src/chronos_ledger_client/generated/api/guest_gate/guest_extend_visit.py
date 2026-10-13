@@ -9,15 +9,18 @@ from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
 from ...models.guest_extend_visit_response_200 import GuestExtendVisitResponse200
 from ...models.guest_extension_request import GuestExtensionRequest
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     entry_id: int,
     *,
     body: GuestExtensionRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "patch",
@@ -84,6 +87,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: GuestExtensionRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | GuestExtendVisitResponse200]:
     """Give an approved visit longer
 
@@ -95,6 +99,7 @@ def sync_detailed(
 
     Args:
         entry_id (int):
+        idempotency_key (str | Unset):
         body (GuestExtensionRequest):
 
     Raises:
@@ -108,6 +113,7 @@ def sync_detailed(
     kwargs = _get_kwargs(
         entry_id=entry_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -122,6 +128,7 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     body: GuestExtensionRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | GuestExtendVisitResponse200 | None:
     """Give an approved visit longer
 
@@ -133,6 +140,7 @@ def sync(
 
     Args:
         entry_id (int):
+        idempotency_key (str | Unset):
         body (GuestExtensionRequest):
 
     Raises:
@@ -147,6 +155,7 @@ def sync(
         entry_id=entry_id,
         client=client,
         body=body,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -155,6 +164,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: GuestExtensionRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | GuestExtendVisitResponse200]:
     """Give an approved visit longer
 
@@ -166,6 +176,7 @@ async def asyncio_detailed(
 
     Args:
         entry_id (int):
+        idempotency_key (str | Unset):
         body (GuestExtensionRequest):
 
     Raises:
@@ -179,6 +190,7 @@ async def asyncio_detailed(
     kwargs = _get_kwargs(
         entry_id=entry_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -191,6 +203,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     body: GuestExtensionRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | GuestExtendVisitResponse200 | None:
     """Give an approved visit longer
 
@@ -202,6 +215,7 @@ async def asyncio(
 
     Args:
         entry_id (int):
+        idempotency_key (str | Unset):
         body (GuestExtensionRequest):
 
     Raises:
@@ -217,5 +231,6 @@ async def asyncio(
             entry_id=entry_id,
             client=client,
             body=body,
+            idempotency_key=idempotency_key,
         )
     ).parsed

@@ -9,15 +9,18 @@ from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
 from ...models.resource_response import ResourceResponse
 from ...models.resource_update import ResourceUpdate
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     resource_id: int,
     *,
     body: ResourceUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "patch",
@@ -84,6 +87,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: ResourceUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | ResourceResponse]:
     """Update a resource
 
@@ -92,6 +96,7 @@ def sync_detailed(
 
     Args:
         resource_id (int):
+        idempotency_key (str | Unset):
         body (ResourceUpdate): Every field is optional and a field left out is left alone. code,
             resource_type and user_id are absent on purpose: code is the importer's match key, and a
             room that becomes a person is a different resource, not an edit.
@@ -107,6 +112,7 @@ def sync_detailed(
     kwargs = _get_kwargs(
         resource_id=resource_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -121,6 +127,7 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     body: ResourceUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | ResourceResponse | None:
     """Update a resource
 
@@ -129,6 +136,7 @@ def sync(
 
     Args:
         resource_id (int):
+        idempotency_key (str | Unset):
         body (ResourceUpdate): Every field is optional and a field left out is left alone. code,
             resource_type and user_id are absent on purpose: code is the importer's match key, and a
             room that becomes a person is a different resource, not an edit.
@@ -145,6 +153,7 @@ def sync(
         resource_id=resource_id,
         client=client,
         body=body,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -153,6 +162,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: ResourceUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | ResourceResponse]:
     """Update a resource
 
@@ -161,6 +171,7 @@ async def asyncio_detailed(
 
     Args:
         resource_id (int):
+        idempotency_key (str | Unset):
         body (ResourceUpdate): Every field is optional and a field left out is left alone. code,
             resource_type and user_id are absent on purpose: code is the importer's match key, and a
             room that becomes a person is a different resource, not an edit.
@@ -176,6 +187,7 @@ async def asyncio_detailed(
     kwargs = _get_kwargs(
         resource_id=resource_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -188,6 +200,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     body: ResourceUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | ResourceResponse | None:
     """Update a resource
 
@@ -196,6 +209,7 @@ async def asyncio(
 
     Args:
         resource_id (int):
+        idempotency_key (str | Unset):
         body (ResourceUpdate): Every field is optional and a field left out is left alone. code,
             resource_type and user_id are absent on purpose: code is the importer's match key, and a
             room that becomes a person is a different resource, not an edit.
@@ -213,5 +227,6 @@ async def asyncio(
             resource_id=resource_id,
             client=client,
             body=body,
+            idempotency_key=idempotency_key,
         )
     ).parsed
