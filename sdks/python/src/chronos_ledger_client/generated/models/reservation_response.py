@@ -29,6 +29,8 @@ class ReservationResponse:
         requested_by_id (None | str | Unset): Null once the account that booked it has been deleted. A hold outlives the
             service account that placed it.
         idempotency_key (str | Unset):
+        external_ref (None | str | Unset): The caller's own identifier for the booking, or null if it was given none. A
+            cancelled booking keeps its reference.
         created_at (datetime.datetime | Unset):
         cancelled_at (datetime.datetime | None | Unset):
     """
@@ -43,6 +45,7 @@ class ReservationResponse:
     status: ReservationResponseStatus | Unset = UNSET
     requested_by_id: None | str | Unset = UNSET
     idempotency_key: str | Unset = UNSET
+    external_ref: None | str | Unset = UNSET
     created_at: datetime.datetime | Unset = UNSET
     cancelled_at: datetime.datetime | None | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
@@ -75,6 +78,12 @@ class ReservationResponse:
             requested_by_id = self.requested_by_id
 
         idempotency_key = self.idempotency_key
+
+        external_ref: None | str | Unset
+        if isinstance(self.external_ref, Unset):
+            external_ref = UNSET
+        else:
+            external_ref = self.external_ref
 
         created_at: str | Unset = UNSET
         if not isinstance(self.created_at, Unset):
@@ -111,6 +120,8 @@ class ReservationResponse:
             field_dict["requested_by_id"] = requested_by_id
         if idempotency_key is not UNSET:
             field_dict["idempotency_key"] = idempotency_key
+        if external_ref is not UNSET:
+            field_dict["external_ref"] = external_ref
         if created_at is not UNSET:
             field_dict["created_at"] = created_at
         if cancelled_at is not UNSET:
@@ -158,6 +169,15 @@ class ReservationResponse:
 
         idempotency_key = d.pop("idempotency_key", UNSET)
 
+        def _parse_external_ref(data: object) -> None | str | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(None | str | Unset, data)
+
+        external_ref = _parse_external_ref(d.pop("external_ref", UNSET))
+
         _created_at = d.pop("created_at", UNSET)
         created_at: datetime.datetime | Unset
         if isinstance(_created_at, Unset):
@@ -193,6 +213,7 @@ class ReservationResponse:
             status=status,
             requested_by_id=requested_by_id,
             idempotency_key=idempotency_key,
+            external_ref=external_ref,
             created_at=created_at,
             cancelled_at=cancelled_at,
         )

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
+
+from ..types import UNSET, Unset
 
 T = TypeVar("T", bound="ReservationCreate")
 
@@ -23,12 +25,18 @@ class ReservationCreate:
             nothing at all or a full day and there is no way to tell which was meant.
              Example: 15:00.
         purpose (str):  Example: Ward round.
+        external_ref (None | str | Unset): The caller's own identifier for the booking, kept exactly as sent. Unique per
+            caller: a second booking under a reference the caller already used, cancelled or not, is a 409 with
+            `RESERVATION_EXTERNAL_REF_TAKEN`. Find the booking again with `GET
+            /api/v1/resources/reservations?external_ref=`. Optional, and any number of bookings may leave it unset.
+             Example: visit-42.
     """
 
     date: datetime.date
     start: str
     end: str
     purpose: str
+    external_ref: None | str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -40,6 +48,12 @@ class ReservationCreate:
 
         purpose = self.purpose
 
+        external_ref: None | str | Unset
+        if isinstance(self.external_ref, Unset):
+            external_ref = UNSET
+        else:
+            external_ref = self.external_ref
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -50,6 +64,8 @@ class ReservationCreate:
                 "purpose": purpose,
             }
         )
+        if external_ref is not UNSET:
+            field_dict["external_ref"] = external_ref
 
         return field_dict
 
@@ -64,11 +80,21 @@ class ReservationCreate:
 
         purpose = d.pop("purpose")
 
+        def _parse_external_ref(data: object) -> None | str | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(None | str | Unset, data)
+
+        external_ref = _parse_external_ref(d.pop("external_ref", UNSET))
+
         reservation_create = cls(
             date=date,
             start=start,
             end=end,
             purpose=purpose,
+            external_ref=external_ref,
         )
 
         reservation_create.additional_properties = d
