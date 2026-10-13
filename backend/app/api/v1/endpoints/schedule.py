@@ -18,6 +18,7 @@ from app.core.time import org_today
 from app.models.db import Activity, DailyLedger, PlanningCycle, StructuralMasterSlot, User
 from app.schemas.resources import ReservationConflict
 from app.schemas.schedule import (
+    ConflictReport,
     CycleActivationConflict,
     DailyLedgerUpdate,
     MasterSlotCreate,
@@ -31,6 +32,7 @@ from app.services.availability import (
     held_against_slot,
     slots_against_slot,
 )
+from app.services.conflicts import MAX_CONFLICT_RANGE_DAYS, find_conflicts
 from app.services.location_resolver import determine_staff_current_states
 from app.services.master_slot import propagate_slot_corrections, rows_in_use
 from app.services.resource import get_or_create_room
@@ -41,6 +43,8 @@ ROOM_IS_HELD = "the resource is held for part of that window"
 ROOM_IS_SCHEDULED = "the resource is already on the timetable for part of that window"
 ROOM_HAS_A_DAY = "the resource already has a generated day in part of that window"
 CYCLE_IS_BLOCKED = "opening this cycle would put its slots on rooms already taken"
+CONFLICT_RANGE_BACKWARDS = "from must not be after to"
+CONFLICT_RANGE_TOO_LONG = f"the range must not exceed {MAX_CONFLICT_RANGE_DAYS} days"
 
 
 def _refuse_if_held(db, cycle, resource_id, weekday, start, end) -> None:
@@ -744,6 +748,35 @@ def get_ledger_range(
     q = _visible_ledger(db, current_user, q)
     keys = (DailyLedger.target_date, DailyLedger.time_window_start, DailyLedger.id)
     return [_ledger_row(e) for e in page.rows(q, *keys)]
+
+
+@router.get("/conflicts", operation_id="schedule.listConflicts", response_model=ConflictReport)
+def get_conflict_report(
+    from_: datetime.date = Query(alias="from"),
+    to: datetime.date = Query(),
+    db: Session = Depends(get_db),
+    _=Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
+):
+    """Every clash already in the schedule between two dates inclusive.
+
+    Two rows holding one resource at once, and one member enrolled in two
+    activities that run at once. It reads and reports; nothing is refused
+    and nothing is changed. app.services.conflicts says what counts.
+
+    Admins only, because these are the callers _visible_ledger shows every
+    row to. The report is only true when it is read over the whole schedule,
+    and the member side names who is enrolled where, which a member or a
+    member of staff is not shown for anybody but themselves.
+    """
+    if from_ > to:
+        raise ChronosError(
+            status_code=422, detail=CONFLICT_RANGE_BACKWARDS, code=ErrorCode.INVALID_VALUE
+        )
+    if (to - from_).days + 1 > MAX_CONFLICT_RANGE_DAYS:
+        raise ChronosError(
+            status_code=422, detail=CONFLICT_RANGE_TOO_LONG, code=ErrorCode.INVALID_VALUE
+        )
+    return {"from": from_, "to": to, "conflicts": find_conflicts(db, from_, to)}
 
 
 @router.patch("/ledger/{ledger_id}", operation_id="schedule.updateLedgerEntry")

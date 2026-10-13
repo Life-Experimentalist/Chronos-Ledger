@@ -22,6 +22,9 @@ from .change_feed import ChangeFeed
 from .change_password_request import ChangePasswordRequest
 from .config_get_response_200 import ConfigGetResponse200
 from .config_get_response_200_labels import ConfigGetResponse200Labels
+from .conflict import Conflict
+from .conflict_item import ConflictItem
+from .conflict_report import ConflictReport
 from .csv_import_result import CsvImportResult
 from .csv_import_result_status import CsvImportResultStatus
 from .cycle_activation_conflict import CycleActivationConflict
@@ -133,6 +136,9 @@ __all__ = (
     "ChangePasswordRequest",
     "ConfigGetResponse200",
     "ConfigGetResponse200Labels",
+    "Conflict",
+    "ConflictItem",
+    "ConflictReport",
     "CsvImportResult",
     "CsvImportResultStatus",
     "CycleActivationConflict",

@@ -1170,6 +1170,79 @@ the other lists, and a long span should be paged.
 GET /api/v1/schedule/ledger?from=2026-01-05&to=2026-01-11&resource_id=12&limit=100
 ```
 
+### GET /schedule/conflicts?from=&to= `[ORG_ADMIN, UNIT_ADMIN]`
+
+Where the schedule already contradicts itself between two dates, both
+included. The write paths refuse a clash as it arrives, but rows written
+before a check existed, a day kept by a closed cycle, or a row written
+straight into the database can still get in. This route finds them and
+reports them. It never refuses anything and never changes a row.
+
+```http
+GET /api/v1/schedule/conflicts?from=2026-01-05&to=2026-01-11
+```
+
+```json
+{
+  "from": "2026-01-05",
+  "to": "2026-01-11",
+  "conflicts": [
+    {
+      "kind": "resource_overlap",
+      "resource_id": 12,
+      "member_id": null,
+      "date": "2026-01-06",
+      "start": "09:30:00",
+      "end_date": "2026-01-06",
+      "end": "10:00:00",
+      "items": [
+        {"type": "slot", "id": 4, "date": "2026-01-06", "start": "09:00:00",
+         "end_date": "2026-01-06", "end": "10:00:00", "activity_id": 7, "resource_id": 12},
+        {"type": "reservation", "id": 31, "date": "2026-01-06", "start": "09:30:00",
+         "end_date": "2026-01-06", "end": "11:00:00", "activity_id": null, "resource_id": 12}
+      ]
+    }
+  ]
+}
+```
+
+There are two kinds. A `resource_overlap` is two rows holding one resource at
+the same moment. A `member_overlap` is one member enrolled in two different
+activities that run at the same moment, on any resource or on none. `date`,
+`start`, `end_date` and `end` on a conflict are the part of the two windows
+they share; each item carries its own full window. `kind` and the item `type`
+are strings, and a reader should skip a value it does not know, because more
+kinds are expected.
+
+What holds a resource is what `GET /resources/{id}/availability` reports as
+busy, by the same rules, so the two never disagree:
+- a weekly slot (`slot`) whose cycle is open, on each date inside the cycle's
+  bounds. A slot in a closed cycle produces nothing and so holds nothing.
+- a generated day (`ledger_day`) that names a resource and a window, whatever
+  its cycle now says, because the day was produced and is on the calendar.
+  A day with no window has no time to clash over.
+- a reservation (`reservation`) that is still `HELD`. A cancelled one has let
+  the room go.
+
+A generated day and the slot that produced it, on the same date, are one
+class: only the day counts. Two windows of one activity are never a member
+clash, since that is one activity. Only members whose accounts are active are
+checked. Leads are not counted on the member side; this report is about
+enrollments.
+
+Windows are half open, so one ending at 10:00 and one starting at 10:00 do
+not clash. A window dated the day before `from` that runs past midnight into
+the range is included, and its `date` is the day it opened on. A weekly clash
+is listed once for each date it happens in the range. Each pair is named once,
+and the list is ordered by kind, then `resource_id` or `member_id`, then when
+the shared window starts.
+
+Both dates are required. `to` before `from` is `422` with `"from must not be
+after to"`, and a range longer than 92 days is `422` with `"the range must
+not exceed 92 days"`; both carry code `INVALID_VALUE`. The cap is lower than
+availability's because this expands every resource and every member at once.
+Admins only, because the member side names who is enrolled where.
+
 ### PATCH /schedule/ledger/{ledger_id} `[ORG_ADMIN, UNIT_ADMIN]`
 
 A unit admin can edit only the days of their own unit's activities. A field
