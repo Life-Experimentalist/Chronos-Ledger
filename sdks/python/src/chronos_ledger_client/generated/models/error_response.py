@@ -14,7 +14,7 @@ T = TypeVar("T", bound="ErrorResponse")
 @_attrs_define
 class ErrorResponse:
     """The body of every error. detail is for a person to read and code is for a program to branch on. A 409 that names
-    what stood in the way has its own schema, with detail as an object; see ReservationConflict.
+    what stood in the way has its own schema, with detail as an object; see ReservationConflict and ReservationRefTaken.
 
         Attributes:
             code (ErrorCode): What went wrong, for a program to branch on. docs/api.md says what each one means. A code is

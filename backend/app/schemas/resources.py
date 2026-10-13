@@ -137,6 +137,10 @@ class ReservationCreate(BaseModel):
     start: datetime.time
     end: datetime.time
     purpose: str = Field(min_length=1, max_length=200)
+    # The caller's own identifier for the booking, kept exactly as sent.
+    # Unique per caller, so it finds this booking again through
+    # GET /resources/reservations?external_ref=.
+    external_ref: str | None = Field(default=None, min_length=1, max_length=120)
 
     @model_validator(mode="after")
     def _is_a_window_at_all(self):
@@ -169,8 +173,24 @@ class ReservationResponse(BaseModel):
     status: ReservationStatus
     requested_by_id: str | None
     idempotency_key: str
+    external_ref: str | None
     created_at: datetime.datetime
     cancelled_at: datetime.datetime | None
+
+
+class ReservationUpdate(BaseModel):
+    """What the caller may change about a reservation it already holds.
+
+    Only its reference, for now. The window is what the conflict check, the
+    exclusion constraint and the idempotency fingerprint are all built on,
+    and moving it is a cancel and a new booking. Null clears the reference;
+    leaving the field out leaves it alone. Any other field is refused rather
+    than ignored, so a caller trying to move a booking is told it did not.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    external_ref: str | None = Field(default=None, min_length=1, max_length=120)
 
 
 class ReservationConflictDetail(BaseModel):
@@ -194,3 +214,20 @@ class ReservationConflict(BaseModel):
     """
 
     detail: ReservationConflictDetail
+
+
+class ReservationRefTakenDetail(BaseModel):
+    """Which reservation already carries the reference.
+
+    The id is what the caller needs next: the booking it made earlier under
+    the same reference, which it can now read, change or cancel.
+    """
+
+    message: str
+    reservation_id: int
+
+
+class ReservationRefTaken(BaseModel):
+    """The body of a 409 with RESERVATION_EXTERNAL_REF_TAKEN."""
+
+    detail: ReservationRefTakenDetail

@@ -73,7 +73,9 @@ Every response with a status of 400 or above carries two fields:
 `detail` is for a person. Its wording can change from one release to the next,
 so do not match on it. It is a string for most errors, the
 `{"message", "conflicts"}` object for a `409` that names the bookings in the
-way, and FastAPI's list of field errors for a `422` with `VALIDATION_FAILED`.
+way, the `{"message", "reservation_id"}` object for a `409` that names the
+reservation already carrying an `external_ref`, and FastAPI's list of field
+errors for a `422` with `VALIDATION_FAILED`.
 
 `code` is for a program. Branch on it. A code is never renamed, and never
 reused for a different meaning once it has shipped: a new kind of failure gets
@@ -131,6 +133,7 @@ way.
 | `USER_DEACTIVATED` | The account named in the request is deactivated. |
 | `IDEMPOTENCY_KEY_REUSED` | The `Idempotency-Key` was already used for a different request. |
 | `IDEMPOTENCY_KEY_IN_PROGRESS` | A request with this `Idempotency-Key` is still running. `Retry-After` says when to try again. |
+| `RESERVATION_EXTERNAL_REF_TAKEN` | Another of the caller's reservations, cancelled or not, already has that `external_ref`. `detail.reservation_id` names it. |
 | `LOCATION_REQUIRED` | The session is geofenced and no location was sent. |
 | `LOCATION_TOO_COARSE` | The location's accuracy is too poor to check against the geofence. |
 | `OUTSIDE_GEOFENCE` | The location is outside the session's geofence. |
@@ -1115,9 +1118,15 @@ than one that fails outright.
   "date": "2026-01-06",
   "start": "14:00",
   "end": "15:00",
-  "purpose": "Ward round"
+  "purpose": "Ward round",
+  "external_ref": "visit-42"
 }
 ```
+
+`external_ref` is optional: the caller's own name for the booking, 1 to 120
+characters, kept exactly as sent. With it, a caller can find, change and
+cancel the booking later without having kept the `id`. See
+[External references](#external-references).
 
 `201` with the hold:
 
@@ -1133,6 +1142,7 @@ than one that fails outright.
   "status": "HELD",
   "requested_by_id": "ADM001",
   "idempotency_key": "6f1c2e40-2c5f-4d0e-9a5b-1c7c0f9c3a11",
+  "external_ref": "visit-42",
   "created_at": "2026-01-05T09:14:22Z",
   "cancelled_at": null
 }
@@ -1197,6 +1207,94 @@ underneath both sits an exclusion constraint over the window itself,
 arrive in. When the constraint is what catches it, the window is looked up
 again and the `409` names the hold that won rather than only saying this
 one lost.
+
+#### External references
+
+An `external_ref` is unique per caller. Sending one that another of the
+caller's reservations already has, cancelled or not, is `409` with the code
+`RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation:
+
+```json
+{
+  "detail": {
+    "message": "a reservation of yours already has that external_ref",
+    "reservation_id": 31
+  },
+  "code": "RESERVATION_EXTERNAL_REF_TAKEN"
+}
+```
+
+Branch on `code` to tell it from the window `409`, which is
+`RESOURCE_CONFLICT` with `detail.conflicts`. The two `detail` objects share
+only `message`.
+
+The reference is checked after the `Idempotency-Key` and before the window.
+The same key with the same body, reference included, is still the `200`
+replay of the original hold, never this `409`. The same key with a different
+reference is a different request under that key, so it is the `422` for a
+reused key. A new key with a reference already in use is the `409`, even when
+the window is also taken, so a caller that sends the same booking twice under
+two keys is told it already has it.
+
+Two requests racing for one reference get one reservation. The unique
+constraint `uq_reservations_requester_ref` refuses the second row, and the
+loser gets the same `409` naming the reservation that won.
+
+Different callers may use the same string: a reference means something only to
+the system that chose it. Any number of reservations may leave it unset.
+
+A cancelled reservation keeps its reference, so the reference still finds it
+and a new booking under the same one is `409`. To book under it again, clear
+or change it on the cancelled reservation first with
+[`PATCH`](#patch-resourcesidreservationsreservation_id-org_admin-unit_admin).
+
+### GET /resources/reservations `[ORG_ADMIN, UNIT_ADMIN]`
+
+The caller's own reservations, cancelled ones included, in id order. Pages
+with `limit` and `offset` like the other lists, with the total in
+`X-Total-Count`. Each row has the shape the booking routes return.
+
+```http
+GET /api/v1/resources/reservations?external_ref=visit-42
+```
+
+Optional filter: `external_ref`, which matches exactly, case included, so with
+it the answer is one reservation or none.
+
+Only the caller's reservations, for every role, an `ORG_ADMIN` included. A
+reference means nothing outside the system that chose it, so asking for one
+must return the caller's own booking and never another caller's under the same
+string. This is where an integration finds its bookings, not a view of
+everybody's. It lives under `/resources` so that a key with `resources:read`
+reaches it.
+
+### PATCH /resources/{id}/reservations/{reservation_id} `[ORG_ADMIN, UNIT_ADMIN]`
+
+Set, change or clear a reservation's `external_ref`.
+
+```json
+{ "external_ref": "visit-43" }
+```
+
+`null` clears it, and leaving the field out leaves it alone. Only the
+reference can change. Any other field is `422` rather than ignored, so a
+caller trying to move a booking is told it did not: moving the window is a
+cancel and a new booking.
+
+The reference is unique per requester, the same rule as on create, and taking
+one already on another of the requester's reservations is the same `409` with
+`RESERVATION_EXTERNAL_REF_TAKEN` and `detail.reservation_id`. When an
+`ORG_ADMIN` changes somebody else's reservation, the reference is checked
+against that requester's references, not the admin's.
+
+Who may change a reservation is who may cancel it: whoever took it, or an
+`ORG_ADMIN`. A `UNIT_ADMIN` that did not make it gets `403` with
+`"only the caller that took a hold may change it"`. The wrong resource id is
+`404`.
+
+Returns the reservation as it now stands. A real change puts an `updated`
+entry for the reservation on the [change feed](#changes); sending the
+reference it already has changes nothing and adds no entry.
 
 ### DELETE /resources/{id}/reservations/{reservation_id} `[ORG_ADMIN, UNIT_ADMIN]`
 

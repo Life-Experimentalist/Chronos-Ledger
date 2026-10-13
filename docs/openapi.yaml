@@ -1103,6 +1103,39 @@ components:
           minLength: 1
           maxLength: 200
           example: Ward round
+        external_ref:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 120
+          description: >
+            The caller's own identifier for the booking, kept exactly as
+            sent. Unique per caller: a second booking under a reference the
+            caller already used, cancelled or not, is a 409 with
+            `RESERVATION_EXTERNAL_REF_TAKEN`. Find the booking again with
+            `GET /api/v1/resources/reservations?external_ref=`. Optional, and
+            any number of bookings may leave it unset.
+          example: visit-42
+
+    ReservationUpdate:
+      type: object
+      additionalProperties: false
+      description: >
+        What the caller may change about a reservation it already holds: its
+        reference, for now. The window is what the conflict check and the
+        idempotency fingerprint are built on, so moving it is a cancel and a
+        new booking. Any other field is refused with a 422 rather than
+        ignored.
+      properties:
+        external_ref:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 120
+          description: >
+            The new reference, or null to clear it. Leaving the field out
+            leaves the reference as it is.
+          example: visit-43
 
     ReservationResponse:
       type: object
@@ -1138,6 +1171,12 @@ components:
             outlives the service account that placed it.
         idempotency_key:
           type: string
+        external_ref:
+          type: string
+          nullable: true
+          description: >
+            The caller's own identifier for the booking, or null if it was
+            given none. A cancelled booking keeps its reference.
         created_at:
           type: string
           format: date-time
@@ -1167,6 +1206,28 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/BusyInterval"
+
+    ReservationRefTaken:
+      type: object
+      description: >
+        The body of a 409 with `RESERVATION_EXTERNAL_REF_TAKEN`. Names the
+        reservation of the caller's that already carries the reference, which
+        is the booking the caller made earlier under it and can now read,
+        change or cancel.
+      required: [detail, code]
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        detail:
+          type: object
+          required: [message, reservation_id]
+          properties:
+            message:
+              type: string
+              example: a reservation of yours already has that external_ref
+            reservation_id:
+              type: integer
+              example: 17
 
     # ── Schedule ──────────────────────────────
     CycleActivationConflict:
@@ -1944,7 +2005,8 @@ components:
       description: >
         The body of every error. detail is for a person to read and code is
         for a program to branch on. A 409 that names what stood in the way
-        has its own schema, with detail as an object; see ReservationConflict.
+        has its own schema, with detail as an object; see ReservationConflict
+        and ReservationRefTaken.
       required: [detail, code]
       properties:
         code:
@@ -2001,6 +2063,7 @@ components:
         - USER_DEACTIVATED
         - IDEMPOTENCY_KEY_REUSED
         - IDEMPOTENCY_KEY_IN_PROGRESS
+        - RESERVATION_EXTERNAL_REF_TAKEN
         - LOCATION_REQUIRED
         - LOCATION_TOO_COARSE
         - OUTSIDE_GEOFENCE
@@ -3531,6 +3594,50 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/resources/reservations:
+    get:
+      operationId: resources.listReservations
+      tags: [Resources]
+      summary: List the caller's own reservations
+      description: >
+        Requires `ORG_ADMIN` or `UNIT_ADMIN`. The reservations the caller
+        made, cancelled ones included, in id order. Only the caller's, for
+        every role, an `ORG_ADMIN` included: a reference means something only
+        to the system that chose it, so asking for one must return the
+        caller's own booking and never another caller's under the same
+        string. This is where an integration finds its bookings, not a view
+        of everybody's.
+
+
+        `external_ref` matches exactly, case included, so with it the answer
+        is one reservation or none. Under `/resources` so that a key scoped
+        `resources:read` reaches it.
+      parameters:
+        - name: external_ref
+          in: query
+          required: false
+          schema:
+            type: string
+          example: visit-42
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: The caller's reservations, ordered by id.
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/XTotalCount"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReservationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /api/v1/resources/{resource_id}:
     parameters:
       - name: resource_id
@@ -3684,6 +3791,18 @@ paths:
         A weekly slot reads its two times by the same rule, so an overnight
         booking is checked against night shifts on the timetable as well as
         against day ones.
+
+
+        An `external_ref` already on one of the caller's reservations,
+        cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and
+        the id of that reservation in `detail.reservation_id`. The reference
+        is checked after the Idempotency-Key, so a retry under the same key
+        and the same body is still a `200` with the original hold, and
+        before the window, so the same booking sent again under a new key is
+        told it already exists rather than that the window is taken. Two
+        requests racing for one reference get one booking and the same 409
+        for the loser. A cancelled reservation keeps its reference: clear or
+        change it with PATCH before booking under it again.
       parameters:
         - name: resource_id
           in: path
@@ -3733,11 +3852,20 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: Something already holds part of that window.
+          description: >
+            The caller already has a reservation with that external_ref
+            (`RESERVATION_EXTERNAL_REF_TAKEN`, ReservationRefTaken), or
+            something already holds part of that window (`RESOURCE_CONFLICT`,
+            ReservationConflict). Branch on `code`. ReservationRefTaken is
+            listed first because its detail has required fields and the
+            other's does not, so a client trying each shape in turn tells
+            them apart.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ReservationConflict"
+                oneOf:
+                  - $ref: "#/components/schemas/ReservationRefTaken"
+                  - $ref: "#/components/schemas/ReservationConflict"
         "422":
           description: >
             end was not after start, or the Idempotency-Key had already been
@@ -3748,6 +3876,77 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/resources/{resource_id}/reservations/{reservation_id}:
+    patch:
+      operationId: resources.updateReservation
+      tags: [Resources]
+      summary: Change a reservation's external_ref
+      description: >
+        Requires `ORG_ADMIN` or `UNIT_ADMIN`. Sets, changes or clears the
+        caller's reference for a reservation. Only the reference can change:
+        moving the window is a cancel and a new booking.
+
+
+        The reference is unique per requester, the same rule as on create,
+        and taking one already on another of the requester's reservations is
+        the same 409. When an `ORG_ADMIN` changes a reservation somebody else
+        made, the reference is checked against that requester's, not the
+        admin's. A cancelled reservation keeps its reference, so this is how
+        a caller frees one to book under again.
+
+
+        Who may change a reservation is who may cancel it: whoever took it,
+        or an `ORG_ADMIN`. A `UNIT_ADMIN` that did not make it gets a 403.
+        Sending the reference the reservation already has changes nothing
+        and leaves no entry on the change feed; a real change leaves one.
+      parameters:
+        - name: resource_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: reservation_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReservationUpdate"
+      responses:
+        "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: The reservation as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Another of the requester's reservations already has that external_ref.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationRefTaken"
+        "422":
+          description: >
+            An empty or over-long external_ref, or a field other than
+            external_ref.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
     delete:
       operationId: resources.cancelReservation
       tags: [Resources]

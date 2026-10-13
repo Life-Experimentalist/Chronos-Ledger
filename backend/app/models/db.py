@@ -434,6 +434,11 @@ class Reservation(Base):
         UniqueConstraint(
             "requested_by_id", "idempotency_key", name="uq_reservations_requester_key"
         ),
+        # The caller's own name for the booking, unique per caller for the
+        # same reason the key is. A null is no reference at all, and SQLite
+        # and PostgreSQL both treat nulls as distinct here, so any number of
+        # rows may leave it unset. A cancelled row keeps its reference.
+        UniqueConstraint("requested_by_id", "external_ref", name="uq_reservations_requester_ref"),
     )
 
     id = Column(Integer, primary_key=True)
@@ -459,6 +464,10 @@ class Reservation(Base):
     # different request is refused, because at that point the caller has lost
     # track of which of the two it meant.
     request_fingerprint = Column(String(64), nullable=False)
+    # What the caller calls this booking in its own system, so it can find and
+    # change the booking without keeping Chronos's id. Optional, and the same
+    # length as the key.
+    external_ref = Column(String(120), nullable=True)
     status = Column(
         Enum(ReservationStatus, name="reservation_status"),
         nullable=False,
