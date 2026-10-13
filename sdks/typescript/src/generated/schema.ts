@@ -642,6 +642,120 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/schedule/activities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List activities
+         * @description Any signed-in user. Retired activities are left out unless `include_retired` is set.
+         */
+        get: operations["schedule.listActivities"];
+        put?: never;
+        /**
+         * Add an activity
+         * @description Admin only. A UNIT_ADMIN may only add activities to their own unit (403 `OUTSIDE_UNIT`). The activity starts with no slots and no members. Each slot added to it with POST /schedule/slots fills the days ahead at once, through the same generator a CSV import and the nightly job use, so an activity built here gets exactly the days the same activity imported from a CSV would.
+         */
+        post: operations["schedule.createActivity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schedule/activities/{activity_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one activity
+         * @description Any signed-in user. A retired activity is still returned.
+         */
+        get: operations["schedule.getActivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Rename an activity
+         * @description Admin only, inside the admin's unit. Only the title can change; see ActivityUpdate for why. Refused with 409 `STATE_CONFLICT` once the activity is retired.
+         */
+        patch: operations["schedule.updateActivity"];
+        trace?: never;
+    };
+    "/api/v1/schedule/activities/{activity_id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire an activity
+         * @description Admin only, inside the admin's unit. Nothing is deleted that has happened. The activity and every slot it still has are marked retired, so the generator writes no more days for them and their rooms are free again. Days from today onward that nobody has marked or annotated are removed; days that carry attendance or a note are kept; days before today are not touched.
+         *
+         *     A retired activity stays readable through GET /schedule/activities/{activity_id} and is left out of the list unless `include_retired` is set. It cannot be edited, given slots or members, or retired again (409 `STATE_CONFLICT`), and a CSV import that names it is refused. Its code stays taken in the cycle.
+         */
+        post: operations["schedule.retireActivity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schedule/activities/{activity_id}/enrollments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List an activity's members
+         * @description Admin only, inside the admin's unit.
+         */
+        get: operations["schedule.listEnrollments"];
+        put?: never;
+        /**
+         * Enroll a member
+         * @description Admin only, inside the admin's unit. The member has to exist and be active, as in a CSV import. Days belong to slots rather than members, so no day is written: the member sees the activity's days from now on.
+         */
+        post: operations["schedule.createEnrollment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schedule/activities/{activity_id}/enrollments/{member_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a member from an activity
+         * @description Admin only, inside the admin's unit. Only the enrollment goes. Days belong to slots, so no day is removed, and the attendance already recorded for the member stays.
+         */
+        delete: operations["schedule.deleteEnrollment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/schedule/slots": {
         parameters: {
             query?: never;
@@ -651,13 +765,13 @@ export interface paths {
         };
         /**
          * List master slots
-         * @description The recurring timetable, before any day is generated from it. Filter by cycle to get one term's worth.
+         * @description The recurring timetable, before any day is generated from it. Filter by cycle to get one term's worth. Retired slots are left out unless `include_retired` is set.
          */
         get: operations["schedule.listSlots"];
         put?: never;
         /**
          * Add a master slot
-         * @description Admin only. A UNIT_ADMIN may only add slots inside their own unit.
+         * @description Admin only. A UNIT_ADMIN may only add slots inside their own unit. The new slot fills the days ahead at once, through the same generator a CSV import and the nightly job use. A retired activity takes no new slots (409 `STATE_CONFLICT`).
          *
          *     Refused with 409 where the room is already taken for part of that window, whether by a booking or by another class. Only holds from today forward count, because a slot lays down days from now onwards and never backwards, and a slot in a closed cycle is neither checked nor counted against, because such a slot does not occupy the room and a booking is already accepted on top of one. Every open cycle counts, including a second one covering a different part of the year: the nightly generator lays every open cycle onto today, so all of them hold the room today.
          *
@@ -702,6 +816,26 @@ export interface paths {
          *     A day already generated on that room in part of the window refuses the change as well, with no cycle gate on either side, because such a day still puts somebody at a door whatever its cycle now says. The check is made before anything is written and again if the database refuses the write anyway: two admins moving two classes onto one room at the same moment both pass the first ask, and the loser is told what beat it rather than handed a 500.
          */
         patch: operations["schedule.updateSlot"];
+        trace?: never;
+    };
+    "/api/v1/schedule/slots/{slot_id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire a master slot
+         * @description Admin only, inside the admin's unit. Where DELETE refuses while a day ahead carries attendance or a note, this keeps that day and removes the days ahead that are still plans. Days before today are not touched. The slot stays, marked retired, so the generator writes no more days for it and its room is free again. A retired slot cannot be edited, deleted or retired again (409 `STATE_CONFLICT`), and a CSV row naming it is refused.
+         */
+        post: operations["schedule.retireSlot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/schedule/ledger/today": {
@@ -2095,6 +2229,53 @@ export interface components {
             date_bounds_end?: string;
             operational_status?: boolean;
         };
+        /** @description An activity, the same one a CSV row names by code, title and unit. It starts with no slots and no members; those are added with POST /schedule/slots and POST /schedule/activities/{activity_id}/enrollments. */
+        ActivityCreate: {
+            /**
+             * @description Unique within the cycle, retired activities included.
+             * @example CS201
+             */
+            activity_code: string;
+            activity_title: string;
+            /** @description A UNIT_ADMIN may only name their own unit. */
+            unit_code: string;
+            cycle_id: number;
+        };
+        /** @description Only the title can change. The code and the cycle are what identify an activity, the same pair a CSV upsert matches on, so changing either is a different activity. The unit is what a unit admin's permission is checked against, and moving an activity between units is left to an import, which only an org admin can run. */
+        ActivityUpdate: {
+            activity_title: string;
+        };
+        ActivityResponse: {
+            id?: number;
+            activity_code?: string;
+            activity_title?: string;
+            unit_code?: string;
+            cycle_id?: number;
+            /**
+             * Format: date-time
+             * @description When the activity was retired. Null while it is live.
+             */
+            retired_at?: string | null;
+        };
+        /** @description What retiring an activity or a slot did to the days ahead. Days from today onward that nobody has marked or annotated are removed; the ones carrying attendance or a note are kept. Days before today are records and are not touched. */
+        RetireResult: {
+            /** Format: date-time */
+            retired_at?: string;
+            /** @description Slots marked retired by this request. Always 1 when a slot is retired; for an activity, every slot it had that was still live. */
+            slots_retired?: number;
+            /** @description Days from today onward that were still plans. */
+            ledger_rows_removed?: number;
+            /** @description Days from today onward kept because attendance or a note has been recorded against them. */
+            ledger_rows_kept?: number;
+        };
+        EnrollmentCreate: {
+            /** @example STU001 */
+            member_id: string;
+        };
+        EnrollmentResponse: {
+            activity_id?: number;
+            member_id?: string;
+        };
         MasterSlotCreate: {
             /** @description ISO weekday, 1 = Monday through 7 = Sunday. */
             day_of_week_index: number;
@@ -2140,6 +2321,11 @@ export interface components {
             resource_id?: number | null;
             /** @description The room's name, mirrored from the resource. Being retired. */
             target_room_identifier?: string | null;
+            /**
+             * Format: date-time
+             * @description When the slot was retired, on its own or with its activity. Null while it is live.
+             */
+            retired_at?: string | null;
         };
         SlotUpdateResult: {
             /** @description Days that were still plans and now carry the new lead or room. */
@@ -3906,10 +4092,329 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    "schedule.listActivities": {
+        parameters: {
+            query?: {
+                cycle_id?: number;
+                include_retired?: boolean;
+                /** @description At most this many rows. Every matching row if omitted. */
+                limit?: components["parameters"]["Limit"];
+                /** @description Skip this many rows first. Rows come in id order. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Activities. */
+            200: {
+                headers: {
+                    "X-Total-Count": components["headers"]["XTotalCount"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityResponse"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    "schedule.createActivity": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivityCreate"];
+            };
+        };
+        responses: {
+            /** @description Activity created. */
+            201: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description The cycle does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The code is already used in that cycle (`ALREADY_EXISTS`), by a live activity or a retired one. The detail says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    "schedule.getActivity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                activity_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The activity. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "schedule.updateActivity": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                activity_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivityUpdate"];
+            };
+        };
+        responses: {
+            /** @description The activity as it now stands. */
+            200: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The activity is retired. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    "schedule.retireActivity": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                activity_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What retiring removed and what it kept. */
+            200: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetireResult"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The activity is already retired. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    "schedule.listEnrollments": {
+        parameters: {
+            query?: {
+                /** @description At most this many rows. Every matching row if omitted. */
+                limit?: components["parameters"]["Limit"];
+                /** @description Skip this many rows first. Rows come in id order. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path: {
+                activity_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The roster. */
+            200: {
+                headers: {
+                    "X-Total-Count": components["headers"]["XTotalCount"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrollmentResponse"][];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "schedule.createEnrollment": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                activity_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnrollmentCreate"];
+            };
+        };
+        responses: {
+            /** @description Member enrolled. */
+            201: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrollmentResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description The activity or the member does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The member is already enrolled (`ALREADY_EXISTS`), or the activity is retired (`STATE_CONFLICT`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A malformed body, or a member who has been deactivated (`USER_DEACTIVATED`). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    "schedule.deleteEnrollment": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                activity_id: number;
+                member_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The enrollment that was removed. */
+            200: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        activity_id?: number;
+                        member_id?: string;
+                        removed?: boolean;
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description The activity does not exist, or the member is not enrolled in it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The activity is retired. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     "schedule.listSlots": {
         parameters: {
             query?: {
                 cycle_id?: number;
+                include_retired?: boolean;
                 /** @description At most this many rows. Every matching row if omitted. */
                 limit?: components["parameters"]["Limit"];
                 /** @description Skip this many rows first. Rows come in id order. */
@@ -4070,6 +4575,43 @@ export interface operations {
             };
             /** @description A malformed body, a window that starts and ends at the same time, or a `primary_lead_id` naming somebody who has been deactivated. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    "schedule.retireSlot": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                slot_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What retiring removed and what it kept. */
+            200: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetireResult"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The slot is already retired. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
