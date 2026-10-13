@@ -3,9 +3,10 @@
 
 import datetime
 
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlalchemy.orm import Session
 
+from app.core.errors import ChronosError, ErrorCode
 from app.models.db import DailyLedger, DynamicState, LogVerificationState, ReverseRsvpLog, User
 
 
@@ -21,9 +22,10 @@ def route_absence_declaration(
     # wait for nobody.
     manager = user.manager if user else None
     if manager is None or manager.deactivated_at is not None:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Reporting hierarchy missing. Contact admin to set your manager.",
+            code=ErrorCode.MANAGER_NOT_SET,
         )
 
     log = ReverseRsvpLog(

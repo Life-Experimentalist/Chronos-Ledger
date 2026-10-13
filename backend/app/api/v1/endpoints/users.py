@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,7 @@ from app.api.v1.endpoints.websocket import CLOSE_UNAUTHENTICATED
 from app.core import clock
 from app.core.database import get_db
 from app.core.emails import normalize_email
+from app.core.errors import ChronosError, ErrorCode
 from app.core.pagination import Page
 from app.core.security import (
     ensure_unit_scope,
@@ -55,23 +56,30 @@ def _check_manager(user_id: str, manager_id: str, db: Session) -> None:
     nobody at the top of it.
     """
     if manager_id == user_id:
-        raise HTTPException(status_code=422, detail="A user cannot be their own manager")
+        raise ChronosError(
+            status_code=422,
+            detail="A user cannot be their own manager",
+            code=ErrorCode.INVALID_VALUE,
+        )
     row = (
         db.query(User.reporting_line_manager, User.deactivated_at)
         .filter(User.id == manager_id)
         .first()
     )
     if row is None:
-        raise HTTPException(status_code=404, detail="Manager not found")
+        raise ChronosError(status_code=404, detail="Manager not found", code=ErrorCode.NOT_FOUND)
     if row[1] is not None:
-        raise HTTPException(status_code=422, detail="Manager is deactivated")
+        raise ChronosError(
+            status_code=422, detail="Manager is deactivated", code=ErrorCode.USER_DEACTIVATED
+        )
     above, seen = row[0], {manager_id}
     # A loop the user is not in can predate this check; stop rather than spin.
     while above is not None and above not in seen:
         if above == user_id:
-            raise HTTPException(
+            raise ChronosError(
                 status_code=422,
                 detail=f"{manager_id} already reports to {user_id}, directly or through others",
+                code=ErrorCode.INVALID_VALUE,
             )
         seen.add(above)
         above = db.query(User.reporting_line_manager).filter(User.id == above).scalar()
@@ -112,18 +120,24 @@ def create_user(
 ):
     admin_roles = (InstitutionalRole.ORG_ADMIN, InstitutionalRole.UNIT_ADMIN)
     if payload.role_type in admin_roles and current_user.role_type != InstitutionalRole.ORG_ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only an organization admin can create admin accounts"
+        raise ChronosError(
+            status_code=403,
+            detail="Only an organization admin can create admin accounts",
+            code=ErrorCode.INSUFFICIENT_ROLE,
         )
     ensure_unit_scope(current_user, payload.unit_code)
     if db.query(User).filter(User.id == payload.id).first():
-        raise HTTPException(status_code=409, detail="User ID already exists")
+        raise ChronosError(
+            status_code=409, detail="User ID already exists", code=ErrorCode.ALREADY_EXISTS
+        )
     if (
         db.query(User)
         .filter(func.lower(User.email_address) == normalize_email(payload.email_address))
         .first()
     ):
-        raise HTTPException(status_code=409, detail="Email already registered")
+        raise ChronosError(
+            status_code=409, detail="Email already registered", code=ErrorCode.EMAIL_TAKEN
+        )
     if payload.reporting_line_manager is not None:
         _check_manager(payload.id, payload.reporting_line_manager, db)
 
@@ -179,10 +193,10 @@ def get_user(
         "ORG_ADMIN",
         "UNIT_ADMIN",
     ):
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise ChronosError(status_code=403, detail="Access denied", code=ErrorCode.FORBIDDEN)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise ChronosError(status_code=404, detail="User not found", code=ErrorCode.NOT_FOUND)
     if current_user.id != user_id:
         ensure_unit_scope(current_user, user.unit_code)
     return user
@@ -197,11 +211,13 @@ def update_user(
 ):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise ChronosError(status_code=404, detail="User not found", code=ErrorCode.NOT_FOUND)
     admin_roles = (InstitutionalRole.ORG_ADMIN, InstitutionalRole.UNIT_ADMIN)
     if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.ORG_ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only an organization admin can modify admin accounts"
+        raise ChronosError(
+            status_code=403,
+            detail="Only an organization admin can modify admin accounts",
+            code=ErrorCode.INSUFFICIENT_ROLE,
         )
     ensure_unit_scope(current_user, user.unit_code)
     if "unit_code" in payload.model_fields_set:
@@ -218,7 +234,9 @@ def update_user(
             .first()
         )
         if taken:
-            raise HTTPException(status_code=409, detail="Email already registered")
+            raise ChronosError(
+                status_code=409, detail="Email already registered", code=ErrorCode.EMAIL_TAKEN
+            )
     if payload.reporting_line_manager is not None:
         _check_manager(user.id, payload.reporting_line_manager, db)
     for field, value in payload.model_dump(exclude_unset=True).items():
@@ -251,11 +269,13 @@ def reset_user_password(
     """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise ChronosError(status_code=404, detail="User not found", code=ErrorCode.NOT_FOUND)
     admin_roles = (InstitutionalRole.ORG_ADMIN, InstitutionalRole.UNIT_ADMIN)
     if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.ORG_ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only an organization admin can modify admin accounts"
+        raise ChronosError(
+            status_code=403,
+            detail="Only an organization admin can modify admin accounts",
+            code=ErrorCode.INSUFFICIENT_ROLE,
         )
     ensure_unit_scope(current_user, user.unit_code)
 
@@ -277,11 +297,13 @@ def _managed_account(user_id: str, db: Session, current_user: User) -> User:
     """The account an admin is about to change, once they are allowed to change it."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise ChronosError(status_code=404, detail="User not found", code=ErrorCode.NOT_FOUND)
     admin_roles = (InstitutionalRole.ORG_ADMIN, InstitutionalRole.UNIT_ADMIN)
     if user.role_type in admin_roles and current_user.role_type != InstitutionalRole.ORG_ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only an organization admin can modify admin accounts"
+        raise ChronosError(
+            status_code=403,
+            detail="Only an organization admin can modify admin accounts",
+            code=ErrorCode.INSUFFICIENT_ROLE,
         )
     ensure_unit_scope(current_user, user.unit_code)
     return user
@@ -357,7 +379,11 @@ def deactivate_user(
     # whoever
     # deactivates the others is still there.
     if user.id == current_user.id:
-        raise HTTPException(status_code=422, detail="You cannot deactivate your own account")
+        raise ChronosError(
+            status_code=422,
+            detail="You cannot deactivate your own account",
+            code=ErrorCode.INVALID_VALUE,
+        )
     if user.deactivated_at is None:
         user.deactivated_at = clock.now()
         user.calendar_feed_token = generate_feed_token()
@@ -405,10 +431,12 @@ def update_user_status(
     current_user: User = Depends(get_current_user),
 ):
     if current_user.id != user_id and current_user.role_type.value not in ("ORG_ADMIN",):
-        raise HTTPException(status_code=403, detail="Can only update own status")
+        raise ChronosError(
+            status_code=403, detail="Can only update own status", code=ErrorCode.FORBIDDEN
+        )
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise ChronosError(status_code=404, detail="User not found", code=ErrorCode.NOT_FOUND)
     user.current_occupancy_index = payload.status
     db.commit()
     return {"status": payload.status.value}

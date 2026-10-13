@@ -33,6 +33,7 @@ from app.core import security
 from app.core.audit import AuditMiddleware
 from app.core.concurrency import ConcurrencyGate
 from app.core.database import POOL_CAPACITY
+from app.core.errors import register_error_handlers
 from app.core.host_identity import (
     HostSecretMiddleware,
     check_host_secret,
@@ -123,6 +124,7 @@ def build_app(secret: str) -> FastAPI:
         )
         embedded.include_router(kept, prefix=f"/api/v1{prefix}", tags=[tag])
     embedded.include_router(clock_endpoints.router, prefix="/api/v1/clock", tags=["Clock"])
+    register_error_handlers(embedded)
     embedded.add_exception_handler(PoolTimeout, main.pool_exhausted)
     embedded.add_api_route("/health", main.health_check, operation_id="health.check")
     embedded.add_api_route("/health/ready", main.readiness_check, operation_id="health.ready")

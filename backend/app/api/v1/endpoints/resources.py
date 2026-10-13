@@ -4,13 +4,14 @@
 import datetime
 import hashlib
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Header, Query, Response, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core import change_feed, clock
 from app.core.database import get_db
+from app.core.errors import ChronosError, ErrorCode
 from app.core.pagination import Page
 from app.core.security import get_current_user, require_roles
 from app.models.db import Reservation, ReservationStatus, Resource, ResourceType
@@ -115,7 +116,9 @@ def create_resource(
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=CODE_TAKEN) from None
+        raise ChronosError(
+            status_code=status.HTTP_409_CONFLICT, detail=CODE_TAKEN, code=ErrorCode.ALREADY_EXISTS
+        ) from None
     db.refresh(resource)
     return resource
 
@@ -166,11 +169,11 @@ def resource_availability(
     """
     resource = db.query(Resource).filter(Resource.id == resource_id).first()
     if not resource:
-        raise HTTPException(status_code=404, detail="Resource not found")
+        raise ChronosError(status_code=404, detail="Resource not found", code=ErrorCode.NOT_FOUND)
     if from_ > to:
-        raise HTTPException(status_code=422, detail=RANGE_BACKWARDS)
+        raise ChronosError(status_code=422, detail=RANGE_BACKWARDS, code=ErrorCode.INVALID_VALUE)
     if (to - from_).days + 1 > MAX_RANGE_DAYS:
-        raise HTTPException(status_code=422, detail=RANGE_TOO_LONG)
+        raise ChronosError(status_code=422, detail=RANGE_TOO_LONG, code=ErrorCode.INVALID_VALUE)
 
     return {
         "resource_id": resource.id,
@@ -203,7 +206,7 @@ def update_resource(
     """
     resource = db.query(Resource).filter(Resource.id == resource_id).first()
     if not resource:
-        raise HTTPException(status_code=404, detail="Resource not found")
+        raise ChronosError(status_code=404, detail="Resource not found", code=ErrorCode.NOT_FOUND)
 
     # exclude_unset, not exclude_none: clearing a coordinate is a thing an
     # admin does on purpose, and it has to be distinguishable from not
@@ -269,13 +272,14 @@ def _conflicts_for(db: Session, resource_id: int, payload: ReservationCreate) ->
     )
 
 
-def _already_taken(conflicts: list[dict]) -> HTTPException:
+def _already_taken(conflicts: list[dict]) -> ChronosError:
     # jsonable_encoder because the detail of an HTTPException is serialised
     # straight to JSON, with none of the conversion a response_model would
     # have done for the dates and times in here.
-    return HTTPException(
+    return ChronosError(
         status_code=status.HTTP_409_CONFLICT,
         detail=jsonable_encoder({"message": ALREADY_TAKEN, "conflicts": conflicts}),
+        code=ErrorCode.RESOURCE_CONFLICT,
     )
 
 
@@ -358,13 +362,15 @@ def create_reservation(
     # the tests, which is why that overlap is the one the tests cannot prove.
     resource = db.query(Resource).filter(Resource.id == resource_id).with_for_update().first()
     if not resource:
-        raise HTTPException(status_code=404, detail="Resource not found")
+        raise ChronosError(status_code=404, detail="Resource not found", code=ErrorCode.NOT_FOUND)
 
     fingerprint = _fingerprint(resource_id, payload)
     seen = db.query(Reservation).filter(Reservation.idempotency_key == idempotency_key).first()
     if seen is not None:
         if seen.request_fingerprint != fingerprint:
-            raise HTTPException(status_code=422, detail=KEY_REUSED)
+            raise ChronosError(
+                status_code=422, detail=KEY_REUSED, code=ErrorCode.IDEMPOTENCY_KEY_REUSED
+            )
         # The same request, again. Hand back what it made the first time,
         # cancelled or not: a retry is asking what happened, not asking for
         # a second room.
@@ -407,7 +413,9 @@ def create_reservation(
         # here. The winner's row is the answer to both.
         won = db.query(Reservation).filter(Reservation.idempotency_key == idempotency_key).first()
         if won is None or won.request_fingerprint != fingerprint:
-            raise HTTPException(status_code=422, detail=KEY_REUSED) from None
+            raise ChronosError(
+                status_code=422, detail=KEY_REUSED, code=ErrorCode.IDEMPOTENCY_KEY_REUSED
+            ) from None
         response.status_code = status.HTTP_200_OK
         return reservation_view(won, resource)
 
@@ -448,13 +456,17 @@ def cancel_reservation(
         .first()
     )
     if not reservation:
-        raise HTTPException(status_code=404, detail="Reservation not found")
+        raise ChronosError(
+            status_code=404, detail="Reservation not found", code=ErrorCode.NOT_FOUND
+        )
 
     if (
         current_user.role_type.value != "ORG_ADMIN"
         and reservation.requested_by_id != current_user.id
     ):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=NOT_YOUR_HOLD)
+        raise ChronosError(
+            status_code=status.HTTP_403_FORBIDDEN, detail=NOT_YOUR_HOLD, code=ErrorCode.FORBIDDEN
+        )
 
     if reservation.status is not ReservationStatus.CANCELLED:
         reservation.status = ReservationStatus.CANCELLED

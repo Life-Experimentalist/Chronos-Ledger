@@ -4,7 +4,7 @@
 import logging
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -13,6 +13,7 @@ from app.core import clock, ids, rate_limit
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.emails import normalize_email
+from app.core.errors import ChronosError, ErrorCode
 from app.core.security import (
     ABSENT_ACCOUNT_HASH,
     create_access_token,
@@ -104,7 +105,11 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
         # ever arrives for real addresses is the same oracle by a slower route.
         rate_limit.spend("login-ip", address, per_address, window)
         rate_limit.spend("login-email", account, per_account, window)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        raise ChronosError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            code=ErrorCode.INVALID_CREDENTIALS,
+        )
 
     refresh_token = _mint_refresh_token(db, user.id)
     db.commit()
@@ -177,28 +182,34 @@ def federated(request: Request, payload: FederatedTokenRequest, db: Session = De
         note = federated_identity.verify_note(payload.token, db)
     except federated_identity.FederationDisabled:
         # Not logged as a refusal, because nothing was wrong with the request.
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found") from None
+        raise ChronosError(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Not Found", code=ErrorCode.NOT_FOUND
+        ) from None
     except federated_identity.ReplayCacheDown as unreachable:
         # Logged already, where it happened, by the code that knows why.
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Federated sign-in is temporarily unavailable",
+            code=ErrorCode.FEDERATION_UNAVAILABLE,
         ) from unreachable
     except federated_identity.NoteRefused as refused:
         # The reason names the issuer, and the kid wherever the kid is the part
         # that was wrong. The note itself never reaches the log.
         logger.warning("federated sign-in refused: %s", refused)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid federated token"
+        raise ChronosError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid federated token",
+            code=ErrorCode.FEDERATED_TOKEN_INVALID,
         ) from refused
 
     try:
         user, refresh_token = _issue(note, db)
     except federated_identity.NoEmailToProvisionWith as unusable:
         logger.warning("federated sign-in could not become an account: %s", unusable)
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="This note carries no email address an account can be created from",
+            code=ErrorCode.FEDERATED_EMAIL_MISSING,
         ) from unusable
     except federated_identity.LinkedAccountIsAdmin as promoted:
         # Said plainly rather than folded into the opaque 401. Whoever is
@@ -207,12 +218,13 @@ def federated(request: Request, payload: FederatedTokenRequest, db: Session = De
         # news to them. Getting here needs a note the issuer's key signed, so
         # there is no way to ask this question about somebody else's account.
         logger.warning("federated sign-in refused, that account is an admin: %s", promoted)
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
                 "This account is an administrator and signs in with a password, "
                 "not through your organization."
             ),
+            code=ErrorCode.FEDERATED_ADMIN_REFUSED,
         ) from promoted
     except federated_identity.EmailAlreadyTaken as taken:
         # The address stays out of the log: it is a claim out of the note, and
@@ -222,16 +234,19 @@ def federated(request: Request, payload: FederatedTokenRequest, db: Session = De
             note.issuer.issuer,
             note.subject,
         )
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_409_CONFLICT,
             detail="The address in this note already belongs to an account",
+            code=ErrorCode.EMAIL_TAKEN,
         ) from taken
     except federated_identity.NoteRefused as refused:
         # A deactivated account and a link pointing at nothing land here, and
         # the caller is told the same thing as for any other refusal.
         logger.warning("federated sign-in refused: %s", refused)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid federated token"
+        raise ChronosError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid federated token",
+            code=ErrorCode.FEDERATED_TOKEN_INVALID,
         ) from refused
 
     # Read by `core/audit.py` once the response has gone out, so the record
@@ -259,8 +274,10 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
         .first()
     )
     if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
+        raise ChronosError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+            code=ErrorCode.REFRESH_TOKEN_INVALID,
         )
 
     now = clock.now()
@@ -279,19 +296,24 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
                 "Every session from that sign-in has been ended.",
                 user_id,
             )
-            raise HTTPException(
+            raise ChronosError(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Refresh token reused; sign in again",
+                code=ErrorCode.REFRESH_TOKEN_REUSED,
             )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token already used"
+        raise ChronosError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token already used",
+            code=ErrorCode.REFRESH_TOKEN_USED,
         )
 
     if _as_utc(row.expires_at) < now:
         db.delete(row)
         db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired"
+        raise ChronosError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token expired",
+            code=ErrorCode.REFRESH_TOKEN_EXPIRED,
         )
 
     # Spent by a conditional update rather than by setting the attribute, so
@@ -305,15 +327,19 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
     )
     if not spent:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token already used"
+        raise ChronosError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token already used",
+            code=ErrorCode.REFRESH_TOKEN_USED,
         )
 
     user = db.get(User, row.user_id)
     if user is None or user.deactivated_at is not None:
         db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
+        raise ChronosError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+            code=ErrorCode.REFRESH_TOKEN_INVALID,
         )
 
     new_refresh = _mint_refresh_token(db, user.id, row.family_id)
@@ -357,15 +383,18 @@ def change_password(
     db: Session = Depends(get_db),
 ):
     if not verify_password(payload.current_password, current_user.credential_secure_hash):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect"
+        raise ChronosError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+            code=ErrorCode.CURRENT_PASSWORD_INCORRECT,
         )
     # The first-login gate exists to get the account off the password it was
     # handed. Setting it back to itself satisfies the flag and changes nothing.
     if payload.new_password == payload.current_password:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="The new password is the one you already have",
+            code=ErrorCode.PASSWORD_UNCHANGED,
         )
 
     current_user.credential_secure_hash = hash_password(payload.new_password)

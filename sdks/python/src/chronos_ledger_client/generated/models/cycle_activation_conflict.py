@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..types import UNSET, Unset
+from ..models.error_code import ErrorCode
 
 if TYPE_CHECKING:
     from ..models.cycle_activation_conflict_detail import CycleActivationConflictDetail
@@ -26,22 +26,31 @@ class CycleActivationConflict:
     the one at fault.
 
         Attributes:
-            detail (CycleActivationConflictDetail | Unset):
+            code (ErrorCode): What went wrong, for a program to branch on. docs/api.md says what each one means. A code is
+                never renamed or reused for a different meaning, but new codes are added, so a client should treat one it does
+                not know by its HTTP status. VALIDATION_FAILED is the only code whose detail is a list: FastAPI's field errors
+                for a request that did not match the declared shape.
+                 Example: NOT_FOUND.
+            detail (CycleActivationConflictDetail):
     """
 
-    detail: CycleActivationConflictDetail | Unset = UNSET
+    code: ErrorCode
+    detail: CycleActivationConflictDetail
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        detail: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.detail, Unset):
-            detail = self.detail.to_dict()
+        code = self.code.value
+
+        detail = self.detail.to_dict()
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({})
-        if detail is not UNSET:
-            field_dict["detail"] = detail
+        field_dict.update(
+            {
+                "code": code,
+                "detail": detail,
+            }
+        )
 
         return field_dict
 
@@ -50,14 +59,12 @@ class CycleActivationConflict:
         from ..models.cycle_activation_conflict_detail import CycleActivationConflictDetail  # noqa: PLC0415
 
         d = dict(src_dict)
-        _detail = d.pop("detail", UNSET)
-        detail: CycleActivationConflictDetail | Unset
-        if isinstance(_detail, Unset):
-            detail = UNSET
-        else:
-            detail = CycleActivationConflictDetail.from_dict(_detail)
+        code = ErrorCode(d.pop("code"))
+
+        detail = CycleActivationConflictDetail.from_dict(d.pop("detail"))
 
         cycle_activation_conflict = cls(
+            code=code,
             detail=detail,
         )
 

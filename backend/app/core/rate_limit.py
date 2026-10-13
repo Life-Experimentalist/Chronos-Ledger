@@ -43,9 +43,10 @@ import hashlib
 import logging
 
 import redis
-from fastapi import HTTPException, Request, status
+from fastapi import Request, status
 
 from app.core.config import get_settings
+from app.core.errors import ChronosError, ErrorCode
 from app.core.redis_client import get_redis
 
 log = logging.getLogger(__name__)
@@ -121,10 +122,11 @@ def guard(bucket: str, subject: str, limit: int, window: int, what: str) -> None
     # A key with no expiry is a process that died between the two halves of
     # `spend`. Report a whole window rather than implying forever.
     retry_after = ttl if ttl and ttl > 0 else window
-    raise HTTPException(
+    raise ChronosError(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         detail=f"Too many {what}. Try again in {retry_after} seconds.",
         headers={"Retry-After": str(retry_after)},
+        code=ErrorCode.RATE_LIMITED,
     )
 
 

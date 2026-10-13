@@ -115,6 +115,7 @@ def test_the_attempt_past_the_budget_is_refused(client, seed_users, limiter):
 
     refused = _sign_in(client, password="wrong")
     assert refused.status_code == 429
+    assert refused.json()["code"] == "RATE_LIMITED"
     # Without this a client has no way to know when to come back, and the
     # answer is guessed as "immediately" by everything that retries.
     assert int(refused.headers["Retry-After"]) > 0

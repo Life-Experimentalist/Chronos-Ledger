@@ -4,13 +4,14 @@
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response
 from sqlalchemy import or_, select, true
 from sqlalchemy.orm import Session
 
 from app.core import clock, rate_limit
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.errors import ChronosError, ErrorCode
 from app.core.pagination import TOTAL_COUNT_HEADER
 from app.core.security import generate_visit_code, get_current_user, hash_visit_code
 from app.core.websocket_manager import socket_broker
@@ -79,7 +80,9 @@ def process_guest_entry(
             InstitutionalRole.UNIT_ADMIN,
         )
     ):
-        raise HTTPException(status_code=404, detail="Staff member not found")
+        raise ChronosError(
+            status_code=404, detail="Staff member not found", code=ErrorCode.NOT_FOUND
+        )
 
     visit_code = generate_visit_code()
     ttl_minutes = get_settings().guest_visit_code_ttl_minutes
@@ -165,7 +168,9 @@ def decide_guest_entry(
         .first()
     )
     if not entry:
-        raise HTTPException(status_code=404, detail="Entry not found or not authorized")
+        raise ChronosError(
+            status_code=404, detail="Entry not found or not authorized", code=ErrorCode.NOT_FOUND
+        )
 
     entry.handshake_status = payload.decision
     # Whoever it was, including the person the visitor came to see, so that the
@@ -201,22 +206,24 @@ def extend_guest_visit(
     """
     maximum = get_settings().guest_visit_extension_max_minutes
     if maximum == 0:
-        raise HTTPException(
+        raise ChronosError(
             status_code=422,
             detail=(
                 "This organization does not extend visits. The visitor checks in again "
                 "instead, or GUEST_VISIT_EXTENSION_MAX_MINUTES is raised above 0."
             ),
+            code=ErrorCode.INVALID_VALUE,
         )
     # Refused rather than quietly trimmed, so a desk that meant 30 and typed
     # 300 hears about it instead of wondering later why the visit ended early.
     if payload.minutes > maximum:
-        raise HTTPException(
+        raise ChronosError(
             status_code=422,
             detail=(
                 f"{payload.minutes} minutes is longer than a single extension may be "
                 f"here, which is {maximum}."
             ),
+            code=ErrorCode.INVALID_VALUE,
         )
 
     entry = (
@@ -225,14 +232,17 @@ def extend_guest_visit(
         .first()
     )
     if not entry:
-        raise HTTPException(status_code=404, detail="Entry not found or not authorized")
+        raise ChronosError(
+            status_code=404, detail="Entry not found or not authorized", code=ErrorCode.NOT_FOUND
+        )
     if (
         entry.handshake_status != LogVerificationState.VERIFIED_APPROVED
         or entry.visit_expires_at is None
     ):
-        raise HTTPException(
+        raise ChronosError(
             status_code=409,
             detail="Only an approved visit that has an end can be extended.",
+            code=ErrorCode.STATE_CONFLICT,
         )
 
     # From the later of now and the end it already has, so a visit half an hour
@@ -264,14 +274,18 @@ def get_visit_status(code: str, db: Session = Depends(get_db)):
         else None
     )
     if entry is None:
-        raise HTTPException(status_code=404, detail="No visit with that code")
+        raise ChronosError(
+            status_code=404, detail="No visit with that code", code=ErrorCode.NOT_FOUND
+        )
     # An expired code reads as one that was never issued. Saying "expired"
     # instead would confirm to whoever is trying codes that this one was real.
     if (
         entry.visit_code_expires_at is not None
         and _as_utc(entry.visit_code_expires_at) <= clock.now()
     ):
-        raise HTTPException(status_code=404, detail="No visit with that code")
+        raise ChronosError(
+            status_code=404, detail="No visit with that code", code=ErrorCode.NOT_FOUND
+        )
     return entry
 
 

@@ -29,10 +29,15 @@ class Tokens:
 class ChronosError(Exception):
     """Every response with status 400 or above, after retries and a token refresh."""
 
-    def __init__(self, status: int, detail: Any) -> None:
+    def __init__(self, status: int, detail: Any, code: str | None = None) -> None:
         self.status = status
         #: ``detail`` exactly as the server returned it: a string, or a dict for a 409.
         self.detail = detail
+        #: The server's code for what went wrong, such as ``"EMAIL_TAKEN"``, for
+        #: a program to branch on. A plain string rather than the generated
+        #: ErrorCode, so a code added after this client was built still arrives.
+        #: None when the body had no code, for example a proxy's error page.
+        self.code = code
         found = detail.get("conflicts") if isinstance(detail, dict) else None
         #: The clashing intervals of a 409, or an empty list.
         self.conflicts: list[dict[str, Any]] = found if isinstance(found, list) else []
@@ -52,7 +57,8 @@ class ChronosError(Exception):
         except ValueError:
             return cls(response.status_code, text or None)
         detail = body["detail"] if isinstance(body, dict) and "detail" in body else body
-        return cls(response.status_code, detail)
+        code = body.get("code") if isinstance(body, dict) else None
+        return cls(response.status_code, detail, code if isinstance(code, str) else None)
 
 
 def retry_after(response: httpx.Response) -> float | None:

@@ -1938,7 +1938,8 @@ export interface components {
         };
         /** @description The body of a 409. What the booking ran into, not merely that it ran into something, so a caller can pick its next hour without asking availability again and diffing the answers. Nested under detail like every other error here, so one error handler reads them all. */
         ReservationConflict: {
-            detail?: {
+            code: components["schemas"]["ErrorCode"];
+            detail: {
                 /** @example the resource is already taken for part of that window */
                 message?: string;
                 conflicts?: components["schemas"]["BusyInterval"][];
@@ -1950,7 +1951,8 @@ export interface components {
          *     Each entry is a BusyInterval naming what was already there, plus blocked_slot_id naming which of the cycle's own slots wanted it. A pair of the cycle's own slots is listed twice, once from each side, because neither of the two is the one at fault.
          */
         CycleActivationConflict: {
-            detail?: {
+            code: components["schemas"]["ErrorCode"];
+            detail: {
                 /** @example opening this cycle would put its slots on rooms already taken */
                 message?: string;
                 conflicts?: (components["schemas"]["BusyInterval"] & {
@@ -2289,10 +2291,18 @@ export interface components {
             /** @description What the next poll sends as `since`. The cursor that was sent in when nothing changed, so storing it unconditionally keeps the caller's place. */
             next_cursor?: number;
         };
+        /** @description The body of every error. detail is for a person to read and code is for a program to branch on. A 409 that names what stood in the way has its own schema, with detail as an object; see ReservationConflict. */
         ErrorResponse: {
+            code: components["schemas"]["ErrorCode"];
             /** @example Not authorized. */
-            detail?: string;
+            detail: string;
         };
+        /**
+         * @description What went wrong, for a program to branch on. docs/api.md says what each one means. A code is never renamed or reused for a different meaning, but new codes are added, so a client should treat one it does not know by its HTTP status. VALIDATION_FAILED is the only code whose detail is a list: FastAPI's field errors for a request that did not match the declared shape.
+         * @example NOT_FOUND
+         * @enum {string}
+         */
+        ErrorCode: "BAD_REQUEST" | "NOT_AUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "STATE_CONFLICT" | "PAYLOAD_TOO_LARGE" | "INVALID_VALUE" | "RATE_LIMITED" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE" | "VALIDATION_FAILED" | "INVALID_CREDENTIALS" | "TOKEN_INVALID" | "API_KEY_INVALID" | "API_KEY_EXPIRED" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_DEACTIVATED" | "REFRESH_TOKEN_INVALID" | "REFRESH_TOKEN_EXPIRED" | "REFRESH_TOKEN_USED" | "REFRESH_TOKEN_REUSED" | "FEDERATED_TOKEN_INVALID" | "FEDERATED_EMAIL_MISSING" | "FEDERATED_ADMIN_REFUSED" | "FEDERATION_UNAVAILABLE" | "CURRENT_PASSWORD_INCORRECT" | "PASSWORD_UNCHANGED" | "PASSWORD_CHANGE_REQUIRED" | "INSUFFICIENT_ROLE" | "SCOPE_MISSING" | "OUTSIDE_UNIT" | "RESOURCE_CONFLICT" | "ALREADY_EXISTS" | "EMAIL_TAKEN" | "USER_DEACTIVATED" | "IDEMPOTENCY_KEY_REUSED" | "LOCATION_REQUIRED" | "LOCATION_TOO_COARSE" | "OUTSIDE_GEOFENCE" | "MANAGER_NOT_SET" | "IMPORT_REJECTED" | "CHANGE_FEED_DISABLED" | "SERVER_BUSY";
     };
     responses: {
         /** @description Missing or invalid JWT. */

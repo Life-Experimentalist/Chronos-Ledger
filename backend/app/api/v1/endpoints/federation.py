@@ -19,11 +19,12 @@ from datetime import UTC, datetime
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core import clock
 from app.core.database import get_db
+from app.core.errors import ChronosError, ErrorCode
 from app.core.security import require_roles
 from app.models.db import (
     FederatedIdentity,
@@ -57,9 +58,10 @@ def _as_utc(moment: datetime) -> datetime:
 def _issuer_or_404(issuer_id: int, db: Session) -> FederatedIssuer:
     row = db.query(FederatedIssuer).filter(FederatedIssuer.id == issuer_id).first()
     if row is None:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Issuer {issuer_id} not found",
+            code=ErrorCode.NOT_FOUND,
         )
     return row
 
@@ -72,9 +74,10 @@ def _key_or_404(issuer_id: int, key_id: int, db: Session) -> FederatedIssuerKey:
         .first()
     )
     if row is None:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Issuer {issuer.id} has no key {key_id}",
+            code=ErrorCode.NOT_FOUND,
         )
     return row
 
@@ -90,14 +93,16 @@ def _load_ed25519(pem: str) -> None:
     try:
         loaded = load_pem_public_key(pem.encode())
     except Exception as exc:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"public_key is not a PEM public key: {exc}",
+            code=ErrorCode.INVALID_VALUE,
         ) from exc
     if not isinstance(loaded, Ed25519PublicKey):
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="public_key is not an Ed25519 key; notes are signed with EdDSA only",
+            code=ErrorCode.INVALID_VALUE,
         )
 
 
@@ -117,9 +122,10 @@ def create_issuer(
 ):
     taken = db.query(FederatedIssuer).filter(FederatedIssuer.issuer == payload.issuer).first()
     if taken is not None:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"'{payload.issuer}' is already registered as issuer {taken.id}",
+            code=ErrorCode.ALREADY_EXISTS,
         )
     row = FederatedIssuer(
         issuer=payload.issuer,
@@ -208,9 +214,10 @@ def add_key(
         .first()
     )
     if taken is not None:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Issuer {issuer.id} already has a key with kid '{payload.kid}'",
+            code=ErrorCode.ALREADY_EXISTS,
         )
     # Normalised before the comparison below, so the window this check passed
     # is the window stored.
@@ -219,9 +226,10 @@ def add_key(
     not_before = _as_utc(payload.not_before) if payload.not_before else clock.wall_now()
     not_after = _as_utc(payload.not_after) if payload.not_after else None
     if not_after is not None and not_after <= not_before:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="not_after is not after not_before; the key would never be valid",
+            code=ErrorCode.INVALID_VALUE,
         )
     row = FederatedIssuerKey(
         issuer_id=issuer.id,
@@ -276,9 +284,10 @@ def retire_key(
     row = _key_or_404(issuer_id, key_id, db)
     not_after = _as_utc(payload.not_after)
     if not_after <= _as_utc(row.not_before):
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="not_after is not after not_before; delete the key instead",
+            code=ErrorCode.INVALID_VALUE,
         )
     row.not_after = not_after
     db.commit()
@@ -333,12 +342,13 @@ def add_role_map_entry(
         .first()
     )
     if taken is not None:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 f"Issuer {issuer.id} already maps group '{payload.group_claim_value}'; "
                 f"delete entry {taken.id} to change it"
             ),
+            code=ErrorCode.ALREADY_EXISTS,
         )
     row = FederatedRoleMap(
         issuer_id=issuer.id,
@@ -394,9 +404,10 @@ def delete_role_map_entry(
         .first()
     )
     if row is None:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Issuer {issuer.id} has no role map entry {entry_id}",
+            code=ErrorCode.NOT_FOUND,
         )
     db.delete(row)
     db.commit()
@@ -441,17 +452,19 @@ def create_link(
     issuer = _issuer_or_404(payload.issuer_id, db)
     user = db.query(User).filter(User.id == payload.user_id).first()
     if user is None:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"User '{payload.user_id}' not found",
+            code=ErrorCode.NOT_FOUND,
         )
     if user.role_type in ADMIN_ROLES:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 f"'{user.id}' is {user.role_type.value} and cannot be linked: no issuer "
                 "may hold a route to an admin account"
             ),
+            code=ErrorCode.STATE_CONFLICT,
         )
     taken = (
         db.query(FederatedIdentity)
@@ -462,12 +475,13 @@ def create_link(
         .first()
     )
     if taken is not None:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 f"Subject '{payload.subject}' at issuer {issuer.id} is already linked "
                 f"to '{taken.user_id}'"
             ),
+            code=ErrorCode.ALREADY_EXISTS,
         )
     row = FederatedIdentity(issuer_id=issuer.id, subject=payload.subject, user_id=user.id)
     db.add(row)
@@ -517,9 +531,10 @@ def delete_link(
     """
     row = db.query(FederatedIdentity).filter(FederatedIdentity.id == link_id).first()
     if row is None:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Link {link_id} not found",
+            code=ErrorCode.NOT_FOUND,
         )
     db.delete(row)
     db.commit()

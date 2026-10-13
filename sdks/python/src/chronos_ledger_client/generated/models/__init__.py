@@ -31,6 +31,7 @@ from .daily_ledger_response import DailyLedgerResponse
 from .daily_ledger_update import DailyLedgerUpdate
 from .deactivated_user_response import DeactivatedUserResponse
 from .dynamic_state import DynamicState
+from .error_code import ErrorCode
 from .error_response import ErrorResponse
 from .execution_mode import ExecutionMode
 from .federated_token_request import FederatedTokenRequest
@@ -141,6 +142,7 @@ __all__ = (
     "DailyLedgerUpdate",
     "DeactivatedUserResponse",
     "DynamicState",
+    "ErrorCode",
     "ErrorResponse",
     "ExecutionMode",
     "FederatedTokenRequest",

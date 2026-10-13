@@ -1048,7 +1048,10 @@ components:
         into something, so a caller can pick its next hour without asking
         availability again and diffing the answers. Nested under detail like
         every other error here, so one error handler reads them all.
+      required: [detail, code]
       properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
         detail:
           type: object
           properties:
@@ -1074,7 +1077,10 @@ components:
         blocked_slot_id naming which of the cycle's own slots wanted it. A
         pair of the cycle's own slots is listed twice, once from each side,
         because neither of the two is the one at fault.
+      required: [detail, code]
       properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
         detail:
           type: object
           properties:
@@ -1720,10 +1726,73 @@ components:
     # ── Common ────────────────────────────────
     ErrorResponse:
       type: object
+      description: >
+        The body of every error. detail is for a person to read and code is
+        for a program to branch on. A 409 that names what stood in the way
+        has its own schema, with detail as an object; see ReservationConflict.
+      required: [detail, code]
       properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
         detail:
           type: string
           example: Not authorized.
+
+    ErrorCode:
+      type: string
+      description: >
+        What went wrong, for a program to branch on. docs/api.md says what
+        each one means. A code is never renamed or reused for a different
+        meaning, but new codes are added, so a client should treat one it
+        does not know by its HTTP status. VALIDATION_FAILED is the only code
+        whose detail is a list: FastAPI's field errors for a request that did
+        not match the declared shape.
+      enum:
+        - BAD_REQUEST
+        - NOT_AUTHENTICATED
+        - FORBIDDEN
+        - NOT_FOUND
+        - METHOD_NOT_ALLOWED
+        - STATE_CONFLICT
+        - PAYLOAD_TOO_LARGE
+        - INVALID_VALUE
+        - RATE_LIMITED
+        - INTERNAL_ERROR
+        - SERVICE_UNAVAILABLE
+        - VALIDATION_FAILED
+        - INVALID_CREDENTIALS
+        - TOKEN_INVALID
+        - API_KEY_INVALID
+        - API_KEY_EXPIRED
+        - ACCOUNT_NOT_FOUND
+        - ACCOUNT_DEACTIVATED
+        - REFRESH_TOKEN_INVALID
+        - REFRESH_TOKEN_EXPIRED
+        - REFRESH_TOKEN_USED
+        - REFRESH_TOKEN_REUSED
+        - FEDERATED_TOKEN_INVALID
+        - FEDERATED_EMAIL_MISSING
+        - FEDERATED_ADMIN_REFUSED
+        - FEDERATION_UNAVAILABLE
+        - CURRENT_PASSWORD_INCORRECT
+        - PASSWORD_UNCHANGED
+        - PASSWORD_CHANGE_REQUIRED
+        - INSUFFICIENT_ROLE
+        - SCOPE_MISSING
+        - OUTSIDE_UNIT
+        - RESOURCE_CONFLICT
+        - ALREADY_EXISTS
+        - EMAIL_TAKEN
+        - USER_DEACTIVATED
+        - IDEMPOTENCY_KEY_REUSED
+        - LOCATION_REQUIRED
+        - LOCATION_TOO_COARSE
+        - OUTSIDE_GEOFENCE
+        - MANAGER_NOT_SET
+        - IMPORT_REJECTED
+        - CHANGE_FEED_DISABLED
+        - SERVER_BUSY
+      example: NOT_FOUND
 
   responses:
     Unauthorized:

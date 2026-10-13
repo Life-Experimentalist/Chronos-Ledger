@@ -164,10 +164,11 @@ def test_create_reservation_makes_one_key_and_sends_it_again_on_a_retry():
 def test_a_409_carries_the_conflicts_it_names():
     busy = [{"date": "2026-01-06", "start": "14:00", "end": "15:00", "reservation_id": 4}]
     detail = {"message": "the resource is already taken", "conflicts": busy}
-    server = Server(lambda r: httpx.Response(409, json={"detail": detail}))
+    server = Server(lambda r: httpx.Response(409, json={"detail": detail, "code": "RESOURCE_CONFLICT"}))
     with pytest.raises(chronos.ChronosError) as caught:
         chronos.create_reservation(client(server, api_key="k"), 3, BODY, idempotency_key="key-12345")
     assert caught.value.status == 409
+    assert caught.value.code == "RESOURCE_CONFLICT"
     assert str(caught.value) == "409: the resource is already taken"
     assert caught.value.conflicts == busy
     assert server.seen[0].headers["Idempotency-Key"] == "key-12345"
@@ -199,6 +200,16 @@ def test_a_non_json_error_body_is_kept_as_text():
     with pytest.raises(chronos.ChronosError) as caught:
         resources_list.sync(client=client(server, api_key="k"))
     assert caught.value.detail == "<html>bad gateway</html>"
+    assert caught.value.code is None
+
+
+def test_a_code_newer_than_this_client_still_arrives():
+    """The code is read as a string, so a server a release ahead does not break an older client."""
+    server = Server(lambda r: httpx.Response(400, json={"detail": "new", "code": "SOMETHING_NEW"}))
+    with pytest.raises(chronos.ChronosError) as caught:
+        resources_list.sync(client=client(server, api_key="k"))
+    assert caught.value.code == "SOMETHING_NEW"
+    assert caught.value.detail == "new"
 
 
 def test_api_key_and_tokens_together_are_refused():

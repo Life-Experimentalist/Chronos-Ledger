@@ -13,6 +13,8 @@ costs nothing, and get a 503 if no slot frees up in time.
 import asyncio
 import json
 
+from app.core.errors import ErrorCode, error_body
+
 
 class ConcurrencyGate:
     def __init__(self, app, limit: int, wait_seconds: float = 10.0, prefix: str = "/api/"):
@@ -38,7 +40,7 @@ class ConcurrencyGate:
 
 
 async def _busy(send):
-    body = json.dumps({"detail": "Server busy, try again shortly."}).encode()
+    body = json.dumps(error_body(ErrorCode.SERVER_BUSY, "Server busy, try again shortly.")).encode()
     await send(
         {
             "type": "http.response.start",
