@@ -5,9 +5,10 @@ import datetime
 import logging
 
 import redis
-from sqlalchemy import and_, func, or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app.core import recurrence
 from app.core.time import org_now, window_span
 from app.models.db import (
     Activity,
@@ -175,11 +176,19 @@ def determine_staff_current_states(
     # then answered off the slot and reported the lead as leading it. The
     # filter is the generator's own, and a slot with a row for the date is
     # left to the row, whether or not tier 2 had anything to say about it.
-    days = {yesterday.isoweekday(): yesterday, today.isoweekday(): today}
+    days = (yesterday, today)
     unresolved = [lead for lead in unresolved if lead not in resolved]
+    # The cycle bounds are narrowed in SQL; whether the rule lands on either
+    # date is asked in Python, because an RRULE is not something either
+    # database can evaluate.
     candidates = [
-        (days[slot.day_of_week_index], slot, offering)
-        for slot, offering in db.query(StructuralMasterSlot, Activity)
+        (day, slot, offering)
+        for slot, offering, cycle_start, cycle_end in db.query(
+            StructuralMasterSlot,
+            Activity,
+            PlanningCycle.date_bounds_start,
+            PlanningCycle.date_bounds_end,
+        )
         .join(Activity, StructuralMasterSlot.activity_id == Activity.id)
         .join(PlanningCycle, Activity.cycle_id == PlanningCycle.id)
         .filter(
@@ -187,18 +196,13 @@ def determine_staff_current_states(
             StructuralMasterSlot.retired_at.is_(None),
             Activity.retired_at.is_(None),
             PlanningCycle.operational_status,
-            or_(
-                *(
-                    and_(
-                        StructuralMasterSlot.day_of_week_index == day.isoweekday(),
-                        PlanningCycle.date_bounds_start <= day,
-                        PlanningCycle.date_bounds_end >= day,
-                    )
-                    for day in days.values()
-                )
-            ),
+            PlanningCycle.date_bounds_start <= today,
+            PlanningCycle.date_bounds_end >= yesterday,
         )
         .all()
+        for day in recurrence.occurrences(
+            slot.rrule, slot.dtstart, max(yesterday, cycle_start), min(today, cycle_end)
+        )
     ]
     generated = {
         (slot_id, day)
@@ -223,7 +227,7 @@ def determine_staff_current_states(
             last_day >= yesterday,
             ReverseRsvpLog.approval_state == LogVerificationState.VERIFIED_APPROVED,
         )
-        for day in days.values()
+        for day in days
         if first <= day <= last
     }
     candidates.sort(key=lambda found: (found[0], found[1].time_window_start))

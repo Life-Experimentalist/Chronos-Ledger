@@ -47,6 +47,7 @@ from app.models.db import (
     StructuralMasterSlot,
     User,
 )
+from tests.conftest import weekly
 
 DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
@@ -143,7 +144,7 @@ def _activity(db, cycle_id: int, code: str) -> Activity:
 
 def _slot(db, activity_id: int, room_id: int, weekday: int, start: int, end: int):
     built = StructuralMasterSlot(
-        day_of_week_index=weekday,
+        **weekly(weekday),
         time_window_start=_at(start),
         time_window_end=_at(end),
         activity_id=activity_id,

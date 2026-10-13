@@ -36,6 +36,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import recurrence
 from app.core.config import get_settings
 from app.core.time import org_today, org_tomorrow
 from app.models.db import (
@@ -132,14 +133,11 @@ def _insert_day(db: Session, fields: dict) -> bool:
 
 
 def generate_daily_ledger_entries(target_date: datetime.date, db: Session) -> int:
-    day_index = target_date.isoweekday()
-
-    slots = (
+    candidates = (
         db.query(StructuralMasterSlot)
         .join(Activity, StructuralMasterSlot.activity_id == Activity.id)
         .join(PlanningCycle, Activity.cycle_id == PlanningCycle.id)
         .filter(
-            StructuralMasterSlot.day_of_week_index == day_index,
             StructuralMasterSlot.retired_at.is_(None),
             Activity.retired_at.is_(None),
             PlanningCycle.operational_status,
@@ -153,6 +151,9 @@ def generate_daily_ledger_entries(target_date: datetime.date, db: Session) -> in
         .order_by(StructuralMasterSlot.id)
         .all()
     )
+    # Whether the rule lands on the date is asked in Python: an RRULE is not
+    # something either database can evaluate.
+    slots = [s for s in candidates if recurrence.occurs_on(s.rrule, s.dtstart, target_date)]
 
     created = 0
     for slot in slots:
@@ -209,7 +210,7 @@ def materialize_horizon(db: Session, cycle_id: int | None = None) -> int:
     is left as it is, and running this twice in a row writes nothing the
     second time. The same rules as generate_daily_ledger_entries decide
     which days a slot has: the cycle open, the date inside the cycle's own
-    dates (so nothing is written past a cycle's end), the slot's weekday, and
+    dates (so nothing is written past a cycle's end), the slot's rule, and
     neither the slot nor its activity retired.
     A lead on approved leave that day gets the row ON_LEAVE, as there.
 
@@ -249,15 +250,12 @@ def materialize_horizon(db: Session, cycle_id: int | None = None) -> int:
 
     missing = []
     for slot, cycle_start, cycle_end in slot_query:
-        # Walk this slot's weekday from the first one inside both the window
-        # and the cycle, a week at a time.
-        day = max(first, cycle_start)
-        end = min(last, cycle_end)
-        day += datetime.timedelta(days=(slot.day_of_week_index - day.isoweekday()) % 7)
-        while day <= end:
+        # The rule's dates inside both the window and the cycle.
+        for day in recurrence.occurrences(
+            slot.rrule, slot.dtstart, max(first, cycle_start), min(last, cycle_end)
+        ):
             if (slot.id, day) not in have:
                 missing.append((day, slot))
-            day += datetime.timedelta(days=7)
     if not missing:
         return 0
 

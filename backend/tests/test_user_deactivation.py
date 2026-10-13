@@ -11,6 +11,7 @@ import asyncio
 from datetime import UTC, datetime, time, timedelta
 
 from app.api.v1.endpoints import websocket as ws_module
+from app.core.recurrence import weekly_rule
 from app.core.time import org_today
 from app.core.websocket_manager import OrganizationConnectionManager, socket_broker
 from app.models.db import (
@@ -23,7 +24,7 @@ from app.models.db import (
     StructuralMasterSlot,
     User,
 )
-from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, login
+from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, login, weekly
 from tests.test_attendance_guest import _GUEST, _FakeRedis
 from tests.test_ingestion import HEADER, _make_cycle, _upload
 from tests.test_ledger_patch import _patch
@@ -374,7 +375,7 @@ def test_the_response_counts_what_is_left_to_hand_over(client, db, seed_users):
     for activity_id in (offerings["CSE"].id, old.id):
         db.add(
             StructuralMasterSlot(
-                day_of_week_index=3,
+                **weekly(3),
                 time_window_start=time(14),
                 time_window_end=time(15),
                 activity_id=activity_id,
@@ -424,7 +425,7 @@ def test_the_response_counts_what_is_left_to_hand_over(client, db, seed_users):
 
 def _slot_body(activity_id, lead_id):
     return {
-        "day_of_week_index": 3,
+        "rrule": weekly_rule(3),
         "time_window_start": "14:00:00",
         "time_window_end": "15:00:00",
         "activity_id": activity_id,

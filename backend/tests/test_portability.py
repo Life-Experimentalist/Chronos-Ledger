@@ -60,7 +60,7 @@ from app.services.portability import (
     export_archive,
     import_archive,
 )
-from tests.conftest import ADMIN_PASSWORD, STAFF_PASSWORD, login
+from tests.conftest import ADMIN_PASSWORD, STAFF_PASSWORD, login, weekly
 
 # Only ever handed to the import in these tests. Not a password for anything.
 IMPORT_PASSWORD = "import-test-password-not-real"
@@ -223,7 +223,7 @@ def seed(engine):
             [
                 StructuralMasterSlot(
                     id=1,
-                    day_of_week_index=1,
+                    **weekly(1),
                     time_window_start=time(9, 0),
                     time_window_end=time(10, 30),
                     activity_id=1,
@@ -233,7 +233,7 @@ def seed(engine):
                 ),
                 StructuralMasterSlot(
                     id=2,
-                    day_of_week_index=7,
+                    **weekly(7),
                     time_window_start=time(22, 0),
                     time_window_end=time(6, 0),
                     activity_id=2,

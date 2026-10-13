@@ -29,7 +29,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ExcludeConstraint
 from sqlalchemy.orm import relationship, validates
 
-from app.core import clock
+from app.core import clock, recurrence
 from app.core.database import Base
 from app.core.emails import normalize_email
 
@@ -282,10 +282,14 @@ class Resource(Base):
 
 class StructuralMasterSlot(Base):
     __tablename__ = "structural_master_slots"
-    __table_args__ = (CheckConstraint("day_of_week_index BETWEEN 1 AND 7"),)
 
     id = Column(Integer, primary_key=True)
-    day_of_week_index = Column(Integer, nullable=False)
+    # The value of an RFC 5545 RRULE property, FREQ=WEEKLY;BYDAY=MO and the
+    # like, and the date it starts from. Both are calendar terms in
+    # ORG_TIMEZONE; the time of day is the two Time columns below.
+    # dtstart is always an occurrence of the rule (app/core/recurrence.py).
+    rrule = Column(String(255), nullable=False)
+    dtstart = Column(Date, nullable=False)
     time_window_start = Column(Time, nullable=False)
     time_window_end = Column(Time, nullable=False)
     activity_id = Column(Integer, ForeignKey("activities.id", ondelete="CASCADE"), nullable=False)
@@ -307,6 +311,19 @@ class StructuralMasterSlot(Base):
     # still only plans are removed by the delete endpoint; days that became
     # records are left behind with master_slot_id nulled.
     daily_ledger_entries = relationship("DailyLedger", back_populates="master_slot")
+
+    @property
+    def day_of_week_index(self) -> int | None:
+        """The weekday the rule first lands on, 1 for Monday to 7 for Sunday.
+
+        What a slot stored before it had a rule, kept for API clients through
+        0.17 and deprecated. For a rule on more than one weekday it is the
+        first one only.
+        """
+        if self.rrule is None or self.dtstart is None:
+            return None
+        first = recurrence.first_occurrence(self.rrule, self.dtstart)
+        return (first or self.dtstart).isoweekday()
 
 
 class DailyLedger(Base):

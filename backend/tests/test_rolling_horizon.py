@@ -22,7 +22,7 @@ from app.models.db import (
     ReverseRsvpLog,
     StructuralMasterSlot,
 )
-from tests.conftest import ADMIN_PASSWORD, login
+from tests.conftest import ADMIN_PASSWORD, login, weekly
 from tests.test_ingestion import HEADER, _upload
 
 # The import fill is switched off for the rest of the suite (see conftest).
@@ -55,7 +55,7 @@ def _week_of_slots(db, offering, lead):
     slots = []
     for weekday in range(1, 8):
         slot = StructuralMasterSlot(
-            day_of_week_index=weekday,
+            **weekly(weekday),
             time_window_start=datetime.time(9, 0),
             time_window_end=datetime.time(10, 0),
             activity_id=offering.id,

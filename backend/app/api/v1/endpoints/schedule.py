@@ -10,7 +10,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core import clock
+from app.core import clock, recurrence
 from app.core.database import get_db
 from app.core.errors import ChronosError, ErrorCode
 from app.core.pagination import Page
@@ -63,6 +63,14 @@ ROOM_HAS_A_DAY = "the resource already has a generated day in part of that windo
 CYCLE_IS_BLOCKED = "opening this cycle would put its slots on rooms already taken"
 CONFLICT_RANGE_BACKWARDS = "from must not be after to"
 CONFLICT_RANGE_TOO_LONG = f"the range must not exceed {MAX_CONFLICT_RANGE_DAYS} days"
+
+
+def _anchor(rule: str, on_or_after: datetime.date) -> datetime.date:
+    """The dtstart to store, or a 422 for a rule with no date left from there."""
+    try:
+        return recurrence.anchor(rule, on_or_after)
+    except ValueError as exc:
+        raise ChronosError(status_code=422, detail=str(exc), code=ErrorCode.INVALID_VALUE) from None
 
 
 def _refuse_if_held(db, cycle, resource_id, weekday, start, end) -> None:
@@ -391,9 +399,16 @@ def clone_cycle_offerings(
         for slot in offering.master_slots:
             if slot.retired_at is not None:
                 continue
+            # The rule comes across as it is and starts again from the new
+            # cycle's first date, so a weekly class runs from the first week of
+            # the new cycle and not from the date it began in the old one.
             db.add(
                 StructuralMasterSlot(
-                    day_of_week_index=slot.day_of_week_index,
+                    rrule=slot.rrule,
+                    dtstart=recurrence.first_occurrence(
+                        slot.rrule, cycles[new_id].date_bounds_start
+                    )
+                    or slot.dtstart,
                     time_window_start=slot.time_window_start,
                     time_window_end=slot.time_window_end,
                     activity_id=new.id,
@@ -731,6 +746,9 @@ def list_master_slots(
     return [
         {
             "id": s.id,
+            "rrule": s.rrule,
+            "dtstart": s.dtstart.isoformat(),
+            # Deprecated: derived from the rule, returned through 0.17.
             "day_of_week_index": s.day_of_week_index,
             "time_window_start": str(s.time_window_start),
             "time_window_end": str(s.time_window_end),
@@ -777,12 +795,16 @@ def create_master_slot(
     _refuse_if_retired(offering, "Activity")
     if payload.primary_lead_id is not None:
         _refuse_unless_active(db, payload.primary_lead_id, "Lead")
+    dtstart = _anchor(payload.rrule, payload.dtstart or offering.cycle.date_bounds_start)
+    # The room checks compare one weekday: the one the rule starts on. For a
+    # rule on several weekdays that is the first of them only.
+    weekday = dtstart.isoweekday()
     room = get_or_create_room(payload.target_room_identifier, db)
     _refuse_if_held(
         db,
         offering.cycle,
         room.id,
-        payload.day_of_week_index,
+        weekday,
         payload.time_window_start,
         payload.time_window_end,
     )
@@ -790,7 +812,7 @@ def create_master_slot(
         db,
         offering.cycle,
         room.id,
-        payload.day_of_week_index,
+        weekday,
         payload.time_window_start,
         payload.time_window_end,
     )
@@ -798,7 +820,7 @@ def create_master_slot(
         db,
         offering.cycle,
         room.id,
-        payload.day_of_week_index,
+        weekday,
         payload.time_window_start,
         payload.time_window_end,
     )
@@ -806,7 +828,8 @@ def create_master_slot(
     # slot whose mirror is spelled differently from its resource is exactly
     # the drift the resource table exists to end.
     slot = StructuralMasterSlot(
-        **payload.model_dump(exclude={"target_room_identifier"}),
+        **payload.model_dump(exclude={"target_room_identifier", "dtstart"}),
+        dtstart=dtstart,
         resource_id=room.id,
         target_room_identifier=room.code,
     )
@@ -840,11 +863,15 @@ def update_master_slot(
     runs at 10:00 from tomorrow, and the days it already ran at 09:00 still
     say 09:00. Reading them off the slot rewrote history instead.
 
-    Moving the slot to another weekday is the one change that cannot be
-    copied across: the days already generated sit on the old weekday and
-    there is no version of them on the new one. Those are withdrawn so the
-    generator can lay them down again, and the request is refused outright
-    if any of them has already been marked.
+    Changing the rule or its start is the one change that cannot be copied
+    across: the days already generated sit on the old dates and there is no
+    version of them on the new ones. Those are withdrawn so the generator can
+    lay them down again, and the request is refused outright if any of them
+    has already been marked.
+
+    A new rule without a dtstart starts again from the cycle's first date,
+    as a new slot does. A dtstart is moved forward to the rule's first
+    occurrence on or after it.
     """
     slot = db.query(StructuralMasterSlot).filter(StructuralMasterSlot.id == slot_id).first()
     if not slot:
@@ -866,7 +893,14 @@ def update_master_slot(
             code=ErrorCode.INVALID_VALUE,
         )
 
-    weekday = fields.get("day_of_week_index", slot.day_of_week_index)
+    rule = fields.get("rrule", slot.rrule)
+    dtstart = slot.dtstart
+    # The same rule sent back without a dtstart is not a new rule, and keeps
+    # the start it has.
+    if rule != slot.rrule or "dtstart" in fields:
+        dtstart = _anchor(rule, fields.get("dtstart") or slot.activity.cycle.date_bounds_start)
+        fields["rrule"], fields["dtstart"] = rule, dtstart
+    weekday = dtstart.isoweekday()
 
     # The room is resolved and the holds are checked before anything is
     # withdrawn or written, so a refusal leaves the slot and the days it has
@@ -876,9 +910,10 @@ def update_master_slot(
     if "target_room_identifier" in fields:
         moving_to = get_or_create_room(fields.pop("target_room_identifier"), db)
     resource_id = moving_to.id if moving_to else slot.resource_id
-    if (resource_id, weekday, start, end) != (
+    if (resource_id, rule, dtstart, start, end) != (
         slot.resource_id,
-        slot.day_of_week_index,
+        slot.rrule,
+        slot.dtstart,
         slot.time_window_start,
         slot.time_window_end,
     ):
@@ -895,8 +930,8 @@ def update_master_slot(
         )
 
     removed = 0
-    if weekday != slot.day_of_week_index:
-        removed = _withdraw_planned_days(slot, db, "moved to another weekday")
+    if (rule, dtstart) != (slot.rrule, slot.dtstart):
+        removed = _withdraw_planned_days(slot, db, "given another rule or start")
 
     if moving_to is not None:
         slot.resource_id = moving_to.id

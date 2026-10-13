@@ -25,7 +25,7 @@ from app.models.db import (
     ResourceType,
     StructuralMasterSlot,
 )
-from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, login
+from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, login, weekly
 
 TOMORROW = org_today() + datetime.timedelta(days=1)
 LAST = TOMORROW + datetime.timedelta(days=6)
@@ -57,7 +57,7 @@ def _activity(db, code):
 
 def _slot(db, activity, room, start, end):
     slot = StructuralMasterSlot(
-        day_of_week_index=TOMORROW.isoweekday(),
+        **weekly(TOMORROW.isoweekday()),
         time_window_start=start,
         time_window_end=end,
         activity_id=activity.id,

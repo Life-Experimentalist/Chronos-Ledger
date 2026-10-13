@@ -247,7 +247,7 @@ Column names are case-sensitive. Extra columns are ignored. Times accept `HH:MM`
 
 ### Can I upload the same file twice?
 
-Yes. An import matches what already exists and reuses it: a slot is matched on activity, weekday and start time, and a row repeated in the file is taken once. Where a matched slot's end time, lead or room has changed, the slot is corrected and the days already generated follow it. A changed start time cannot be matched, so it arrives as a second slot and the old one is listed in `not_in_file`. That list is a report only; an import never deletes anything. The CSV import section of [`docs/api.md`](api.md) covers what to do with it.
+Yes. An import matches what already exists and reuses it: a slot is matched on activity, weekly rule (the row's weekday) and start time, and a row repeated in the file is taken once. Where a matched slot's end time, lead or room has changed, the slot is corrected and the days already generated follow it. A changed start time cannot be matched, so it arrives as a second slot and the old one is listed in `not_in_file`. That list is a report only; an import never deletes anything. The CSV import section of [`docs/api.md`](api.md) covers what to do with it.
 
 ---
 

@@ -33,7 +33,7 @@ from app.core.database import Base
 # What /health reports in place of a migration revision. A string a maintainer
 # bumps when the models change, so two instances can be told apart by what
 # their database looks like without either reading its catalog.
-SCHEMA_VERSION = "3"
+SCHEMA_VERSION = "4"
 
 # Two replicas starting together would both find the tables missing and both
 # try to make them. On PostgreSQL the first one to start holds this advisory

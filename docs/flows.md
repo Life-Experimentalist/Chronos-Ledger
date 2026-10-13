@@ -153,7 +153,7 @@ flowchart TD
     T([APScheduler fires at 23:00 in ORG_TIMEZONE]) --> Q1
 
     Q1[Query open PlanningCycles<br/>whose dates include tomorrow] --> Q2
-    Q2[Query their StructuralMasterSlots<br/>for tomorrows day_of_week_index] --> LOOP
+    Q2[Query their StructuralMasterSlots<br/>whose rule gives tomorrow] --> LOOP
 
     LOOP{For each slot} --> CHK
 
@@ -176,6 +176,6 @@ flowchart TD
 
 1. APScheduler (configured in `backend/app/main.py`) runs `cron/ledger_generator.materialize_horizon()` at 23:00 in `ORG_TIMEZONE`. It writes every missing day from tomorrow through `LEDGER_HORIZON_DAYS` ahead (28 by default), in batches, reading the existing days once rather than checking slot by slot. `POST /ingestion/upload-csv` calls it for the imported cycle, so a new cycle has its days straight away. A server that starts also runs the single-day `generate_daily_ledger_entries()` once for today, and for tomorrow too if it starts at or after 23:00, because the scheduler keeps no record of a run it missed while the server was down. The catch-up never writes a date that has already passed.
 2. Only cycles that are open and whose `date_bounds_start` to `date_bounds_end` overlaps the window, both ends included, count. If there are none (e.g., term break), the job is a no-op.
-3. Each `StructuralMasterSlot` of those cycles gets a day on every date in the window that matches its `day_of_week_index` and falls inside the cycle's own dates.
+3. Each `StructuralMasterSlot` of those cycles gets a day on every date in the window that its `rrule` gives, counted from its `dtstart`, and falls inside the cycle's own dates.
 4. For each slot, an existence check is performed, backed by a unique key on `target_date` and `master_slot_id` (`uq_daily_ledger_slot_date`). This makes the job fully **idempotent**, safe to re-run manually via `POST /ingestion/generate-ledger` and safe on several instances at once, without creating duplicates.
 5. New rows are inserted with `operational_state = SCHEDULED` and the slot's lead. Admins (a unit admin only within their own unit) can subsequently mutate the row (substitute lead, delivery format, geofence coords) via `PATCH /schedule/ledger/{id}`.

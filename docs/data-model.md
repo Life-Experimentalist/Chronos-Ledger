@@ -62,7 +62,8 @@ erDiagram
 
     StructuralMasterSlot {
         int id PK
-        int day_of_week_index "1 = Monday … 7 = Sunday"
+        string rrule "RFC 5545 RRULE value, e.g. FREQ=WEEKLY;BYDAY=MO"
+        date dtstart "first date the rule gives"
         time time_window_start
         time time_window_end
         int activity_id FK "→ Activity.id"
@@ -262,7 +263,7 @@ A thing a reservation consumes. Every room is one row, created on first sight by
 `user_id` marks a resource that is a person, so that staff availability and room availability do not become two mechanisms that drift apart. `latitude`, `longitude` and `altitude_target` are the room's own geofence, as opposed to the per-day override on a `DailyLedger` row.
 
 ### `StructuralMasterSlot`
-The repeating weekly timetable entry. `day_of_week_index` follows Python's `date.isoweekday()` convention (1 = Monday, 7 = Sunday), enforced by a CHECK constraint. These are the *template* rows that `ledger_generator` reads each night.
+The repeating timetable entry. `rrule` is the value of one RFC 5545 RRULE property (`FREQ=WEEKLY;BYDAY=MO` for every Monday) and `dtstart` is the date it counts from, always the rule's own first date. Both are in the organization's calendar (`ORG_TIMEZONE`): the rule gives calendar dates and the slot's `time_window_start` and `time_window_end` are read on each of them, so the time of day does not move across a daylight saving change. `backend/app/core/recurrence.py` is the one place the pair is expanded. `day_of_week_index` is no longer stored; the model and the API work it out as the weekday of the first date, and the API stops sending it after 0.17. These are the *template* rows that `ledger_generator` reads each night.
 
 ### `ActivityEnrollment`
 Member-to-activity enrollment. Created in bulk by `ingestion_engine` during CSV import. No per-term attendance target is stored here, percentage calculations are done at query time.
