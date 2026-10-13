@@ -2244,6 +2244,7 @@ components:
         - IMPORT_REJECTED
         - CHANGE_FEED_DISABLED
         - SERVER_BUSY
+        - DATABASE_UNAVAILABLE
         - WEBHOOK_URL_REFUSED
         - WEBHOOK_SECRET_LIMIT
       example: NOT_FOUND
