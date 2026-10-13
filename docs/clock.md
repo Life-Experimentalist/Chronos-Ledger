@@ -110,6 +110,7 @@ sorted, and jobs that fall on one instant run in table order:
 | 3 | `guest_retention_purge` | 03:30 daily | Deletes visitor check-ins older than `GUEST_RETENTION_DAYS`, when set |
 | 4 | `idempotency_purge` | 03:45 daily | Deletes `Idempotency-Key` records older than `IDEMPOTENCY_RETENTION_HOURS` |
 | 5 | `guest_overstay_notice` | every 5 minutes | Announces approved visits that have run past their end |
+| 6 | `webhook_delivery` | every `WEBHOOK_DELIVERY_INTERVAL_SECONDS`, only with `CHANGE_FEED_ENABLED` | Turns new change feed markers into webhook deliveries and sends the ones that are due ([webhooks.md](webhooks.md)) |
 
 Before each job runs the clock is set to that job's moment, so the nightly
 run at 23:00 sees the same "tomorrow" it would have seen at 23:00, and the
@@ -121,8 +122,38 @@ The overstay notice runs once per window, at the last five-minute mark
 inside it, rather than once per mark. That is how APScheduler treats runs
 it missed while the process was busy, and the job is a sweep that announces
 whatever is overdue, so the last run does the work of all of them. An
-advance that crosses a whole day therefore runs five jobs, not three
-hundred.
+advance that crosses a whole day therefore runs five jobs (six with the
+change feed on), not three hundred.
+
+Webhook delivery is a job in this table rather than something the host
+calls on its own. It runs last, so a pass sees every change the jobs
+before it wrote at the same instant, and like the overstay notice it runs
+once per advance, at the last mark inside the window. One pass sends each
+delivery that is due at most once, so a retry chain moves one attempt per
+advance: a receiver that was down while the host crossed a day hears about
+it over the next few advances, in order, rather than all at once. The
+choice keeps the worker on the same clock as everything else, so retries
+and the 24 hours an old signing secret lives are measured in host time and
+replay the same way, and it adds nothing to the list of real-time reads
+above. While the change feed is off the job has no moments, so it never
+runs and is not in the list `advance` returns.
+
+Two limits in the worker stay in real seconds, because they guard against
+a receiver that is slow in real seconds: the deadline on one attempt and
+the share of a pass's lease it may spend sending. They are durations
+measured with a counter, not instants read from a clock, so they are not
+among the reads above, and a receiver that answers promptly never reaches
+them. On PostgreSQL the worker also skips its 5 second wait for late
+commits under a host clock, which leans on the host advancing only after
+its own writes have returned ([webhooks.md](webhooks.md#under-a-host-clock)).
+
+The cost is that `webhook-timestamp` is host time as well. A receiver that
+follows the Standard Webhooks rule and refuses a timestamp more than five
+minutes from its own clock will refuse every delivery from a host clock
+that is not keeping close to real time. That is the right answer for a
+real receiver, since a signature with a stale time could be a replay. A
+simulation's receiver either runs on the host's clock too or skips the
+timestamp check.
 
 ## The determinism guarantee
 

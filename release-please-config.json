@@ -21,10 +21,15 @@
         { "type": "json", "path": "sdks/typescript/package-lock.json", "jsonpath": "$.packages[''].version" },
         { "type": "json", "path": "sdks/typescript/package.json", "jsonpath": "$.version" },
         { "type": "toml", "path": "sdks/python/pyproject.toml",   "jsonpath": "$.project.version" },
+        { "type": "toml", "path": "sdks/rust/Cargo.toml",         "jsonpath": "$.package.version" },
+        { "type": "toml", "path": "sdks/rust/Cargo.lock",         "jsonpath": "$.package[?(@.name.value=='chronos-ledger-client')].version" },
         "sdks/typescript/src/version.ts",
         "sdks/python/src/chronos_ledger_client/__init__.py",
+        "sdks/go/version.go",
         "docs/openapi.yaml",
-        "backend/app/main.py"
+        "sdks/rust/openapi.yaml",
+        "backend/app/main.py",
+        "charts/chronos-ledger/Chart.yaml"
       ],
       "changelog-sections": [
         { "type": "feat",     "section": "Features" },

@@ -143,6 +143,8 @@ way.
 | `IMPORT_REJECTED` | A CSV import failed. `detail` is the import's error log. |
 | `CHANGE_FEED_DISABLED` | The change feed is turned off on this deployment. |
 | `SERVER_BUSY` | The server is out of database connections or request slots. Try again shortly. |
+| `WEBHOOK_URL_REFUSED` | The URL may not receive webhooks: not https, credentials in it, or an internal address. `detail` says which. |
+| `WEBHOOK_SECRET_LIMIT` | The webhook already has two live signing secrets. Remove the previous one before rotating again. |
 
 ---
 
@@ -164,7 +166,7 @@ Idempotency-Replayed: true
 
 - The same key and the same request: the first response comes back, status
   and body, with `Idempotency-Replayed: true`. Nothing runs a second time.
-- The same key and a different request: `409` with `IDEMPOTENCY_KEY_REUSED`.
+- The same key and a different request: `422` with `IDEMPOTENCY_KEY_REUSED`.
   The request is the method, the path, the query string (in any order) and the
   JSON body (in any key order or spacing).
 - The same key while the first request is still running: `409` with
@@ -195,16 +197,17 @@ The key is ignored, and a retry runs again, on:
   `/auth/logout`, `/auth/federated`): no caller to file the key under.
 - routes whose response carries a secret that is stored nowhere else:
   `POST /auth/change-password`, `POST /users/{user_id}/reset-password`,
-  `POST /api-keys/`, `POST /sync/feed-token/rotate` and
-  `POST /guest/register-checkin`. Keeping the response would keep the secret.
+  `POST /api-keys/`, `POST /sync/feed-token/rotate`,
+  `POST /guest/register-checkin`, `POST /webhooks/` and
+  `POST /webhooks/{subscription_id}/rotate-secret`. Keeping the response
+  would keep the secret.
 - `POST /ingestion/upload-csv`, a multipart upload. An upload of the same file
   is already a no-op, and the file is not held in memory to be hashed.
 
 `POST /resources/{id}/reservations` had a required key of its own before this
-existed, and keeps the answers it gave: a reused key is `422`, not `409`, and
-a retry gets `200` with the hold as it is now (cancelled, if it was) rather
-than a replay. Its key is unique per caller. Moving it to `409` is a breaking
-change, left for 0.17.
+existed, and keeps its own answer to a retry: `200` with the hold as it is now
+(cancelled, if it was) rather than a replay. A reused key is `422`, as on every
+other write. Its key is unique per caller.
 
 One gap is left. The key is claimed in the same transaction as the request's
 own changes, and the response is recorded just after it has been sent. If the
@@ -446,6 +449,7 @@ land open by nobody remembering to annotate it.
 | `admin` | the organization export (`admin:read`) |
 | `audit` | the audit log |
 | `changes` | the change feed |
+| `webhooks` | webhook subscriptions and their deliveries |
 | `federation` | the federated identity registry |
 
 A key holding `schedule:read` passes `GET /schedule/slots` and is refused
@@ -750,10 +754,13 @@ loses access.
 
 ## Paging
 
-Nine routes return a whole list: `GET /users/`, `GET /users/staff/available`,
-`GET /resources/`, `GET /schedule/cycles`, `GET /schedule/slots`,
+Thirteen routes return a whole list: `GET /users/`, `GET /users/staff/available`,
+`GET /resources/`, `GET /resources/reservations`, `GET /schedule/cycles`,
+`GET /schedule/activities`, `GET /schedule/activities/{id}/enrollments`,
+`GET /schedule/slots`,
 `GET /schedule/ledger/today`, `GET /schedule/ledger`,
-`GET /schedule/staff/all/locations` and `GET /audit/`.
+`GET /schedule/staff/all/locations`, `GET /audit/` and
+`GET /webhooks/{subscription_id}/deliveries`.
 Each takes two optional query parameters:
 
 - `limit`: at most this many rows, 1 or more.
@@ -762,7 +769,7 @@ Each takes two optional query parameters:
 Leave both off and the route returns every row it matches, as it always has.
 Rows come back in id order (`code` for `GET /resources/`, `staff_id` for the
 locator, date then start time for `GET /schedule/ledger`, newest first for
-`GET /audit/`), and every response, paged or not, carries `X-Total-Count`: how many rows matched before
+`GET /audit/` and for webhook deliveries), and every response, paged or not, carries `X-Total-Count`: how many rows matched before
 the page was cut. A `limit` of 0 or a negative `offset` is refused with `422`,
 and an offset past the end is an empty list with the count still set.
 
@@ -2425,6 +2432,68 @@ rooms and the bookings in full on a slow timer, which is needed anyway.
   "next_cursor": 4193
 }
 ```
+
+---
+
+## Webhooks
+
+The change feed, pushed. A subscription is a URL that is sent a signed POST
+for each change to a room or a booking, retried for about a day when the
+receiver is down. Everything a receiver needs, from the body to checking the
+signature, is in [webhooks.md](webhooks.md). The routes need `ORG_ADMIN`,
+and an API key needs `webhooks:read` or `webhooks:write`. Like the feed, they
+need `CHANGE_FEED_ENABLED`: creating a subscription while it is off answers
+`503`.
+
+### POST /webhooks/ `[ORG_ADMIN]`
+
+```json
+{
+  "url": "https://receiver.example.com/hooks/chronos",
+  "event_types": ["reservation.created", "reservation.updated"]
+}
+```
+
+`201` with the subscription and its signing `secret`, which is shown here and
+nowhere else. The event types are `resource.created`, `resource.updated`,
+`reservation.created` and `reservation.updated`. The subscription starts at
+the newest change and is sent nothing older. A URL that may not receive
+webhooks is `422` with `WEBHOOK_URL_REFUSED`.
+
+### GET /webhooks/ `[ORG_ADMIN]`
+### GET /webhooks/{subscription_id} `[ORG_ADMIN]`
+
+Subscriptions without their secrets. `paused_at` is set while one is paused,
+and `previous_secret_expires_at` while a rotated-out secret still signs.
+
+### PATCH /webhooks/{subscription_id} `[ORG_ADMIN]`
+
+Changes `url`, `event_types` or `active`. A new URL is checked as on create.
+Switched off, a subscription keeps its place; switched back on, it is sent
+what happened in between.
+
+### DELETE /webhooks/{subscription_id} `[ORG_ADMIN]`
+
+Stops sending and removes the subscription with its deliveries.
+
+### POST /webhooks/{subscription_id}/rotate-secret `[ORG_ADMIN]`
+### DELETE /webhooks/{subscription_id}/previous-secret `[ORG_ADMIN]`
+
+Rotation returns a new secret, shown once, and keeps the old one signing
+alongside it for 24 hours. Removing the previous secret ends that early.
+Rotating while two are live is `409` with `WEBHOOK_SECRET_LIMIT`.
+
+### POST /webhooks/{subscription_id}/resume `[ORG_ADMIN]`
+
+A subscription is paused after five deliveries in a row fail for good.
+Resuming it sends everything it missed, oldest first.
+
+### GET /webhooks/{subscription_id}/deliveries `[ORG_ADMIN]`
+### POST /webhooks/{subscription_id}/deliveries/{delivery_id}/redeliver `[ORG_ADMIN]`
+
+Deliveries newest first, each with every attempt: status code, time taken,
+why it failed and the start of the answer. Redelivering sends one again on
+the next pass, with the same `webhook-id` and body, and answers `202`.
 
 ---
 

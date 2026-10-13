@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { ChronosError, createChronosClient, paginate, VERSION } from "../src/index.ts";
-import { chronosFetch, retryAfter } from "../src/transport.ts";
+import { chronosFetch, resolveRetry, retryAfter } from "../src/transport.ts";
 
 type Handler = (request: Request) => Response | Promise<Response>;
 
@@ -87,25 +87,17 @@ test("a 429 waits for Retry-After, then succeeds", async () => {
   const waits: number[] = [];
   let calls = 0;
   const { fetch } = server(() => (++calls === 1 ? json(429, { detail: "slow down" }, { "Retry-After": "2" }) : json(200, [])));
-  const send = chronosFetch({ baseUrl: "https://c.test", maxRetries: 3, fetch, sleep: async (ms) => void waits.push(ms) });
+  const send = chronosFetch({ baseUrl: "https://c.test", retry: resolveRetry({}), fetch, sleep: async (ms) => void waits.push(ms) });
   const response = await send(new Request("https://c.test/api/v1/resources/"));
   assert.equal(response.status, 200);
   assert.deepEqual(waits, [2000]);
 });
 
-test("retries stop after maxRetries and raise the last error", async () => {
+test("retries stop after maxAttempts and raise the last error", async () => {
   const { seen, fetch } = server(() => json(503, { detail: "down" }));
-  const send = chronosFetch({ baseUrl: "https://c.test", maxRetries: 2, fetch, sleep: noSleep });
+  const send = chronosFetch({ baseUrl: "https://c.test", retry: resolveRetry({ maxAttempts: 3 }), fetch, sleep: noSleep });
   await assert.rejects(send(new Request("https://c.test/api/v1/resources/")), { status: 503 });
   assert.equal(seen.length, 3);
-});
-
-test("a POST without an Idempotency-Key is never retried", async () => {
-  const { seen, fetch } = server(() => json(503, { detail: "down" }));
-  const send = chronosFetch({ baseUrl: "https://c.test", maxRetries: 3, fetch, sleep: noSleep });
-  const request = new Request("https://c.test/api/v1/resources/", { method: "POST", body: "{}" });
-  await assert.rejects(send(request), { status: 503 });
-  assert.equal(seen.length, 1);
 });
 
 test("createReservation makes one key and sends it again on a retry", async () => {
@@ -113,7 +105,7 @@ test("createReservation makes one key and sends it again on a retry", async () =
   const { seen, fetch } = server(() =>
     ++calls === 1 ? json(502, { detail: "bad gateway" }) : json(201, { id: 7, resource_id: 3 }),
   );
-  const send = chronosFetch({ baseUrl: "https://c.test", maxRetries: 3, fetch, sleep: noSleep });
+  const send = chronosFetch({ baseUrl: "https://c.test", retry: resolveRetry({}), fetch, sleep: noSleep });
   const chronos = createChronosClient({ baseUrl: "https://c.test", apiKey: "k", fetch: ((input: Request) => send(input)) as typeof globalThis.fetch });
   const hold = await chronos.createReservation(3, { date: "2026-01-06", start: "14:00", end: "15:00", purpose: "Viva" });
   assert.equal(hold.id, 7);

@@ -18,6 +18,7 @@ from app.api.v1.endpoints import (
     resources,
     schedule,
     users,
+    webhooks,
     websocket,
 )
 
@@ -38,6 +39,7 @@ ROUTERS = (
     (calendar_sync.router, "/sync", "Calendar Sync"),
     (audit.router, "/audit", "Audit"),
     (changes.router, "/changes", "Changes"),
+    (webhooks.router, "/webhooks", "Webhooks"),
     (federation.router, "/federation", "Federation"),
     (admin.router, "/admin", "Admin"),
 )
