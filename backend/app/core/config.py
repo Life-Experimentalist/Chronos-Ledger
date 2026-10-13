@@ -214,6 +214,24 @@ class Settings(BaseSettings):
     # and polls from there: what happened while this was off was not recorded.
     change_feed_enabled: bool = False
 
+    # How often, in seconds, the webhook worker fans new changes out and sends
+    # what is due. Webhooks are built on the change feed, so they need
+    # CHANGE_FEED_ENABLED as well. docs/webhooks.md is the whole design.
+    webhook_delivery_interval_seconds: int = 5
+
+    # Hosts a webhook may be sent to over plain http, comma separated, for
+    # example a receiver on the same private network that has no certificate.
+    # Empty, so every webhook URL must be https. Matched against the URL's
+    # host exactly, without the port.
+    webhook_allow_http_hosts: str = ""
+
+    # Whether a webhook may go to a loopback, private or link-local address.
+    # Off, because a URL an admin types is otherwise a way to make this server
+    # call into its own network: the metadata service of a cloud host, a
+    # database's HTTP port, an internal admin page. Turn it on only where the
+    # receiver really is on the private network.
+    webhook_allow_private_targets: bool = False
+
     # Whether a registered outside issuer may vouch for a person, so that
     # somebody already signed in over there arrives here without a second
     # password. Off, and off means POST /api/v1/auth/federated answers 404
@@ -243,6 +261,20 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.app_cors_origins.split(",") if o.strip()]
+
+    @property
+    def webhook_allow_http_hosts_set(self) -> set[str]:
+        return {h.strip().lower() for h in self.webhook_allow_http_hosts.split(",") if h.strip()}
+
+    @field_validator("webhook_delivery_interval_seconds")
+    @classmethod
+    def _webhook_interval_is_positive(cls, seconds: int) -> int:
+        if not 1 <= seconds <= 3600:
+            raise ValueError(
+                f"WEBHOOK_DELIVERY_INTERVAL_SECONDS={seconds} is outside 1 to 3600. "
+                "Leave it unset for 5."
+            )
+        return seconds
 
     @field_validator("docs_enabled", mode="before")
     @classmethod

@@ -110,6 +110,8 @@ SECRET_OPERATIONS = frozenset(
         "apiKeys.create",
         "sync.rotateFeedToken",
         "guest.checkIn",
+        "webhooks.create",
+        "webhooks.rotateSecret",
     }
 )
 
