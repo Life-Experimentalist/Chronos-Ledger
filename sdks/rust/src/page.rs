@@ -57,7 +57,7 @@ where
         let pending = next.map(|offset| (offset, fetch(limit, offset)));
         async move {
             let Some((offset, call)) = pending else {
-                return Ok(None);
+                return Ok::<_, Error>(None);
             };
             let page = call.await?;
             let seen = offset + page.rows.len() as u64;
