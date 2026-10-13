@@ -87,6 +87,10 @@ An unexpected failure on the server is `500` with `INTERNAL_ERROR` and the
 detail `Internal server error`. The traceback goes to the server log, never to
 the caller.
 
+One response is not an error body: `GET /health/ready` answers `503` with the
+same shape it answers `200` with, so a load balancer reads one body either
+way.
+
 | Code | Means |
 | ---- | ----- |
 | `BAD_REQUEST` | A `400` with no more specific code. |
