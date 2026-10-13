@@ -209,7 +209,7 @@ Automatically on first login when `initial_login_state` is `true` for an `ORG_AD
 
 ### CSV import succeeded but the timetable looks empty
 
-The ledger is not generated automatically after import. Go to **Step 4: Generate Ledger** in the wizard (or Admin Dashboard → Import → Generate Daily Ledger). The nightly job only writes the next day, at 23:00 in `ORG_TIMEZONE`, but you can trigger it manually from the UI.
+An import writes the new cycle's days for the next `LEDGER_HORIZON_DAYS` days (28 by default), but only while the cycle is open and only inside its own dates. A cycle that starts further out than that shows nothing until the nightly job at 23:00 in `ORG_TIMEZONE` reaches it. To write a particular date by hand, go to **Step 4: Generate Ledger** in the wizard (or Admin Dashboard → Import → Generate Daily Ledger).
 
 ---
 

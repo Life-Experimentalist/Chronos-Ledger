@@ -149,6 +149,13 @@ class Settings(BaseSettings):
     # accuracy at all is not refused for it.
     geofence_accuracy_factor: float = 2.0
 
+    # How many days ahead the nightly job keeps the timetable written out as
+    # dated rows, counted from tomorrow. A newly imported cycle is filled the
+    # same distance at once. A cycle's own end date still stops it, so a
+    # setting longer than the term writes nothing past the term. 28 is four
+    # weeks, enough for the calendar feed to show a month.
+    ledger_horizon_days: int = 28
+
     # How many days a visitor check-in is kept. Each one holds the visitor's
     # name and phone number, and nothing else ever deletes it. A job at 03:30
     # deletes the older ones every day. 0 keeps them forever, which is how an
@@ -263,6 +270,16 @@ class Settings(BaseSettings):
                 "accuracy check off, or leave it unset for 2."
             )
         return factor
+
+    @field_validator("ledger_horizon_days")
+    @classmethod
+    def _horizon_is_sane(cls, days: int) -> int:
+        if not 1 <= days <= 366:
+            raise ValueError(
+                f"LEDGER_HORIZON_DAYS={days} is outside 1 to 366. Use 1 to write only "
+                "tomorrow, or leave it unset for 28."
+            )
+        return days
 
     @field_validator("guest_retention_days")
     @classmethod

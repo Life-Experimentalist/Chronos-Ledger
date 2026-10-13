@@ -105,7 +105,7 @@ sorted, and jobs that fall on one instant run in table order:
 
 | Order | Job | When, in `ORG_TIMEZONE` | Does |
 |---|---|---|---|
-| 1 | `nightly_ledger_gen` | 23:00 daily | Lays down tomorrow's `daily_ledger` rows from the timetable |
+| 1 | `nightly_ledger_gen` | 23:00 daily | Writes the `daily_ledger` rows still missing from tomorrow through `LEDGER_HORIZON_DAYS` ahead |
 | 2 | `refresh_token_purge` | 03:00 daily | Deletes refresh tokens a day past expiry |
 | 3 | `guest_retention_purge` | 03:30 daily | Deletes visitor check-ins older than `GUEST_RETENTION_DAYS`, when set |
 | 4 | `guest_overstay_notice` | every 5 minutes | Announces approved visits that have run past their end |
