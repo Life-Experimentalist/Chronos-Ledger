@@ -1,6 +1,9 @@
 """Contains all the data models used in inputs/outputs"""
 
 from .access_readiness import AccessReadiness
+from .activity_create import ActivityCreate
+from .activity_response import ActivityResponse
+from .activity_update import ActivityUpdate
 from .annotation_create import AnnotationCreate
 from .annotation_response import AnnotationResponse
 from .api_key_create import ApiKeyCreate
@@ -34,6 +37,8 @@ from .daily_ledger_response import DailyLedgerResponse
 from .daily_ledger_update import DailyLedgerUpdate
 from .deactivated_user_response import DeactivatedUserResponse
 from .dynamic_state import DynamicState
+from .enrollment_create import EnrollmentCreate
+from .enrollment_response import EnrollmentResponse
 from .error_code import ErrorCode
 from .error_response import ErrorResponse
 from .execution_mode import ExecutionMode
@@ -90,6 +95,7 @@ from .resource_response import ResourceResponse
 from .resource_response_resource_type import ResourceResponseResourceType
 from .resource_update import ResourceUpdate
 from .resources_list_resource_type import ResourcesListResourceType
+from .retire_result import RetireResult
 from .reverse_rsvp_create import ReverseRsvpCreate
 from .reverse_rsvp_response import ReverseRsvpResponse
 from .role_map_entry_create import RoleMapEntryCreate
@@ -100,6 +106,7 @@ from .rsvp_decision import RsvpDecision
 from .schedule_clone_cycle_response_200 import ScheduleCloneCycleResponse200
 from .schedule_close_cycle_response_200 import ScheduleCloseCycleResponse200
 from .schedule_create_slot_response_200 import ScheduleCreateSlotResponse200
+from .schedule_delete_enrollment_response_200 import ScheduleDeleteEnrollmentResponse200
 from .schedule_open_cycle_response_200 import ScheduleOpenCycleResponse200
 from .schedule_update_ledger_entry_response_200 import ScheduleUpdateLedgerEntryResponse200
 from .slot_deletion_result import SlotDeletionResult
@@ -127,6 +134,9 @@ from .ws_get_stats_response_200 import WsGetStatsResponse200
 
 __all__ = (
     "AccessReadiness",
+    "ActivityCreate",
+    "ActivityResponse",
+    "ActivityUpdate",
     "AnnotationCreate",
     "AnnotationResponse",
     "ApiKeyCreate",
@@ -160,6 +170,8 @@ __all__ = (
     "DailyLedgerUpdate",
     "DeactivatedUserResponse",
     "DynamicState",
+    "EnrollmentCreate",
+    "EnrollmentResponse",
     "ErrorCode",
     "ErrorResponse",
     "ExecutionMode",
@@ -216,6 +228,7 @@ __all__ = (
     "ResourceResponseResourceType",
     "ResourcesListResourceType",
     "ResourceUpdate",
+    "RetireResult",
     "ReverseRsvpCreate",
     "ReverseRsvpResponse",
     "RoleMapEntryCreate",
@@ -226,6 +239,7 @@ __all__ = (
     "ScheduleCloneCycleResponse200",
     "ScheduleCloseCycleResponse200",
     "ScheduleCreateSlotResponse200",
+    "ScheduleDeleteEnrollmentResponse200",
     "ScheduleOpenCycleResponse200",
     "ScheduleUpdateLedgerEntryResponse200",
     "SlotDeletionResult",

@@ -79,7 +79,8 @@ def sync_detailed(
 
      Copies every `Activity` in the old cycle and every `StructuralMasterSlot` under them, each slot
     pointed at its activity's copy with the same lead, room and window. Member enrollment and attendance
-    records are **not** cloned. Re-import CSV after cloning to update enrollment.
+    records are **not** cloned. Re-import CSV after cloning to update enrollment. Retired activities and
+    retired slots are left behind.
 
     The target must be closed and have no activities. The copied slots are not checked against the rooms
     here; opening the target runs those checks over all of them at once. Requires `ORG_ADMIN`.
@@ -121,7 +122,8 @@ def sync(
 
      Copies every `Activity` in the old cycle and every `StructuralMasterSlot` under them, each slot
     pointed at its activity's copy with the same lead, room and window. Member enrollment and attendance
-    records are **not** cloned. Re-import CSV after cloning to update enrollment.
+    records are **not** cloned. Re-import CSV after cloning to update enrollment. Retired activities and
+    retired slots are left behind.
 
     The target must be closed and have no activities. The copied slots are not checked against the rooms
     here; opening the target runs those checks over all of them at once. Requires `ORG_ADMIN`.
@@ -158,7 +160,8 @@ async def asyncio_detailed(
 
      Copies every `Activity` in the old cycle and every `StructuralMasterSlot` under them, each slot
     pointed at its activity's copy with the same lead, room and window. Member enrollment and attendance
-    records are **not** cloned. Re-import CSV after cloning to update enrollment.
+    records are **not** cloned. Re-import CSV after cloning to update enrollment. Retired activities and
+    retired slots are left behind.
 
     The target must be closed and have no activities. The copied slots are not checked against the rooms
     here; opening the target runs those checks over all of them at once. Requires `ORG_ADMIN`.
@@ -198,7 +201,8 @@ async def asyncio(
 
      Copies every `Activity` in the old cycle and every `StructuralMasterSlot` under them, each slot
     pointed at its activity's copy with the same lead, room and window. Member enrollment and attendance
-    records are **not** cloned. Re-import CSV after cloning to update enrollment.
+    records are **not** cloned. Re-import CSV after cloning to update enrollment. Retired activities and
+    retired slots are left behind.
 
     The target must be closed and have no activities. The copied slots are not checked against the rooms
     here; opening the target runs those checks over all of them at once. Requires `ORG_ADMIN`.

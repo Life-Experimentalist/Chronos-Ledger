@@ -1303,6 +1303,109 @@ components:
         operational_status:
           type: boolean
 
+    ActivityCreate:
+      type: object
+      description: >
+        An activity, the same one a CSV row names by code, title and unit. It
+        starts with no slots and no members; those are added with POST
+        /schedule/slots and POST /schedule/activities/{activity_id}/enrollments.
+      required: [activity_code, activity_title, unit_code, cycle_id]
+      properties:
+        activity_code:
+          type: string
+          minLength: 1
+          maxLength: 30
+          description: Unique within the cycle, retired activities included.
+          example: CS201
+        activity_title:
+          type: string
+          minLength: 1
+          maxLength: 150
+        unit_code:
+          type: string
+          minLength: 1
+          maxLength: 50
+          description: A UNIT_ADMIN may only name their own unit.
+        cycle_id:
+          type: integer
+
+    ActivityUpdate:
+      type: object
+      description: >
+        Only the title can change. The code and the cycle are what identify an
+        activity, the same pair a CSV upsert matches on, so changing either is
+        a different activity. The unit is what a unit admin's permission is
+        checked against, and moving an activity between units is left to an
+        import, which only an org admin can run.
+      required: [activity_title]
+      properties:
+        activity_title:
+          type: string
+          minLength: 1
+          maxLength: 150
+
+    ActivityResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        activity_code:
+          type: string
+        activity_title:
+          type: string
+        unit_code:
+          type: string
+        cycle_id:
+          type: integer
+        retired_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the activity was retired. Null while it is live.
+
+    RetireResult:
+      type: object
+      description: >
+        What retiring an activity or a slot did to the days ahead. Days from
+        today onward that nobody has marked or annotated are removed; the ones
+        carrying attendance or a note are kept. Days before today are records
+        and are not touched.
+      properties:
+        retired_at:
+          type: string
+          format: date-time
+        slots_retired:
+          type: integer
+          description: >
+            Slots marked retired by this request. Always 1 when a slot is
+            retired; for an activity, every slot it had that was still live.
+        ledger_rows_removed:
+          type: integer
+          description: Days from today onward that were still plans.
+        ledger_rows_kept:
+          type: integer
+          description: >
+            Days from today onward kept because attendance or a note has been
+            recorded against them.
+
+    EnrollmentCreate:
+      type: object
+      required: [member_id]
+      properties:
+        member_id:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: STU001
+
+    EnrollmentResponse:
+      type: object
+      properties:
+        activity_id:
+          type: integer
+        member_id:
+          type: string
+
     MasterSlotCreate:
       type: object
       required:
@@ -1398,6 +1501,13 @@ components:
           type: string
           nullable: true
           description: The room's name, mirrored from the resource. Being retired.
+        retired_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            When the slot was retired, on its own or with its activity. Null
+            while it is live.
 
     SlotUpdateResult:
       type: object
@@ -4062,6 +4172,345 @@ paths:
           $ref: "#/components/responses/NotFound"
 
   # ── Schedule ──────────────────────────────
+  /api/v1/schedule/activities:
+    get:
+      operationId: schedule.listActivities
+      tags: [Schedule]
+      summary: List activities
+      description: >
+        Any signed-in user. Retired activities are left out unless
+        `include_retired` is set.
+      parameters:
+        - name: cycle_id
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: include_retired
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Activities.
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/XTotalCount"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      operationId: schedule.createActivity
+      tags: [Schedule]
+      summary: Add an activity
+      description: >
+        Admin only. A UNIT_ADMIN may only add activities to their own unit
+        (403 `OUTSIDE_UNIT`). The activity starts with no slots and no
+        members. Each slot added to it with POST /schedule/slots fills the
+        days ahead at once, through the same generator a CSV import and the
+        nightly job use, so an activity built here gets exactly the days the
+        same activity imported from a CSV would.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActivityCreate"
+      responses:
+        "201":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: Activity created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The cycle does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            The code is already used in that cycle (`ALREADY_EXISTS`), by a
+            live activity or a retired one. The detail says which.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/v1/schedule/activities/{activity_id}:
+    get:
+      operationId: schedule.getActivity
+      tags: [Schedule]
+      summary: Read one activity
+      description: Any signed-in user. A retired activity is still returned.
+      parameters:
+        - name: activity_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The activity.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      operationId: schedule.updateActivity
+      tags: [Schedule]
+      summary: Rename an activity
+      description: >
+        Admin only, inside the admin's unit. Only the title can change; see
+        ActivityUpdate for why. Refused with 409 `STATE_CONFLICT` once the
+        activity is retired.
+      parameters:
+        - name: activity_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActivityUpdate"
+      responses:
+        "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: The activity as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The activity is retired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/v1/schedule/activities/{activity_id}/retire:
+    post:
+      operationId: schedule.retireActivity
+      tags: [Schedule]
+      summary: Retire an activity
+      description: >
+        Admin only, inside the admin's unit. Nothing is deleted that has
+        happened. The activity and every slot it still has are marked
+        retired, so the generator writes no more days for them and their
+        rooms are free again. Days from today onward that nobody has marked
+        or annotated are removed; days that carry attendance or a note are
+        kept; days before today are not touched.
+
+
+        A retired activity stays readable through GET
+        /schedule/activities/{activity_id} and is left out of the list
+        unless `include_retired` is set. It cannot be edited, given slots or
+        members, or retired again (409 `STATE_CONFLICT`), and a CSV import
+        that names it is refused. Its code stays taken in the cycle.
+      parameters:
+        - name: activity_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: What retiring removed and what it kept.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetireResult"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The activity is already retired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/schedule/activities/{activity_id}/enrollments:
+    get:
+      operationId: schedule.listEnrollments
+      tags: [Schedule]
+      summary: List an activity's members
+      description: Admin only, inside the admin's unit.
+      parameters:
+        - name: activity_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: The roster.
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/XTotalCount"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EnrollmentResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    post:
+      operationId: schedule.createEnrollment
+      tags: [Schedule]
+      summary: Enroll a member
+      description: >
+        Admin only, inside the admin's unit. The member has to exist and be
+        active, as in a CSV import. Days belong to slots rather than members,
+        so no day is written: the member sees the activity's days from now
+        on.
+      parameters:
+        - name: activity_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrollmentCreate"
+      responses:
+        "201":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: Member enrolled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The activity or the member does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            The member is already enrolled (`ALREADY_EXISTS`), or the activity
+            is retired (`STATE_CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: A malformed body, or a member who has been deactivated (`USER_DEACTIVATED`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/schedule/activities/{activity_id}/enrollments/{member_id}:
+    delete:
+      operationId: schedule.deleteEnrollment
+      tags: [Schedule]
+      summary: Remove a member from an activity
+      description: >
+        Admin only, inside the admin's unit. Only the enrollment goes. Days
+        belong to slots, so no day is removed, and the attendance already
+        recorded for the member stays.
+      parameters:
+        - name: activity_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: member_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: The enrollment that was removed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activity_id:
+                    type: integer
+                  member_id:
+                    type: string
+                  removed:
+                    type: boolean
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The activity does not exist, or the member is not enrolled in it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The activity is retired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/schedule/slots:
     get:
       operationId: schedule.listSlots
@@ -4069,13 +4518,20 @@ paths:
       summary: List master slots
       description: >
         The recurring timetable, before any day is generated from it. Filter
-        by cycle to get one term's worth.
+        by cycle to get one term's worth. Retired slots are left out unless
+        `include_retired` is set.
       parameters:
         - name: cycle_id
           in: query
           required: false
           schema:
             type: integer
+        - name: include_retired
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Offset"
       responses:
@@ -4099,6 +4555,9 @@ paths:
       summary: Add a master slot
       description: >
         Admin only. A UNIT_ADMIN may only add slots inside their own unit.
+        The new slot fills the days ahead at once, through the same generator
+        a CSV import and the nightly job use. A retired activity takes no new
+        slots (409 `STATE_CONFLICT`).
 
 
         Refused with 409 where the room is already taken for part of that
@@ -4305,6 +4764,47 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+
+  /api/v1/schedule/slots/{slot_id}/retire:
+    post:
+      operationId: schedule.retireSlot
+      tags: [Schedule]
+      summary: Retire a master slot
+      description: >
+        Admin only, inside the admin's unit. Where DELETE refuses while a day
+        ahead carries attendance or a note, this keeps that day and removes
+        the days ahead that are still plans. Days before today are not
+        touched. The slot stays, marked retired, so the generator writes no
+        more days for it and its room is free again. A retired slot cannot be
+        edited, deleted or retired again (409 `STATE_CONFLICT`), and a CSV
+        row naming it is refused.
+      parameters:
+        - name: slot_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: What retiring removed and what it kept.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetireResult"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The slot is already retired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/schedule/ledger/today:
     get:
@@ -4671,7 +5171,8 @@ paths:
         `StructuralMasterSlot` under them, each slot pointed at its activity's
         copy with the same lead, room and window. Member enrollment and
         attendance records are **not** cloned. Re-import CSV after cloning to
-        update enrollment.
+        update enrollment. Retired activities and retired slots are left
+        behind.
 
 
         The target must be closed and have no activities. The copied slots

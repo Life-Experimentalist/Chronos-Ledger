@@ -9,7 +9,8 @@ attendance is marked against. This is the only thing that writes those rows.
 
 A slot produces a day only while its cycle is open and the date falls inside
 the cycle's own dates, both ends included. availability.occupied applies the
-same two tests, so what the API reports as taken is what this will write.
+same two tests, so what the API reports as taken is what this will write. A
+retired slot, or a slot of a retired activity, produces nothing.
 
 generate_daily_ledger_entries writes one date. materialize_horizon writes every
 missing date from tomorrow to LEDGER_HORIZON_DAYS ahead, which is what the
@@ -139,6 +140,8 @@ def generate_daily_ledger_entries(target_date: datetime.date, db: Session) -> in
         .join(PlanningCycle, Activity.cycle_id == PlanningCycle.id)
         .filter(
             StructuralMasterSlot.day_of_week_index == day_index,
+            StructuralMasterSlot.retired_at.is_(None),
+            Activity.retired_at.is_(None),
             PlanningCycle.operational_status,
             PlanningCycle.date_bounds_start <= target_date,
             PlanningCycle.date_bounds_end >= target_date,
@@ -206,7 +209,8 @@ def materialize_horizon(db: Session, cycle_id: int | None = None) -> int:
     is left as it is, and running this twice in a row writes nothing the
     second time. The same rules as generate_daily_ledger_entries decide
     which days a slot has: the cycle open, the date inside the cycle's own
-    dates (so nothing is written past a cycle's end), and the slot's weekday.
+    dates (so nothing is written past a cycle's end), the slot's weekday, and
+    neither the slot nor its activity retired.
     A lead on approved leave that day gets the row ON_LEAVE, as there.
 
     This reads the existing rows, the slots and the leave once for the whole
@@ -224,6 +228,8 @@ def materialize_horizon(db: Session, cycle_id: int | None = None) -> int:
         .join(Activity, StructuralMasterSlot.activity_id == Activity.id)
         .join(PlanningCycle, Activity.cycle_id == PlanningCycle.id)
         .filter(
+            StructuralMasterSlot.retired_at.is_(None),
+            Activity.retired_at.is_(None),
             PlanningCycle.operational_status,
             PlanningCycle.date_bounds_start <= last,
             PlanningCycle.date_bounds_end >= first,

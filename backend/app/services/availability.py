@@ -75,8 +75,8 @@ def _within(cycle: PlanningCycle | None, day: datetime.date) -> bool:
 def booked_slots(db: Session, resource_id: int) -> list[StructuralMasterSlot]:
     """The weekly slots that count against this resource.
 
-    A slot counts while its cycle is flagged open, and only on the dates
-    inside the cycle's own bounds. Those are the two tests
+    A slot counts while its cycle is flagged open and neither it nor its
+    activity is retired, and only on the dates inside the cycle's own bounds. Those are the two tests
     generate_daily_ledger_entries applies before it writes a day, so a room
     reported free here is a room the nightly job is not going to fill. The
     flag is tested here. The dates are tested date by date, in occupied() and
@@ -88,6 +88,8 @@ def booked_slots(db: Session, resource_id: int) -> list[StructuralMasterSlot]:
         .join(PlanningCycle, Activity.cycle_id == PlanningCycle.id)
         .filter(
             StructuralMasterSlot.resource_id == resource_id,
+            StructuralMasterSlot.retired_at.is_(None),
+            Activity.retired_at.is_(None),
             PlanningCycle.operational_status,
         )
         .options(joinedload(StructuralMasterSlot.activity).joinedload(Activity.cycle))

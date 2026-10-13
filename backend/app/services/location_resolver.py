@@ -184,6 +184,8 @@ def determine_staff_current_states(
         .join(PlanningCycle, Activity.cycle_id == PlanningCycle.id)
         .filter(
             StructuralMasterSlot.primary_lead_id.in_(unresolved),
+            StructuralMasterSlot.retired_at.is_(None),
+            Activity.retired_at.is_(None),
             PlanningCycle.operational_status,
             or_(
                 *(

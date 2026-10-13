@@ -92,11 +92,14 @@ def _import_leaves_the_ledger_alone(request, monkeypatch):
     generate_daily_ledger_entries, and count on that day not being there yet.
     So the fill an import does is switched off here. A test module that is
     about the fill sets FILL_LEDGER_ON_IMPORT = True at module level.
+    Creating a slot through POST /schedule/slots fills the same way, so it is
+    switched off by the same flag.
     """
     if not getattr(request.module, "FILL_LEDGER_ON_IMPORT", False):
-        from app.api.v1.endpoints import ingestion
+        from app.api.v1.endpoints import ingestion, schedule
 
         monkeypatch.setattr(ingestion, "materialize_horizon", lambda db, cycle_id=None: 0)
+        monkeypatch.setattr(schedule, "materialize_horizon", lambda db, cycle_id=None: 0)
 
 
 @pytest.fixture()
