@@ -107,6 +107,11 @@ services:
       # outside system to poll for. Off: nothing deletes those rows, and an
       # instance with no integrator has nobody to read them.
       CHANGE_FEED_ENABLED: ${CHANGE_FEED_ENABLED:-false}
+      # Outgoing webhooks, sent from the change feed. https only and no
+      # private addresses unless these say otherwise (docs/webhooks.md).
+      WEBHOOK_DELIVERY_INTERVAL_SECONDS: ${WEBHOOK_DELIVERY_INTERVAL_SECONDS:-5}
+      WEBHOOK_ALLOW_HTTP_HOSTS: ${WEBHOOK_ALLOW_HTTP_HOSTS:-}
+      WEBHOOK_ALLOW_PRIVATE_TARGETS: ${WEBHOOK_ALLOW_PRIVATE_TARGETS:-false}
       # Whether a registered outside issuer may vouch for a person. Off, and
       # off answers 404 rather than 403; nothing verifies until an operator
       # registers an issuer and a signing key.

@@ -303,6 +303,15 @@ One row per refresh token until it expires. Only the SHA-256 hash is stored. A t
 ### `ChangeMarker`
 A note that one row changed, so a system keeping its own copy of the rooms and the bookings can poll for what moved at `GET /api/v1/changes/`. Written only while `CHANGE_FEED_ENABLED` is on, in the same transaction as the change itself, so a write that rolls back leaves no marker. Deliberately thin: `entity_kind` (`resource` or `reservation`), `entity_id` and `change_kind` (`created` or `updated`), and `at`. It says nothing about what the row now holds, because the feed reads the current row back out of its own table and so cannot disagree with it, and nothing about who, because that is what `audit_records` is for. `id` is the cursor a consumer holds on to. No foreign keys, hence its absence from the diagram above: a marker outlives what it points at, and a cascade would take the news of a change away with the row it was about. Nothing deletes these rows.
 
+### `WebhookSubscription`
+A URL that is sent a signed POST for each change to a room or a booking ([webhooks.md](webhooks.md)). `event_types` is the comma separated, sorted list of types it wants. `cursor` is the last `change_markers` id it has turned into deliveries; a new subscription starts at the newest. `active` is the administrator's switch and `paused_at` is set after five deliveries in a row fail for good, or by an import without secrets; either way nothing is fanned out or sent. `secret` and `previous_secret` are stored as they are, since signing needs the key itself, and `previous_secret_expires_at` is when the rotated-out one stops signing.
+
+### `WebhookDelivery`
+One event for one subscription, in `webhook_deliveries`, unique on (`subscription_id`, `marker_id`). `payload` is the exact body, built at fan-out so every retry sends the same bytes, and `event_id` is the `webhook-id` header. `status` is `pending`, `succeeded` or `failed`, with `attempt_count` and `next_attempt_at` driving the retries. Deleted with its subscription.
+
+### `WebhookAttempt`
+One try at sending a delivery: when, the status code (null when nothing came back), `response_ms`, a short `error`, and the first 200 characters of the answer. Deleted with its delivery.
+
 ### `ApiKey`
 A long-lived credential for an integration, bound to a user row that acts as its service account. Only the SHA-256 hash is stored, and the raw key is shown once. A request made with the key acts as that user, so role checks and unit scoping apply unchanged. `scopes` is a comma separated list of `<area>:<read|write>` entries, or `*` for every area; `expires_at` null means the key does not expire. Deactivating the bound user deletes its keys, and reactivating does not bring them back.
 

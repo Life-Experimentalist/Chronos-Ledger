@@ -49,6 +49,7 @@ from app.models.db import (
     User,
     VerificationLedger,
     VerificationMetric,
+    WebhookSubscription,
 )
 from app.services import portability
 from app.services.portability import (
@@ -69,6 +70,8 @@ IMPORT_PASSWORD = "import-test-password-not-real"
 FEED_TOKEN = "feed-token-for-tests-only"
 SEEDED_KEY = "ck_portability_test_key_for_the_seed"
 VISIT_CODE_HASH = "a" * 64
+# Shaped like a webhook secret and signing nothing anywhere.
+WEBHOOK_SECRET = "whsec_" + "dGVzdHMtb25seS13ZWJob29rLXNlY3JldC0zMmJ5dGU="
 
 
 @pytest.fixture(autouse=True)
@@ -455,6 +458,25 @@ def seed(engine):
                 created_at=datetime(2026, 1, 1, tzinfo=UTC),
             )
         )
+        # Paused already, because an import without secrets pauses every
+        # subscription, and the round trip without secrets must still give
+        # the same bytes.
+        db.add(
+            WebhookSubscription(
+                id=1,
+                url="https://receiver.test/hooks",
+                event_types="reservation.created,reservation.updated",
+                active=True,
+                paused_at=datetime(2026, 1, 6, 9, 0, tzinfo=UTC),
+                consecutive_failures=5,
+                cursor=1,
+                secret=WEBHOOK_SECRET,
+                previous_secret=None,
+                previous_secret_expires_at=None,
+                created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                updated_at=datetime(2026, 1, 6, 9, 0, tzinfo=UTC),
+            )
+        )
         db.commit()
 
 
@@ -599,6 +621,7 @@ def test_secrets_are_left_out_by_default(source):
     assert FEED_TOKEN.encode() not in everything
     assert hash_api_key(SEEDED_KEY).encode() not in everything
     assert VISIT_CODE_HASH.encode() not in everything
+    assert WEBHOOK_SECRET.encode() not in everything
     assert b"$2b$" not in everything
     for table, columns in SECRET_COLUMNS.items():
         for line in contents[f"{table}.jsonl"].splitlines():
@@ -614,6 +637,7 @@ def test_secrets_are_written_with_the_flag(source):
     assert FEED_TOKEN.encode() in everything
     assert hash_api_key(SEEDED_KEY).encode() in everything
     assert VISIT_CODE_HASH.encode() in everything
+    assert WEBHOOK_SECRET.encode() in everything
     assert b"$2b$" in everything
 
 
@@ -648,6 +672,27 @@ def test_an_import_with_secrets_keeps_every_password(source, engines):
             == original.get(User, SEEDED_ADMIN_ID).credential_secure_hash
         )
         assert db.get(ApiKey, 1).key_hash == hash_api_key(SEEDED_KEY)
+        assert db.get(WebhookSubscription, 1).secret == WEBHOOK_SECRET
+
+
+def test_an_import_without_secrets_pauses_webhooks_with_a_new_secret(source, engines):
+    with Session(source) as db:
+        subscription = db.get(WebhookSubscription, 1)
+        subscription.paused_at = None
+        subscription.previous_secret = WEBHOOK_SECRET.replace("dGVz", "b2xk")
+        subscription.previous_secret_expires_at = datetime(2026, 1, 7, tzinfo=UTC)
+        db.commit()
+    target = engines("target")
+    import_archive(target, io.BytesIO(export_bytes(source)), admin_password=IMPORT_PASSWORD)
+    with Session(target) as db:
+        imported = db.get(WebhookSubscription, 1)
+        assert imported.paused_at is not None
+        assert imported.secret.startswith("whsec_")
+        assert imported.secret != WEBHOOK_SECRET
+        assert imported.previous_secret is None
+        assert imported.previous_secret_expires_at is None
+        assert imported.cursor == 1
+        assert imported.url == "https://receiver.test/hooks"
 
 
 # Refusals.

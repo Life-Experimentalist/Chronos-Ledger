@@ -95,6 +95,10 @@ class ErrorCode(StrEnum):
     CHANGE_FEED_DISABLED = "CHANGE_FEED_DISABLED"
     SERVER_BUSY = "SERVER_BUSY"
 
+    # Webhooks.
+    WEBHOOK_URL_REFUSED = "WEBHOOK_URL_REFUSED"
+    WEBHOOK_SECRET_LIMIT = "WEBHOOK_SECRET_LIMIT"
+
 
 # For an HTTPException raised without a code. A status missing here falls back
 # by its hundred, so the handler never has to answer without one.

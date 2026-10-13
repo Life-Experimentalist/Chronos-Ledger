@@ -61,7 +61,7 @@ components:
         cannot be. `scopes` is a comma separated list of `<area>:read` and
         `<area>:write`, where the area is the path segment after `/api/v1`:
         `schedule`, `resources`, `attendance`, `users`, `ingestion`, `guest`,
-        `sync`, `config`, `auth`, `api-keys`, `audit`, `changes`. `GET`, `HEAD` and `OPTIONS` are
+        `sync`, `config`, `auth`, `api-keys`, `audit`, `changes`, `webhooks`. `GET`, `HEAD` and `OPTIONS` are
         reads and everything else is a write, so `schedule:read` passes
         `GET /schedule/slots` and is refused `POST /schedule/slots` with a 403
         naming `schedule:write`. The single scope `*` is every area, which is
@@ -2042,6 +2042,179 @@ components:
             when nothing changed, so storing it unconditionally keeps the
             caller's place.
 
+    # ── Webhooks ──────────────────────────────
+    WebhookEventType:
+      type: string
+      enum:
+        - reservation.created
+        - reservation.updated
+        - resource.created
+        - resource.updated
+
+    WebhookCreate:
+      type: object
+      required: [url, event_types]
+      properties:
+        url:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: >
+            Where to POST each event. HTTPS, unless the host is listed in
+            `WEBHOOK_ALLOW_HTTP_HOSTS`. A name that resolves to a loopback,
+            private, link-local or otherwise internal address is refused
+            unless `WEBHOOK_ALLOW_PRIVATE_TARGETS` is on.
+          example: https://receiver.example.com/hooks/chronos
+        event_types:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/WebhookEventType"
+          description: Which events to send. Stored sorted and deduplicated.
+          example: [reservation.created, reservation.updated]
+        active:
+          type: boolean
+          default: true
+          description: >
+            An inactive subscription keeps its place and sends nothing. Made
+            active again, it sends what happened in between.
+
+    WebhookUpdate:
+      type: object
+      description: Only the fields sent are changed.
+      properties:
+        url:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          nullable: true
+        event_types:
+          type: array
+          minItems: 1
+          nullable: true
+          items:
+            $ref: "#/components/schemas/WebhookEventType"
+        active:
+          type: boolean
+          nullable: true
+
+    WebhookResponse:
+      type: object
+      description: A subscription, without its secrets.
+      properties:
+        id:
+          type: integer
+        url:
+          type: string
+        event_types:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebhookEventType"
+        active:
+          type: boolean
+        paused_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Set while the subscription is paused, after five deliveries in a
+            row ran out of attempts or by an import that carried no secrets.
+            Cleared by resume.
+        consecutive_failures:
+          type: integer
+          description: Deliveries in a row that ran out of attempts. A success resets it.
+        previous_secret_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Set while the secret before the last rotation still signs
+            alongside the current one.
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    WebhookWithSecret:
+      allOf:
+        - $ref: "#/components/schemas/WebhookResponse"
+        - type: object
+          required: [secret]
+          properties:
+            secret:
+              type: string
+              description: >
+                The signing secret, `whsec_` and the base64 of 32 random bytes.
+                Returned here and nowhere else, so keep it: it cannot be read
+                back, only replaced by rotating.
+
+    WebhookAttemptResponse:
+      type: object
+      properties:
+        at:
+          type: string
+          format: date-time
+        status_code:
+          type: integer
+          nullable: true
+          description: Null when no response came back.
+        response_ms:
+          type: integer
+        error:
+          type: string
+          nullable: true
+          description: Why the attempt failed, briefly. Null on success.
+        response_excerpt:
+          type: string
+          nullable: true
+          description: The start of the response body, cut short.
+
+    WebhookDeliveryResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        subscription_id:
+          type: integer
+        event_id:
+          type: string
+          description: The `webhook-id` header, the same on every attempt.
+        event_type:
+          $ref: "#/components/schemas/WebhookEventType"
+        entity_kind:
+          type: string
+          enum: [resource, reservation]
+        entity_id:
+          type: integer
+        marker_id:
+          type: integer
+          description: The change feed cursor this delivery was made from.
+        status:
+          type: string
+          enum: [pending, succeeded, failed]
+        attempt_count:
+          type: integer
+        next_attempt_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebhookAttemptResponse"
+
     # ── Common ────────────────────────────────
     ErrorResponse:
       type: object
@@ -2114,6 +2287,8 @@ components:
         - IMPORT_REJECTED
         - CHANGE_FEED_DISABLED
         - SERVER_BUSY
+        - WEBHOOK_URL_REFUSED
+        - WEBHOOK_SECRET_LIMIT
       example: NOT_FOUND
 
   responses:
@@ -6084,6 +6259,356 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Webhooks ──────────────────────────────
+  /api/v1/webhooks/:
+    get:
+      operationId: webhooks.list
+      tags: [Webhooks]
+      summary: List webhook subscriptions
+      description: >
+        Requires `ORG_ADMIN`; an API key needs `webhooks:read`. Every
+        subscription, oldest first, without its secrets. docs/webhooks.md
+        describes what is sent, how it is signed and how failures are retried.
+      responses:
+        "200":
+          description: Every subscription.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WebhookResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+    post:
+      operationId: webhooks.create
+      tags: [Webhooks]
+      summary: Subscribe a URL to changes
+      description: >
+        Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Events are
+        made from the change feed, so the feed has to be on. The subscription
+        starts at the newest change and is sent nothing that happened before
+        it existed: read the rooms and the bookings in full once, as a change
+        feed consumer does.
+
+
+        The signing secret is in the response and nowhere else. An
+        Idempotency-Key is ignored here, because keeping the response would
+        keep the secret.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookCreate"
+      responses:
+        "201":
+          description: Subscribed. The `secret` field will not be shown again.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookWithSecret"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: >
+            `WEBHOOK_URL_REFUSED` for a URL that may not receive webhooks
+            (not HTTPS, an internal address, credentials in the URL), or
+            `VALIDATION_FAILED` for an unknown event type.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: The change feed is off, so there would be nothing to send.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/webhooks/{subscription_id}:
+    get:
+      operationId: webhooks.get
+      tags: [Webhooks]
+      summary: Get a webhook subscription
+      description: Requires `ORG_ADMIN`; an API key needs `webhooks:read`.
+      parameters:
+        - name: subscription_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The subscription, without its secrets.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      operationId: webhooks.update
+      tags: [Webhooks]
+      summary: Change a webhook subscription
+      description: >
+        Requires `ORG_ADMIN`; an API key needs `webhooks:write`. New event
+        types apply to changes fanned out from now on. Switched off, a
+        subscription keeps its place and sends nothing; switched back on, it
+        sends what happened in between.
+      parameters:
+        - name: subscription_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookUpdate"
+      responses:
+        "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: The updated subscription.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: >
+            `WEBHOOK_URL_REFUSED` for a URL that may not receive webhooks, or
+            `VALIDATION_FAILED` for an unknown event type.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      operationId: webhooks.delete
+      tags: [Webhooks]
+      summary: Delete a webhook subscription
+      description: >
+        Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Stops
+        sending at once and removes the subscription with its deliveries and
+        their attempts.
+      parameters:
+        - name: subscription_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: Deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/webhooks/{subscription_id}/rotate-secret:
+    post:
+      operationId: webhooks.rotateSecret
+      tags: [Webhooks]
+      summary: Issue a new signing secret
+      description: >
+        Requires `ORG_ADMIN`; an API key needs `webhooks:write`. The new
+        secret is in the response and nowhere else. The old one keeps signing
+        alongside it for 24 hours, or until it is removed, so every send in
+        that time carries two signatures and receivers can switch over at
+        their own pace. An Idempotency-Key is ignored here, for the reason it
+        is on create.
+      parameters:
+        - name: subscription_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Rotated. The `secret` field will not be shown again.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookWithSecret"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            `WEBHOOK_SECRET_LIMIT`: two secrets are already live. Remove the
+            previous one first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/webhooks/{subscription_id}/previous-secret:
+    delete:
+      operationId: webhooks.removePreviousSecret
+      tags: [Webhooks]
+      summary: Stop signing with the previous secret
+      description: >
+        Requires `ORG_ADMIN`; an API key needs `webhooks:write`. For when
+        every receiver has moved to the new secret before the 24 hours are
+        up. Nothing to remove is not an error.
+      parameters:
+        - name: subscription_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: Only the current secret signs now.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/webhooks/{subscription_id}/resume:
+    post:
+      operationId: webhooks.resume
+      tags: [Webhooks]
+      summary: Resume a paused subscription
+      description: >
+        Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Clears the
+        pause and the failure count. Nothing is skipped: what changed while it
+        was paused is sent, oldest first. Resuming one that is not paused
+        changes nothing.
+      parameters:
+        - name: subscription_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: The subscription, no longer paused.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/webhooks/{subscription_id}/deliveries:
+    get:
+      operationId: webhooks.listDeliveries
+      tags: [Webhooks]
+      summary: What was sent and what came back
+      description: >
+        Requires `ORG_ADMIN`; an API key needs `webhooks:read`. Deliveries
+        newest first, each with every attempt made at it.
+      parameters:
+        - name: subscription_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Deliveries, newest first.
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/XTotalCount"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WebhookDeliveryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/webhooks/{subscription_id}/deliveries/{delivery_id}/redeliver:
+    post:
+      operationId: webhooks.redeliver
+      tags: [Webhooks]
+      summary: Send a delivery again
+      description: >
+        Requires `ORG_ADMIN`; an API key needs `webhooks:write`. The delivery
+        goes back in the queue with a fresh set of attempts and is sent on the
+        worker's next pass, with the same `webhook-id` and body and a new
+        timestamp and signature.
+      parameters:
+        - name: subscription_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: delivery_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: Queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookDeliveryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/v1/sync/feed-token:
     get:

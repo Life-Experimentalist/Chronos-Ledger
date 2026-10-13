@@ -53,6 +53,7 @@ from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import DBAPIError
 
 import app.models.db  # noqa: F401 (registers every table with the metadata)
+from app.core import clock
 from app.core.bootstrap import SEEDED_ADMIN_ID
 from app.core.database import Base
 from app.core.schema import SCHEMA_LOCK_KEY, SCHEMA_VERSION
@@ -77,6 +78,15 @@ EXCLUDED: dict[str, str] = {
     # the imported deployment gets its write treated as a new request.
     "idempotency_records": "stored responses to retried writes, kept for hours; "
     "a retry after an import is treated as a new request",
+    # The outgoing webhook queue and its history. A subscription travels and
+    # carries its cursor, so the imported deployment knows where it was; the
+    # sends themselves were to this deployment's receivers at this
+    # deployment's moments, and replaying them from another would repeat
+    # calls the receiver already had.
+    "webhook_deliveries": "the outgoing webhook queue; an imported subscription "
+    "carries on from its cursor instead of replaying old sends",
+    "webhook_attempts": "the record of each webhook send and its response, "
+    "which belongs to the deployment that made it",
 }
 
 # Exported tables in foreign key order, which is also the order an import
@@ -91,6 +101,7 @@ SECRET_COLUMNS: dict[str, tuple[str, ...]] = {
     "users": ("calendar_feed_token", "credential_secure_hash"),
     "api_keys": ("key_hash",),
     "guest_gate_registry": ("visit_code_hash",),
+    "webhook_subscriptions": ("secret", "previous_secret"),
 }
 
 # Rows per INSERT on import. Enough to keep round trips down, small enough
@@ -375,6 +386,13 @@ def _load(connection, archive, table: Table, expected: int, redacted: bool) -> N
                     raise ArchiveError(
                         f"{name} line {number}: {column.name} {record[column.name]!r}: {problem}"
                     ) from None
+        if omitted and table.name == "webhook_subscriptions":
+            # The receiver knows the old secret, not the new random one, so
+            # every send would fail its check and the subscription would pause
+            # itself after a day of retries. Pausing it here says so at once:
+            # rotate, give the receiver the secret, then resume.
+            row["paused_at"] = row["paused_at"] or clock.now()
+            row["previous_secret_expires_at"] = None
         batch.append(row)
         if len(batch) >= BATCH_SIZE:
             _insert(connection, table, batch, name, number)
@@ -475,8 +493,15 @@ def _redacted_value(table: str, column: str):
         # of no key keeps the row, its label and its scopes, and lets nothing
         # in. Reissue the key.
         return secrets.token_hex(32)
-    # users.calendar_feed_token and guest_gate_registry.visit_code_hash are
-    # nullable. A person gets a new feed link from GET /sync/feed-token; a
+    if (table, column) == ("webhook_subscriptions", "secret"):
+        # Required, and a well-formed secret nobody holds. _load pauses the
+        # subscription as well, so nothing is signed with it until an admin
+        # rotates and resumes.
+        from app.services.webhooks import new_secret
+
+        return new_secret()
+    # users.calendar_feed_token, guest_gate_registry.visit_code_hash and
+    # webhook_subscriptions.previous_secret are nullable. A person gets a new feed link from GET /sync/feed-token; a
     # visitor's code was only ever good for that visit.
     return None
 
