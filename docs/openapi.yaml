@@ -4797,7 +4797,8 @@ paths:
         `StructuralMasterSlot` under them, each slot pointed at its activity's
         copy with the same lead, room and window. Member enrollment and
         attendance records are **not** cloned. Re-import CSV after cloning to
-        update enrollment.
+        update enrollment. Retired activities and retired slots are left
+        behind.
 
 
         The target must be closed and have no activities. The copied slots

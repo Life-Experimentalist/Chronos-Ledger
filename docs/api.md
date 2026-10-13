@@ -1451,7 +1451,8 @@ already closed runs the same sweep.
 `clone-to` copies every activity in the old cycle and every weekly slot under
 them into the new one, each slot with the same lead, room and window.
 Enrollment and attendance are not copied: import the new cycle's CSV after
-cloning. The target has to be closed and have no activities, or the clone is
+cloning. Retired activities and retired slots are not copied either, and
+opening a cycle leaves its retired slots out of the room checks. The target has to be closed and have no activities, or the clone is
 refused with `409`. The copied slots are not checked against the rooms here;
 opening the target is what checks them.
 
