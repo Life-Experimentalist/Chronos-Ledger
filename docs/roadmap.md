@@ -293,6 +293,7 @@ release; it is described with the integration contract below.
   returned, derived, through 0.17, and removed after.
 - **Done when:** a weekly slot across a DST change materializes at the same
   local time on both sides; migrated slots materialize the same days as before.
+- **Status:** built in PR #91, held for 0.17.
 
 ### E-6. Editable timetable
 
