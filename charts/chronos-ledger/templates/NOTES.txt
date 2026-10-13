@@ -1,0 +1,17 @@
+Chronos Ledger {{ .Chart.AppVersion }} is installed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+The backend reads DATABASE_URL and JWT_SECRET_SIGNING_KEY from the Secret
+"{{ .Values.existingSecret }}". If its pod sits in CreateContainerConfigError, that Secret or
+one of those keys is missing.
+
+Check the rollout:
+  kubectl --namespace {{ .Release.Namespace }} rollout status deployment/{{ include "chronos-ledger.fullname" . }}-backend
+{{- if not .Values.ingress.enabled }}
+
+No ingress is configured. To look at it from your machine:
+  kubectl --namespace {{ .Release.Namespace }} port-forward service/{{ if .Values.web.enabled }}{{ include "chronos-ledger.fullname" . }}-web 8080:{{ .Values.web.service.port }}{{ else }}{{ .Values.backend.service.name }} 8080:{{ .Values.backend.service.port }}{{ end }}
+and open http://localhost:8080
+{{- end }}
+
+The administrator is admin@org.internal. It can sign in only after the
+INITIAL_ADMIN_PASSWORD key is set in the Secret.

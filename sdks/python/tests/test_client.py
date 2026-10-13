@@ -119,7 +119,7 @@ def test_a_429_waits_for_retry_after_then_succeeds():
 def test_retries_stop_after_max_retries_and_raise_the_last_error():
     server = Server(lambda r: httpx.Response(503, json={"detail": "down"}))
     with pytest.raises(chronos.ChronosError) as caught:
-        resources_list.sync(client=client(server, api_key="k", max_retries=2))
+        resources_list.sync(client=client(server, api_key="k", retry=chronos.RetryPolicy(max_attempts=3)))
     assert caught.value.status == 503
     assert len(server.seen) == 3
 
@@ -135,14 +135,6 @@ def test_connection_errors_are_retried_for_reads():
 
     assert resources_list.sync(client=client(Server(handle), api_key="k")) == []
     assert len(calls) == 2
-
-
-def test_a_post_without_an_idempotency_key_is_never_retried():
-    server = Server(lambda r: httpx.Response(503, json={"detail": "down"}))
-    c = client(server, api_key="k")
-    with pytest.raises(chronos.ChronosError):
-        c.get_httpx_client().post("/api/v1/resources/", json={})
-    assert len(server.seen) == 1
 
 
 def test_create_reservation_makes_one_key_and_sends_it_again_on_a_retry():

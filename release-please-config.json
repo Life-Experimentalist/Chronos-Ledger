@@ -27,7 +27,8 @@
         "sdks/python/src/chronos_ledger_client/__init__.py",
         "sdks/go/version.go",
         "docs/openapi.yaml",
-        "backend/app/main.py"
+        "backend/app/main.py",
+        "charts/chronos-ledger/Chart.yaml"
       ],
       "changelog-sections": [
         { "type": "feat",     "section": "Features" },

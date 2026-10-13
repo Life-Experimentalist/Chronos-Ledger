@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from ._transport import ChronosError, ChronosTransport, Tokens
+from ._transport import DEFAULT_RETRY, ChronosError, ChronosTransport, RetryPolicy, Tokens
 from .generated import Client
 from .generated.api.resources import resources_create_reservation
 from .generated.models import ReservationCreate, ReservationResponse
@@ -25,6 +25,7 @@ __version__ = "0.15.0"  # x-release-please-version
 __all__ = [
     "ChronosError",
     "Client",
+    "RetryPolicy",
     "Tokens",
     "__version__",
     "connect",
@@ -39,7 +40,7 @@ def connect(
     api_key: str | None = None,
     tokens: Tokens | None = None,
     on_tokens: Callable[[Tokens], None] | None = None,
-    max_retries: int = 3,
+    retry: RetryPolicy | None = DEFAULT_RETRY,
     timeout: float = 30.0,
     transport: httpx.BaseTransport | None = None,
 ) -> Client:
@@ -47,8 +48,9 @@ def connect(
 
     Pass ``api_key`` for a scoped API key, or ``tokens`` from ``POST /api/v1/auth/login``.
     Tokens are refreshed once on a 401 and each new pair goes to ``on_tokens``,
-    because a refresh token works only once. ``transport`` replaces the network,
-    which is how the tests run.
+    because a refresh token works only once. ``retry`` says how a failed request
+    is tried again, and ``None`` turns retries off. ``transport`` replaces the
+    network, which is how the tests run.
     """
     if api_key and tokens:
         raise ValueError("pass api_key or tokens, not both")
@@ -64,7 +66,7 @@ def connect(
                 api_key=api_key,
                 tokens=tokens,
                 on_tokens=on_tokens,
-                max_retries=max_retries,
+                retry=retry,
                 inner=transport,
             )
         },
@@ -79,8 +81,9 @@ def create_reservation(
 ) -> ReservationResponse:
     """Hold a resource.
 
-    An Idempotency-Key is made when none is given, and the same key goes out on
-    every retry, so a retry never takes a second hold.
+    The generated call needs an Idempotency-Key, so one is made here when none
+    is given. Every other write gets one from the transport. The same key goes
+    out on every retry, so a retry never takes a second hold.
     """
     result = resources_create_reservation.sync(
         resource_id,

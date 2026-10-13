@@ -270,6 +270,12 @@ these SDKs are how it will call Chronos.
 They follow the same rules as the other two: generated from the spec, checked
 in CI against it, versioned with the server's tags.
 
+The Helm chart is in the repository at `charts/chronos-ledger` (see
+[Kubernetes (Helm)](deployment.md#kubernetes-helm)). `helm.yml` lints it,
+renders it three ways and checks the output against the Kubernetes schemas. It
+is not published to a chart registry; that, and the deb/rpm packages, remain
+on request.
+
 ---
 
 ## 0.17: Engine, part 2 (breaking)
@@ -336,7 +342,7 @@ codes. C-4 is breaking and ships with 0.17.
   `POST`, `PATCH` and `DELETE` accepts it. A new table keeps, per API key or
   user, the key, a hash of the request, the status and the stored response,
   for a retention window (24 hours by default). A repeat with the same body
-  returns the stored response; the same key with a different body is a 409
+  returns the stored response; the same key with a different body is a 422
   with `IDEMPOTENCY_KEY_REUSED`. Two concurrent first uses are settled by the
   table's unique constraint. Reservation create keeps its current behaviour
   and moves onto the shared mechanism; its key, globally unique today,
@@ -392,6 +398,7 @@ codes. C-4 is breaking and ships with 0.17.
 - **Done when:** a test server that drops the first response and answers the
   second sees one effect for a create through each SDK; a 400 is never
   retried.
+- **Status:** shipped in 0.16.
 
 ### C-6. Failure modes written down
 

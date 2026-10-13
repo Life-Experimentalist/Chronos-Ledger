@@ -1,0 +1,123 @@
+name: Helm chart
+
+# Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
+#
+# Lints and renders charts/chronos-ledger, then checks every rendered object
+# against the Kubernetes API schemas. Nothing is installed into a cluster and
+# nothing is published: the chart is not pushed to a registry from here.
+# A separate workflow so a chart-only change does not wait for the backend and
+# frontend gates in ci.yml.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "charts/**"
+      - ".github/workflows/helm.yml"
+  push:
+    branches: [main]
+    paths:
+      - "charts/**"
+      - ".github/workflows/helm.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CHART: charts/chronos-ledger
+  # The Kubernetes version the manifests are rendered and validated for.
+  KUBE_VERSION: "1.31.0"
+  # The name of a Secret, not a secret. The chart refuses to render without one.
+  SECRET_NAME: chronos-ledger
+  KUBECONFORM_VERSION: v0.8.0
+  # From the CHECKSUMS file of the kubeconform v0.8.0 release.
+  KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+
+jobs:
+  chart:
+    name: Helm lint, template, kubeconform
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.22.0
+
+      - name: Install kubeconform
+        run: |
+          curl -fsSL -o kubeconform.tar.gz \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  kubeconform.tar.gz" | sha256sum -c -
+          tar -xzf kubeconform.tar.gz kubeconform
+          sudo install -m 0755 kubeconform /usr/local/bin/kubeconform
+          kubeconform -v
+
+      - name: Helm lint
+        run: helm lint --strict "$CHART" --set existingSecret="$SECRET_NAME"
+
+      # Each render is a different shape of the same chart. Every one has to
+      # pass the schema in values.schema.json (helm checks it on the way in)
+      # and kubeconform's strict mode, which also rejects unknown fields.
+      - name: Render and validate, default values
+        run: |
+          helm template chronos "$CHART" --kube-version "$KUBE_VERSION" \
+            --set existingSecret="$SECRET_NAME" \
+            | kubeconform -strict -summary -kubernetes-version "$KUBE_VERSION"
+
+      - name: Render and validate, ingress enabled
+        run: |
+          helm template chronos "$CHART" --kube-version "$KUBE_VERSION" \
+            --set existingSecret="$SECRET_NAME" \
+            --set ingress.enabled=true \
+            --set ingress.className=nginx \
+            --set 'ingress.tls[0].secretName=chronos-tls' \
+            --set 'ingress.tls[0].hosts[0]=chronos.example.com' \
+            | tee rendered-ingress.yaml \
+            | kubeconform -strict -summary -kubernetes-version "$KUBE_VERSION"
+          grep -q '^kind: Ingress$' rendered-ingress.yaml
+
+      - name: Render and validate, no web tier, Redis, two replicas
+        run: |
+          helm template chronos "$CHART" --kube-version "$KUBE_VERSION" \
+            --set existingSecret="$SECRET_NAME" \
+            --set web.enabled=false \
+            --set ingress.enabled=true \
+            --set backend.replicaCount=2 \
+            --set redis.enabled=true \
+            --set redis.url=redis://redis.example.svc:6379/0 \
+            | kubeconform -strict -summary -kubernetes-version "$KUBE_VERSION"
+
+      # The chart has to refuse these. A render that succeeds here means a
+      # guard was lost.
+      - name: Refuses a render without a Secret
+        run: |
+          if helm template chronos "$CHART" --kube-version "$KUBE_VERSION"; then
+            echo "::error::rendered without existingSecret"
+            exit 1
+          fi
+
+      - name: Refuses a secret in the ConfigMap
+        run: |
+          if helm template chronos "$CHART" --kube-version "$KUBE_VERSION" \
+              --set existingSecret="$SECRET_NAME" \
+              --set config.DATABASE_URL=anything; then
+            echo "::error::DATABASE_URL was accepted under config"
+            exit 1
+          fi
+
+      - name: Refuses more than one replica without Redis
+        run: |
+          if helm template chronos "$CHART" --kube-version "$KUBE_VERSION" \
+              --set existingSecret="$SECRET_NAME" \
+              --set backend.replicaCount=2; then
+            echo "::error::two replicas were accepted without Redis"
+            exit 1
+          fi
