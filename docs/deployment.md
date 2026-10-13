@@ -416,7 +416,7 @@ from the LAN.
 (`chronos-ledger-backend` and `chronos-ledger-web`, from GHCR) with the same
 environment variables. The chart is in the repository and is not published to
 a chart registry: install it from a checkout of the tag you want. It needs
-Kubernetes 1.25 or later and Helm 3.8 or later.
+Kubernetes 1.25 or later.
 
 What the chart does not include is a database. PostgreSQL is yours: a managed
 service, an operator, or a server outside the cluster. Redis is optional.
