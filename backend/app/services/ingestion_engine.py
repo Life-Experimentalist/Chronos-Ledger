@@ -285,6 +285,14 @@ class ChronosIngestionEngine:
                     self.db.flush()
                     offerings[offering.activity_code] = offering
                 else:
+                    if offering.retired_at is not None:
+                        # Upserting it would put a class back on the timetable
+                        # that somebody took off, the same as a deactivated
+                        # member above.
+                        raise ValueError(
+                            f"activity '{row['activity_code']}' is retired in this "
+                            "cycle; take its rows out of the file"
+                        )
                     offering.activity_title = str(row["activity_title"])
                     offering.unit_code = str(row["unit"])
 
@@ -309,6 +317,11 @@ class ChronosIngestionEngine:
                     )
 
                 slot = slots.get((offering.id, day, t_start))
+                if slot is not None and slot.retired_at is not None:
+                    raise ValueError(
+                        f"activity '{row['activity_code']}': the slot on day {day} at "
+                        f"{t_start} is retired; take its rows out of the file"
+                    )
                 room = rooms.get(str(row["room"]))
                 if room is None:
                     room = rooms[str(row["room"])] = get_or_create_room(str(row["room"]), self.db)
@@ -513,7 +526,11 @@ class ChronosIngestionEngine:
         """
         codes = dict(
             self.db.query(Activity.id, Activity.activity_code)
-            .filter(Activity.cycle_id == cycle_id, Activity.unit_code.in_(units))
+            .filter(
+                Activity.cycle_id == cycle_id,
+                Activity.unit_code.in_(units),
+                Activity.retired_at.is_(None),
+            )
             .all()
         )
         if not codes:
@@ -529,7 +546,10 @@ class ChronosIngestionEngine:
                 "room": slot.resource.code if slot.resource else slot.target_room_identifier,
             }
             for slot in self.db.query(StructuralMasterSlot)
-            .filter(StructuralMasterSlot.activity_id.in_(activity_ids))
+            .filter(
+                StructuralMasterSlot.activity_id.in_(activity_ids),
+                StructuralMasterSlot.retired_at.is_(None),
+            )
             .all()
             if slot.id not in seen_slots
         ]

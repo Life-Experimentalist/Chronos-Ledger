@@ -331,6 +331,8 @@ def _open_items(user_id: str, db: Session) -> OpenItems:
         .join(PlanningCycle, Activity.cycle_id == PlanningCycle.id)
         .filter(
             StructuralMasterSlot.primary_lead_id == user_id,
+            StructuralMasterSlot.retired_at.is_(None),
+            Activity.retired_at.is_(None),
             PlanningCycle.date_bounds_end >= today,
         )
     )

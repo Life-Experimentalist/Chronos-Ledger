@@ -1,7 +1,7 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
-from datetime import date, time
+from datetime import date, datetime, time
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -67,6 +67,68 @@ class CycleActivationConflict(BaseModel):
     """
 
     detail: CycleActivationConflictDetail
+
+
+class ActivityCreate(BaseModel):
+    """An activity, the same one a CSV row names by code, title and unit.
+
+    It has no slots and no members yet. Those are added with POST
+    /schedule/slots and POST /schedule/activities/{id}/enrollments.
+    """
+
+    activity_code: str = Field(min_length=1, max_length=30)
+    activity_title: str = Field(min_length=1, max_length=150)
+    unit_code: str = Field(min_length=1, max_length=50)
+    cycle_id: int
+
+
+class ActivityUpdate(BaseModel):
+    """What may change about an activity that already exists: its title.
+
+    The code and the cycle are what identify it, the same pair a CSV upsert
+    matches on, so changing either is a different activity. The unit is left
+    out too: it is what a unit admin's permission is checked against, and
+    moving an activity out of a unit is a decision for an import, which only
+    an org admin can run.
+    """
+
+    activity_title: str = Field(min_length=1, max_length=150)
+
+
+class ActivityResponse(BaseModel):
+    id: int
+    activity_code: str
+    activity_title: str
+    unit_code: str
+    cycle_id: int
+    retired_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class RetireResult(BaseModel):
+    """What retiring an activity or a slot did to the days ahead.
+
+    Days from today onward that nobody has marked or annotated are removed.
+    The ones that carry attendance or a note are kept, and counted here.
+    Days before today are records and are not touched.
+    """
+
+    retired_at: datetime
+    slots_retired: int
+    ledger_rows_removed: int
+    ledger_rows_kept: int
+
+
+class EnrollmentCreate(BaseModel):
+    member_id: str = Field(min_length=1, max_length=50)
+
+
+class EnrollmentResponse(BaseModel):
+    activity_id: int
+    member_id: str
+
+    model_config = {"from_attributes": True}
 
 
 class MasterSlotCreate(BaseModel):

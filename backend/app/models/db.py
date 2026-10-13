@@ -215,6 +215,10 @@ class Activity(Base):
     activity_title = Column(String(150), nullable=False)
     unit_code = Column(String(50), nullable=False)
     cycle_id = Column(Integer, ForeignKey("planning_cycles.id", ondelete="CASCADE"), nullable=False)
+    # Set by POST /schedule/activities/{id}/retire, which also retires every
+    # slot. A retired activity is kept rather than deleted so the days it ran
+    # and the attendance taken on them stay, and it produces no new days.
+    retired_at = Column(DateTime(timezone=True), nullable=True)
 
     cycle = relationship("PlanningCycle", back_populates="activities")
     master_slots = relationship(
@@ -290,6 +294,9 @@ class StructuralMasterSlot(Base):
     # Kept in step with the resource by every write path, and read by the
     # frontend and the calendar feed, until they move to resource_id.
     target_room_identifier = Column(String(30), nullable=True)
+    # Set by POST /schedule/slots/{id}/retire or by retiring the activity. A
+    # retired slot produces no new days and holds no room.
+    retired_at = Column(DateTime(timezone=True), nullable=True)
 
     activity = relationship("Activity", back_populates="master_slots")
     primary_lead = relationship("User", foreign_keys=[primary_lead_id])

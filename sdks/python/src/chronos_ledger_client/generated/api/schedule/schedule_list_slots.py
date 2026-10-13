@@ -13,6 +13,7 @@ from ...types import UNSET, Response, Unset
 def _get_kwargs(
     *,
     cycle_id: int | Unset = UNSET,
+    include_retired: bool | Unset = False,
     limit: int | Unset = UNSET,
     offset: int | Unset = 0,
 ) -> dict[str, Any]:
@@ -20,6 +21,8 @@ def _get_kwargs(
     params: dict[str, Any] = {}
 
     params["cycle_id"] = cycle_id
+
+    params["include_retired"] = include_retired
 
     params["limit"] = limit
 
@@ -75,16 +78,18 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     cycle_id: int | Unset = UNSET,
+    include_retired: bool | Unset = False,
     limit: int | Unset = UNSET,
     offset: int | Unset = 0,
 ) -> Response[ErrorResponse | list[MasterSlotResponse]]:
     """List master slots
 
      The recurring timetable, before any day is generated from it. Filter by cycle to get one term's
-    worth.
+    worth. Retired slots are left out unless `include_retired` is set.
 
     Args:
         cycle_id (int | Unset):
+        include_retired (bool | Unset):  Default: False.
         limit (int | Unset):
         offset (int | Unset):  Default: 0.
 
@@ -98,6 +103,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         cycle_id=cycle_id,
+        include_retired=include_retired,
         limit=limit,
         offset=offset,
     )
@@ -113,16 +119,18 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     cycle_id: int | Unset = UNSET,
+    include_retired: bool | Unset = False,
     limit: int | Unset = UNSET,
     offset: int | Unset = 0,
 ) -> ErrorResponse | list[MasterSlotResponse] | None:
     """List master slots
 
      The recurring timetable, before any day is generated from it. Filter by cycle to get one term's
-    worth.
+    worth. Retired slots are left out unless `include_retired` is set.
 
     Args:
         cycle_id (int | Unset):
+        include_retired (bool | Unset):  Default: False.
         limit (int | Unset):
         offset (int | Unset):  Default: 0.
 
@@ -137,6 +145,7 @@ def sync(
     return sync_detailed(
         client=client,
         cycle_id=cycle_id,
+        include_retired=include_retired,
         limit=limit,
         offset=offset,
     ).parsed
@@ -146,16 +155,18 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     cycle_id: int | Unset = UNSET,
+    include_retired: bool | Unset = False,
     limit: int | Unset = UNSET,
     offset: int | Unset = 0,
 ) -> Response[ErrorResponse | list[MasterSlotResponse]]:
     """List master slots
 
      The recurring timetable, before any day is generated from it. Filter by cycle to get one term's
-    worth.
+    worth. Retired slots are left out unless `include_retired` is set.
 
     Args:
         cycle_id (int | Unset):
+        include_retired (bool | Unset):  Default: False.
         limit (int | Unset):
         offset (int | Unset):  Default: 0.
 
@@ -169,6 +180,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         cycle_id=cycle_id,
+        include_retired=include_retired,
         limit=limit,
         offset=offset,
     )
@@ -182,16 +194,18 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     cycle_id: int | Unset = UNSET,
+    include_retired: bool | Unset = False,
     limit: int | Unset = UNSET,
     offset: int | Unset = 0,
 ) -> ErrorResponse | list[MasterSlotResponse] | None:
     """List master slots
 
      The recurring timetable, before any day is generated from it. Filter by cycle to get one term's
-    worth.
+    worth. Retired slots are left out unless `include_retired` is set.
 
     Args:
         cycle_id (int | Unset):
+        include_retired (bool | Unset):  Default: False.
         limit (int | Unset):
         offset (int | Unset):  Default: 0.
 
@@ -207,6 +221,7 @@ async def asyncio(
         await asyncio_detailed(
             client=client,
             cycle_id=cycle_id,
+            include_retired=include_retired,
             limit=limit,
             offset=offset,
         )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
 from typing import Any, TypeVar, cast
 
@@ -23,6 +24,8 @@ class MasterSlotResponse:
         primary_lead_id (None | str | Unset):
         resource_id (int | None | Unset): Prefer this over target_room_identifier.
         target_room_identifier (None | str | Unset): The room's name, mirrored from the resource. Being retired.
+        retired_at (datetime.datetime | None | Unset): When the slot was retired, on its own or with its activity. Null
+            while it is live.
     """
 
     id: int | Unset = UNSET
@@ -33,6 +36,7 @@ class MasterSlotResponse:
     primary_lead_id: None | str | Unset = UNSET
     resource_id: int | None | Unset = UNSET
     target_room_identifier: None | str | Unset = UNSET
+    retired_at: datetime.datetime | None | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -64,6 +68,14 @@ class MasterSlotResponse:
         else:
             target_room_identifier = self.target_room_identifier
 
+        retired_at: None | str | Unset
+        if isinstance(self.retired_at, Unset):
+            retired_at = UNSET
+        elif isinstance(self.retired_at, datetime.datetime):
+            retired_at = self.retired_at.isoformat()
+        else:
+            retired_at = self.retired_at
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({})
@@ -83,6 +95,8 @@ class MasterSlotResponse:
             field_dict["resource_id"] = resource_id
         if target_room_identifier is not UNSET:
             field_dict["target_room_identifier"] = target_room_identifier
+        if retired_at is not UNSET:
+            field_dict["retired_at"] = retired_at
 
         return field_dict
 
@@ -126,6 +140,23 @@ class MasterSlotResponse:
 
         target_room_identifier = _parse_target_room_identifier(d.pop("target_room_identifier", UNSET))
 
+        def _parse_retired_at(data: object) -> datetime.datetime | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, str):
+                    raise TypeError()
+                retired_at_type_0 = datetime.datetime.fromisoformat(data)
+
+                return retired_at_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(datetime.datetime | None | Unset, data)
+
+        retired_at = _parse_retired_at(d.pop("retired_at", UNSET))
+
         master_slot_response = cls(
             id=id,
             day_of_week_index=day_of_week_index,
@@ -135,6 +166,7 @@ class MasterSlotResponse:
             primary_lead_id=primary_lead_id,
             resource_id=resource_id,
             target_room_identifier=target_room_identifier,
+            retired_at=retired_at,
         )
 
         master_slot_response.additional_properties = d
