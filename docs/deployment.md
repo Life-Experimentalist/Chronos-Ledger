@@ -410,6 +410,164 @@ from the LAN.
 
 ---
 
+## Kubernetes (Helm)
+
+`charts/chronos-ledger` runs the same two images as `docker-compose.prod.yml`
+(`chronos-ledger-backend` and `chronos-ledger-web`, from GHCR) with the same
+environment variables. The chart is in the repository and is not published to
+a chart registry: install it from a checkout of the tag you want. It needs
+Kubernetes 1.25 or later and Helm 3.8 or later.
+
+What the chart does not include is a database. PostgreSQL is yours: a managed
+service, an operator, or a server outside the cluster. Redis is optional.
+
+### What it creates
+
+| Object | Notes |
+|---|---|
+| Backend Deployment and Service | Service is named `chronos-app`, port 8000 |
+| Web Deployment and Service | nginx plus the static frontend, port 80. On by default (`web.enabled`). There is no separate frontend image: the compose files build the frontend into a volume, and the published web image is nginx with that build baked in |
+| ConfigMap | The non-secret settings from `config` in `values.yaml` |
+| Ingress | Off by default (`ingress.enabled`) |
+
+The backend Service is named `chronos-app` because the `nginx.conf` inside
+the web image dials `chronos-app:8000` and has no way to be told another name.
+That also means one release per namespace while the web tier is on.
+
+### Install
+
+1. Create the Secret the chart reads. The chart never creates one and never
+   puts a secret into a ConfigMap, so this step is yours. Use any name and any
+   way of creating it (kubectl, sealed secrets, an external secrets operator);
+   the keys are what matter.
+
+   ```bash
+   kubectl create namespace chronos
+   kubectl --namespace chronos create secret generic chronos-secrets \
+     --from-literal=DATABASE_URL='postgresql://<user>:<password>@<postgres-host>:5432/<database>' \
+     --from-literal=JWT_SECRET_SIGNING_KEY="$(openssl rand -hex 32)" \
+     --from-literal=INITIAL_ADMIN_PASSWORD='<a password of your own>'
+   ```
+
+   | Key | Required | Notes |
+   |---|---|---|
+   | `DATABASE_URL` | yes | The app refuses to start in production on a password published in this repository |
+   | `JWT_SECRET_SIGNING_KEY` | yes | At least 32 characters |
+   | `INITIAL_ADMIN_PASSWORD` | no | Without it nobody can sign in as the administrator; see [First login](#4-first-login) |
+   | `VAPID_PRIVATE_KEY` | no | Web Push |
+   | `REDIS_URL` | no | Only read when `redis.urlFromSecret` is true |
+
+2. Write a values file with your own settings. Only what differs from the
+   defaults needs to be there.
+
+   ```yaml
+   # my-values.yaml
+   existingSecret: chronos-secrets
+   config:
+     ORG_TIMEZONE: <IANA zone name>
+   ingress:
+     enabled: true
+     className: <your ingress class>
+     hosts:
+       - host: <chronos-hostname>
+         paths:
+           - path: /
+             pathType: Prefix
+     tls:
+       - secretName: <existing-tls-secret>
+         hosts:
+           - <chronos-hostname>
+   ```
+
+3. Install from the checkout:
+
+   ```bash
+   helm install chronos ./charts/chronos-ledger \
+     --namespace chronos --values my-values.yaml
+   kubectl --namespace chronos rollout status deployment/chronos-chronos-ledger-backend
+   ```
+
+   The backend builds the schema on its first start, which can take a while on
+   an empty database. The startup probe allows three minutes before the
+   liveness probe takes over. A pod stuck in `CreateContainerConfigError` means
+   the Secret or one of its required keys is missing.
+
+4. To upgrade, check out the new tag and run `helm upgrade` with the same
+   values file. The chart's default image tag is `v` plus its `appVersion`, so
+   the images follow the chart. A release that changes `schema_version` needs a
+   restored backup or a fresh database, exactly as in
+   [Production Deployment](#production-deployment-organization-server).
+
+### Settings
+
+Every variable `docker-compose.prod.yml` passes to the backend is a key under
+`config` with the same default. Anything else `backend/app/core/config.py`
+reads can be added there. The schema in `values.schema.json` rejects
+`DATABASE_URL`, `JWT_SECRET_SIGNING_KEY`, `INITIAL_ADMIN_PASSWORD`,
+`VAPID_PRIVATE_KEY` and `REDIS_URL` under `config`, and `APP_ENV`, which is
+always `production`.
+
+Redis is off by default and the app works without it: the rate limits fail
+open, the location cache is skipped, and `/health/ready` does not depend on
+it. To turn it on, set `redis.enabled` and `redis.url` (an address with no
+credentials in it) or `redis.urlFromSecret`. Do not point `REDIS_URL` at
+`memory://`: that needs a Python extra the image does not install.
+
+### Replicas
+
+The chart defaults to one backend replica. Every backend process runs the
+in-process scheduler, so each replica fires each job. The ledger jobs and the
+catch-up at start-up are safe to repeat (the database allows one generated day
+per slot per date), and the schema step takes a PostgreSQL advisory lock, so
+replicas can start together. The one job with no such guard is the guest
+overstay notice (`backend/app/cron/guest_overstay.py::announce_overstayed_visits`):
+it reads the overdue visits and then stamps them, so two replicas that run in
+the same five-minute window can announce one overstay twice. That only matters
+when `GUEST_VISIT_LENGTH_MINUTES` is above 0. The chart does not elect a
+leader.
+
+Raising `backend.replicaCount` above 1 also requires `redis.enabled`, because
+WebSocket events reach sockets held by other replicas through Redis (see
+[Scaling](#scaling)); the chart refuses the combination without it.
+
+### Security context
+
+Both Deployments run as a non-root user, with every capability dropped, no
+privilege escalation, the runtime default seccomp profile and a read-only root
+filesystem. Writable paths are emptyDirs: `/tmp` for the backend (CSV uploads
+and exports), and `/var/cache/nginx`, `/run`, `/etc/nginx/tls` and `/tmp` for
+nginx.
+
+Two things in that depend on the images, and have not been run against a
+cluster by the project's CI, which renders the chart and checks the manifests
+but starts no pods:
+
+- The backend image sets no user, so the chart names uid 10001. If the
+  container fails to start with a read-only root, set
+  `backend.securityContext.readOnlyRootFilesystem` to `false`.
+- The web image's nginx listens on port 80. A non-root user can bind it only
+  because the chart sets the `net.ipv4.ip_unprivileged_port_start` sysctl,
+  which Kubernetes treats as safe. A cluster that refuses the sysctl can run
+  the web pod as root with the capabilities nginx needs, as described in the
+  comments on `web.podSecurityContext` in `values.yaml`.
+
+### Ingress and client addresses
+
+TLS ends at the ingress; the web image's HTTPS listener stays off because no
+certificate is mounted. The nginx in the web image sets `X-Forwarded-For` to
+the address that connected to it, on purpose, so a caller cannot choose its own
+address. Behind an ingress controller that address is the controller's, so the
+sign-in rate limit counts every user as one caller. Raise
+`config.RATE_LIMIT_LOGIN_PER_IP` to suit the organization, or turn the per
+address limit off with `0`. Fixing it properly means teaching that nginx the
+controller's address with the `realip` module, which the chart does not do
+because it runs the image's own `nginx.conf` unchanged.
+
+A CSV upload can be 25 MB. Many ingress controllers refuse a body over 1 MB by
+default, so set the body size limit in `ingress.annotations` for yours.
+
+---
+
 ## Scaling
 
 How far one machine goes, with load test numbers, is in [hardware.md](hardware.md).

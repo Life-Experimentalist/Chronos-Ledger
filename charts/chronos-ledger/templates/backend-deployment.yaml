@@ -1,0 +1,123 @@
+{{- $secret := required "existingSecret is required: the name of a Secret holding DATABASE_URL and JWT_SECRET_SIGNING_KEY" .Values.existingSecret -}}
+{{- if and .Values.web.enabled (ne .Values.backend.service.name "chronos-app") -}}
+{{- fail "backend.service.name must stay chronos-app while web.enabled is true: the nginx.conf in the web image dials that name" -}}
+{{- end -}}
+{{- if and .Values.redis.enabled (not .Values.redis.urlFromSecret) -}}
+{{- if not .Values.redis.url -}}
+{{- fail "redis.enabled needs redis.url, or redis.urlFromSecret with a REDIS_URL key in existingSecret" -}}
+{{- end -}}
+{{- if contains "@" .Values.redis.url -}}
+{{- fail "redis.url must not carry credentials: put the full URL under REDIS_URL in existingSecret and set redis.urlFromSecret" -}}
+{{- end -}}
+{{- end -}}
+{{- if and (gt (int .Values.backend.replicaCount) 1) (not .Values.redis.enabled) -}}
+{{- fail "backend.replicaCount above 1 needs redis.enabled: WebSocket events reach the other replicas through Redis" -}}
+{{- end -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "chronos-ledger.fullname" . }}-backend
+  labels:
+    {{- include "chronos-ledger.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  replicas: {{ .Values.backend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "chronos-ledger.selectorLabels" (dict "root" . "component" "backend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chronos-ledger.selectorLabels" (dict "root" . "component" "backend") | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.backend.podSecurityContext | nindent 8 }}
+      containers:
+        - name: backend
+          image: {{ include "chronos-ledger.image" (dict "root" . "image" .Values.backend.image) | quote }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.backend.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "chronos-ledger.fullname" . }}-config
+          env:
+            - name: APP_ENV
+              value: production
+            # uv and Python write here when the root filesystem is read-only.
+            - name: UV_CACHE_DIR
+              value: /tmp/uv-cache
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret | quote }}
+                  key: DATABASE_URL
+            - name: JWT_SECRET_SIGNING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret | quote }}
+                  key: JWT_SECRET_SIGNING_KEY
+            - name: INITIAL_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret | quote }}
+                  key: INITIAL_ADMIN_PASSWORD
+                  optional: true
+            - name: VAPID_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret | quote }}
+                  key: VAPID_PRIVATE_KEY
+                  optional: true
+            {{- if .Values.redis.enabled }}
+            - name: REDIS_URL
+              {{- if .Values.redis.urlFromSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret | quote }}
+                  key: REDIS_URL
+              {{- else }}
+              value: {{ .Values.redis.url | quote }}
+              {{- end }}
+            {{- end }}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: {{ .Values.backend.probes.startup.periodSeconds }}
+            failureThreshold: {{ .Values.backend.probes.startup.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: {{ .Values.backend.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.backend.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.backend.probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: {{ .Values.backend.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.backend.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.backend.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
