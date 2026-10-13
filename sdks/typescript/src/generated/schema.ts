@@ -546,6 +546,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/resources/reservations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's own reservations
+         * @description Requires `ORG_ADMIN` or `UNIT_ADMIN`. The reservations the caller made, cancelled ones included, in id order. Only the caller's, for every role, an `ORG_ADMIN` included: a reference means something only to the system that chose it, so asking for one must return the caller's own booking and never another caller's under the same string. This is where an integration finds its bookings, not a view of everybody's.
+         *
+         *     `external_ref` matches exactly, case included, so with it the answer is one reservation or none. Under `/resources` so that a key scoped `resources:read` reaches it.
+         */
+        get: operations["resources.listReservations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/resources/{resource_id}": {
         parameters: {
             query?: never;
@@ -610,6 +632,8 @@ export interface paths {
          *     Windows are half open, so an interval ending at ten and one starting at ten do not clash. A window may end earlier than it starts, and that is how it says it runs past midnight: 22:00 to 06:00 is a night shift of eight hours, and date is the day it opens on. Equal times are refused, because 09:00 to 09:00 is either nothing at all or a full day and there is no way to tell which was meant.
          *
          *     A weekly slot reads its two times by the same rule, so an overnight booking is checked against night shifts on the timetable as well as against day ones.
+         *
+         *     An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
          */
         post: operations["resources.createReservation"];
         delete?: never;
@@ -639,7 +663,15 @@ export interface paths {
         delete: operations["resources.cancelReservation"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Change a reservation's external_ref
+         * @description Requires `ORG_ADMIN` or `UNIT_ADMIN`. Sets, changes or clears the caller's reference for a reservation. Only the reference can change: moving the window is a cancel and a new booking.
+         *
+         *     The reference is unique per requester, the same rule as on create, and taking one already on another of the requester's reservations is the same 409. When an `ORG_ADMIN` changes a reservation somebody else made, the reference is checked against that requester's, not the admin's. A cancelled reservation keeps its reference, so this is how a caller frees one to book under again.
+         *
+         *     Who may change a reservation is who may cancel it: whoever took it, or an `ORG_ADMIN`. A `UNIT_ADMIN` that did not make it gets a 403. Sending the reference the reservation already has changes nothing and leaves no entry on the change feed; a real change leaves one.
+         */
+        patch: operations["resources.updateReservation"];
         trace?: never;
     };
     "/api/v1/schedule/slots": {
@@ -2019,6 +2051,19 @@ export interface components {
             end: string;
             /** @example Ward round */
             purpose: string;
+            /**
+             * @description The caller's own identifier for the booking, kept exactly as sent. Unique per caller: a second booking under a reference the caller already used, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN`. Find the booking again with `GET /api/v1/resources/reservations?external_ref=`. Optional, and any number of bookings may leave it unset.
+             * @example visit-42
+             */
+            external_ref?: string | null;
+        };
+        /** @description What the caller may change about a reservation it already holds: its reference, for now. The window is what the conflict check and the idempotency fingerprint are built on, so moving it is a cancel and a new booking. Any other field is refused with a 422 rather than ignored. */
+        ReservationUpdate: {
+            /**
+             * @description The new reference, or null to clear it. Leaving the field out leaves the reference as it is.
+             * @example visit-43
+             */
+            external_ref?: string | null;
         };
         ReservationResponse: {
             id?: number;
@@ -2037,6 +2082,8 @@ export interface components {
             /** @description Null once the account that booked it has been deleted. A hold outlives the service account that placed it. */
             requested_by_id?: string | null;
             idempotency_key?: string;
+            /** @description The caller's own identifier for the booking, or null if it was given none. A cancelled booking keeps its reference. */
+            external_ref?: string | null;
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */
@@ -2049,6 +2096,16 @@ export interface components {
                 /** @example the resource is already taken for part of that window */
                 message?: string;
                 conflicts?: components["schemas"]["BusyInterval"][];
+            };
+        };
+        /** @description The body of a 409 with `RESERVATION_EXTERNAL_REF_TAKEN`. Names the reservation of the caller's that already carries the reference, which is the booking the caller made earlier under it and can now read, change or cancel. */
+        ReservationRefTaken: {
+            code: components["schemas"]["ErrorCode"];
+            detail: {
+                /** @example a reservation of yours already has that external_ref */
+                message: string;
+                /** @example 17 */
+                reservation_id: number;
             };
         };
         /**
@@ -2397,7 +2454,7 @@ export interface components {
             /** @description What the next poll sends as `since`. The cursor that was sent in when nothing changed, so storing it unconditionally keeps the caller's place. */
             next_cursor?: number;
         };
-        /** @description The body of every error. detail is for a person to read and code is for a program to branch on. A 409 that names what stood in the way has its own schema, with detail as an object; see ReservationConflict. */
+        /** @description The body of every error. detail is for a person to read and code is for a program to branch on. A 409 that names what stood in the way has its own schema, with detail as an object; see ReservationConflict and ReservationRefTaken. */
         ErrorResponse: {
             code: components["schemas"]["ErrorCode"];
             /** @example Not authorized. */
@@ -2408,7 +2465,7 @@ export interface components {
          * @example NOT_FOUND
          * @enum {string}
          */
-        ErrorCode: "BAD_REQUEST" | "NOT_AUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "STATE_CONFLICT" | "PAYLOAD_TOO_LARGE" | "INVALID_VALUE" | "RATE_LIMITED" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE" | "VALIDATION_FAILED" | "INVALID_CREDENTIALS" | "TOKEN_INVALID" | "API_KEY_INVALID" | "API_KEY_EXPIRED" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_DEACTIVATED" | "REFRESH_TOKEN_INVALID" | "REFRESH_TOKEN_EXPIRED" | "REFRESH_TOKEN_USED" | "REFRESH_TOKEN_REUSED" | "FEDERATED_TOKEN_INVALID" | "FEDERATED_EMAIL_MISSING" | "FEDERATED_ADMIN_REFUSED" | "FEDERATION_UNAVAILABLE" | "CURRENT_PASSWORD_INCORRECT" | "PASSWORD_UNCHANGED" | "PASSWORD_CHANGE_REQUIRED" | "INSUFFICIENT_ROLE" | "SCOPE_MISSING" | "OUTSIDE_UNIT" | "RESOURCE_CONFLICT" | "ALREADY_EXISTS" | "EMAIL_TAKEN" | "USER_DEACTIVATED" | "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_KEY_IN_PROGRESS" | "LOCATION_REQUIRED" | "LOCATION_TOO_COARSE" | "OUTSIDE_GEOFENCE" | "MANAGER_NOT_SET" | "IMPORT_REJECTED" | "CHANGE_FEED_DISABLED" | "SERVER_BUSY";
+        ErrorCode: "BAD_REQUEST" | "NOT_AUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "STATE_CONFLICT" | "PAYLOAD_TOO_LARGE" | "INVALID_VALUE" | "RATE_LIMITED" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE" | "VALIDATION_FAILED" | "INVALID_CREDENTIALS" | "TOKEN_INVALID" | "API_KEY_INVALID" | "API_KEY_EXPIRED" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_DEACTIVATED" | "REFRESH_TOKEN_INVALID" | "REFRESH_TOKEN_EXPIRED" | "REFRESH_TOKEN_USED" | "REFRESH_TOKEN_REUSED" | "FEDERATED_TOKEN_INVALID" | "FEDERATED_EMAIL_MISSING" | "FEDERATED_ADMIN_REFUSED" | "FEDERATION_UNAVAILABLE" | "CURRENT_PASSWORD_INCORRECT" | "PASSWORD_UNCHANGED" | "PASSWORD_CHANGE_REQUIRED" | "INSUFFICIENT_ROLE" | "SCOPE_MISSING" | "OUTSIDE_UNIT" | "RESOURCE_CONFLICT" | "ALREADY_EXISTS" | "EMAIL_TAKEN" | "USER_DEACTIVATED" | "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_KEY_IN_PROGRESS" | "RESERVATION_EXTERNAL_REF_TAKEN" | "LOCATION_REQUIRED" | "LOCATION_TOO_COARSE" | "OUTSIDE_GEOFENCE" | "MANAGER_NOT_SET" | "IMPORT_REJECTED" | "CHANGE_FEED_DISABLED" | "SERVER_BUSY";
     };
     responses: {
         /** @description Missing or invalid JWT. */
@@ -3737,6 +3794,36 @@ export interface operations {
             };
         };
     };
+    "resources.listReservations": {
+        parameters: {
+            query?: {
+                /** @example visit-42 */
+                external_ref?: string;
+                /** @description At most this many rows. Every matching row if omitted. */
+                limit?: components["parameters"]["Limit"];
+                /** @description Skip this many rows first. Rows come in id order. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's reservations, ordered by id. */
+            200: {
+                headers: {
+                    "X-Total-Count": components["headers"]["XTotalCount"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservationResponse"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     "resources.update": {
         parameters: {
             query?: never;
@@ -3856,13 +3943,13 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description Something already holds part of that window. */
+            /** @description The caller already has a reservation with that external_ref (`RESERVATION_EXTERNAL_REF_TAKEN`, ReservationRefTaken), or something already holds part of that window (`RESOURCE_CONFLICT`, ReservationConflict). Branch on `code`. ReservationRefTaken is listed first because its detail has required fields and the other's does not, so a client trying each shape in turn tells them apart. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReservationConflict"];
+                    "application/json": components["schemas"]["ReservationRefTaken"] | components["schemas"]["ReservationConflict"];
                 };
             };
             /** @description end was not after start, or the Idempotency-Key had already been used for a different request. */
@@ -3904,6 +3991,58 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    "resources.updateReservation": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                resource_id: number;
+                reservation_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReservationUpdate"];
+            };
+        };
+        responses: {
+            /** @description The reservation as it now stands. */
+            200: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservationResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Another of the requester's reservations already has that external_ref. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReservationRefTaken"];
+                };
+            };
+            /** @description An empty or over-long external_ref, or a field other than external_ref. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     "schedule.listSlots": {

@@ -9,6 +9,7 @@ from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
 from ...models.reservation_conflict import ReservationConflict
 from ...models.reservation_create import ReservationCreate
+from ...models.reservation_ref_taken import ReservationRefTaken
 from ...models.reservation_response import ReservationResponse
 from ...types import Response
 
@@ -39,7 +40,7 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> ErrorResponse | ReservationConflict | ReservationResponse | None:
+) -> ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse | None:
     if response.status_code == 200:
         response_200 = ReservationResponse.from_dict(response.json())
 
@@ -66,7 +67,23 @@ def _parse_response(
         return response_404
 
     if response.status_code == 409:
-        response_409 = ReservationConflict.from_dict(response.json())
+
+        def _parse_response_409(data: object) -> ReservationConflict | ReservationRefTaken:
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                response_409_type_0 = ReservationRefTaken.from_dict(data)
+
+                return response_409_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            if not isinstance(data, dict):
+                raise TypeError()
+            response_409_type_1 = ReservationConflict.from_dict(data)
+
+            return response_409_type_1
+
+        response_409 = _parse_response_409(response.json())
 
         return response_409
 
@@ -83,7 +100,7 @@ def _parse_response(
 
 def _build_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[ErrorResponse | ReservationConflict | ReservationResponse]:
+) -> Response[ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -98,7 +115,7 @@ def sync_detailed(
     client: AuthenticatedClient | Client,
     body: ReservationCreate,
     idempotency_key: str,
-) -> Response[ErrorResponse | ReservationConflict | ReservationResponse]:
+) -> Response[ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse]:
     """Hold a resource for one dated window
 
      Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
@@ -117,6 +134,14 @@ def sync_detailed(
     A weekly slot reads its two times by the same rule, so an overnight booking is checked against night
     shifts on the timetable as well as against day ones.
 
+    An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with
+    `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The
+    reference is checked after the Idempotency-Key, so a retry under the same key and the same body is
+    still a `200` with the original hold, and before the window, so the same booking sent again under a
+    new key is told it already exists rather than that the window is taken. Two requests racing for one
+    reference get one booking and the same 409 for the loser. A cancelled reservation keeps its
+    reference: clear or change it with PATCH before booking under it again.
+
     Args:
         resource_id (int):
         idempotency_key (str):
@@ -127,7 +152,7 @@ def sync_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[ErrorResponse | ReservationConflict | ReservationResponse]
+        Response[ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse]
     """
 
     kwargs = _get_kwargs(
@@ -149,7 +174,7 @@ def sync(
     client: AuthenticatedClient | Client,
     body: ReservationCreate,
     idempotency_key: str,
-) -> ErrorResponse | ReservationConflict | ReservationResponse | None:
+) -> ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse | None:
     """Hold a resource for one dated window
 
      Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
@@ -168,6 +193,14 @@ def sync(
     A weekly slot reads its two times by the same rule, so an overnight booking is checked against night
     shifts on the timetable as well as against day ones.
 
+    An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with
+    `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The
+    reference is checked after the Idempotency-Key, so a retry under the same key and the same body is
+    still a `200` with the original hold, and before the window, so the same booking sent again under a
+    new key is told it already exists rather than that the window is taken. Two requests racing for one
+    reference get one booking and the same 409 for the loser. A cancelled reservation keeps its
+    reference: clear or change it with PATCH before booking under it again.
+
     Args:
         resource_id (int):
         idempotency_key (str):
@@ -178,7 +211,7 @@ def sync(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        ErrorResponse | ReservationConflict | ReservationResponse
+        ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse
     """
 
     return sync_detailed(
@@ -195,7 +228,7 @@ async def asyncio_detailed(
     client: AuthenticatedClient | Client,
     body: ReservationCreate,
     idempotency_key: str,
-) -> Response[ErrorResponse | ReservationConflict | ReservationResponse]:
+) -> Response[ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse]:
     """Hold a resource for one dated window
 
      Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
@@ -214,6 +247,14 @@ async def asyncio_detailed(
     A weekly slot reads its two times by the same rule, so an overnight booking is checked against night
     shifts on the timetable as well as against day ones.
 
+    An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with
+    `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The
+    reference is checked after the Idempotency-Key, so a retry under the same key and the same body is
+    still a `200` with the original hold, and before the window, so the same booking sent again under a
+    new key is told it already exists rather than that the window is taken. Two requests racing for one
+    reference get one booking and the same 409 for the loser. A cancelled reservation keeps its
+    reference: clear or change it with PATCH before booking under it again.
+
     Args:
         resource_id (int):
         idempotency_key (str):
@@ -224,7 +265,7 @@ async def asyncio_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[ErrorResponse | ReservationConflict | ReservationResponse]
+        Response[ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse]
     """
 
     kwargs = _get_kwargs(
@@ -244,7 +285,7 @@ async def asyncio(
     client: AuthenticatedClient | Client,
     body: ReservationCreate,
     idempotency_key: str,
-) -> ErrorResponse | ReservationConflict | ReservationResponse | None:
+) -> ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse | None:
     """Hold a resource for one dated window
 
      Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
@@ -263,6 +304,14 @@ async def asyncio(
     A weekly slot reads its two times by the same rule, so an overnight booking is checked against night
     shifts on the timetable as well as against day ones.
 
+    An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with
+    `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The
+    reference is checked after the Idempotency-Key, so a retry under the same key and the same body is
+    still a `200` with the original hold, and before the window, so the same booking sent again under a
+    new key is told it already exists rather than that the window is taken. Two requests racing for one
+    reference get one booking and the same 409 for the loser. A cancelled reservation keeps its
+    reference: clear or change it with PATCH before booking under it again.
+
     Args:
         resource_id (int):
         idempotency_key (str):
@@ -273,7 +322,7 @@ async def asyncio(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        ErrorResponse | ReservationConflict | ReservationResponse
+        ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse
     """
 
     return (

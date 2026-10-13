@@ -7,7 +7,7 @@ import hashlib
 from fastapi import APIRouter, Depends, Header, Query, Response, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core import change_feed, clock
 from app.core.database import get_db
@@ -20,7 +20,9 @@ from app.schemas.resources import (
     AvailabilityResponse,
     ReservationConflict,
     ReservationCreate,
+    ReservationRefTaken,
     ReservationResponse,
+    ReservationUpdate,
     ResourceCreate,
     ResourceResponse,
     ResourceUpdate,
@@ -40,10 +42,13 @@ RANGE_BACKWARDS = "from must not be after to"
 RANGE_TOO_LONG = f"the range must not exceed {MAX_RANGE_DAYS} days"
 ALREADY_TAKEN = "the resource is already taken for part of that window"
 NOT_YOUR_HOLD = "only the caller that took a hold may cancel it"
+NOT_YOUR_HOLD_TO_CHANGE = "only the caller that took a hold may change it"
+REF_TAKEN = "a reservation of yours already has that external_ref"
 CODE_TAKEN = "a resource with that code already exists"
 # The name of the exclusion constraint on reservations. Postgres puts it in
-# the error text, which is how an overlap is told apart from the unique key
-# on the idempotency key: both arrive here as one IntegrityError.
+# the error text, which is how an overlap is told apart from the unique keys
+# on the idempotency key and the external_ref: all arrive here as one
+# IntegrityError.
 OVERLAP_CONSTRAINT = "ex_reservations_no_overlap"
 
 
@@ -74,6 +79,40 @@ def list_resources(
     if code is not None:
         query = query.filter(Resource.code == code.strip())
     return page.rows(query, Resource.code)
+
+
+# Declared before any route on /{resource_id}, so that a GET added there later
+# cannot take this path for a resource id.
+@router.get(
+    "/reservations",
+    operation_id="resources.listReservations",
+    response_model=list[ReservationResponse],
+)
+def list_reservations(
+    external_ref: str | None = None,
+    page: Page = Depends(),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
+):
+    """The caller's own reservations, cancelled ones included, in id order.
+
+    Only the caller's, for every role. A reference is unique per caller and
+    means nothing outside the system that chose it, so an integration asking
+    for its booking by reference must get its own booking back and never
+    another caller's under the same string. An ORG_ADMIN gets its own too:
+    this is the list an integration finds its bookings in, not a view of
+    everybody's.
+
+    external_ref matches exactly, so it returns one reservation or none.
+    """
+    query = (
+        db.query(Reservation)
+        .options(joinedload(Reservation.resource))
+        .filter(Reservation.requested_by_id == current_user.id)
+    )
+    if external_ref is not None:
+        query = query.filter(Reservation.external_ref == external_ref)
+    return [reservation_view(held, held.resource) for held in page.rows(query, Reservation.id)]
 
 
 @router.post(
@@ -225,16 +264,20 @@ def _fingerprint(resource_id: int, payload: ReservationCreate) -> str:
     The resource is in it because it is in the path and not in the body: the
     same key sent to two different rooms is two different requests, and
     without this it would look like one.
+
+    external_ref is in it only when it was sent, so every fingerprint stored
+    before the field existed still matches a retry of the same request.
     """
-    asked = "|".join(
-        (
-            str(resource_id),
-            payload.date.isoformat(),
-            payload.start.isoformat(),
-            payload.end.isoformat(),
-            payload.purpose.strip(),
-        )
-    )
+    parts = [
+        str(resource_id),
+        payload.date.isoformat(),
+        payload.start.isoformat(),
+        payload.end.isoformat(),
+        payload.purpose.strip(),
+    ]
+    if payload.external_ref is not None:
+        parts.append(payload.external_ref)
+    asked = "|".join(parts)
     return hashlib.sha256(asked.encode("utf-8")).hexdigest()
 
 
@@ -283,6 +326,16 @@ def _already_taken(conflicts: list[dict]) -> ChronosError:
     )
 
 
+def _ref_taken(existing: Reservation) -> ChronosError:
+    # An object rather than a string so the id is a field a program reads,
+    # not a number to be parsed out of a sentence.
+    return ChronosError(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={"message": REF_TAKEN, "reservation_id": existing.id},
+        code=ErrorCode.RESERVATION_EXTERNAL_REF_TAKEN,
+    )
+
+
 def reservation_view(reservation: Reservation, resource: Resource) -> dict:
     """The ReservationResponse shape, built once.
 
@@ -301,6 +354,7 @@ def reservation_view(reservation: Reservation, resource: Resource) -> dict:
         "status": reservation.status,
         "requested_by_id": reservation.requested_by_id,
         "idempotency_key": reservation.idempotency_key,
+        "external_ref": reservation.external_ref,
         "created_at": reservation.created_at,
         "cancelled_at": reservation.cancelled_at,
     }
@@ -311,7 +365,11 @@ def reservation_view(reservation: Reservation, resource: Resource) -> dict:
     operation_id="resources.createReservation",
     response_model=ReservationResponse,
     status_code=status.HTTP_201_CREATED,
-    responses={409: {"model": ReservationConflict}},
+    # The taken reference first, the same order as docs/openapi.yaml. The
+    # generated clients try each shape in turn, and the spec requires nothing
+    # in ReservationConflict's detail, so the other way round they would read
+    # a taken reference as a window conflict.
+    responses={409: {"model": ReservationRefTaken | ReservationConflict}},
 )
 def create_reservation(
     resource_id: int,
@@ -354,6 +412,13 @@ def create_reservation(
     creating a slot, moving one, and uploading a timetable are all refused
     where a booking already stands, so a hold taken here holds against the
     timetable and not only against other holds.
+
+    An external_ref already on one of the caller's reservations, cancelled
+    or not, is a 409 naming that reservation. It is checked after the key,
+    so a retry under the same key is still answered from the row it made,
+    and before the window, so a caller that books the same thing again under
+    a new key is told it already has it rather than that something is in
+    the way.
     """
     # Still here, and now for one job: holding a booking off against a class,
     # which is in another table and so is out of reach of the constraint.
@@ -377,6 +442,11 @@ def create_reservation(
         response.status_code = status.HTTP_200_OK
         return reservation_view(seen, resource)
 
+    if payload.external_ref is not None:
+        taken = _by_ref(db, current_user.id, payload.external_ref)
+        if taken is not None:
+            raise _ref_taken(taken)
+
     conflicts = _conflicts_for(db, resource_id, payload)
     if conflicts:
         raise _already_taken(conflicts)
@@ -390,6 +460,7 @@ def create_reservation(
         requested_by_id=current_user.id,
         idempotency_key=idempotency_key,
         request_fingerprint=fingerprint,
+        external_ref=payload.external_ref,
         status=ReservationStatus.HELD,
     )
     db.add(reservation)
@@ -412,6 +483,13 @@ def create_reservation(
         # Two copies of the same request arrived at once and the loser lands
         # here. The winner's row is the answer to both.
         won = _by_key(db, current_user.id, idempotency_key)
+        if won is None and payload.external_ref is not None:
+            # Or two different requests under one reference, and the other
+            # one committed first. The check above saw neither; the unique
+            # constraint saw both, and the row that won is the answer.
+            taken = _by_ref(db, current_user.id, payload.external_ref)
+            if taken is not None:
+                raise _ref_taken(taken) from None
         if won is None or won.request_fingerprint != fingerprint:
             raise ChronosError(
                 status_code=422, detail=KEY_REUSED, code=ErrorCode.IDEMPOTENCY_KEY_REUSED
@@ -433,6 +511,101 @@ def _by_key(db: Session, requester_id: str, idempotency_key: str) -> Reservation
         )
         .first()
     )
+
+
+def _by_ref(db: Session, requester_id: str, external_ref: str) -> Reservation | None:
+    """The booking this requester already gave this reference, if any."""
+    return (
+        db.query(Reservation)
+        .filter(
+            Reservation.requested_by_id == requester_id,
+            Reservation.external_ref == external_ref,
+        )
+        .first()
+    )
+
+
+def _changeable(
+    db: Session, resource_id: int, reservation_id: int, current_user, refusal: str
+) -> Reservation:
+    """The reservation, if it is on this resource and the caller may change it.
+
+    The rule cancelling has always had: whoever took the hold, or an
+    ORG_ADMIN, because a hold taken by an account that no longer exists has
+    nobody left to act on it.
+    """
+    reservation = (
+        db.query(Reservation)
+        .filter(Reservation.id == reservation_id, Reservation.resource_id == resource_id)
+        .first()
+    )
+    if not reservation:
+        raise ChronosError(
+            status_code=404, detail="Reservation not found", code=ErrorCode.NOT_FOUND
+        )
+
+    if (
+        current_user.role_type.value != "ORG_ADMIN"
+        and reservation.requested_by_id != current_user.id
+    ):
+        raise ChronosError(
+            status_code=status.HTTP_403_FORBIDDEN, detail=refusal, code=ErrorCode.FORBIDDEN
+        )
+    return reservation
+
+
+@router.patch(
+    "/{resource_id}/reservations/{reservation_id}",
+    operation_id="resources.updateReservation",
+    response_model=ReservationResponse,
+    responses={409: {"model": ReservationRefTaken}},
+)
+def update_reservation(
+    resource_id: int,
+    reservation_id: int,
+    payload: ReservationUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
+):
+    """Set, change or clear a reservation's external_ref.
+
+    The same reference on another of the requester's reservations is the
+    same 409 create gives. A cancelled reservation keeps its reference, so
+    clearing or changing it here is how a caller frees a reference to book
+    under again.
+
+    Changing nothing writes nothing: sending the reference the reservation
+    already has leaves no change marker, the same as cancelling twice.
+    """
+    reservation = _changeable(
+        db, resource_id, reservation_id, current_user, NOT_YOUR_HOLD_TO_CHANGE
+    )
+
+    fields = payload.model_dump(exclude_unset=True)
+    if "external_ref" in fields and fields["external_ref"] != reservation.external_ref:
+        ref = fields["external_ref"]
+        # Unique per requester, and the requester is the row's, not the
+        # caller's: an ORG_ADMIN changing another caller's booking is held
+        # to that caller's references. A null requester has none to clash.
+        requester = reservation.requested_by_id
+        if ref is not None and requester is not None:
+            taken = _by_ref(db, requester, ref)
+            if taken is not None:
+                raise _ref_taken(taken)
+        reservation.external_ref = ref
+        change_feed.record(db, change_feed.RESERVATION, reservation.id, change_feed.UPDATED)
+        try:
+            db.commit()
+        except IntegrityError:
+            # Another request gave the same reference to another booking
+            # between the check and this commit.
+            db.rollback()
+            taken = _by_ref(db, requester, ref) if ref is not None and requester else None
+            if taken is None:
+                raise
+            raise _ref_taken(taken) from None
+        db.refresh(reservation)
+    return reservation_view(reservation, reservation.resource)
 
 
 @router.delete(
@@ -462,23 +635,7 @@ def cancel_reservation(
     is the exception, because a hold taken by an account that no longer
     exists has nobody left to cancel it.
     """
-    reservation = (
-        db.query(Reservation)
-        .filter(Reservation.id == reservation_id, Reservation.resource_id == resource_id)
-        .first()
-    )
-    if not reservation:
-        raise ChronosError(
-            status_code=404, detail="Reservation not found", code=ErrorCode.NOT_FOUND
-        )
-
-    if (
-        current_user.role_type.value != "ORG_ADMIN"
-        and reservation.requested_by_id != current_user.id
-    ):
-        raise ChronosError(
-            status_code=status.HTTP_403_FORBIDDEN, detail=NOT_YOUR_HOLD, code=ErrorCode.FORBIDDEN
-        )
+    reservation = _changeable(db, resource_id, reservation_id, current_user, NOT_YOUR_HOLD)
 
     if reservation.status is not ReservationStatus.CANCELLED:
         reservation.status = ReservationStatus.CANCELLED
