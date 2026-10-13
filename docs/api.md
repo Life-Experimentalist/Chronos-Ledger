@@ -753,8 +753,10 @@ loses access.
 
 ## Paging
 
-Eleven routes return a whole list: `GET /users/`, `GET /users/staff/available`,
-`GET /resources/`, `GET /resources/reservations`, `GET /schedule/cycles`, `GET /schedule/slots`,
+Thirteen routes return a whole list: `GET /users/`, `GET /users/staff/available`,
+`GET /resources/`, `GET /resources/reservations`, `GET /schedule/cycles`,
+`GET /schedule/activities`, `GET /schedule/activities/{id}/enrollments`,
+`GET /schedule/slots`,
 `GET /schedule/ledger/today`, `GET /schedule/ledger`,
 `GET /schedule/staff/all/locations`, `GET /audit/` and
 `GET /webhooks/{subscription_id}/deliveries`.
