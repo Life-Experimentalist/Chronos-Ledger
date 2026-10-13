@@ -65,15 +65,57 @@ hold = chronos.create_reservation(
 ```
 
 An `Idempotency-Key` is generated when `idempotency_key` is not given, and the
-same key goes out on every retry, so a retry never takes a second hold.
+same key goes out on every retry, so a retry never takes a second hold. Every
+other write gets a key too, see [Retries](#retries).
 
 ## Retries
 
-`429`, `502`, `503`, `504` and connection errors are retried up to
-`max_retries` times (default 3). `Retry-After` is honoured up to 30 seconds;
-without it the wait doubles from 0.5 s to at most 8 s. Only `GET`, `HEAD`,
-`PUT`, `DELETE`, `OPTIONS` and requests that carry an `Idempotency-Key` are
-retried.
+A request is tried again when:
+
+- no response arrived: a refused or dropped connection, or a timeout;
+- the status is `429`, `502`, `503` or `504`;
+- the status is `409` and the body code is `IDEMPOTENCY_KEY_IN_PROGRESS`, which
+  means the first request under that key is still running. The same key gets
+  the stored answer once it finishes.
+
+No other `4xx` is retried: `400`, `401` (after the one token refresh), `403`,
+`404`, `422` and a plain `409` conflict come straight back as `ChronosError`.
+
+Every write (`POST`, `PATCH`, `PUT`, `DELETE`) is sent with an
+`Idempotency-Key`: the header you set, or a UUIDv4 the client makes once per
+call and sends again on each retry, so a retried write has one effect. A write
+is never sent without a key, which is why writes can be retried at all. `GET`,
+`HEAD` and `OPTIONS` carry none.
+
+The wait before retry `n` (counting from 0) is a random number between 0 and
+`min(max_delay, base_delay * 2**n)`. When the response has a `Retry-After`
+header, in seconds or as an HTTP date, the client waits that long instead. A
+wait that would run past the deadline is not started: the last response is
+raised instead.
+
+Settings go in a `RetryPolicy`:
+
+```python
+client = chronos.connect(
+    base_url,
+    api_key=key,
+    retry=chronos.RetryPolicy(max_attempts=6, base_delay=0.5, max_delay=10.0, deadline=60.0),
+)
+```
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `max_attempts` | 4 | Tries in all, the first included |
+| `base_delay` | 0.25 | Seconds; the first jitter ceiling |
+| `max_delay` | 8.0 | Seconds; the highest a jittered wait can reach |
+| `deadline` | 30.0 | Seconds from the first send; no wait starts past it |
+
+`retry=None` turns retries off. A write still carries its key. The deadline
+does not interrupt a request in flight, so set `timeout` for that.
+
+When the tries or the deadline run out, a response error is raised as
+`ChronosError` with the status, `code` and `detail` of the last response, and a
+transport error is raised as the `httpx` exception it was.
 
 ## Paging
 

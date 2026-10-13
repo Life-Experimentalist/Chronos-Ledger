@@ -392,6 +392,7 @@ codes. C-4 is breaking and ships with 0.17.
 - **Done when:** a test server that drops the first response and answers the
   second sees one effect for a create through each SDK; a 400 is never
   retried.
+- **Status:** shipped in 0.16.
 
 ### C-6. Failure modes written down
 
