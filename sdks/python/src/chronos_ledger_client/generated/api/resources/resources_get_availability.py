@@ -109,6 +109,10 @@ def sync_detailed(
     range that returned it: grouping by date alone files that hold under a day nobody asked about, and
     discarding anything outside the range shows a ward as free while it is staffed.
 
+    The resource's mode changes which reservations count. On a POOLED resource one booking does not make
+    it busy: each stretch in which the bookings together hold the whole pool is reported instead, as an
+    interval with every id null. On a SHARED resource reservations are never reported.
+
     Args:
         resource_id (int):
         from_ (datetime.date):
@@ -164,6 +168,10 @@ def sync(
     range that returned it: grouping by date alone files that hold under a day nobody asked about, and
     discarding anything outside the range shows a ward as free while it is staffed.
 
+    The resource's mode changes which reservations count. On a POOLED resource one booking does not make
+    it busy: each stretch in which the bookings together hold the whole pool is reported instead, as an
+    interval with every id null. On a SHARED resource reservations are never reported.
+
     Args:
         resource_id (int):
         from_ (datetime.date):
@@ -213,6 +221,10 @@ async def asyncio_detailed(
     hold dated Monday that ends at six. Read each interval by its own date and end_date and not by the
     range that returned it: grouping by date alone files that hold under a day nobody asked about, and
     discarding anything outside the range shows a ward as free while it is staffed.
+
+    The resource's mode changes which reservations count. On a POOLED resource one booking does not make
+    it busy: each stretch in which the bookings together hold the whole pool is reported instead, as an
+    interval with every id null. On a SHARED resource reservations are never reported.
 
     Args:
         resource_id (int):
@@ -266,6 +278,10 @@ async def asyncio(
     hold dated Monday that ends at six. Read each interval by its own date and end_date and not by the
     range that returned it: grouping by date alone files that hold under a day nobody asked about, and
     discarding anything outside the range shows a ward as free while it is staffed.
+
+    The resource's mode changes which reservations count. On a POOLED resource one booking does not make
+    it busy: each stretch in which the bookings together hold the whole pool is reported instead, as an
+    interval with every id null. On a SHARED resource reservations are never reported.
 
     Args:
         resource_id (int):

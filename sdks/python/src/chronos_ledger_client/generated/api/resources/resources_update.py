@@ -6,6 +6,7 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...models.bookings_would_not_fit import BookingsWouldNotFit
 from ...models.error_response import ErrorResponse
 from ...models.resource_response import ResourceResponse
 from ...models.resource_update import ResourceUpdate
@@ -39,7 +40,7 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> ErrorResponse | ResourceResponse | None:
+) -> BookingsWouldNotFit | ErrorResponse | ResourceResponse | None:
     if response.status_code == 200:
         response_200 = ResourceResponse.from_dict(response.json())
 
@@ -60,6 +61,11 @@ def _parse_response(
 
         return response_404
 
+    if response.status_code == 409:
+        response_409 = BookingsWouldNotFit.from_dict(response.json())
+
+        return response_409
+
     if response.status_code == 422:
         response_422 = ErrorResponse.from_dict(response.json())
 
@@ -73,7 +79,7 @@ def _parse_response(
 
 def _build_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[ErrorResponse | ResourceResponse]:
+) -> Response[BookingsWouldNotFit | ErrorResponse | ResourceResponse]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -88,11 +94,13 @@ def sync_detailed(
     client: AuthenticatedClient | Client,
     body: ResourceUpdate,
     idempotency_key: str | Unset = UNSET,
-) -> Response[ErrorResponse | ResourceResponse]:
+) -> Response[BookingsWouldNotFit | ErrorResponse | ResourceResponse]:
     """Update a resource
 
-     Fill in what a CSV could not know: capacity, and where the room physically is. Setting latitude and
-    longitude is what switches geofencing on for every session held there.
+     Fill in what a CSV could not know: capacity, mode, and where the room physically is. Setting
+    latitude and longitude is what switches geofencing on for every session held there. A change of mode
+    or capacity is checked against the bookings still to come and refused with 409 if any would no
+    longer fit.
 
     Args:
         resource_id (int):
@@ -106,7 +114,7 @@ def sync_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[ErrorResponse | ResourceResponse]
+        Response[BookingsWouldNotFit | ErrorResponse | ResourceResponse]
     """
 
     kwargs = _get_kwargs(
@@ -128,11 +136,13 @@ def sync(
     client: AuthenticatedClient | Client,
     body: ResourceUpdate,
     idempotency_key: str | Unset = UNSET,
-) -> ErrorResponse | ResourceResponse | None:
+) -> BookingsWouldNotFit | ErrorResponse | ResourceResponse | None:
     """Update a resource
 
-     Fill in what a CSV could not know: capacity, and where the room physically is. Setting latitude and
-    longitude is what switches geofencing on for every session held there.
+     Fill in what a CSV could not know: capacity, mode, and where the room physically is. Setting
+    latitude and longitude is what switches geofencing on for every session held there. A change of mode
+    or capacity is checked against the bookings still to come and refused with 409 if any would no
+    longer fit.
 
     Args:
         resource_id (int):
@@ -146,7 +156,7 @@ def sync(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        ErrorResponse | ResourceResponse
+        BookingsWouldNotFit | ErrorResponse | ResourceResponse
     """
 
     return sync_detailed(
@@ -163,11 +173,13 @@ async def asyncio_detailed(
     client: AuthenticatedClient | Client,
     body: ResourceUpdate,
     idempotency_key: str | Unset = UNSET,
-) -> Response[ErrorResponse | ResourceResponse]:
+) -> Response[BookingsWouldNotFit | ErrorResponse | ResourceResponse]:
     """Update a resource
 
-     Fill in what a CSV could not know: capacity, and where the room physically is. Setting latitude and
-    longitude is what switches geofencing on for every session held there.
+     Fill in what a CSV could not know: capacity, mode, and where the room physically is. Setting
+    latitude and longitude is what switches geofencing on for every session held there. A change of mode
+    or capacity is checked against the bookings still to come and refused with 409 if any would no
+    longer fit.
 
     Args:
         resource_id (int):
@@ -181,7 +193,7 @@ async def asyncio_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[ErrorResponse | ResourceResponse]
+        Response[BookingsWouldNotFit | ErrorResponse | ResourceResponse]
     """
 
     kwargs = _get_kwargs(
@@ -201,11 +213,13 @@ async def asyncio(
     client: AuthenticatedClient | Client,
     body: ResourceUpdate,
     idempotency_key: str | Unset = UNSET,
-) -> ErrorResponse | ResourceResponse | None:
+) -> BookingsWouldNotFit | ErrorResponse | ResourceResponse | None:
     """Update a resource
 
-     Fill in what a CSV could not know: capacity, and where the room physically is. Setting latitude and
-    longitude is what switches geofencing on for every session held there.
+     Fill in what a CSV could not know: capacity, mode, and where the room physically is. Setting
+    latitude and longitude is what switches geofencing on for every session held there. A change of mode
+    or capacity is checked against the bookings still to come and refused with 409 if any would no
+    longer fit.
 
     Args:
         resource_id (int):
@@ -219,7 +233,7 @@ async def asyncio(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        ErrorResponse | ResourceResponse
+        BookingsWouldNotFit | ErrorResponse | ResourceResponse
     """
 
     return (

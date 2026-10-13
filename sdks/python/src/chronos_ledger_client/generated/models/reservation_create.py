@@ -30,6 +30,10 @@ class ReservationCreate:
             `RESERVATION_EXTERNAL_REF_TAKEN`. Find the booking again with `GET
             /api/v1/resources/reservations?external_ref=`. Optional, and any number of bookings may leave it unset.
              Example: visit-42.
+        quantity (int | Unset): How many units of a POOLED resource to take. Above 1 on any other resource is a 422.
+            Part of what a retry is compared on only when it is sent, so a retry that leaves it out still matches a booking
+            made before the field existed.
+             Default: 1. Example: 2.
     """
 
     date: datetime.date
@@ -37,6 +41,7 @@ class ReservationCreate:
     end: str
     purpose: str
     external_ref: None | str | Unset = UNSET
+    quantity: int | Unset = 1
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -54,6 +59,8 @@ class ReservationCreate:
         else:
             external_ref = self.external_ref
 
+        quantity = self.quantity
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -66,6 +73,8 @@ class ReservationCreate:
         )
         if external_ref is not UNSET:
             field_dict["external_ref"] = external_ref
+        if quantity is not UNSET:
+            field_dict["quantity"] = quantity
 
         return field_dict
 
@@ -89,12 +98,15 @@ class ReservationCreate:
 
         external_ref = _parse_external_ref(d.pop("external_ref", UNSET))
 
+        quantity = d.pop("quantity", UNSET)
+
         reservation_create = cls(
             date=date,
             start=start,
             end=end,
             purpose=purpose,
             external_ref=external_ref,
+            quantity=quantity,
         )
 
         reservation_create.additional_properties = d
