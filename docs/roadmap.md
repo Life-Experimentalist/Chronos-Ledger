@@ -2,7 +2,7 @@
 
 <!-- Copyright 2026 Chronos Ledger Contributors (Apache 2.0) -->
 
-Current release: 0.14.0, with 0.15 next. This page plans the releases after
+Current release: 0.15.0, with 0.16 next. This page plans the releases after
 it. The plan is detailed on purpose: each item has a scope, the files it touches and
 a check that says when it is done, so it can be picked up without
 re-deciding anything.
@@ -163,7 +163,7 @@ against the spec. Publishing to npm and PyPI is added on request.
   `backend/app/core/redis_client.py`, `backend/app/core/schema.py`,
   `backend/app/main.py`, `backend/pyproject.toml`, `docs/standalone.md`.
 - **Done when:** 40 concurrent overlapping bookings give one `201` and 39
-  `409`; an installed wheel starts on a fresh folder. On main, in 0.15.
+  `409`; an installed wheel starts on a fresh folder. Shipped in 0.15.0.
 
 ### S-2. CI upgrades a SQLite file (dropped)
 
@@ -184,7 +184,7 @@ against the spec. Publishing to npm and PyPI is added on request.
   each of those files against an empty database of its own.
 - **Touches:** `.github/workflows/ci.yml`.
 - **Done when:** the job is green and none of those tests skip.
-- **Status:** on main, in 0.15.
+- **Status:** shipped in 0.15.0.
 
 ### S-4. The integrated flavour: `chronos-engine embedded`
 
@@ -204,7 +204,7 @@ against the spec. Publishing to npm and PyPI is added on request.
 - **Done when:** the SQLite tests cover the secret, the actor mapping and
   the stripped routes; `tests/test_embedded_pg.py` proves that every table
   and constraint lands in the named schema next to a host table of the same
-  name. On main, in 0.15.
+  name. Shipped in 0.15.0.
 
 ---
 
