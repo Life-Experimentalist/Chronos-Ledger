@@ -82,8 +82,9 @@ No other `4xx` is retried: `400`, `401` (after the one token refresh), `403`,
 `404`, `422` and a plain `409` conflict come straight back as `ChronosError`.
 
 Every write (`POST`, `PATCH`, `PUT`, `DELETE`) is sent with an
-`Idempotency-Key`: the header you set, or a UUIDv4 the client makes once per
-call and sends again on each retry, so a retried write has one effect. A write
+`Idempotency-Key`: the one you pass as `idempotency_key=` to a generated call
+that declares it, or a UUIDv4 the client makes once per call and sends again on
+each retry, so a retried write has one effect. A write
 is never sent without a key, which is why writes can be retried at all. `GET`,
 `HEAD` and `OPTIONS` carry none.
 
