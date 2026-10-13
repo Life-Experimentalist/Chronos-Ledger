@@ -2,11 +2,12 @@
 
 <!-- Copyright 2026 Chronos Ledger Contributors (Apache 2.0) -->
 
-Status: TypeScript and Python are built in 0.13, in `sdks/`, and not yet
-published to npm or PyPI. See [sdks/typescript.md](sdks/typescript.md) and
-[sdks/python.md](sdks/python.md). Go and Rust come later. The shared scenario
+Status: TypeScript and Python are built in 0.13 and Go and Rust after it, all
+in `sdks/`, and none is published to a registry yet. See
+[sdks/typescript.md](sdks/typescript.md), [sdks/python.md](sdks/python.md),
+[sdks/go.md](sdks/go.md) and [sdks/rust.md](sdks/rust.md). The shared scenario
 test in section 4 is not built; each library tests its hand-written layer
-against a mocked server. Until a language has a library, use the
+against a stub server. Until a language has a library, use the
 [REST quickstart](quickstart.md) or point any OpenAPI generator at
 [openapi.yaml](openapi.yaml).
 
@@ -31,11 +32,10 @@ before the first library is published.
    is named `<area>.<verb>` (for example `resources.createReservation`) in
    both the FastAPI routes and the YAML, and the same test checks they agree.
    Renaming one later is a breaking change for every SDK.
-3. **An OpenAPI 3.0 copy for tools that need it.** The spec is 3.1. Some Go
-   and Rust generators only read 3.0, so CI also produces a down-converted
-   `openapi-3.0.yaml` as a build artifact (not committed). Check each
-   generator's current 3.1 support when implementing; drop this step if
-   they all read 3.1 by then.
+3. **An OpenAPI 3.0 copy for tools that need it.** The spec is 3.1.
+   `oapi-codegen` reads it as it is. `progenitor` (Rust) refuses it, so
+   `sdks/rust/build.rs` rewrites it in memory (see
+   [sdks/rust.md](sdks/rust.md)) and nothing converted is committed.
 
 ## 1. Libraries
 
@@ -43,8 +43,8 @@ before the first library is published.
 |---|---|---|---|---|
 | TypeScript / JavaScript | `@life-experimentalist/chronos` | `openapi-typescript` for types, `openapi-fetch` for calls | none beyond `fetch` | npm, trusted publishing |
 | Python | `chronos-ledger-client` | `openapi-python-client` | `httpx`, `attrs` | PyPI, trusted publishing |
-| Go | `github.com/Life-Experimentalist/chronos-go` | `oapi-codegen` (client + types) | standard library | Go module proxy, via tag |
-| Rust | `chronos-ledger-client` | `progenitor` | `reqwest`, `serde` | crates.io |
+| Go | `github.com/Life-Experimentalist/Chronos-Ledger/sdks/go` | `oapi-codegen` (client + types) | standard library, `oapi-codegen/runtime` | Go module proxy, via tag |
+| Rust | `chronos-ledger-client` | `progenitor`, run from `build.rs` | `reqwest`, `serde`, `tokio` | crates.io |
 
 Names are proposals; confirm availability before the first publish.
 
@@ -52,9 +52,8 @@ TypeScript works in Node 18+, Deno, Bun and browsers. JavaScript users get the
 same package with no type checking needed.
 
 Where the code lives: one `sdks/` directory in this repository with a
-subdirectory per language, except Go, which needs its own repository (or a
-`sdks/go` module path with prefixed tags such as `sdks/go/v0.13.0`). Prefixed
-tags in this repo are the simpler choice and avoid a second repository.
+subdirectory per language. Go is the `sdks/go` module, released with prefixed
+tags such as `sdks/go/v0.15.0`, which avoids a second repository.
 
 ## 2. What each library adds by hand
 
@@ -107,10 +106,9 @@ next to `curl`.
 ## 6. Order of work
 
 1. CI spec check and `operationId`s (precondition 1 and 2).
-2. TypeScript and Python: the two that current integrators (PulseWard is
-   JavaScript) will use first.
-3. Shared scenario test harness.
-4. Go and Rust.
+2. TypeScript and Python: the two that current integrators will use first.
+3. Go and Rust.
+4. Shared scenario test harness.
 5. Language pages and quickstart tabs.
 
 ## Acceptance checks

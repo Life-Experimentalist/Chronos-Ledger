@@ -1,0 +1,9 @@
+# Settings for oapi-codegen. See docs/sdks/go.md for the command.
+package: generated
+output: generated/client.gen.go
+generate:
+  models: true
+  client: true
+output-options:
+  # The spec has two schemas that both come out as Conflict.
+  resolve-type-name-collisions: true
