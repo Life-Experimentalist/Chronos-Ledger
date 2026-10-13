@@ -968,6 +968,111 @@ components:
           items:
             $ref: "#/components/schemas/BusyInterval"
 
+    ConflictItem:
+      type: object
+      description: >
+        One of the rows taking part in a clash, with the window it holds.
+        type is `slot` (a weekly slot on one date, id is the slot),
+        `ledger_day` (a generated day, id is the ledger row) or `reservation`
+        (a held booking, id is the reservation). It is a string rather than
+        an enum so that a new kind of row can be added later; a reader should
+        skip a type it does not know. date is the day the window opened on
+        and end_date the day it finishes on, as in BusyInterval.
+      required: [type, id, date, start, end_date, end, activity_id, resource_id]
+      properties:
+        type:
+          type: string
+          example: slot
+        id:
+          type: integer
+        date:
+          type: string
+          format: date
+          example: "2026-01-05"
+        start:
+          type: string
+          format: time
+          example: "09:00:00"
+        end_date:
+          type: string
+          format: date
+          example: "2026-01-05"
+        end:
+          type: string
+          format: time
+          example: "10:00:00"
+        activity_id:
+          type: integer
+          nullable: true
+          description: Null for a reservation.
+        resource_id:
+          type: integer
+          nullable: true
+          description: Null for a slot or a day that names no resource.
+
+    Conflict:
+      type: object
+      description: >
+        Two rows that hold the same resource, or the same member, at the same
+        moment. kind is `resource_overlap`, with resource_id set and
+        member_id null, or `member_overlap`, with member_id set and
+        resource_id null. Like ConflictItem.type, kind is a string so that
+        later kinds can be added; a reader should skip a kind it does not
+        know. date, start, end_date and end are the part of the two windows
+        they share. items is a list rather than a pair so that a later kind
+        can name more than two rows.
+      required: [kind, resource_id, member_id, date, start, end_date, end, items]
+      properties:
+        kind:
+          type: string
+          example: resource_overlap
+        resource_id:
+          type: integer
+          nullable: true
+        member_id:
+          type: string
+          nullable: true
+        date:
+          type: string
+          format: date
+          example: "2026-01-05"
+        start:
+          type: string
+          format: time
+          example: "09:30:00"
+        end_date:
+          type: string
+          format: date
+          example: "2026-01-05"
+        end:
+          type: string
+          format: time
+          example: "10:00:00"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConflictItem"
+
+    ConflictReport:
+      type: object
+      required: [from, to, conflicts]
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        conflicts:
+          type: array
+          description: >
+            Every clash that reaches into the range, each pair named once.
+            Ordered by kind, then resource_id or member_id, then the moment
+            the shared window starts. Times are naive wall clock in the
+            organization's own timezone.
+          items:
+            $ref: "#/components/schemas/Conflict"
+
     ReservationCreate:
       type: object
       required: [date, start, end, purpose]
@@ -3772,6 +3877,44 @@ paths:
                   $ref: "#/components/schemas/DailyLedgerResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/v1/schedule/conflicts:
+    get:
+      operationId: schedule.listConflicts
+      tags: [Schedule]
+      summary: Clashes already in the schedule between two dates
+      description: >
+        Reports two rows holding one resource at once, and one member enrolled
+        in two activities that run at once. It reads and reports; nothing is
+        refused or changed. Both dates are included. `to` before `from`, or a
+        range longer than 92 days, is refused with 422 and code
+        INVALID_VALUE. ORG_ADMIN and UNIT_ADMIN only.
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: The clashes over the range.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConflictReport"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/UnprocessableEntity"
 

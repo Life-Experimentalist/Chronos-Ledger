@@ -170,3 +170,47 @@ class StaffLocationResponse(BaseModel):
     staff_id: str
     full_name: str
     occupancy_index: str
+
+
+class ConflictItem(BaseModel):
+    """One of the rows taking part in a clash, with the window it holds.
+
+    type is "slot" (a weekly slot on one date, id is the slot), "ledger_day"
+    (a generated day, id is the ledger row) or "reservation" (a held booking,
+    id is the reservation). A string rather than an enum so that a new kind
+    of row can be added without breaking a client that does not know it.
+    """
+
+    type: str
+    id: int
+    date: date
+    start: time
+    end_date: date
+    end: time
+    activity_id: int | None
+    resource_id: int | None
+
+
+class Conflict(BaseModel):
+    """Two rows that hold the same resource, or the same member, at once.
+
+    kind is "resource_overlap", with resource_id set, or "member_overlap",
+    with member_id set. date, start, end_date and end are the part of the two
+    windows they share. items is a list rather than a pair so that a later
+    kind can name more than two rows.
+    """
+
+    kind: str
+    resource_id: int | None
+    member_id: str | None
+    date: date
+    start: time
+    end_date: date
+    end: time
+    items: list[ConflictItem]
+
+
+class ConflictReport(BaseModel):
+    range_start: date = Field(alias="from")
+    to: date
+    conflicts: list[Conflict]

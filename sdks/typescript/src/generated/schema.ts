@@ -744,6 +744,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/schedule/conflicts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Clashes already in the schedule between two dates
+         * @description Reports two rows holding one resource at once, and one member enrolled in two activities that run at once. It reads and reports; nothing is refused or changed. Both dates are included. `to` before `from`, or a range longer than 92 days, is refused with 422 and code INVALID_VALUE. ORG_ADMIN and UNIT_ADMIN only.
+         */
+        get: operations["schedule.listConflicts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/schedule/ledger/{ledger_id}": {
         parameters: {
             query?: never;
@@ -1892,6 +1912,72 @@ export interface components {
             to?: string;
             /** @description Busy intervals, not free ones. Times are naive wall clock in the organization's own timezone, with no offset and no Z. */
             busy?: components["schemas"]["BusyInterval"][];
+        };
+        /** @description One of the rows taking part in a clash, with the window it holds. type is `slot` (a weekly slot on one date, id is the slot), `ledger_day` (a generated day, id is the ledger row) or `reservation` (a held booking, id is the reservation). It is a string rather than an enum so that a new kind of row can be added later; a reader should skip a type it does not know. date is the day the window opened on and end_date the day it finishes on, as in BusyInterval. */
+        ConflictItem: {
+            /** @example slot */
+            type: string;
+            id: number;
+            /**
+             * Format: date
+             * @example 2026-01-05
+             */
+            date: string;
+            /**
+             * Format: time
+             * @example 09:00:00
+             */
+            start: string;
+            /**
+             * Format: date
+             * @example 2026-01-05
+             */
+            end_date: string;
+            /**
+             * Format: time
+             * @example 10:00:00
+             */
+            end: string;
+            /** @description Null for a reservation. */
+            activity_id: number | null;
+            /** @description Null for a slot or a day that names no resource. */
+            resource_id: number | null;
+        };
+        /** @description Two rows that hold the same resource, or the same member, at the same moment. kind is `resource_overlap`, with resource_id set and member_id null, or `member_overlap`, with member_id set and resource_id null. Like ConflictItem.type, kind is a string so that later kinds can be added; a reader should skip a kind it does not know. date, start, end_date and end are the part of the two windows they share. items is a list rather than a pair so that a later kind can name more than two rows. */
+        Conflict: {
+            /** @example resource_overlap */
+            kind: string;
+            resource_id: number | null;
+            member_id: string | null;
+            /**
+             * Format: date
+             * @example 2026-01-05
+             */
+            date: string;
+            /**
+             * Format: time
+             * @example 09:30:00
+             */
+            start: string;
+            /**
+             * Format: date
+             * @example 2026-01-05
+             */
+            end_date: string;
+            /**
+             * Format: time
+             * @example 10:00:00
+             */
+            end: string;
+            items: components["schemas"]["ConflictItem"][];
+        };
+        ConflictReport: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            /** @description Every clash that reaches into the range, each pair named once. Ordered by kind, then resource_id or member_id, then the moment the shared window starts. Times are naive wall clock in the organization's own timezone. */
+            conflicts: components["schemas"]["Conflict"][];
         };
         ReservationCreate: {
             /**
@@ -3936,6 +4022,32 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    "schedule.listConflicts": {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The clashes over the range. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictReport"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             422: components["responses"]["UnprocessableEntity"];
         };
     };
