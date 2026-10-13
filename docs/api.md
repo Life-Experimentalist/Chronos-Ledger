@@ -438,6 +438,7 @@ land open by nobody remembering to annotate it.
 | `guest` | the kiosk endpoints |
 | `ingestion` | CSV upload and ledger generation |
 | `sync` | the calendar feed |
+| `admin` | the organization export (`admin:read`) |
 | `audit` | the audit log |
 | `changes` | the change feed |
 | `federation` | the federated identity registry |
@@ -2020,9 +2021,18 @@ The organization's data as one zip archive, sent as an attachment named
 out and how to load it are in [portability.md](portability.md).
 
 Password hashes, API key hashes, calendar feed tokens and visit code hashes
-are left out unless `include_secrets=true` is given. Refresh tokens and the
-signing key are never in it. There is no import route: `chronos-engine
-import` loads an archive into an empty database.
+are always left out. An archive with them comes only from `chronos-engine
+export --include-secrets`, which needs the database itself, so neither an
+admin key nor a stolen admin session can take them over the network. Refresh
+tokens and the signing key are never in it.
+
+Every export is written to the audit log with the account, the key and the
+status, although it is a `GET`: it hands out the whole organization. A request
+refused before the route runs (`401`, `403`) is not recorded, like any other
+refused read.
+
+There is no import route: `chronos-engine import` loads an archive into an
+empty database.
 
 ---
 
@@ -2039,6 +2049,8 @@ nobody is signed in yet when it arrives; `POST /auth/federated` is the
 exception and names the account it handed the session to, which on a first
 sign-in reads as the account having been created by its own arrival. A
 refused exchange is recorded with no account, like any other refusal.
+One read is recorded too: [GET /admin/export](#get-adminexport-org_admin),
+once it has run.
 
 Records point at no other table, so deleting an account or revoking a key
 leaves its history. If a record cannot be written the request still succeeds

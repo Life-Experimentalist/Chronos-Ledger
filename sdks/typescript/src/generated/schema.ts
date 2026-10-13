@@ -1263,7 +1263,7 @@ export interface paths {
         };
         /**
          * The organization's data as one archive
-         * @description Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON Lines file per table, described in docs/portability.md. Password hashes, API key hashes, calendar feed tokens and visit code hashes are left out unless `include_secrets` is true. Refresh tokens and the signing key are never in it. `chronos-engine import` loads it into an empty database.
+         * @description Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON Lines file per table, described in docs/portability.md. Password hashes, API key hashes, calendar feed tokens and visit code hashes are always left out; an archive with them comes only from `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every export is written to the audit log, although it is a read. `chronos-engine import` loads the archive into an empty database.
          */
         get: operations["admin.export"];
         put?: never;
@@ -5067,9 +5067,7 @@ export interface operations {
     };
     "admin.export": {
         parameters: {
-            query?: {
-                include_secrets?: boolean;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;

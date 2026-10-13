@@ -22,9 +22,10 @@ curl -H "Authorization: Bearer $TOKEN" -o chronos.zip \
   "http://localhost/api/v1/admin/export"
 ```
 
-Add `?include_secrets=true` for an archive that carries the secrets listed
-below. The route writes the archive to a temporary file and sends it, so a
-large organization waits for the whole export before the download starts.
+The route always leaves out the secrets listed below. It writes the archive
+to a temporary file and sends it, so a large organization waits for the whole
+export before the download starts. Every export is written to the audit log
+with the account, the key and the status, although it is a read.
 
 From the command line, against a stopped or running engine:
 
@@ -33,9 +34,12 @@ chronos-engine export --data-dir ./chronos-data --to ./chronos.zip
 chronos-engine export --database-url postgresql://chronos:PASSWORD@localhost/chronos --to ./chronos.zip
 ```
 
-`--include-secrets` does what the query parameter does. `--to` must not exist
-yet. An embedded deployment keeps its tables in a schema of the host's
-database, so name it: `--schema chronos` (see [embedded.md](embedded.md)).
+`--include-secrets` adds the secrets. This is the only way to get an archive
+with them: the command needs the database itself, so it exposes nothing its
+user could not read already, while over HTTP an admin API key or a stolen
+admin session would be enough. `--to` must not exist yet. An embedded
+deployment keeps its tables in a schema of the host's database, so name it:
+`--schema chronos` (see [embedded.md](embedded.md)).
 
 The export is one consistent read. On PostgreSQL it runs as a single
 `REPEATABLE READ, READ ONLY` transaction, so writes made while it runs are not
@@ -66,7 +70,8 @@ administrator, so its database is never empty.
 
 ## Secrets
 
-These columns are left off every row unless `include_secrets` is set:
+These columns are left off every row unless the export was made with
+`chronos-engine export --include-secrets`:
 
 | Table | Column | What it is |
 |---|---|---|

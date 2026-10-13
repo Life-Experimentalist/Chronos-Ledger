@@ -7,24 +7,14 @@ import httpx
 from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
-from ...types import UNSET, File, Response, Unset
+from ...types import File, Response
 
 
-def _get_kwargs(
-    *,
-    include_secrets: bool | Unset = False,
-) -> dict[str, Any]:
-
-    params: dict[str, Any] = {}
-
-    params["include_secrets"] = include_secrets
-
-    params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
+def _get_kwargs() -> dict[str, Any]:
 
     _kwargs: dict[str, Any] = {
         "method": "get",
         "url": "/api/v1/admin/export",
-        "params": params,
     }
 
     return _kwargs
@@ -73,17 +63,15 @@ def _build_response(
 def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
-    include_secrets: bool | Unset = False,
 ) -> Response[ErrorResponse | File]:
     """The organization's data as one archive
 
      Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON
     Lines file per table, described in docs/portability.md. Password hashes, API key hashes, calendar
-    feed tokens and visit code hashes are left out unless `include_secrets` is true. Refresh tokens and
-    the signing key are never in it. `chronos-engine import` loads it into an empty database.
-
-    Args:
-        include_secrets (bool | Unset):  Default: False.
+    feed tokens and visit code hashes are always left out; an archive with them comes only from
+    `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every
+    export is written to the audit log, although it is a read. `chronos-engine import` loads the archive
+    into an empty database.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -93,9 +81,7 @@ def sync_detailed(
         Response[ErrorResponse | File]
     """
 
-    kwargs = _get_kwargs(
-        include_secrets=include_secrets,
-    )
+    kwargs = _get_kwargs()
 
     response = client.get_httpx_client().request(
         **kwargs,
@@ -107,17 +93,15 @@ def sync_detailed(
 def sync(
     *,
     client: AuthenticatedClient | Client,
-    include_secrets: bool | Unset = False,
 ) -> ErrorResponse | File | None:
     """The organization's data as one archive
 
      Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON
     Lines file per table, described in docs/portability.md. Password hashes, API key hashes, calendar
-    feed tokens and visit code hashes are left out unless `include_secrets` is true. Refresh tokens and
-    the signing key are never in it. `chronos-engine import` loads it into an empty database.
-
-    Args:
-        include_secrets (bool | Unset):  Default: False.
+    feed tokens and visit code hashes are always left out; an archive with them comes only from
+    `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every
+    export is written to the audit log, although it is a read. `chronos-engine import` loads the archive
+    into an empty database.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -129,24 +113,21 @@ def sync(
 
     return sync_detailed(
         client=client,
-        include_secrets=include_secrets,
     ).parsed
 
 
 async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
-    include_secrets: bool | Unset = False,
 ) -> Response[ErrorResponse | File]:
     """The organization's data as one archive
 
      Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON
     Lines file per table, described in docs/portability.md. Password hashes, API key hashes, calendar
-    feed tokens and visit code hashes are left out unless `include_secrets` is true. Refresh tokens and
-    the signing key are never in it. `chronos-engine import` loads it into an empty database.
-
-    Args:
-        include_secrets (bool | Unset):  Default: False.
+    feed tokens and visit code hashes are always left out; an archive with them comes only from
+    `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every
+    export is written to the audit log, although it is a read. `chronos-engine import` loads the archive
+    into an empty database.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -156,9 +137,7 @@ async def asyncio_detailed(
         Response[ErrorResponse | File]
     """
 
-    kwargs = _get_kwargs(
-        include_secrets=include_secrets,
-    )
+    kwargs = _get_kwargs()
 
     response = await client.get_async_httpx_client().request(**kwargs)
 
@@ -168,17 +147,15 @@ async def asyncio_detailed(
 async def asyncio(
     *,
     client: AuthenticatedClient | Client,
-    include_secrets: bool | Unset = False,
 ) -> ErrorResponse | File | None:
     """The organization's data as one archive
 
      Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON
     Lines file per table, described in docs/portability.md. Password hashes, API key hashes, calendar
-    feed tokens and visit code hashes are left out unless `include_secrets` is true. Refresh tokens and
-    the signing key are never in it. `chronos-engine import` loads it into an empty database.
-
-    Args:
-        include_secrets (bool | Unset):  Default: False.
+    feed tokens and visit code hashes are always left out; an archive with them comes only from
+    `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every
+    export is written to the audit log, although it is a read. `chronos-engine import` loads the archive
+    into an empty database.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -191,6 +168,5 @@ async def asyncio(
     return (
         await asyncio_detailed(
             client=client,
-            include_secrets=include_secrets,
         )
     ).parsed

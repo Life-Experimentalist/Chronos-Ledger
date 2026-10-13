@@ -14,6 +14,7 @@ from sqlalchemy import func, inspect, select
 from sqlalchemy.orm import Session
 
 from app import standalone
+from app.api.v1.endpoints import admin
 from app.core.bootstrap import SEEDED_ADMIN_ID
 from app.core.database import Base, sqlite_engine
 from app.core.schema import SCHEMA_VERSION, ensure_schema
@@ -737,33 +738,89 @@ def test_an_unknown_column_is_refused(source, engines):
 
 # The route.
 
+EXPORT = "/api/v1/admin/export"
+
 
 def test_the_export_route_needs_a_signed_in_caller(client, seed_users):
-    assert client.get("/api/v1/admin/export").status_code == 401
+    assert client.get(EXPORT).status_code == 401
 
 
 def test_the_export_route_is_for_org_admins_only(client, seed_users):
     headers = login(client, "staff@test.internal", STAFF_PASSWORD)
-    assert client.get("/api/v1/admin/export", headers=headers).status_code == 403
+    assert client.get(EXPORT, headers=headers).status_code == 403
 
 
-@pytest.mark.parametrize("include_secrets", [False, True])
-def test_the_export_route_returns_the_archive(client, seed_users, include_secrets):
+def _export_records(db):
+    db.expire_all()
+    return db.query(AuditRecord).filter(AuditRecord.path == EXPORT).all()
+
+
+def test_the_export_route_returns_the_archive(client, seed_users):
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
-    response = client.get(
-        "/api/v1/admin/export",
-        params={"include_secrets": str(include_secrets).lower()},
-        headers=headers,
-    )
+    response = client.get(EXPORT, headers=headers)
     assert response.status_code == 200, response.text
     assert response.headers["content-type"] == "application/zip"
     assert "chronos-ledger-export.zip" in response.headers["content-disposition"]
     contents = members(response.content)
     manifest = json.loads(contents["manifest.json"])
-    assert manifest["secrets_included"] is include_secrets
     users = {e["name"]: e["rows"] for e in manifest["tables"]}["users"]
     assert users == 3
-    assert (b"$2b$" in contents["users.jsonl"]) is include_secrets
+
+
+def test_the_export_route_never_includes_secrets(client, seed_users):
+    """Secrets come only from the CLI; the old query parameter does nothing."""
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    response = client.get(EXPORT, params={"include_secrets": "true"}, headers=headers)
+    assert response.status_code == 200, response.text
+    contents = members(response.content)
+    assert json.loads(contents["manifest.json"])["secrets_included"] is False
+    assert b"$2b$" not in contents["users.jsonl"]
+
+
+def test_an_export_is_audited_with_the_signed_in_caller(client, db, seed_users):
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    assert client.get(EXPORT, headers=headers).status_code == 200
+    [record] = _export_records(db)
+    assert (record.actor_id, record.api_key_id) == ("ADM001", None)
+    assert (record.method, record.status_code) == ("GET", 200)
+
+
+def test_an_export_is_audited_with_the_key_that_asked(client, db, seed_users):
+    key = ApiKey(
+        key_hash=hash_api_key(SEEDED_KEY),
+        key_prefix=SEEDED_KEY[:12],
+        label="exporter",
+        user_id="ADM001",
+        scopes="admin:read",
+    )
+    db.add(key)
+    db.commit()
+    assert client.get(EXPORT, headers={"X-API-Key": SEEDED_KEY}).status_code == 200
+    [record] = _export_records(db)
+    assert (record.actor_id, record.api_key_id) == ("ADM001", key.id)
+    assert (record.method, record.status_code) == ("GET", 200)
+
+
+def test_a_failed_export_is_audited_and_leaves_no_file(client, db, seed_users, monkeypatch):
+    made = []
+    mkstemp = admin.tempfile.mkstemp
+
+    def noting_mkstemp(**kwargs):
+        handle, path = mkstemp(**kwargs)
+        made.append(path)
+        return handle, path
+
+    def fail(connection, target, include_secrets):
+        raise RuntimeError("export failed")
+
+    monkeypatch.setattr(admin.tempfile, "mkstemp", noting_mkstemp)
+    monkeypatch.setattr(admin, "export_archive", fail)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    with pytest.raises(RuntimeError, match="export failed"):
+        client.get(EXPORT, headers=headers)
+    [record] = _export_records(db)
+    assert (record.actor_id, record.status_code) == ("ADM001", 500)
+    assert not os.path.exists(made[0])
 
 
 # The CLI.
