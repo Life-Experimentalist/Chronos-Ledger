@@ -72,7 +72,7 @@ def test_health_needs_no_secret(embedded):
 def test_everything_else_needs_the_secret(embedded):
     for res in (embedded.get("/api/v1/config"), embedded.get("/api/v1/users/")):
         assert res.status_code == 401
-        assert res.json() == {"detail": "Not authenticated"}
+        assert res.json() == {"detail": "Not authenticated", "code": "NOT_AUTHENTICATED"}
         assert res.headers["WWW-Authenticate"] == "Host"
 
 

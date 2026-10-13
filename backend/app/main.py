@@ -21,6 +21,7 @@ from app.core.bootstrap import apply_initial_admin_password
 from app.core.concurrency import ConcurrencyGate
 from app.core.config import docs_are_published, get_settings
 from app.core.database import POOL_CAPACITY, SessionLocal, engine, is_sqlite
+from app.core.errors import ErrorCode, error_body, register_error_handlers
 from app.core.pagination import TOTAL_COUNT_HEADER
 from app.core.redis_client import get_redis, is_memory
 from app.core.schema import SCHEMA_VERSION, ensure_schema
@@ -210,6 +211,7 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api/v1")
+register_error_handlers(app)
 
 
 @app.exception_handler(PoolTimeout)
@@ -217,7 +219,7 @@ async def pool_exhausted(_request, _exc):
     return JSONResponse(
         status_code=503,
         headers={"Retry-After": "1"},
-        content={"detail": "Server busy, try again shortly."},
+        content=error_body(ErrorCode.SERVER_BUSY, "Server busy, try again shortly."),
     )
 
 

@@ -8,7 +8,7 @@ from typing import Any
 
 import bcrypt
 import jwt
-from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi import Depends, Header, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import InvalidTokenError
 from sqlalchemy.orm import Session
@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core import clock
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.errors import ChronosError, ErrorCode
 from app.models.db import WILDCARD_SCOPE
 
 settings = get_settings()
@@ -156,10 +157,11 @@ def get_current_user_id(
     if credentials is not None:
         payload = decode_token(credentials.credentials)
         if not payload or "sub" not in payload:
-            raise HTTPException(
+            raise ChronosError(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired token",
                 headers={"WWW-Authenticate": "Bearer"},
+                code=ErrorCode.TOKEN_INVALID,
             )
         # Read by the audit log once the response has gone out.
         request.state.actor_id = payload["sub"]
@@ -170,9 +172,10 @@ def get_current_user_id(
 
         row = db.query(ApiKey).filter(ApiKey.key_hash == hash_api_key(api_key)).first()
         if row is None:
-            raise HTTPException(
+            raise ChronosError(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid API key",
+                code=ErrorCode.API_KEY_INVALID,
             )
         # Set before the expiry and scope checks, so the audit log can say
         # which key a refused write came from. Also read by get_current_user,
@@ -188,22 +191,25 @@ def get_current_user_id(
                 row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=UTC)
             )
             if expires_at <= clock.now():
-                raise HTTPException(
+                raise ChronosError(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="API key expired",
+                    code=ErrorCode.API_KEY_EXPIRED,
                 )
         needed = required_scope(request.method, request.url.path)
         if not key_allows(row.scopes, needed):
-            raise HTTPException(
+            raise ChronosError(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"API key is not scoped for {needed or 'this request'}",
+                code=ErrorCode.SCOPE_MISSING,
             )
         return row.user_id
 
-    raise HTTPException(
+    raise ChronosError(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Not authenticated",
         headers={"WWW-Authenticate": "Bearer"},
+        code=ErrorCode.NOT_AUTHENTICATED,
     )
 
 
@@ -230,13 +236,21 @@ def get_current_user(
 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise ChronosError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+            code=ErrorCode.ACCOUNT_NOT_FOUND,
+        )
     # Ahead of the key check below, so a key bound to a deactivated account
     # stops working with it. Deactivating drops the refresh tokens, which
     # leaves an access token already issued as the only way in, and this is
     # where it ends.
     if user.deactivated_at is not None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account deactivated")
+        raise ChronosError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account deactivated",
+            code=ErrorCode.ACCOUNT_DEACTIVATED,
+        )
     # The gate moves a person off a password they were handed. A key never
     # uses that password, and issuing one already took an organization admin
     # who had
@@ -249,9 +263,10 @@ def get_current_user(
         and first_login_blocks(user)
         and not request.url.path.endswith(_FIRST_LOGIN_EXEMPT_SUFFIXES)
     ):
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Change the initial password before using other endpoints",
+            code=ErrorCode.PASSWORD_CHANGE_REQUIRED,
         )
     return user
 
@@ -271,17 +286,20 @@ def in_unit_scope(current_user, unit_code) -> bool:
 def ensure_unit_scope(current_user, unit_code) -> None:
     """A UNIT_ADMIN may only act inside their own unit; other roles pass."""
     if not in_unit_scope(current_user, unit_code):
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Outside your unit",
+            code=ErrorCode.OUTSIDE_UNIT,
         )
 
 
 def require_roles(*roles: str):
     def checker(current_user=Depends(get_current_user)):
         if current_user.role_type.value not in roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+            raise ChronosError(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+                code=ErrorCode.INSUFFICIENT_ROLE,
             )
         return current_user
 

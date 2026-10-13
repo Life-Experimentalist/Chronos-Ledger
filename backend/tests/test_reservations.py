@@ -184,6 +184,8 @@ def test_two_holds_on_the_same_hour_is_409(client, db, seed_users):
 
     res = _book(client, headers, room.id, key="booking-second-1")
     assert res.status_code == 409
+    # The code sits beside detail, so the conflicts stay where callers read them.
+    assert res.json()["code"] == "RESOURCE_CONFLICT"
     detail = res.json()["detail"]
     assert detail["message"] == "the resource is already taken for part of that window"
     assert [c["reservation_id"] for c in detail["conflicts"]] == [first["id"]]
@@ -515,6 +517,7 @@ def test_the_same_key_for_a_different_request_is_refused(client, db, seed_users)
     res = _book(client, headers, room.id, key="confused-key-01", start="16:00", end="17:00")
     assert res.status_code == 422
     assert res.json()["detail"] == "that Idempotency-Key was used for a different request"
+    assert res.json()["code"] == "IDEMPOTENCY_KEY_REUSED"
 
 
 def test_the_same_key_on_a_different_room_is_refused(client, db, seed_users):

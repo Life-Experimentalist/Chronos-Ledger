@@ -61,6 +61,7 @@ def test_a_read_scope_does_not_carry_write(client, seed_users):
     )
     assert denied.status_code == 403
     assert "schedule:write" in denied.json()["detail"]
+    assert denied.json()["code"] == "SCOPE_MISSING"
 
 
 def test_a_scope_does_not_carry_to_another_area(client, seed_users):

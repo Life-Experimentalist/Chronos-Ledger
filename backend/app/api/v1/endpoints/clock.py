@@ -18,10 +18,11 @@ concurrent calls cannot interleave their job runs.
 
 import threading
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from pydantic import AwareDatetime, BaseModel
 
 from app.core import clock
+from app.core.errors import ChronosError, ErrorCode
 from app.core.host_identity import SYSTEM_ACTOR_ID
 from app.core.security import get_current_user
 from app.cron import scheduled
@@ -47,9 +48,10 @@ class Advanced(BaseModel):
 
 def the_host_itself(user: User = Depends(get_current_user)) -> User:
     if user.id != SYSTEM_ACTOR_ID:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Only the actor {SYSTEM_ACTOR_ID!r} may advance the clock",
+            code=ErrorCode.FORBIDDEN,
         )
     return user
 
@@ -65,15 +67,17 @@ def advance_clock(body: AdvanceRequest, user: User = Depends(the_host_itself)):
     # scheduled.advance can own an event loop of its own for the jobs, and
     # the nightly run stays off the loop that serves requests.
     if not clock.is_host():
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_409_CONFLICT,
             detail="This process is on the system clock; start it with --clock-start",
+            code=ErrorCode.STATE_CONFLICT,
         )
     with _advancing:
         if body.to < clock.now():
-            raise HTTPException(
+            raise ChronosError(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"The clock does not go backwards: it reads {clock.now().isoformat()}",
+                code=ErrorCode.INVALID_VALUE,
             )
         ran = scheduled.advance(body.to)
     return Advanced(now=clock.now(), ran=ran)

@@ -5,11 +5,12 @@ import datetime
 import os
 import tempfile
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.errors import ChronosError, ErrorCode
 from app.core.security import require_roles
 from app.core.time import org_tomorrow
 from app.models.db import PlanningCycle
@@ -33,13 +34,15 @@ def upload_csv(
     # run on a worker thread. As an async def they ran on the event loop and
     # held every other request and socket until the import was done.
     if not file.filename.endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Only CSV files are accepted")
+        raise ChronosError(
+            status_code=400, detail="Only CSV files are accepted", code=ErrorCode.INVALID_VALUE
+        )
 
     # Looked up here rather than left to the foreign key. A bad id reaching the
     # database comes back as a driver error naming a constraint, which tells an
     # admin who mistyped a number nothing they can act on.
     if not db.query(PlanningCycle).filter(PlanningCycle.id == cycle_id).first():
-        raise HTTPException(status_code=404, detail="Cycle not found")
+        raise ChronosError(status_code=404, detail="Cycle not found", code=ErrorCode.NOT_FOUND)
 
     limit_mb = get_settings().csv_upload_max_mb
     # tempfile honours the platform temp dir; a hardcoded /tmp only exists on Linux.
@@ -52,9 +55,10 @@ def upload_csv(
             while chunk := file.file.read(_CHUNK_BYTES):
                 written += len(chunk)
                 if written > limit_mb * 1024 * 1024:
-                    raise HTTPException(
+                    raise ChronosError(
                         status_code=413,
                         detail=f"File is larger than the {limit_mb} MB upload limit",
+                        code=ErrorCode.PAYLOAD_TOO_LARGE,
                     )
                 f.write(chunk)
 
@@ -62,7 +66,9 @@ def upload_csv(
         result = engine.process_member_centric_matrix(tmp_path, cycle_id)
 
         if result["status"] == "FAILED":
-            raise HTTPException(status_code=422, detail=result["error_log"])
+            raise ChronosError(
+                status_code=422, detail=result["error_log"], code=ErrorCode.IMPORT_REJECTED
+            )
 
         return result
     finally:

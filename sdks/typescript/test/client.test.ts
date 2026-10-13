@@ -126,12 +126,15 @@ test("createReservation makes one key and sends it again on a retry", async () =
 
 test("a 409 carries the conflicts it names", async () => {
   const busy = [{ date: "2026-01-06", start: "14:00", end: "15:00", reservation_id: 4 }];
-  const { fetch } = server(() => json(409, { detail: { message: "the resource is already taken", conflicts: busy } }));
+  const { fetch } = server(() =>
+    json(409, { detail: { message: "the resource is already taken", conflicts: busy }, code: "RESOURCE_CONFLICT" }),
+  );
   const chronos = createChronosClient({ baseUrl: "https://c.test", apiKey: "k", fetch });
   await assert.rejects(
     chronos.createReservation(3, { date: "2026-01-06", start: "14:00", end: "15:00", purpose: "Viva" }, "key-12345"),
     (error: ChronosError) => {
       assert.equal(error.status, 409);
+      assert.equal(error.code, "RESOURCE_CONFLICT");
       assert.equal(error.message, "409: the resource is already taken");
       assert.deepEqual(error.conflicts, busy);
       return true;
@@ -167,5 +170,11 @@ test("Retry-After reads seconds and HTTP dates", () => {
 test("a non-JSON error body is kept as text", async () => {
   const { fetch } = server(() => new Response("<html>bad gateway</html>", { status: 400 }));
   const chronos = createChronosClient({ baseUrl: "https://c.test", apiKey: "k", fetch });
-  await assert.rejects(chronos.GET("/api/v1/resources/"), { status: 400, detail: "<html>bad gateway</html>" });
+  await assert.rejects(chronos.GET("/api/v1/resources/"), { status: 400, detail: "<html>bad gateway</html>", code: null });
+});
+
+test("a code newer than this client still arrives", async () => {
+  const { fetch } = server(() => json(400, { detail: "new", code: "SOMETHING_NEW" }));
+  const chronos = createChronosClient({ baseUrl: "https://c.test", apiKey: "k", fetch });
+  await assert.rejects(chronos.GET("/api/v1/resources/"), { status: 400, detail: "new", code: "SOMETHING_NEW" });
 });

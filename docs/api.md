@@ -62,6 +62,80 @@ a caller learns the password floor from a single rejected change anyway.
 
 ---
 
+## Errors
+
+Every response with a status of 400 or above carries two fields:
+
+```json
+{ "detail": "Email already registered", "code": "EMAIL_TAKEN" }
+```
+
+`detail` is for a person. Its wording can change from one release to the next,
+so do not match on it. It is a string for most errors, the
+`{"message", "conflicts"}` object for a `409` that names the bookings in the
+way, and FastAPI's list of field errors for a `422` with `VALIDATION_FAILED`.
+
+`code` is for a program. Branch on it. A code is never renamed, and never
+reused for a different meaning once it has shipped: a new kind of failure gets
+a new code. A server newer than your client can therefore send a code your
+client has never seen, so fall back to the HTTP status when the code is not
+one you handle. The list is the `ErrorCode` enum in
+[`docs/openapi.yaml`](openapi.yaml), and a test fails if the server can send a
+code that enum does not have.
+
+An unexpected failure on the server is `500` with `INTERNAL_ERROR` and the
+detail `Internal server error`. The traceback goes to the server log, never to
+the caller.
+
+| Code | Means |
+| ---- | ----- |
+| `BAD_REQUEST` | A `400` with no more specific code. |
+| `NOT_AUTHENTICATED` | No credentials, or none this route accepts. |
+| `FORBIDDEN` | A `403` with no more specific code. |
+| `NOT_FOUND` | The path, or the record it names, does not exist. |
+| `METHOD_NOT_ALLOWED` | The path exists but does not take this method. |
+| `STATE_CONFLICT` | The record is in a state that does not allow this, for example a cycle that already has activities. |
+| `PAYLOAD_TOO_LARGE` | An upload over the size limit. |
+| `INVALID_VALUE` | The request had the right shape, but a value in it was refused. |
+| `RATE_LIMITED` | Over a rate limit. `Retry-After` says when to try again. |
+| `INTERNAL_ERROR` | Something failed on the server. |
+| `SERVICE_UNAVAILABLE` | A `503` with no more specific code. |
+| `VALIDATION_FAILED` | The body, query or headers did not match the declared shape. `detail` is a list. |
+| `INVALID_CREDENTIALS` | Wrong email address or password, or a deactivated account signing in. |
+| `TOKEN_INVALID` | The bearer token did not verify or has expired. |
+| `API_KEY_INVALID` | No key matches the one sent. |
+| `API_KEY_EXPIRED` | The key is past its `expires_at`. |
+| `ACCOUNT_NOT_FOUND` | The token is valid but its account no longer exists. |
+| `ACCOUNT_DEACTIVATED` | The token's account has been deactivated. |
+| `REFRESH_TOKEN_INVALID` | The refresh token is not one this server issued. |
+| `REFRESH_TOKEN_EXPIRED` | The refresh token is past its lifetime. |
+| `REFRESH_TOKEN_USED` | The refresh token was spent in the last ten seconds, the way two tabs refreshing together look. Nothing else changes. |
+| `REFRESH_TOKEN_REUSED` | The refresh token was spent longer ago than that. Every token from the same sign-in has stopped working. |
+| `FEDERATED_TOKEN_INVALID` | The signed note from the other system did not verify. |
+| `FEDERATED_EMAIL_MISSING` | The note carries no email address to create the account with. |
+| `FEDERATED_ADMIN_REFUSED` | The note would sign in an administrator, which federation never does. |
+| `FEDERATION_UNAVAILABLE` | Federated sign-in cannot be checked right now. |
+| `CURRENT_PASSWORD_INCORRECT` | The current password given with a change is wrong. |
+| `PASSWORD_UNCHANGED` | The new password is the one already set. |
+| `PASSWORD_CHANGE_REQUIRED` | The account must change its initial password before anything else. |
+| `INSUFFICIENT_ROLE` | The account's role is too low for this route, or for the account it is changing. |
+| `SCOPE_MISSING` | The API key lacks the scope this route needs. `detail` names it. |
+| `OUTSIDE_UNIT` | A unit administrator acting on someone in another unit. |
+| `RESOURCE_CONFLICT` | A booking or schedule clashes with another. `detail.conflicts` lists what is in the way. |
+| `ALREADY_EXISTS` | A record with that identifier or code already exists. |
+| `EMAIL_TAKEN` | The email address belongs to another account. |
+| `USER_DEACTIVATED` | The account named in the request is deactivated. |
+| `IDEMPOTENCY_KEY_REUSED` | The `Idempotency-Key` was already used for a different request. |
+| `LOCATION_REQUIRED` | The session is geofenced and no location was sent. |
+| `LOCATION_TOO_COARSE` | The location's accuracy is too poor to check against the geofence. |
+| `OUTSIDE_GEOFENCE` | The location is outside the session's geofence. |
+| `MANAGER_NOT_SET` | The account has no manager to send the request to. |
+| `IMPORT_REJECTED` | A CSV import failed. `detail` is the import's error log. |
+| `CHANGE_FEED_DISABLED` | The change feed is turned off on this deployment. |
+| `SERVER_BUSY` | The server is out of database connections or request slots. Try again shortly. |
+
+---
+
 ## Authentication
 
 All endpoints except `/auth/login`, `/auth/refresh`, `/auth/logout`,
@@ -105,7 +179,10 @@ Only failed sign-ins are counted; a correct password costs nothing. Past the
 budget the answer is a `429` carrying `Retry-After` in seconds:
 
 ```json
-{ "detail": "Too many sign-in attempts from this address. Try again in 840 seconds." }
+{
+  "detail": "Too many sign-in attempts from this address. Try again in 840 seconds.",
+  "code": "RATE_LIMITED"
+}
 ```
 
 Every number is a setting, `RATE_LIMIT_*` in [`.env.example`](../.env.example).

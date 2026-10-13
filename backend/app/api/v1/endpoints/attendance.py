@@ -3,13 +3,14 @@
 
 from collections import Counter
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core import clock
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.errors import ChronosError, ErrorCode
 from app.core.security import get_current_user, in_unit_scope
 from app.core.websocket_manager import socket_broker
 from app.models.db import (
@@ -72,7 +73,9 @@ def _fence_target(ledger: DailyLedger) -> tuple[float, float, float | None] | No
 def _ledger_or_404(db: Session, ledger_id: int) -> DailyLedger:
     ledger = db.query(DailyLedger).filter(DailyLedger.id == ledger_id).first()
     if not ledger:
-        raise HTTPException(status_code=404, detail="Ledger instance not found")
+        raise ChronosError(
+            status_code=404, detail="Ledger instance not found", code=ErrorCode.NOT_FOUND
+        )
     return ledger
 
 
@@ -93,7 +96,9 @@ def _has_ledger_authority(current_user: User, ledger: DailyLedger) -> bool:
 
 def _ensure_ledger_authority(current_user: User, ledger: DailyLedger) -> None:
     if not _has_ledger_authority(current_user, ledger):
-        raise HTTPException(status_code=403, detail="Not authorized for this ledger")
+        raise ChronosError(
+            status_code=403, detail="Not authorized for this ledger", code=ErrorCode.FORBIDDEN
+        )
 
 
 @router.post("/mark", operation_id="attendance.mark")
@@ -107,7 +112,11 @@ def mark_attendance(
     # Members can only mark their own attendance; must pass geo validation
     if current_user.role_type.value == "MEMBER":
         if payload.member_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Cannot mark attendance for another member")
+            raise ChronosError(
+                status_code=403,
+                detail="Cannot mark attendance for another member",
+                code=ErrorCode.FORBIDDEN,
+            )
 
         # The horizontal target is what makes a session fenced. Altitude is
         # optional on both sides: requiring altitude_target here meant a ledger
@@ -115,21 +124,23 @@ def mark_attendance(
         target = _fence_target(ledger)
         if target is not None and ledger.delivery_format == ExecutionMode.PHYSICAL:
             if payload.user_lat is None or payload.user_lon is None:
-                raise HTTPException(
+                raise ChronosError(
                     status_code=400,
                     detail="This session is geo-fenced; location coordinates are required",
+                    code=ErrorCode.LOCATION_REQUIRED,
                 )
             radius = ledger.precision_radius_meters or 15
             factor = get_settings().geofence_accuracy_factor
             if factor and payload.user_accuracy is not None:
                 limit = radius * factor
                 if payload.user_accuracy > limit:
-                    raise HTTPException(
+                    raise ChronosError(
                         status_code=400,
                         detail=(
                             f"Location accuracy of {payload.user_accuracy:.0f} m is too coarse "
                             f"for this session's {radius:.0f} m fence; the limit is {limit:.0f} m"
                         ),
+                        code=ErrorCode.LOCATION_TOO_COARSE,
                     )
             target_lat, target_lon, target_alt = target
             valid = validate_3d_presence(
@@ -142,7 +153,11 @@ def mark_attendance(
                 radius,
             )
             if not valid:
-                raise HTTPException(status_code=400, detail="Location outside geofence boundary")
+                raise ChronosError(
+                    status_code=400,
+                    detail="Location outside geofence boundary",
+                    code=ErrorCode.OUTSIDE_GEOFENCE,
+                )
     else:
         _ensure_ledger_authority(current_user, ledger)
 
@@ -169,15 +184,20 @@ def batch_mark_attendance(
     # session in the organization by naming their own at the top.
     stray = sorted({r.ledger_instance_id for r in payload.records} - {ledger.id})
     if stray:
-        raise HTTPException(
+        raise ChronosError(
             status_code=422,
             detail=f"Every record must name ledger {ledger.id}, not {', '.join(map(str, stray))}",
+            code=ErrorCode.INVALID_VALUE,
         )
     # Two lines for one member leave it unclear which one was meant.
     counts = Counter(r.member_id for r in payload.records)
     repeated = sorted(member for member, n in counts.items() if n > 1)
     if repeated:
-        raise HTTPException(status_code=422, detail=f"Listed more than once: {', '.join(repeated)}")
+        raise ChronosError(
+            status_code=422,
+            detail=f"Listed more than once: {', '.join(repeated)}",
+            code=ErrorCode.INVALID_VALUE,
+        )
     _refuse_unknown_members(db, list(counts))
 
     _write_marks(db, ledger.id, payload.records, current_user.id)
@@ -194,7 +214,11 @@ def _refuse_unknown_members(db: Session, member_ids: list[str]) -> None:
     known = {row[0] for row in db.query(User.id).filter(User.id.in_(member_ids))}
     unknown = sorted(set(member_ids) - known)
     if unknown:
-        raise HTTPException(status_code=404, detail=f"Member not found: {', '.join(unknown)}")
+        raise ChronosError(
+            status_code=404,
+            detail=f"Member not found: {', '.join(unknown)}",
+            code=ErrorCode.NOT_FOUND,
+        )
 
 
 def _write_marks(
@@ -260,7 +284,9 @@ def get_attendance_for_ledger(
         return rows.all()
     if current_user.role_type.value == "MEMBER":
         return rows.filter(VerificationLedger.member_id == current_user.id).all()
-    raise HTTPException(status_code=403, detail="Not authorized for this ledger")
+    raise ChronosError(
+        status_code=403, detail="Not authorized for this ledger", code=ErrorCode.FORBIDDEN
+    )
 
 
 # ── Reverse RSVP (Absence System) ────────────────────────────────────────────
@@ -375,7 +401,11 @@ def decide_absence(
         .first()
     )
     if not log:
-        raise HTTPException(status_code=404, detail="Absence request not found or not authorized")
+        raise ChronosError(
+            status_code=404,
+            detail="Absence request not found or not authorized",
+            code=ErrorCode.NOT_FOUND,
+        )
 
     commit_absence_override(log_id, current_user.id, payload.decision.value, db)
     background_tasks.add_task(

@@ -4,10 +4,11 @@
 import datetime
 from datetime import UTC
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.errors import ChronosError, ErrorCode
 from app.core.pagination import Page
 from app.core.security import require_roles
 from app.core.time import org_timezone
@@ -31,7 +32,9 @@ def list_audit_records(
     a day means the day as the people working in it count it.
     """
     if from_ is not None and to is not None and to < from_:
-        raise HTTPException(status_code=422, detail="to is before from")
+        raise ChronosError(
+            status_code=422, detail="to is before from", code=ErrorCode.INVALID_VALUE
+        )
     zone = org_timezone()
     # Bounds go in as UTC. SQLite keeps the wall time it was given and drops
     # the zone, and every record was written in UTC.

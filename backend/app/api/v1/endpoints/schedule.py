@@ -4,12 +4,13 @@
 
 import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.errors import ChronosError, ErrorCode
 from app.core.pagination import Page
 from app.core.redis_client import get_redis
 from app.core.security import ensure_unit_scope, get_current_user, require_roles
@@ -63,9 +64,10 @@ def _refuse_if_held(db, cycle, resource_id, weekday, start, end) -> None:
         return
     conflicts = held_against_slot(db, resource_id, weekday, start, end, cycle=cycle)
     if conflicts:
-        raise HTTPException(
+        raise ChronosError(
             status_code=409,
             detail=jsonable_encoder({"message": ROOM_IS_HELD, "conflicts": conflicts}),
+            code=ErrorCode.RESOURCE_CONFLICT,
         )
 
 
@@ -93,9 +95,10 @@ def _refuse_if_scheduled(db, cycle, resource_id, weekday, start, end, exclude_sl
         db, resource_id, weekday, start, end, exclude_slot_id, cycle=cycle
     )
     if conflicts:
-        raise HTTPException(
+        raise ChronosError(
             status_code=409,
             detail=jsonable_encoder({"message": ROOM_IS_SCHEDULED, "conflicts": conflicts}),
+            code=ErrorCode.RESOURCE_CONFLICT,
         )
 
 
@@ -131,9 +134,10 @@ def _refuse_if_a_day_is_there(
         db, resource_id, weekday, start, end, exclude_slot_id, cycle=cycle
     )
     if conflicts:
-        raise HTTPException(
+        raise ChronosError(
             status_code=409,
             detail=jsonable_encoder({"message": ROOM_HAS_A_DAY, "conflicts": conflicts}),
+            code=ErrorCode.RESOURCE_CONFLICT,
         )
 
 
@@ -189,7 +193,7 @@ def close_cycle(
     """
     cycle = db.query(PlanningCycle).filter(PlanningCycle.id == cycle_id).first()
     if not cycle:
-        raise HTTPException(status_code=404, detail="Cycle not found")
+        raise ChronosError(status_code=404, detail="Cycle not found", code=ErrorCode.NOT_FOUND)
     cycle.operational_status = False
 
     ahead = (
@@ -255,7 +259,7 @@ def open_cycle(cycle_id: int, db: Session = Depends(get_db), _=Depends(require_r
     """
     cycle = db.query(PlanningCycle).filter(PlanningCycle.id == cycle_id).first()
     if not cycle:
-        raise HTTPException(status_code=404, detail="Cycle not found")
+        raise ChronosError(status_code=404, detail="Cycle not found", code=ErrorCode.NOT_FOUND)
     if cycle.operational_status:
         # Its slots were checked as they landed, so there is nothing to ask.
         return {"message": f"Cycle {cycle_id} was already open"}
@@ -288,9 +292,10 @@ def open_cycle(cycle_id: int, db: Session = Depends(get_db), _=Depends(require_r
 
     if conflicts:
         db.rollback()
-        raise HTTPException(
+        raise ChronosError(
             status_code=409,
             detail=jsonable_encoder({"message": CYCLE_IS_BLOCKED, "conflicts": conflicts}),
+            code=ErrorCode.RESOURCE_CONFLICT,
         )
 
     db.commit()
@@ -323,19 +328,21 @@ def clone_cycle_offerings(
     found = db.query(PlanningCycle).filter(PlanningCycle.id.in_([old_id, new_id])).all()
     cycles = {cycle.id: cycle for cycle in found}
     if old_id not in cycles or new_id not in cycles:
-        raise HTTPException(status_code=404, detail="Cycle not found")
+        raise ChronosError(status_code=404, detail="Cycle not found", code=ErrorCode.NOT_FOUND)
     if cycles[new_id].operational_status:
-        raise HTTPException(
+        raise ChronosError(
             status_code=409,
             detail=(
                 f"Cycle {new_id} is open. Clone into a closed cycle and open it "
                 "afterwards: opening is what checks the copied slots against the rooms"
             ),
+            code=ErrorCode.STATE_CONFLICT,
         )
     if db.query(Activity).filter(Activity.cycle_id == new_id).first():
-        raise HTTPException(
+        raise ChronosError(
             status_code=409,
             detail=f"Cycle {new_id} already has activities. Clone into an empty cycle",
+            code=ErrorCode.STATE_CONFLICT,
         )
 
     old_offerings = (
@@ -405,9 +412,11 @@ def _refuse_unless_active(db: Session, user_id: str, role: str) -> None:
     """
     found = db.query(User.deactivated_at).filter(User.id == user_id).first()
     if found is None:
-        raise HTTPException(status_code=404, detail=f"{role} not found")
+        raise ChronosError(status_code=404, detail=f"{role} not found", code=ErrorCode.NOT_FOUND)
     if found[0] is not None:
-        raise HTTPException(status_code=422, detail=f"{role} is deactivated")
+        raise ChronosError(
+            status_code=422, detail=f"{role} is deactivated", code=ErrorCode.USER_DEACTIVATED
+        )
 
 
 @router.post(
@@ -420,7 +429,9 @@ def create_master_slot(
 ):
     offering = db.query(Activity).filter(Activity.id == payload.activity_id).first()
     if not offering:
-        raise HTTPException(status_code=404, detail="Activity offering not found")
+        raise ChronosError(
+            status_code=404, detail="Activity offering not found", code=ErrorCode.NOT_FOUND
+        )
     ensure_unit_scope(current_user, offering.unit_code)
     if payload.primary_lead_id is not None:
         _refuse_unless_active(db, payload.primary_lead_id, "Lead")
@@ -494,7 +505,9 @@ def update_master_slot(
     """
     slot = db.query(StructuralMasterSlot).filter(StructuralMasterSlot.id == slot_id).first()
     if not slot:
-        raise HTTPException(status_code=404, detail="Master slot not found")
+        raise ChronosError(
+            status_code=404, detail="Master slot not found", code=ErrorCode.NOT_FOUND
+        )
     ensure_unit_scope(current_user, slot.activity.unit_code)
 
     fields = payload.model_dump(exclude_unset=True)
@@ -503,9 +516,10 @@ def update_master_slot(
     start = fields.get("time_window_start", slot.time_window_start)
     end = fields.get("time_window_end", slot.time_window_end)
     if end == start:
-        raise HTTPException(
+        raise ChronosError(
             status_code=422,
             detail="time_window_end must not equal time_window_start",
+            code=ErrorCode.INVALID_VALUE,
         )
 
     weekday = fields.get("day_of_week_index", slot.day_of_week_index)
@@ -585,7 +599,9 @@ def delete_master_slot(
     """
     slot = db.query(StructuralMasterSlot).filter(StructuralMasterSlot.id == slot_id).first()
     if not slot:
-        raise HTTPException(status_code=404, detail="Master slot not found")
+        raise ChronosError(
+            status_code=404, detail="Master slot not found", code=ErrorCode.NOT_FOUND
+        )
     ensure_unit_scope(current_user, slot.activity.unit_code)
 
     detached = (
@@ -621,12 +637,13 @@ def _withdraw_planned_days(slot: StructuralMasterSlot, db: Session, why: str) ->
     blocked = rows_in_use([row.id for row in planned], db)
     if blocked:
         dates = sorted(str(row.target_date) for row in planned if row.id in blocked)
-        raise HTTPException(
+        raise ChronosError(
             status_code=409,
             detail=(
                 f"This slot cannot be {why} while days it has produced carry "
                 f"attendance or notes: {', '.join(dates)}"
             ),
+            code=ErrorCode.STATE_CONFLICT,
         )
     for row in planned:
         db.delete(row)
@@ -716,7 +733,9 @@ def get_ledger_range(
     the same thing.
     """
     if to < from_:
-        raise HTTPException(status_code=422, detail="to is before from")
+        raise ChronosError(
+            status_code=422, detail="to is before from", code=ErrorCode.INVALID_VALUE
+        )
     q = db.query(DailyLedger).filter(
         DailyLedger.target_date >= from_, DailyLedger.target_date <= to
     )
@@ -736,7 +755,9 @@ def update_ledger_entry(
 ):
     entry = db.query(DailyLedger).filter(DailyLedger.id == ledger_id).first()
     if not entry:
-        raise HTTPException(status_code=404, detail="Ledger entry not found")
+        raise ChronosError(
+            status_code=404, detail="Ledger entry not found", code=ErrorCode.NOT_FOUND
+        )
     ensure_unit_scope(current_user, entry.activity.unit_code)
     if payload.substitute_lead_id is not None:
         _refuse_unless_active(db, payload.substitute_lead_id, "Substitute")
@@ -775,7 +796,7 @@ def get_staff_location(
 ):
     staff = db.query(User).filter(User.id == staff_id).first()
     if not staff or staff.deactivated_at is not None:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise ChronosError(status_code=404, detail="Staff not found", code=ErrorCode.NOT_FOUND)
 
     redis = get_redis()
     result = determine_staff_current_states([staff], db, redis)[staff.id]

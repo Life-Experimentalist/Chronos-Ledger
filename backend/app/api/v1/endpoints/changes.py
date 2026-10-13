@@ -1,7 +1,7 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
@@ -9,6 +9,7 @@ from app.api.v1.endpoints.resources import reservation_view
 from app.core import change_feed
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.errors import ChronosError, ErrorCode
 from app.core.security import require_roles
 from app.models.db import ChangeMarker, Reservation, Resource
 from app.schemas.changes import ChangeFeed
@@ -72,7 +73,11 @@ def list_changes(
     every write.
     """
     if not get_settings().change_feed_enabled:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=FEED_OFF)
+        raise ChronosError(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=FEED_OFF,
+            code=ErrorCode.CHANGE_FEED_DISABLED,
+        )
 
     if full:
         markers = (

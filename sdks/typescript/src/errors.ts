@@ -14,14 +14,22 @@ export class ChronosError extends Error {
   readonly status: number;
   /** `detail` exactly as the server returned it: a string, or an object for a 409. */
   readonly detail: unknown;
+  /**
+   * The server's code for what went wrong, such as `"EMAIL_TAKEN"`, for a
+   * program to branch on. A plain string rather than the generated ErrorCode
+   * union, so a code added after this client was built still arrives. Null
+   * when the body had no code, for example a proxy's error page.
+   */
+  readonly code: string | null;
   /** The clashing intervals of a 409, or an empty list. */
   readonly conflicts: Conflict[];
 
-  constructor(status: number, detail: unknown) {
+  constructor(status: number, detail: unknown, code: string | null = null) {
     super(describe(status, detail));
     this.name = "ChronosError";
     this.status = status;
     this.detail = detail;
+    this.code = code;
     const found = (detail as { conflicts?: unknown } | null)?.conflicts;
     this.conflicts = Array.isArray(found) ? (found as Conflict[]) : [];
   }
@@ -29,13 +37,16 @@ export class ChronosError extends Error {
   static async fromResponse(response: Response): Promise<ChronosError> {
     const text = await response.text();
     let detail: unknown = text || null;
+    let code: string | null = null;
     try {
       const body = JSON.parse(text) as unknown;
       detail = body && typeof body === "object" && "detail" in body ? body.detail : body;
+      const found = body && typeof body === "object" && "code" in body ? body.code : null;
+      code = typeof found === "string" ? found : null;
     } catch {
       // Not JSON, for example an HTML page from a proxy: keep the text.
     }
-    return new ChronosError(response.status, detail);
+    return new ChronosError(response.status, detail, code);
   }
 }
 

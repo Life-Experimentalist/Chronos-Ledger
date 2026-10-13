@@ -34,13 +34,14 @@ that account, an ORG_ADMIN, when the database is prepared.
 import hmac
 import secrets
 
-from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi import Depends, Header, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.responses import JSONResponse
 
 from app.core.database import get_db
 from app.core.emails import normalize_email
+from app.core.errors import ChronosError, ErrorCode, error_body
 from app.core.security import hash_password
 from app.models.db import InstitutionalRole, User
 
@@ -93,7 +94,7 @@ class HostSecretMiddleware:
         if not hmac.compare_digest(presented, self._expected):
             response = JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": "Not authenticated"},
+                content=error_body(ErrorCode.NOT_AUTHENTICATED, "Not authenticated"),
                 headers={"WWW-Authenticate": "Host"},
             )
             await response(scope, receive, send)
@@ -118,9 +119,10 @@ def host_actor(
     """
     actor_id = (actor_id or "").strip()
     if not actor_id or len(actor_id) > ACTOR_ID_LIMIT:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"X-Chronos-Actor is required, at most {ACTOR_ID_LIMIT} characters",
+            code=ErrorCode.NOT_AUTHENTICATED,
         )
     if actor_id == SYSTEM_ACTOR_ID:
         # The host itself: the seeded administrator, whatever role or unit
@@ -132,16 +134,18 @@ def host_actor(
             role_type = InstitutionalRole((role or "").strip())
         except ValueError:
             names = ", ".join(member.value for member in InstitutionalRole)
-            raise HTTPException(
+            raise ChronosError(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"X-Chronos-Actor-Role must be one of {names}",
+                code=ErrorCode.INVALID_VALUE,
             ) from None
     if email is not None:
         email = normalize_email(email)
         if not email or len(email) > EMAIL_LIMIT:
-            raise HTTPException(
+            raise ChronosError(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"X-Chronos-Actor-Email must be an address of at most {EMAIL_LIMIT} characters",
+                code=ErrorCode.INVALID_VALUE,
             )
     name = (name or "").strip()[:NAME_LIMIT] or None
     # Three states: absent leaves the unit as it is, so a host that sets it
@@ -149,9 +153,10 @@ def host_actor(
     if unit is not None:
         unit = unit.strip()
         if len(unit) > UNIT_LIMIT:
-            raise HTTPException(
+            raise ChronosError(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"X-Chronos-Actor-Unit must be a unit code of at most {UNIT_LIMIT} characters",
+                code=ErrorCode.INVALID_VALUE,
             )
 
     user = db.get(User, actor_id)
@@ -232,10 +237,11 @@ def _save(db: Session) -> None:
         raise _email_taken() from None
 
 
-def _email_taken() -> HTTPException:
-    return HTTPException(
+def _email_taken() -> ChronosError:
+    return ChronosError(
         status_code=status.HTTP_409_CONFLICT,
         detail="X-Chronos-Actor-Email already belongs to another account",
+        code=ErrorCode.EMAIL_TAKEN,
     )
 
 

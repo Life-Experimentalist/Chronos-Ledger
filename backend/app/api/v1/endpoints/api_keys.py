@@ -4,12 +4,13 @@
 import re
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.core import clock
 from app.core.database import get_db
+from app.core.errors import ChronosError, ErrorCode
 from app.core.security import generate_api_key, hash_api_key, require_roles
 from app.models.db import WILDCARD_SCOPE, ApiKey, User
 
@@ -78,14 +79,16 @@ def create_api_key(
 ):
     bound_user = db.query(User).filter(User.id == payload.user_id).first()
     if bound_user is None:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"User '{payload.user_id}' not found",
+            code=ErrorCode.NOT_FOUND,
         )
     if bound_user.deactivated_at is not None:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"User '{payload.user_id}' is deactivated",
+            code=ErrorCode.USER_DEACTIVATED,
         )
     # Normalised once and then stored, so the value the gate compares later is
     # the value this check passed, not a naive twin of it.
@@ -94,9 +97,10 @@ def create_api_key(
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=UTC)
         if expires_at <= clock.now():
-            raise HTTPException(
+            raise ChronosError(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="expires_at is in the past; the key would be dead on arrival",
+                code=ErrorCode.INVALID_VALUE,
             )
     raw = generate_api_key()
     row = ApiKey(
@@ -138,9 +142,10 @@ def revoke_api_key(
 ):
     row = db.query(ApiKey).filter(ApiKey.id == key_id).first()
     if row is None:
-        raise HTTPException(
+        raise ChronosError(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"API key {key_id} not found",
+            code=ErrorCode.NOT_FOUND,
         )
     db.delete(row)
     db.commit()
