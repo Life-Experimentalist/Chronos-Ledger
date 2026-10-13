@@ -80,8 +80,11 @@ from .refresh_request import RefreshRequest
 from .reservation_conflict import ReservationConflict
 from .reservation_conflict_detail import ReservationConflictDetail
 from .reservation_create import ReservationCreate
+from .reservation_ref_taken import ReservationRefTaken
+from .reservation_ref_taken_detail import ReservationRefTakenDetail
 from .reservation_response import ReservationResponse
 from .reservation_response_status import ReservationResponseStatus
+from .reservation_update import ReservationUpdate
 from .resource_create import ResourceCreate
 from .resource_response import ResourceResponse
 from .resource_response_resource_type import ResourceResponseResourceType
@@ -203,8 +206,11 @@ __all__ = (
     "ReservationConflict",
     "ReservationConflictDetail",
     "ReservationCreate",
+    "ReservationRefTaken",
+    "ReservationRefTakenDetail",
     "ReservationResponse",
     "ReservationResponseStatus",
+    "ReservationUpdate",
     "ResourceCreate",
     "ResourceResponse",
     "ResourceResponseResourceType",

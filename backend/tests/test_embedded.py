@@ -26,6 +26,7 @@ from app import standalone
 from app.core import clock, database, host_identity
 from app.core.database import get_db, get_session_opener, sqlite_engine
 from app.core.host_identity import SYSTEM_ACTOR_ID, seed_system_account
+from app.core.schema import SCHEMA_VERSION
 from app.embedded import CLOCK_OPERATIONS, STRIPPED_OPERATIONS, build_app
 from app.main import app as ordinary_app
 from app.models.db import AuditRecord, InstitutionalRole, User
@@ -468,13 +469,13 @@ def test_the_ready_line_is_one_json_object():
     assert json.loads(standalone.ready_line(_listening())) == {
         "chronos": "ready",
         "port": 54321,
-        "schema_version": "3",
+        "schema_version": SCHEMA_VERSION,
         "clock": "system",
     }
     assert json.loads(standalone.ready_line(_listening(uds="/run/chronos.sock"))) == {
         "chronos": "ready",
         "socket": "/run/chronos.sock",
-        "schema_version": "3",
+        "schema_version": SCHEMA_VERSION,
         "clock": "system",
     }
 

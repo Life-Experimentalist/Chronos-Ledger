@@ -4,9 +4,11 @@
 
 Every error body is `{"detail": ..., "code": ...}`. `detail` is for a person
 and stays exactly as it was before codes existed, because callers already
-parse it: a string for most errors, the `{"message", "conflicts"}` object for
-a 409 that names what stood in the way, and FastAPI's list of field errors
-for a malformed request. `code` is for a program to branch on.
+parse it: a string for most errors, an object with a `message` for a 409
+that names what stood in the way (`{"message", "conflicts"}` for a booking
+clash, `{"message", "reservation_id"}` for a reservation reference already
+taken), and FastAPI's list of field errors for a malformed request. `code`
+is for a program to branch on.
 
 ErrorCode is the single list of codes. docs/openapi.yaml repeats it as the
 `ErrorCode` enum, and tests/test_error_codes.py fails when the two differ. A
@@ -80,6 +82,7 @@ class ErrorCode(StrEnum):
     USER_DEACTIVATED = "USER_DEACTIVATED"
     IDEMPOTENCY_KEY_REUSED = "IDEMPOTENCY_KEY_REUSED"
     IDEMPOTENCY_KEY_IN_PROGRESS = "IDEMPOTENCY_KEY_IN_PROGRESS"
+    RESERVATION_EXTERNAL_REF_TAKEN = "RESERVATION_EXTERNAL_REF_TAKEN"
 
     # Attendance and absence.
     LOCATION_REQUIRED = "LOCATION_REQUIRED"
