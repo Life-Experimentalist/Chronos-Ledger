@@ -138,6 +138,8 @@ const (
 	TOKENINVALID                ErrorCode = "TOKEN_INVALID"
 	USERDEACTIVATED             ErrorCode = "USER_DEACTIVATED"
 	VALIDATIONFAILED            ErrorCode = "VALIDATION_FAILED"
+	WEBHOOKSECRETLIMIT          ErrorCode = "WEBHOOK_SECRET_LIMIT"
+	WEBHOOKURLREFUSED           ErrorCode = "WEBHOOK_URL_REFUSED"
 )
 
 // Valid indicates whether the value is a known member of the ErrorCode enum.
@@ -234,6 +236,10 @@ func (e ErrorCode) Valid() bool {
 	case USERDEACTIVATED:
 		return true
 	case VALIDATIONFAILED:
+		return true
+	case WEBHOOKSECRETLIMIT:
+		return true
+	case WEBHOOKURLREFUSED:
 		return true
 	default:
 		return false
@@ -444,6 +450,69 @@ func (e VerificationMetric) Valid() bool {
 	case LATE:
 		return true
 	case PRESENT:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WebhookDeliveryResponseEntityKind.
+const (
+	Reservation WebhookDeliveryResponseEntityKind = "reservation"
+	Resource    WebhookDeliveryResponseEntityKind = "resource"
+)
+
+// Valid indicates whether the value is a known member of the WebhookDeliveryResponseEntityKind enum.
+func (e WebhookDeliveryResponseEntityKind) Valid() bool {
+	switch e {
+	case Reservation:
+		return true
+	case Resource:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WebhookDeliveryResponseStatus.
+const (
+	Failed    WebhookDeliveryResponseStatus = "failed"
+	Pending   WebhookDeliveryResponseStatus = "pending"
+	Succeeded WebhookDeliveryResponseStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the WebhookDeliveryResponseStatus enum.
+func (e WebhookDeliveryResponseStatus) Valid() bool {
+	switch e {
+	case Failed:
+		return true
+	case Pending:
+		return true
+	case Succeeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WebhookEventType.
+const (
+	ReservationCreated WebhookEventType = "reservation.created"
+	ReservationUpdated WebhookEventType = "reservation.updated"
+	ResourceCreated    WebhookEventType = "resource.created"
+	ResourceUpdated    WebhookEventType = "resource.updated"
+)
+
+// Valid indicates whether the value is a known member of the WebhookEventType enum.
+func (e WebhookEventType) Valid() bool {
+	switch e {
+	case ReservationCreated:
+		return true
+	case ReservationUpdated:
+		return true
+	case ResourceCreated:
+		return true
+	case ResourceUpdated:
 		return true
 	default:
 		return false
@@ -1467,6 +1536,111 @@ type UserUpdate struct {
 // VerificationMetric Attendance marking status for a member.
 type VerificationMetric string
 
+// WebhookAttemptResponse defines model for WebhookAttemptResponse.
+type WebhookAttemptResponse struct {
+	At *time.Time `json:"at,omitempty"`
+
+	// Error Why the attempt failed, briefly. Null on success.
+	Error *string `json:"error,omitempty"`
+
+	// ResponseExcerpt The start of the response body, cut short.
+	ResponseExcerpt *string `json:"response_excerpt,omitempty"`
+	ResponseMs      *int    `json:"response_ms,omitempty"`
+
+	// StatusCode Null when no response came back.
+	StatusCode *int `json:"status_code,omitempty"`
+}
+
+// WebhookCreate defines model for WebhookCreate.
+type WebhookCreate struct {
+	// Active An inactive subscription keeps its place and sends nothing. Made active again, it sends what happened in between.
+	Active *bool `json:"active,omitempty"`
+
+	// EventTypes Which events to send. Stored sorted and deduplicated.
+	EventTypes []WebhookEventType `json:"event_types"`
+
+	// Url Where to POST each event. HTTPS, unless the host is listed in `WEBHOOK_ALLOW_HTTP_HOSTS`. A name that resolves to a loopback, private, link-local or otherwise internal address is refused unless `WEBHOOK_ALLOW_PRIVATE_TARGETS` is on.
+	Url string `json:"url"`
+}
+
+// WebhookDeliveryResponse defines model for WebhookDeliveryResponse.
+type WebhookDeliveryResponse struct {
+	AttemptCount *int                               `json:"attempt_count,omitempty"`
+	Attempts     *[]WebhookAttemptResponse          `json:"attempts,omitempty"`
+	CompletedAt  *time.Time                         `json:"completed_at,omitempty"`
+	CreatedAt    *time.Time                         `json:"created_at,omitempty"`
+	EntityId     *int                               `json:"entity_id,omitempty"`
+	EntityKind   *WebhookDeliveryResponseEntityKind `json:"entity_kind,omitempty"`
+
+	// EventId The `webhook-id` header, the same on every attempt.
+	EventId   *string           `json:"event_id,omitempty"`
+	EventType *WebhookEventType `json:"event_type,omitempty"`
+	Id        *int              `json:"id,omitempty"`
+
+	// MarkerId The change feed cursor this delivery was made from.
+	MarkerId       *int                           `json:"marker_id,omitempty"`
+	NextAttemptAt  *time.Time                     `json:"next_attempt_at,omitempty"`
+	Status         *WebhookDeliveryResponseStatus `json:"status,omitempty"`
+	SubscriptionId *int                           `json:"subscription_id,omitempty"`
+}
+
+// WebhookDeliveryResponseEntityKind defines model for WebhookDeliveryResponse.EntityKind.
+type WebhookDeliveryResponseEntityKind string
+
+// WebhookDeliveryResponseStatus defines model for WebhookDeliveryResponse.Status.
+type WebhookDeliveryResponseStatus string
+
+// WebhookEventType defines model for WebhookEventType.
+type WebhookEventType string
+
+// WebhookResponse A subscription, without its secrets.
+type WebhookResponse struct {
+	Active *bool `json:"active,omitempty"`
+
+	// ConsecutiveFailures Deliveries in a row that ran out of attempts. A success resets it.
+	ConsecutiveFailures *int                `json:"consecutive_failures,omitempty"`
+	CreatedAt           *time.Time          `json:"created_at,omitempty"`
+	EventTypes          *[]WebhookEventType `json:"event_types,omitempty"`
+	Id                  *int                `json:"id,omitempty"`
+
+	// PausedAt Set while the subscription is paused, after five deliveries in a row ran out of attempts or by an import that carried no secrets. Cleared by resume.
+	PausedAt *time.Time `json:"paused_at,omitempty"`
+
+	// PreviousSecretExpiresAt Set while the secret before the last rotation still signs alongside the current one.
+	PreviousSecretExpiresAt *time.Time `json:"previous_secret_expires_at,omitempty"`
+	UpdatedAt               *time.Time `json:"updated_at,omitempty"`
+	Url                     *string    `json:"url,omitempty"`
+}
+
+// WebhookUpdate Only the fields sent are changed.
+type WebhookUpdate struct {
+	Active     *bool               `json:"active,omitempty"`
+	EventTypes *[]WebhookEventType `json:"event_types,omitempty"`
+	Url        *string             `json:"url,omitempty"`
+}
+
+// WebhookWithSecret defines model for WebhookWithSecret.
+type WebhookWithSecret struct {
+	Active *bool `json:"active,omitempty"`
+
+	// ConsecutiveFailures Deliveries in a row that ran out of attempts. A success resets it.
+	ConsecutiveFailures *int                `json:"consecutive_failures,omitempty"`
+	CreatedAt           *time.Time          `json:"created_at,omitempty"`
+	EventTypes          *[]WebhookEventType `json:"event_types,omitempty"`
+	Id                  *int                `json:"id,omitempty"`
+
+	// PausedAt Set while the subscription is paused, after five deliveries in a row ran out of attempts or by an import that carried no secrets. Cleared by resume.
+	PausedAt *time.Time `json:"paused_at,omitempty"`
+
+	// PreviousSecretExpiresAt Set while the secret before the last rotation still signs alongside the current one.
+	PreviousSecretExpiresAt *time.Time `json:"previous_secret_expires_at,omitempty"`
+
+	// Secret The signing secret, `whsec_` and the base64 of 32 random bytes. Returned here and nowhere else, so keep it: it cannot be read back, only replaced by rotating.
+	Secret    string     `json:"secret"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+	Url       *string    `json:"url,omitempty"`
+}
+
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = string
 
@@ -1964,6 +2138,45 @@ type UsersUpdateStatusParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// WebhooksDeleteParams defines parameters for WebhooksDelete.
+type WebhooksDeleteParams struct {
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// WebhooksUpdateParams defines parameters for WebhooksUpdate.
+type WebhooksUpdateParams struct {
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// WebhooksListDeliveriesParams defines parameters for WebhooksListDeliveries.
+type WebhooksListDeliveriesParams struct {
+	// Limit At most this many rows. Every matching row if omitted.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Skip this many rows first. Rows come in id order.
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// WebhooksRedeliverParams defines parameters for WebhooksRedeliver.
+type WebhooksRedeliverParams struct {
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// WebhooksRemovePreviousSecretParams defines parameters for WebhooksRemovePreviousSecret.
+type WebhooksRemovePreviousSecretParams struct {
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// WebhooksResumeParams defines parameters for WebhooksResume.
+type WebhooksResumeParams struct {
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // ApiKeysCreateJSONRequestBody defines body for ApiKeysCreate for application/json ContentType.
 type ApiKeysCreateJSONRequestBody = ApiKeyCreate
 
@@ -2068,6 +2281,12 @@ type UsersUpdateJSONRequestBody = UserUpdate
 
 // UsersUpdateStatusJSONRequestBody defines body for UsersUpdateStatus for application/json ContentType.
 type UsersUpdateStatusJSONRequestBody = UserStatusUpdate
+
+// WebhooksCreateJSONRequestBody defines body for WebhooksCreate for application/json ContentType.
+type WebhooksCreateJSONRequestBody = WebhookCreate
+
+// WebhooksUpdateJSONRequestBody defines body for WebhooksUpdate for application/json ContentType.
+type WebhooksUpdateJSONRequestBody = WebhookUpdate
 
 // AsReservationRefTaken returns the union data inside the ResourcesCreateReservation409JSONResponseBody as a ReservationRefTaken
 func (t ResourcesCreateReservation409JSONResponseBody) AsReservationRefTaken() (ReservationRefTaken, error) {
@@ -3340,6 +3559,102 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /api/v1/users/{user_id}/status (the `UsersUpdateStatus` operationId).
 	UsersUpdateStatus(ctx context.Context, userId string, params *UsersUpdateStatusParams, body UsersUpdateStatusJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WebhooksList List webhook subscriptions
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:read`. Every subscription, oldest first, without its secrets. docs/webhooks.md describes what is sent, how it is signed and how failures are retried.
+	//
+	// Corresponds with GET /api/v1/webhooks/ (the `WebhooksList` operationId).
+	WebhooksList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WebhooksCreateWithBody Subscribe a URL to changes
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Events are made from the change feed, so the feed has to be on. The subscription starts at the newest change and is sent nothing that happened before it existed: read the rooms and the bookings in full once, as a change feed consumer does.
+	//
+	// The signing secret is in the response and nowhere else. An Idempotency-Key is ignored here, because keeping the response would keep the secret.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/webhooks/ (the `WebhooksCreate` operationId).
+	WebhooksCreateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WebhooksCreate Subscribe a URL to changes
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Events are made from the change feed, so the feed has to be on. The subscription starts at the newest change and is sent nothing that happened before it existed: read the rooms and the bookings in full once, as a change feed consumer does.
+	//
+	// The signing secret is in the response and nowhere else. An Idempotency-Key is ignored here, because keeping the response would keep the secret.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/webhooks/ (the `WebhooksCreate` operationId).
+	WebhooksCreate(ctx context.Context, body WebhooksCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WebhooksDelete Delete a webhook subscription
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Stops sending at once and removes the subscription with its deliveries and their attempts.
+	//
+	// Corresponds with DELETE /api/v1/webhooks/{subscription_id} (the `WebhooksDelete` operationId).
+	WebhooksDelete(ctx context.Context, subscriptionId int, params *WebhooksDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WebhooksGet Get a webhook subscription
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:read`.
+	//
+	// Corresponds with GET /api/v1/webhooks/{subscription_id} (the `WebhooksGet` operationId).
+	WebhooksGet(ctx context.Context, subscriptionId int, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WebhooksUpdateWithBody Change a webhook subscription
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. New event types apply to changes fanned out from now on. Switched off, a subscription keeps its place and sends nothing; switched back on, it sends what happened in between.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /api/v1/webhooks/{subscription_id} (the `WebhooksUpdate` operationId).
+	WebhooksUpdateWithBody(ctx context.Context, subscriptionId int, params *WebhooksUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WebhooksUpdate Change a webhook subscription
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. New event types apply to changes fanned out from now on. Switched off, a subscription keeps its place and sends nothing; switched back on, it sends what happened in between.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /api/v1/webhooks/{subscription_id} (the `WebhooksUpdate` operationId).
+	WebhooksUpdate(ctx context.Context, subscriptionId int, params *WebhooksUpdateParams, body WebhooksUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WebhooksListDeliveries What was sent and what came back
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:read`. Deliveries newest first, each with every attempt made at it.
+	//
+	// Corresponds with GET /api/v1/webhooks/{subscription_id}/deliveries (the `WebhooksListDeliveries` operationId).
+	WebhooksListDeliveries(ctx context.Context, subscriptionId int, params *WebhooksListDeliveriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WebhooksRedeliver Send a delivery again
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. The delivery goes back in the queue with a fresh set of attempts and is sent on the worker's next pass, with the same `webhook-id` and body and a new timestamp and signature.
+	//
+	// Corresponds with POST /api/v1/webhooks/{subscription_id}/deliveries/{delivery_id}/redeliver (the `WebhooksRedeliver` operationId).
+	WebhooksRedeliver(ctx context.Context, subscriptionId int, deliveryId int, params *WebhooksRedeliverParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WebhooksRemovePreviousSecret Stop signing with the previous secret
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. For when every receiver has moved to the new secret before the 24 hours are up. Nothing to remove is not an error.
+	//
+	// Corresponds with DELETE /api/v1/webhooks/{subscription_id}/previous-secret (the `WebhooksRemovePreviousSecret` operationId).
+	WebhooksRemovePreviousSecret(ctx context.Context, subscriptionId int, params *WebhooksRemovePreviousSecretParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WebhooksResume Resume a paused subscription
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Clears the pause and the failure count. Nothing is skipped: what changed while it was paused is sent, oldest first. Resuming one that is not paused changes nothing.
+	//
+	// Corresponds with POST /api/v1/webhooks/{subscription_id}/resume (the `WebhooksResume` operationId).
+	WebhooksResume(ctx context.Context, subscriptionId int, params *WebhooksResumeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WebhooksRotateSecret Issue a new signing secret
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. The new secret is in the response and nowhere else. The old one keeps signing alongside it for 24 hours, or until it is removed, so every send in that time carries two signatures and receivers can switch over at their own pace. An Idempotency-Key is ignored here, for the reason it is on create.
+	//
+	// Corresponds with POST /api/v1/webhooks/{subscription_id}/rotate-secret (the `WebhooksRotateSecret` operationId).
+	WebhooksRotateSecret(ctx context.Context, subscriptionId int, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// WsGetStats Count of people with an open websocket, on every instance
 	//
@@ -5647,6 +5962,222 @@ func (c *Client) UsersUpdateStatusWithBody(ctx context.Context, userId string, p
 // Corresponds with PUT /api/v1/users/{user_id}/status (the `UsersUpdateStatus` operationId).
 func (c *Client) UsersUpdateStatus(ctx context.Context, userId string, params *UsersUpdateStatusParams, body UsersUpdateStatusJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUsersUpdateStatusRequest(c.Server, userId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WebhooksList List webhook subscriptions
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:read`. Every subscription, oldest first, without its secrets. docs/webhooks.md describes what is sent, how it is signed and how failures are retried.
+//
+// Corresponds with GET /api/v1/webhooks/ (the `WebhooksList` operationId).
+func (c *Client) WebhooksList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWebhooksListRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WebhooksCreateWithBody Subscribe a URL to changes
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Events are made from the change feed, so the feed has to be on. The subscription starts at the newest change and is sent nothing that happened before it existed: read the rooms and the bookings in full once, as a change feed consumer does.
+//
+// The signing secret is in the response and nowhere else. An Idempotency-Key is ignored here, because keeping the response would keep the secret.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/webhooks/ (the `WebhooksCreate` operationId).
+func (c *Client) WebhooksCreateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWebhooksCreateRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WebhooksCreate Subscribe a URL to changes
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Events are made from the change feed, so the feed has to be on. The subscription starts at the newest change and is sent nothing that happened before it existed: read the rooms and the bookings in full once, as a change feed consumer does.
+//
+// The signing secret is in the response and nowhere else. An Idempotency-Key is ignored here, because keeping the response would keep the secret.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/webhooks/ (the `WebhooksCreate` operationId).
+func (c *Client) WebhooksCreate(ctx context.Context, body WebhooksCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWebhooksCreateRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WebhooksDelete Delete a webhook subscription
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Stops sending at once and removes the subscription with its deliveries and their attempts.
+//
+// Corresponds with DELETE /api/v1/webhooks/{subscription_id} (the `WebhooksDelete` operationId).
+func (c *Client) WebhooksDelete(ctx context.Context, subscriptionId int, params *WebhooksDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWebhooksDeleteRequest(c.Server, subscriptionId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WebhooksGet Get a webhook subscription
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:read`.
+//
+// Corresponds with GET /api/v1/webhooks/{subscription_id} (the `WebhooksGet` operationId).
+func (c *Client) WebhooksGet(ctx context.Context, subscriptionId int, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWebhooksGetRequest(c.Server, subscriptionId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WebhooksUpdateWithBody Change a webhook subscription
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. New event types apply to changes fanned out from now on. Switched off, a subscription keeps its place and sends nothing; switched back on, it sends what happened in between.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /api/v1/webhooks/{subscription_id} (the `WebhooksUpdate` operationId).
+func (c *Client) WebhooksUpdateWithBody(ctx context.Context, subscriptionId int, params *WebhooksUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWebhooksUpdateRequestWithBody(c.Server, subscriptionId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WebhooksUpdate Change a webhook subscription
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. New event types apply to changes fanned out from now on. Switched off, a subscription keeps its place and sends nothing; switched back on, it sends what happened in between.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /api/v1/webhooks/{subscription_id} (the `WebhooksUpdate` operationId).
+func (c *Client) WebhooksUpdate(ctx context.Context, subscriptionId int, params *WebhooksUpdateParams, body WebhooksUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWebhooksUpdateRequest(c.Server, subscriptionId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WebhooksListDeliveries What was sent and what came back
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:read`. Deliveries newest first, each with every attempt made at it.
+//
+// Corresponds with GET /api/v1/webhooks/{subscription_id}/deliveries (the `WebhooksListDeliveries` operationId).
+func (c *Client) WebhooksListDeliveries(ctx context.Context, subscriptionId int, params *WebhooksListDeliveriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWebhooksListDeliveriesRequest(c.Server, subscriptionId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WebhooksRedeliver Send a delivery again
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. The delivery goes back in the queue with a fresh set of attempts and is sent on the worker's next pass, with the same `webhook-id` and body and a new timestamp and signature.
+//
+// Corresponds with POST /api/v1/webhooks/{subscription_id}/deliveries/{delivery_id}/redeliver (the `WebhooksRedeliver` operationId).
+func (c *Client) WebhooksRedeliver(ctx context.Context, subscriptionId int, deliveryId int, params *WebhooksRedeliverParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWebhooksRedeliverRequest(c.Server, subscriptionId, deliveryId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WebhooksRemovePreviousSecret Stop signing with the previous secret
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. For when every receiver has moved to the new secret before the 24 hours are up. Nothing to remove is not an error.
+//
+// Corresponds with DELETE /api/v1/webhooks/{subscription_id}/previous-secret (the `WebhooksRemovePreviousSecret` operationId).
+func (c *Client) WebhooksRemovePreviousSecret(ctx context.Context, subscriptionId int, params *WebhooksRemovePreviousSecretParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWebhooksRemovePreviousSecretRequest(c.Server, subscriptionId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WebhooksResume Resume a paused subscription
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Clears the pause and the failure count. Nothing is skipped: what changed while it was paused is sent, oldest first. Resuming one that is not paused changes nothing.
+//
+// Corresponds with POST /api/v1/webhooks/{subscription_id}/resume (the `WebhooksResume` operationId).
+func (c *Client) WebhooksResume(ctx context.Context, subscriptionId int, params *WebhooksResumeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWebhooksResumeRequest(c.Server, subscriptionId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WebhooksRotateSecret Issue a new signing secret
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. The new secret is in the response and nowhere else. The old one keeps signing alongside it for 24 hours, or until it is removed, so every send in that time carries two signatures and receivers can switch over at their own pace. An Idempotency-Key is ignored here, for the reason it is on create.
+//
+// Corresponds with POST /api/v1/webhooks/{subscription_id}/rotate-secret (the `WebhooksRotateSecret` operationId).
+func (c *Client) WebhooksRotateSecret(ctx context.Context, subscriptionId int, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWebhooksRotateSecretRequest(c.Server, subscriptionId)
 	if err != nil {
 		return nil, err
 	}
@@ -10450,6 +10981,479 @@ func NewUsersUpdateStatusRequestWithBody(server string, userId string, params *U
 	return req, nil
 }
 
+// NewWebhooksListRequest constructs an http.Request for the WebhooksList method
+func NewWebhooksListRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/webhooks/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewWebhooksCreateRequest calls the generic WebhooksCreate builder with application/json body
+func NewWebhooksCreateRequest(server string, body WebhooksCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewWebhooksCreateRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewWebhooksCreateRequestWithBody constructs an http.Request for the WebhooksCreate method, with any body, and a specified content type
+func NewWebhooksCreateRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/webhooks/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewWebhooksDeleteRequest constructs an http.Request for the WebhooksDelete method
+func NewWebhooksDeleteRequest(server string, subscriptionId int, params *WebhooksDeleteParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "subscription_id", subscriptionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/webhooks/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewWebhooksGetRequest constructs an http.Request for the WebhooksGet method
+func NewWebhooksGetRequest(server string, subscriptionId int) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "subscription_id", subscriptionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/webhooks/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewWebhooksUpdateRequest calls the generic WebhooksUpdate builder with application/json body
+func NewWebhooksUpdateRequest(server string, subscriptionId int, params *WebhooksUpdateParams, body WebhooksUpdateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewWebhooksUpdateRequestWithBody(server, subscriptionId, params, "application/json", bodyReader)
+}
+
+// NewWebhooksUpdateRequestWithBody constructs an http.Request for the WebhooksUpdate method, with any body, and a specified content type
+func NewWebhooksUpdateRequestWithBody(server string, subscriptionId int, params *WebhooksUpdateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "subscription_id", subscriptionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/webhooks/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewWebhooksListDeliveriesRequest constructs an http.Request for the WebhooksListDeliveries method
+func NewWebhooksListDeliveriesRequest(server string, subscriptionId int, params *WebhooksListDeliveriesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "subscription_id", subscriptionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/webhooks/%s/deliveries", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "offset", *params.Offset, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewWebhooksRedeliverRequest constructs an http.Request for the WebhooksRedeliver method
+func NewWebhooksRedeliverRequest(server string, subscriptionId int, deliveryId int, params *WebhooksRedeliverParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "subscription_id", subscriptionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "delivery_id", deliveryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/webhooks/%s/deliveries/%s/redeliver", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewWebhooksRemovePreviousSecretRequest constructs an http.Request for the WebhooksRemovePreviousSecret method
+func NewWebhooksRemovePreviousSecretRequest(server string, subscriptionId int, params *WebhooksRemovePreviousSecretParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "subscription_id", subscriptionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/webhooks/%s/previous-secret", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewWebhooksResumeRequest constructs an http.Request for the WebhooksResume method
+func NewWebhooksResumeRequest(server string, subscriptionId int, params *WebhooksResumeParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "subscription_id", subscriptionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/webhooks/%s/resume", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewWebhooksRotateSecretRequest constructs an http.Request for the WebhooksRotateSecret method
+func NewWebhooksRotateSecretRequest(server string, subscriptionId int) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "subscription_id", subscriptionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/webhooks/%s/rotate-secret", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewWsGetStatsRequest constructs an http.Request for the WsGetStats method
 func NewWsGetStatsRequest(server string) (*http.Request, error) {
 	var err error
@@ -11754,6 +12758,118 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PUT /api/v1/users/{user_id}/status (the `UsersUpdateStatus` operationId).
 	UsersUpdateStatusWithResponse(ctx context.Context, userId string, params *UsersUpdateStatusParams, body UsersUpdateStatusJSONRequestBody, reqEditors ...RequestEditorFn) (*UsersUpdateStatusResponse, error)
+
+	// WebhooksListWithResponse List webhook subscriptions
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:read`. Every subscription, oldest first, without its secrets. docs/webhooks.md describes what is sent, how it is signed and how failures are retried.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/webhooks/ (the `WebhooksList` operationId).
+	WebhooksListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*WebhooksListResponse, error)
+
+	// WebhooksCreateWithBodyWithResponse Subscribe a URL to changes
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Events are made from the change feed, so the feed has to be on. The subscription starts at the newest change and is sent nothing that happened before it existed: read the rooms and the bookings in full once, as a change feed consumer does.
+	//
+	// The signing secret is in the response and nowhere else. An Idempotency-Key is ignored here, because keeping the response would keep the secret.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/webhooks/ (the `WebhooksCreate` operationId).
+	WebhooksCreateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*WebhooksCreateResponse, error)
+
+	// WebhooksCreateWithResponse Subscribe a URL to changes
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Events are made from the change feed, so the feed has to be on. The subscription starts at the newest change and is sent nothing that happened before it existed: read the rooms and the bookings in full once, as a change feed consumer does.
+	//
+	// The signing secret is in the response and nowhere else. An Idempotency-Key is ignored here, because keeping the response would keep the secret.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/webhooks/ (the `WebhooksCreate` operationId).
+	WebhooksCreateWithResponse(ctx context.Context, body WebhooksCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*WebhooksCreateResponse, error)
+
+	// WebhooksDeleteWithResponse Delete a webhook subscription
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Stops sending at once and removes the subscription with its deliveries and their attempts.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/v1/webhooks/{subscription_id} (the `WebhooksDelete` operationId).
+	WebhooksDeleteWithResponse(ctx context.Context, subscriptionId int, params *WebhooksDeleteParams, reqEditors ...RequestEditorFn) (*WebhooksDeleteResponse, error)
+
+	// WebhooksGetWithResponse Get a webhook subscription
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:read`.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/webhooks/{subscription_id} (the `WebhooksGet` operationId).
+	WebhooksGetWithResponse(ctx context.Context, subscriptionId int, reqEditors ...RequestEditorFn) (*WebhooksGetResponse, error)
+
+	// WebhooksUpdateWithBodyWithResponse Change a webhook subscription
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. New event types apply to changes fanned out from now on. Switched off, a subscription keeps its place and sends nothing; switched back on, it sends what happened in between.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /api/v1/webhooks/{subscription_id} (the `WebhooksUpdate` operationId).
+	WebhooksUpdateWithBodyWithResponse(ctx context.Context, subscriptionId int, params *WebhooksUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*WebhooksUpdateResponse, error)
+
+	// WebhooksUpdateWithResponse Change a webhook subscription
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. New event types apply to changes fanned out from now on. Switched off, a subscription keeps its place and sends nothing; switched back on, it sends what happened in between.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /api/v1/webhooks/{subscription_id} (the `WebhooksUpdate` operationId).
+	WebhooksUpdateWithResponse(ctx context.Context, subscriptionId int, params *WebhooksUpdateParams, body WebhooksUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*WebhooksUpdateResponse, error)
+
+	// WebhooksListDeliveriesWithResponse What was sent and what came back
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:read`. Deliveries newest first, each with every attempt made at it.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/webhooks/{subscription_id}/deliveries (the `WebhooksListDeliveries` operationId).
+	WebhooksListDeliveriesWithResponse(ctx context.Context, subscriptionId int, params *WebhooksListDeliveriesParams, reqEditors ...RequestEditorFn) (*WebhooksListDeliveriesResponse, error)
+
+	// WebhooksRedeliverWithResponse Send a delivery again
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. The delivery goes back in the queue with a fresh set of attempts and is sent on the worker's next pass, with the same `webhook-id` and body and a new timestamp and signature.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/webhooks/{subscription_id}/deliveries/{delivery_id}/redeliver (the `WebhooksRedeliver` operationId).
+	WebhooksRedeliverWithResponse(ctx context.Context, subscriptionId int, deliveryId int, params *WebhooksRedeliverParams, reqEditors ...RequestEditorFn) (*WebhooksRedeliverResponse, error)
+
+	// WebhooksRemovePreviousSecretWithResponse Stop signing with the previous secret
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. For when every receiver has moved to the new secret before the 24 hours are up. Nothing to remove is not an error.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/v1/webhooks/{subscription_id}/previous-secret (the `WebhooksRemovePreviousSecret` operationId).
+	WebhooksRemovePreviousSecretWithResponse(ctx context.Context, subscriptionId int, params *WebhooksRemovePreviousSecretParams, reqEditors ...RequestEditorFn) (*WebhooksRemovePreviousSecretResponse, error)
+
+	// WebhooksResumeWithResponse Resume a paused subscription
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Clears the pause and the failure count. Nothing is skipped: what changed while it was paused is sent, oldest first. Resuming one that is not paused changes nothing.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/webhooks/{subscription_id}/resume (the `WebhooksResume` operationId).
+	WebhooksResumeWithResponse(ctx context.Context, subscriptionId int, params *WebhooksResumeParams, reqEditors ...RequestEditorFn) (*WebhooksResumeResponse, error)
+
+	// WebhooksRotateSecretWithResponse Issue a new signing secret
+	//
+	// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. The new secret is in the response and nowhere else. The old one keeps signing alongside it for 24 hours, or until it is removed, so every send in that time carries two signatures and receivers can switch over at their own pace. An Idempotency-Key is ignored here, for the reason it is on create.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/webhooks/{subscription_id}/rotate-secret (the `WebhooksRotateSecret` operationId).
+	WebhooksRotateSecretWithResponse(ctx context.Context, subscriptionId int, reqEditors ...RequestEditorFn) (*WebhooksRotateSecretResponse, error)
 
 	// WsGetStatsWithResponse Count of people with an open websocket, on every instance
 	//
@@ -17628,6 +18744,668 @@ func (r UsersUpdateStatusResponse) ContentType() string {
 	return ""
 }
 
+type WebhooksListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]WebhookResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r WebhooksListResponse) GetJSON200() *[]WebhookResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r WebhooksListResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r WebhooksListResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetBody returns the raw response body bytes
+func (r WebhooksListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WebhooksListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WebhooksListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WebhooksListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type WebhooksCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *WebhookWithSecret
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *ErrorResponse
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ErrorResponse
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r WebhooksCreateResponse) GetJSON201() *WebhookWithSecret {
+	return r.JSON201
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r WebhooksCreateResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r WebhooksCreateResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r WebhooksCreateResponse) GetJSON422() *ErrorResponse {
+	return r.JSON422
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r WebhooksCreateResponse) GetJSON503() *ErrorResponse {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r WebhooksCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WebhooksCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WebhooksCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WebhooksCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// WebhooksDeleteResponse204Headers the declared response headers of an HTTP 204 response for WebhooksDelete
+type WebhooksDeleteResponse204Headers struct {
+	IdempotencyReplayed *string
+}
+
+type WebhooksDeleteResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// Headers204 the parsed response headers for an HTTP 204 response
+	Headers204 *WebhooksDeleteResponse204Headers
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r WebhooksDeleteResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r WebhooksDeleteResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r WebhooksDeleteResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r WebhooksDeleteResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WebhooksDeleteResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WebhooksDeleteResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WebhooksDeleteResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type WebhooksGetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *WebhookResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r WebhooksGetResponse) GetJSON200() *WebhookResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r WebhooksGetResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r WebhooksGetResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r WebhooksGetResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r WebhooksGetResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WebhooksGetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WebhooksGetResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WebhooksGetResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// WebhooksUpdateResponse200Headers the declared response headers of an HTTP 200 response for WebhooksUpdate
+type WebhooksUpdateResponse200Headers struct {
+	IdempotencyReplayed *string
+}
+
+type WebhooksUpdateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *WebhookResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *ErrorResponse
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *WebhooksUpdateResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r WebhooksUpdateResponse) GetJSON200() *WebhookResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r WebhooksUpdateResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r WebhooksUpdateResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r WebhooksUpdateResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r WebhooksUpdateResponse) GetJSON422() *ErrorResponse {
+	return r.JSON422
+}
+
+// GetBody returns the raw response body bytes
+func (r WebhooksUpdateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WebhooksUpdateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WebhooksUpdateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WebhooksUpdateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// WebhooksListDeliveriesResponse200Headers the declared response headers of an HTTP 200 response for WebhooksListDeliveries
+type WebhooksListDeliveriesResponse200Headers struct {
+	XTotalCount *int
+}
+
+type WebhooksListDeliveriesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]WebhookDeliveryResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *WebhooksListDeliveriesResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r WebhooksListDeliveriesResponse) GetJSON200() *[]WebhookDeliveryResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r WebhooksListDeliveriesResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r WebhooksListDeliveriesResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r WebhooksListDeliveriesResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r WebhooksListDeliveriesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WebhooksListDeliveriesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WebhooksListDeliveriesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WebhooksListDeliveriesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// WebhooksRedeliverResponse202Headers the declared response headers of an HTTP 202 response for WebhooksRedeliver
+type WebhooksRedeliverResponse202Headers struct {
+	IdempotencyReplayed *string
+}
+
+type WebhooksRedeliverResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *WebhookDeliveryResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *WebhooksRedeliverResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r WebhooksRedeliverResponse) GetJSON202() *WebhookDeliveryResponse {
+	return r.JSON202
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r WebhooksRedeliverResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r WebhooksRedeliverResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r WebhooksRedeliverResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r WebhooksRedeliverResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WebhooksRedeliverResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WebhooksRedeliverResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WebhooksRedeliverResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// WebhooksRemovePreviousSecretResponse204Headers the declared response headers of an HTTP 204 response for WebhooksRemovePreviousSecret
+type WebhooksRemovePreviousSecretResponse204Headers struct {
+	IdempotencyReplayed *string
+}
+
+type WebhooksRemovePreviousSecretResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// Headers204 the parsed response headers for an HTTP 204 response
+	Headers204 *WebhooksRemovePreviousSecretResponse204Headers
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r WebhooksRemovePreviousSecretResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r WebhooksRemovePreviousSecretResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r WebhooksRemovePreviousSecretResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r WebhooksRemovePreviousSecretResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WebhooksRemovePreviousSecretResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WebhooksRemovePreviousSecretResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WebhooksRemovePreviousSecretResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// WebhooksResumeResponse200Headers the declared response headers of an HTTP 200 response for WebhooksResume
+type WebhooksResumeResponse200Headers struct {
+	IdempotencyReplayed *string
+}
+
+type WebhooksResumeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *WebhookResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *WebhooksResumeResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r WebhooksResumeResponse) GetJSON200() *WebhookResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r WebhooksResumeResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r WebhooksResumeResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r WebhooksResumeResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r WebhooksResumeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WebhooksResumeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WebhooksResumeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WebhooksResumeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type WebhooksRotateSecretResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *WebhookWithSecret
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *ErrorResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r WebhooksRotateSecretResponse) GetJSON200() *WebhookWithSecret {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r WebhooksRotateSecretResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r WebhooksRotateSecretResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r WebhooksRotateSecretResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r WebhooksRotateSecretResponse) GetJSON409() *ErrorResponse {
+	return r.JSON409
+}
+
+// GetBody returns the raw response body bytes
+func (r WebhooksRotateSecretResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WebhooksRotateSecretResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WebhooksRotateSecretResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WebhooksRotateSecretResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type WsGetStatsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -19698,6 +21476,190 @@ func (c *ClientWithResponses) UsersUpdateStatusWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseUsersUpdateStatusResponse(rsp)
+}
+
+// WebhooksListWithResponse List webhook subscriptions
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:read`. Every subscription, oldest first, without its secrets. docs/webhooks.md describes what is sent, how it is signed and how failures are retried.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/webhooks/ (the `WebhooksList` operationId).
+func (c *ClientWithResponses) WebhooksListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*WebhooksListResponse, error) {
+	rsp, err := c.WebhooksList(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWebhooksListResponse(rsp)
+}
+
+// WebhooksCreateWithBodyWithResponse Subscribe a URL to changes
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Events are made from the change feed, so the feed has to be on. The subscription starts at the newest change and is sent nothing that happened before it existed: read the rooms and the bookings in full once, as a change feed consumer does.
+//
+// The signing secret is in the response and nowhere else. An Idempotency-Key is ignored here, because keeping the response would keep the secret.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/webhooks/ (the `WebhooksCreate` operationId).
+func (c *ClientWithResponses) WebhooksCreateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*WebhooksCreateResponse, error) {
+	rsp, err := c.WebhooksCreateWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWebhooksCreateResponse(rsp)
+}
+
+// WebhooksCreateWithResponse Subscribe a URL to changes
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Events are made from the change feed, so the feed has to be on. The subscription starts at the newest change and is sent nothing that happened before it existed: read the rooms and the bookings in full once, as a change feed consumer does.
+//
+// The signing secret is in the response and nowhere else. An Idempotency-Key is ignored here, because keeping the response would keep the secret.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/webhooks/ (the `WebhooksCreate` operationId).
+func (c *ClientWithResponses) WebhooksCreateWithResponse(ctx context.Context, body WebhooksCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*WebhooksCreateResponse, error) {
+	rsp, err := c.WebhooksCreate(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWebhooksCreateResponse(rsp)
+}
+
+// WebhooksDeleteWithResponse Delete a webhook subscription
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Stops sending at once and removes the subscription with its deliveries and their attempts.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/v1/webhooks/{subscription_id} (the `WebhooksDelete` operationId).
+func (c *ClientWithResponses) WebhooksDeleteWithResponse(ctx context.Context, subscriptionId int, params *WebhooksDeleteParams, reqEditors ...RequestEditorFn) (*WebhooksDeleteResponse, error) {
+	rsp, err := c.WebhooksDelete(ctx, subscriptionId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWebhooksDeleteResponse(rsp)
+}
+
+// WebhooksGetWithResponse Get a webhook subscription
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:read`.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/webhooks/{subscription_id} (the `WebhooksGet` operationId).
+func (c *ClientWithResponses) WebhooksGetWithResponse(ctx context.Context, subscriptionId int, reqEditors ...RequestEditorFn) (*WebhooksGetResponse, error) {
+	rsp, err := c.WebhooksGet(ctx, subscriptionId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWebhooksGetResponse(rsp)
+}
+
+// WebhooksUpdateWithBodyWithResponse Change a webhook subscription
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. New event types apply to changes fanned out from now on. Switched off, a subscription keeps its place and sends nothing; switched back on, it sends what happened in between.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /api/v1/webhooks/{subscription_id} (the `WebhooksUpdate` operationId).
+func (c *ClientWithResponses) WebhooksUpdateWithBodyWithResponse(ctx context.Context, subscriptionId int, params *WebhooksUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*WebhooksUpdateResponse, error) {
+	rsp, err := c.WebhooksUpdateWithBody(ctx, subscriptionId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWebhooksUpdateResponse(rsp)
+}
+
+// WebhooksUpdateWithResponse Change a webhook subscription
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. New event types apply to changes fanned out from now on. Switched off, a subscription keeps its place and sends nothing; switched back on, it sends what happened in between.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /api/v1/webhooks/{subscription_id} (the `WebhooksUpdate` operationId).
+func (c *ClientWithResponses) WebhooksUpdateWithResponse(ctx context.Context, subscriptionId int, params *WebhooksUpdateParams, body WebhooksUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*WebhooksUpdateResponse, error) {
+	rsp, err := c.WebhooksUpdate(ctx, subscriptionId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWebhooksUpdateResponse(rsp)
+}
+
+// WebhooksListDeliveriesWithResponse What was sent and what came back
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:read`. Deliveries newest first, each with every attempt made at it.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/webhooks/{subscription_id}/deliveries (the `WebhooksListDeliveries` operationId).
+func (c *ClientWithResponses) WebhooksListDeliveriesWithResponse(ctx context.Context, subscriptionId int, params *WebhooksListDeliveriesParams, reqEditors ...RequestEditorFn) (*WebhooksListDeliveriesResponse, error) {
+	rsp, err := c.WebhooksListDeliveries(ctx, subscriptionId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWebhooksListDeliveriesResponse(rsp)
+}
+
+// WebhooksRedeliverWithResponse Send a delivery again
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. The delivery goes back in the queue with a fresh set of attempts and is sent on the worker's next pass, with the same `webhook-id` and body and a new timestamp and signature.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/webhooks/{subscription_id}/deliveries/{delivery_id}/redeliver (the `WebhooksRedeliver` operationId).
+func (c *ClientWithResponses) WebhooksRedeliverWithResponse(ctx context.Context, subscriptionId int, deliveryId int, params *WebhooksRedeliverParams, reqEditors ...RequestEditorFn) (*WebhooksRedeliverResponse, error) {
+	rsp, err := c.WebhooksRedeliver(ctx, subscriptionId, deliveryId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWebhooksRedeliverResponse(rsp)
+}
+
+// WebhooksRemovePreviousSecretWithResponse Stop signing with the previous secret
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. For when every receiver has moved to the new secret before the 24 hours are up. Nothing to remove is not an error.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/v1/webhooks/{subscription_id}/previous-secret (the `WebhooksRemovePreviousSecret` operationId).
+func (c *ClientWithResponses) WebhooksRemovePreviousSecretWithResponse(ctx context.Context, subscriptionId int, params *WebhooksRemovePreviousSecretParams, reqEditors ...RequestEditorFn) (*WebhooksRemovePreviousSecretResponse, error) {
+	rsp, err := c.WebhooksRemovePreviousSecret(ctx, subscriptionId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWebhooksRemovePreviousSecretResponse(rsp)
+}
+
+// WebhooksResumeWithResponse Resume a paused subscription
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Clears the pause and the failure count. Nothing is skipped: what changed while it was paused is sent, oldest first. Resuming one that is not paused changes nothing.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/webhooks/{subscription_id}/resume (the `WebhooksResume` operationId).
+func (c *ClientWithResponses) WebhooksResumeWithResponse(ctx context.Context, subscriptionId int, params *WebhooksResumeParams, reqEditors ...RequestEditorFn) (*WebhooksResumeResponse, error) {
+	rsp, err := c.WebhooksResume(ctx, subscriptionId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWebhooksResumeResponse(rsp)
+}
+
+// WebhooksRotateSecretWithResponse Issue a new signing secret
+//
+// Requires `ORG_ADMIN`; an API key needs `webhooks:write`. The new secret is in the response and nowhere else. The old one keeps signing alongside it for 24 hours, or until it is removed, so every send in that time carries two signatures and receivers can switch over at their own pace. An Idempotency-Key is ignored here, for the reason it is on create.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/webhooks/{subscription_id}/rotate-secret (the `WebhooksRotateSecret` operationId).
+func (c *ClientWithResponses) WebhooksRotateSecretWithResponse(ctx context.Context, subscriptionId int, reqEditors ...RequestEditorFn) (*WebhooksRotateSecretResponse, error) {
+	rsp, err := c.WebhooksRotateSecret(ctx, subscriptionId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWebhooksRotateSecretResponse(rsp)
 }
 
 // WsGetStatsWithResponse Count of people with an open websocket, on every instance
@@ -24542,6 +26504,560 @@ func ParseUsersUpdateStatusResponse(rsp *http.Response) (*UsersUpdateStatusRespo
 			headers.IdempotencyReplayed = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseWebhooksListResponse parses an HTTP response from a WebhooksListWithResponse call
+func ParseWebhooksListResponse(rsp *http.Response) (*WebhooksListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WebhooksListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []WebhookResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseWebhooksCreateResponse parses an HTTP response from a WebhooksCreateWithResponse call
+func ParseWebhooksCreateResponse(rsp *http.Response) (*WebhooksCreateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WebhooksCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest WebhookWithSecret
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseWebhooksDeleteResponse parses an HTTP response from a WebhooksDeleteWithResponse call
+func ParseWebhooksDeleteResponse(rsp *http.Response) (*WebhooksDeleteResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WebhooksDeleteResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		var headers WebhooksDeleteResponse204Headers
+		if values := rsp.Header.Values("Idempotency-Replayed"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Idempotency-Replayed", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.IdempotencyReplayed = &value
+		}
+		response.Headers204 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseWebhooksGetResponse parses an HTTP response from a WebhooksGetWithResponse call
+func ParseWebhooksGetResponse(rsp *http.Response) (*WebhooksGetResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WebhooksGetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WebhookResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseWebhooksUpdateResponse parses an HTTP response from a WebhooksUpdateWithResponse call
+func ParseWebhooksUpdateResponse(rsp *http.Response) (*WebhooksUpdateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WebhooksUpdateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WebhookResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers WebhooksUpdateResponse200Headers
+		if values := rsp.Header.Values("Idempotency-Replayed"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Idempotency-Replayed", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.IdempotencyReplayed = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseWebhooksListDeliveriesResponse parses an HTTP response from a WebhooksListDeliveriesWithResponse call
+func ParseWebhooksListDeliveriesResponse(rsp *http.Response) (*WebhooksListDeliveriesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WebhooksListDeliveriesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []WebhookDeliveryResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers WebhooksListDeliveriesResponse200Headers
+		if values := rsp.Header.Values("X-Total-Count"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Total-Count", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XTotalCount = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseWebhooksRedeliverResponse parses an HTTP response from a WebhooksRedeliverWithResponse call
+func ParseWebhooksRedeliverResponse(rsp *http.Response) (*WebhooksRedeliverResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WebhooksRedeliverResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest WebhookDeliveryResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers WebhooksRedeliverResponse202Headers
+		if values := rsp.Header.Values("Idempotency-Replayed"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Idempotency-Replayed", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.IdempotencyReplayed = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseWebhooksRemovePreviousSecretResponse parses an HTTP response from a WebhooksRemovePreviousSecretWithResponse call
+func ParseWebhooksRemovePreviousSecretResponse(rsp *http.Response) (*WebhooksRemovePreviousSecretResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WebhooksRemovePreviousSecretResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		var headers WebhooksRemovePreviousSecretResponse204Headers
+		if values := rsp.Header.Values("Idempotency-Replayed"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Idempotency-Replayed", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.IdempotencyReplayed = &value
+		}
+		response.Headers204 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseWebhooksResumeResponse parses an HTTP response from a WebhooksResumeWithResponse call
+func ParseWebhooksResumeResponse(rsp *http.Response) (*WebhooksResumeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WebhooksResumeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WebhookResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers WebhooksResumeResponse200Headers
+		if values := rsp.Header.Values("Idempotency-Replayed"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Idempotency-Replayed", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.IdempotencyReplayed = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseWebhooksRotateSecretResponse parses an HTTP response from a WebhooksRotateSecretWithResponse call
+func ParseWebhooksRotateSecretResponse(rsp *http.Response) (*WebhooksRotateSecretResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WebhooksRotateSecretResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WebhookWithSecret
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
 	}
 
 	return response, nil

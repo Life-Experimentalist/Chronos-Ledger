@@ -5,8 +5,8 @@
 Module `github.com/Life-Experimentalist/Chronos-Ledger/sdks/go`, package
 `chronos`, in [`sdks/go`](../../sdks/go). The calls are generated from
 [openapi.yaml](../openapi.yaml) by `oapi-codegen` and live in the `generated`
-package. Go 1.24 or newer; the only dependency outside the standard library is
-`oapi-codegen/runtime`.
+package. Go 1.24 or newer to use it (regenerating needs Go 1.25). The only
+dependency outside the standard library is `oapi-codegen/runtime`.
 
 ## Install
 
