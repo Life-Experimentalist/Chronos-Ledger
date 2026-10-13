@@ -18,7 +18,7 @@ So there are two artifacts, shipped through different channels:
 
 | Artifact | What it is | Channels |
 |---|---|---|
-| Server images | `backend`, `frontend`, `nginx` containers | GHCR, Docker Hub, compose file, Helm chart |
+| Server images | `backend`, `frontend`, `nginx` containers | GHCR, Docker Hub, compose file, Helm chart (in the repository, not published) |
 | `chronos` CLI | A small static binary that installs, configures, upgrades, backs up and diagnoses a server | GitHub Releases, install scripts, Homebrew tap, Scoop bucket |
 
 The CLI is written in Rust, so it is one static file per platform with no
@@ -71,7 +71,8 @@ and Windows x64 and arm64. Each binary is run once, then uploaded with a
 | npm | `npx @life-experimentalist/chronos` | per-platform packages, trusted publishing | on request |
 | PyPI | `uvx chronos-ledger` | wheels wrapping the binary, trusted publishing | on request |
 | crates.io | `cargo install chronos-ledger` | `cargo publish` | on request |
-| Helm, deb / rpm, MSI | | | on request |
+| Helm chart | `helm install chronos ./charts/chronos-ledger` from a checkout | `charts/chronos-ledger`, checked by `helm.yml` | in the repository; not pushed to a chart registry |
+| deb / rpm, MSI | | | on request |
 
 The tap and the bucket pull from the latest release on their own schedule, so
 no token in this repository can write to another one.

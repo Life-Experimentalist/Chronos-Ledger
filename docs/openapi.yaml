@@ -2268,7 +2268,10 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
     UnprocessableEntity:
-      description: Validation error (e.g. malformed request body).
+      description: >
+        Validation error (e.g. malformed request body). On a write that takes
+        an Idempotency-Key, also a key already used for a different request
+        (`IDEMPOTENCY_KEY_REUSED`).
       content:
         application/json:
           schema:
@@ -2329,7 +2332,7 @@ components:
         instead of a second effect. A key belongs to the API key, or the
         user, that sent it, and is remembered for
         `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a
-        different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry
+        different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry
         while the first request is still running is `409` with
         `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to
         255 printable ASCII characters is `422` with `INVALID_VALUE`.
@@ -2747,6 +2750,7 @@ paths:
             A malformed body, or a `reporting_line_manager` that names the
             user, someone who already reports to them, or someone who has been
             deactivated.
+            A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`.
           content:
             application/json:
               schema:
@@ -2867,6 +2871,7 @@ paths:
             A malformed body, or a `reporting_line_manager` that names the
             user, someone who already reports to them, or someone who has been
             deactivated.
+            A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`.
           content:
             application/json:
               schema:
@@ -2956,7 +2961,9 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "422":
-          description: The caller named their own account.
+          description: >
+            The caller named their own account.
+            A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`.
           content:
             application/json:
               schema:
@@ -2997,6 +3004,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   /api/v1/users/{user_id}/status:
     put:
@@ -3037,6 +3046,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   # ── API keys ─────────────────────────────
   /api/v1/api-keys/:
@@ -3130,6 +3141,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   # ── Federation ────────────────────────────
   /api/v1/federation/issuers:
@@ -3266,6 +3279,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   /api/v1/federation/issuers/{issuer_id}/keys:
     get:
@@ -3346,6 +3361,7 @@ paths:
           description: >
             A `public_key` that is not a PEM public key or is not Ed25519, or a
             `not_after` that is not after `not_before`.
+            A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`.
           content:
             application/json:
               schema:
@@ -3399,6 +3415,7 @@ paths:
           description: >
             `not_after` is not after the key's `not_before`, which would leave a
             key that was never valid. Delete it instead.
+            A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`.
           content:
             application/json:
               schema:
@@ -3437,6 +3454,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   /api/v1/federation/issuers/{issuer_id}/role-map:
     get:
@@ -3520,6 +3539,7 @@ paths:
             A `role_type` of `ORG_ADMIN` or `UNIT_ADMIN`. No issuer may assert
             either, which is what keeps a leaked signing key to the level the
             operator chose.
+            A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`.
           content:
             application/json:
               schema:
@@ -3559,6 +3579,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   /api/v1/federation/links:
     get:
@@ -3677,6 +3699,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
   # ── Resources ─────────────────────────────
   /api/v1/resources/:
     get:
@@ -3764,6 +3788,7 @@ paths:
           description: >
             A blank or over-long code, latitude without longitude or the
             reverse, or a coordinate out of range.
+            A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`.
           content:
             application/json:
               schema:
@@ -3856,6 +3881,7 @@ paths:
           description: >
             latitude and longitude were not set or cleared together, or a
             coordinate was out of range.
+            A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`.
           content:
             application/json:
               schema:
@@ -3991,9 +4017,9 @@ paths:
             Unique per caller across every resource. A UUID is the right
             shape. Required rather than optional because a booking client
             retries, and a retry that books a second room is worse than one
-            that fails. This route keeps the answers it gave before the
-            shared Idempotency-Key: a reused key is `422`, not `409`, and a
-            retry gets the hold as it is now with `200`, not a replay.
+            that fails. This route keeps the answer it gave before the
+            shared Idempotency-Key: a retry gets the hold as it is now with
+            `200`, not a replay.
           schema:
             type: string
             minLength: 8
@@ -4044,7 +4070,7 @@ paths:
         "422":
           description: >
             end was not after start, or the Idempotency-Key had already been
-            used for a different request.
+            used for a different request (`IDEMPOTENCY_KEY_REUSED`).
           content:
             application/json:
               schema:
@@ -4117,6 +4143,7 @@ paths:
           description: >
             An empty or over-long external_ref, or a field other than
             external_ref.
+            A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`.
           content:
             application/json:
               schema:
@@ -4170,6 +4197,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   # ── Schedule ──────────────────────────────
   /api/v1/schedule/activities:
@@ -4371,6 +4400,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   /api/v1/schedule/activities/{activity_id}/enrollments:
     get:
@@ -4452,7 +4483,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "422":
-          description: A malformed body, or a member who has been deactivated (`USER_DEACTIVATED`).
+          description: >
+            A malformed body, or a member who has been deactivated (`USER_DEACTIVATED`).
+            A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`.
           content:
             application/json:
               schema:
@@ -4510,6 +4543,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   /api/v1/schedule/slots:
     get:
@@ -4623,7 +4658,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/ReservationConflict"
         "422":
-          description: A malformed body, or a `primary_lead_id` naming somebody who has been deactivated.
+          description: >
+            A malformed body, or a `primary_lead_id` naming somebody who has been deactivated.
+            A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`.
           content:
             application/json:
               schema:
@@ -4720,6 +4757,7 @@ paths:
           description: >
             A malformed body, a window that starts and ends at the same time,
             or a `primary_lead_id` naming somebody who has been deactivated.
+            A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`.
           content:
             application/json:
               schema:
@@ -4764,6 +4802,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   /api/v1/schedule/slots/{slot_id}/retire:
     post:
@@ -4805,6 +4845,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   /api/v1/schedule/ledger/today:
     get:
@@ -4963,7 +5005,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "422":
-          description: A malformed body, or a `substitute_lead_id` naming somebody who has been deactivated.
+          description: >
+            A malformed body, or a `substitute_lead_id` naming somebody who has been deactivated.
+            A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`.
           content:
             application/json:
               schema:
@@ -5107,6 +5151,8 @@ paths:
                     description: Days from today onward kept because they carry attendance or a note.
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   /api/v1/schedule/cycles/{cycle_id}/open:
     patch:
@@ -5160,6 +5206,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CycleActivationConflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   /api/v1/schedule/cycles/{old_id}/clone-to/{new_id}:
     post:
@@ -5215,6 +5263,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   # ── Attendance ────────────────────────────
   /api/v1/attendance/mark:
@@ -5279,6 +5329,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   /api/v1/attendance/batch:
     post:
@@ -5330,6 +5382,7 @@ paths:
           description: >
             A record names a different ledger from the batch, or one member
             appears twice.
+            A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`.
           content:
             application/json:
               schema:
@@ -5405,6 +5458,8 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   /api/v1/attendance/absence/pending:
     get:
@@ -5473,6 +5528,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   /api/v1/attendance/annotations:
     post:
@@ -5505,6 +5562,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   /api/v1/attendance/annotations/{ledger_id}:
     get:
@@ -5750,6 +5809,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   /api/v1/guest/{entry_id}/extend:
     patch:
@@ -5820,6 +5881,7 @@ paths:
             Longer than GUEST_VISIT_EXTENSION_MAX_MINUTES, refused rather than
             quietly trimmed so that a desk which meant 30 and typed 300 hears
             about it. Also every extension when that setting is 0.
+            A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`.
           content:
             application/json:
               schema:
@@ -5977,6 +6039,8 @@ paths:
                     format: date
         "403":
           $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   # ── Admin ─────────────────────────────────
   /api/v1/admin/export:

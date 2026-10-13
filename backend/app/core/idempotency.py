@@ -6,7 +6,7 @@ A caller that sends a write and loses the response cannot tell whether it
 happened. With an Idempotency-Key it sends the same request again under the
 same key and gets the first response back, with Idempotency-Replayed: true,
 instead of a second effect. The same key with a different request is
-refused with 409 IDEMPOTENCY_KEY_REUSED, and a retry that arrives while the
+refused with 422 IDEMPOTENCY_KEY_REUSED, and a retry that arrives while the
 first is still running gets 409 IDEMPOTENCY_KEY_IN_PROGRESS.
 
 Two pieces, because neither place can do the whole job alone.
@@ -95,9 +95,8 @@ KEPT_HEADERS = frozenset({b"content-type", b"location"})
 UNSTORED_CLIENT_ERRORS = frozenset({401, 403, 429})
 
 # Reservation create had its own key before this module existed, and keeps
-# what it answered then: 422 for a reused key, and a retry answered from the
-# reservation as it is now (cancelled or not) rather than replayed from here.
-# Moving it to 409 is a breaking change for the next minor release.
+# answering a retry from the reservation as it is now (cancelled or not)
+# rather than replaying from here. A reused key is 422 there as everywhere.
 OWN_REPLAY_OPERATIONS = frozenset({"resources.createReservation"})
 
 # Writes whose response carries a credential that is stored nowhere else, or
@@ -263,11 +262,7 @@ def _answer(row, pending: Pending) -> None:
     """Answer a request whose key already has a row: refuse it, or replay."""
     if row.request_hash != pending.request_hash:
         raise ChronosError(
-            status_code=(
-                status.HTTP_422_UNPROCESSABLE_CONTENT
-                if pending.own_replay
-                else status.HTTP_409_CONFLICT
-            ),
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=KEY_REUSED,
             code=ErrorCode.IDEMPOTENCY_KEY_REUSED,
         )

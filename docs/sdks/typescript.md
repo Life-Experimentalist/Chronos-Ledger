@@ -66,15 +66,57 @@ const hold = await chronos.createReservation(3, {
 An `Idempotency-Key` is generated when you do not pass one as the third
 argument, and the same key goes out on every retry, so a retry never takes a
 second hold. Pass your own key when a retry can come from outside the process,
-for example after a crash.
+for example after a crash. Every other write gets a key too, see
+[Retries](#retries).
 
 ## Retries
 
-`429`, `502`, `503`, `504` and network errors are retried up to `maxRetries`
-times (default 3). `Retry-After` is honoured up to 30 seconds; without it the
-wait doubles from 500 ms to at most 8 s. Only `GET`, `HEAD`, `PUT`, `DELETE`,
-`OPTIONS` and requests that carry an `Idempotency-Key` are retried. Other
-writes are sent once.
+A request is tried again when:
+
+- no response arrived: `fetch` threw, for example on a refused or dropped
+  connection;
+- the status is `429`, `502`, `503` or `504`;
+- the status is `409` and the body code is `IDEMPOTENCY_KEY_IN_PROGRESS`, which
+  means the first request under that key is still running. The same key gets
+  the stored answer once it finishes.
+
+No other `4xx` is retried: `400`, `401` (after the one token refresh), `403`,
+`404`, `422` and a plain `409` conflict throw `ChronosError` at once. An abort
+from the caller's own `AbortSignal` is not retried either.
+
+Every write (`POST`, `PATCH`, `PUT`, `DELETE`) is sent with an
+`Idempotency-Key`: the header you set, or a UUIDv4 the client makes once per
+call and sends again on each retry, so a retried write has one effect. A write
+is never sent without a key, which is why writes can be retried at all. `GET`,
+`HEAD` and `OPTIONS` carry none.
+
+The wait before retry `n` (counting from 0) is a random number between 0 and
+`min(maxDelayMs, baseDelayMs * 2 ** n)`. When the response has a `Retry-After`
+header, in seconds or as an HTTP date, the client waits that long instead. A
+wait that would run past the deadline is not started: the last response is
+thrown instead.
+
+```ts
+const chronos = createChronosClient({
+  baseUrl,
+  apiKey,
+  retry: { maxAttempts: 6, baseDelayMs: 500, maxDelayMs: 10_000, deadlineMs: 60_000 },
+});
+```
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `maxAttempts` | 4 | Tries in all, the first included |
+| `baseDelayMs` | 250 | The first jitter ceiling |
+| `maxDelayMs` | 8000 | The highest a jittered wait can reach |
+| `deadlineMs` | 30000 | From the first send; no wait starts past it |
+
+`retry: false` turns retries off. A write still carries its key. The deadline
+does not interrupt a request in flight; pass a `signal` to the call for that.
+
+When the tries or the deadline run out, a response error is thrown as
+`ChronosError` with the status, `code` and `detail` of the last response, and a
+network error is thrown as it came from `fetch`.
 
 ## Paging
 

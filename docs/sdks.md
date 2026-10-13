@@ -63,8 +63,8 @@ Kept small and identical in behavior across languages:
 | Concern | Behavior |
 |---|---|
 | Auth | Construct with `api_key` (sends `X-API-Key`) or with a token provider. The token provider variant calls `/auth/refresh` on `401` once, then gives up |
-| Idempotency | `createReservation` generates an `Idempotency-Key` if the caller did not pass one, and reuses it on its own retries |
-| Retries | Only on `429`, `502`, `503`, `504` and connection errors; honors `Retry-After`; writes retried only when idempotent |
+| Idempotency | Every write (`POST`, `PATCH`, `PUT`, `DELETE`) goes out with an `Idempotency-Key`: the caller's own, or a UUIDv4 the library makes once per call and reuses on its own retries. Reads carry none |
+| Retries | When no response arrived (connection error, timeout), on `429`, `502`, `503` and `504`, and on a `409` whose code is `IDEMPOTENCY_KEY_IN_PROGRESS`. Exponential backoff with full jitter: the wait is random between 0 and `min(cap, base * 2^n)`. `Retry-After` (seconds or an HTTP date) replaces the jittered wait. No other `4xx` is ever retried. Reads retry freely; a write retries only because it carries a key. Settings: 4 attempts, 0.25 s base, 8 s cap, 30 s overall deadline; retries can be turned off. When they run out, the last response is raised as the library's error, or the last transport error is raised as it came |
 | Paging | An iterator over list routes that reads `X-Total-Count` and walks `limit`/`offset` |
 | Errors | One error type carrying status, `detail` as returned, and for `409` the parsed `conflicts` list |
 | Base URL | Required argument; the library appends `/api/v1` |

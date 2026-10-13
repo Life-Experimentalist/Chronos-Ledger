@@ -141,13 +141,13 @@ def test_key_order_and_spacing_in_the_body_are_the_same_request():
 # -- Refusals -----------------------------------------------------------------
 
 
-def test_the_same_key_for_a_different_request_is_409(client, db, seed_users):
+def test_the_same_key_for_a_different_request_is_422(client, db, seed_users):
     admin = login(client, "admin@test.internal", ADMIN_PASSWORD)
     _create_room(client, admin, "confused-1", code="LH-201")
 
     res = _create_room(client, admin, "confused-1", code="LH-305")
 
-    assert res.status_code == 409
+    assert res.status_code == 422
     assert res.json()["code"] == "IDEMPOTENCY_KEY_REUSED"
     assert REPLAYED not in res.headers
     assert db.query(Resource).count() == 1
@@ -286,7 +286,7 @@ def test_a_key_is_new_again_after_the_retention_window(client, db, seed_users):
         assert _create_room(client, admin, "day-key", code="LH-1").status_code == 201
 
         clock.advance_to(start + timedelta(hours=23, minutes=59))
-        assert _create_room(client, admin, "day-key", code="LH-2").status_code == 409
+        assert _create_room(client, admin, "day-key", code="LH-2").status_code == 422
 
         clock.advance_to(start + timedelta(hours=24))
         res = _create_room(client, admin, "day-key", code="LH-2")
