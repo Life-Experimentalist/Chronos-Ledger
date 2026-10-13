@@ -49,6 +49,8 @@ class ErrorCode(StrEnum):
     TOKEN_INVALID = "TOKEN_INVALID"
     USER_DEACTIVATED = "USER_DEACTIVATED"
     VALIDATION_FAILED = "VALIDATION_FAILED"
+    WEBHOOK_SECRET_LIMIT = "WEBHOOK_SECRET_LIMIT"
+    WEBHOOK_URL_REFUSED = "WEBHOOK_URL_REFUSED"
 
     def __str__(self) -> str:
         return str(self.value)

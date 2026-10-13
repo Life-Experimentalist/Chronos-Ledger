@@ -122,24 +122,7 @@ def list_changes(
 
     wanted = {g.newest for g in groups} | {g.oldest for g in groups}
     markers = {m.id: m for m in db.query(ChangeMarker).filter(ChangeMarker.id.in_(wanted))}
-
-    resource_ids = [g.entity_id for g in groups if g.entity_kind == change_feed.RESOURCE]
-    reservation_ids = [g.entity_id for g in groups if g.entity_kind == change_feed.RESERVATION]
-    resources = (
-        {r.id: r for r in db.query(Resource).filter(Resource.id.in_(resource_ids))}
-        if resource_ids
-        else {}
-    )
-    reservations = (
-        {
-            r.id: r
-            for r in db.query(Reservation)
-            .options(joinedload(Reservation.resource))
-            .filter(Reservation.id.in_(reservation_ids))
-        }
-        if reservation_ids
-        else {}
-    )
+    rows = current_rows(db, [(g.entity_kind, g.entity_id) for g in groups])
 
     changes = []
     for group in groups:
@@ -156,11 +139,30 @@ def list_changes(
             "change_kind": markers[group.oldest].change_kind,
             "at": markers[group.newest].at,
         }
-        if group.entity_kind == change_feed.RESOURCE:
-            entry["resource"] = resources.get(group.entity_id)
-        else:
-            held = reservations.get(group.entity_id)
-            entry["reservation"] = reservation_view(held, held.resource) if held else None
+        entry[group.entity_kind] = rows.get((group.entity_kind, group.entity_id))
         changes.append(entry)
 
     return {"changes": changes, "next_cursor": changes[-1]["cursor"]}
+
+
+def current_rows(db: Session, keys: list[tuple[str, int]]) -> dict[tuple[str, int], object]:
+    """What each (entity_kind, entity_id) holds now, in the form a Change carries it.
+
+    The feed and the webhooks (services/webhooks.py) both read rows through
+    this, so a webhook's data says exactly what the feed would have said. A
+    row that has gone is absent from the result.
+    """
+    resource_ids = [entity_id for kind, entity_id in keys if kind == change_feed.RESOURCE]
+    reservation_ids = [entity_id for kind, entity_id in keys if kind == change_feed.RESERVATION]
+    rows: dict[tuple[str, int], object] = {}
+    if resource_ids:
+        for resource in db.query(Resource).filter(Resource.id.in_(resource_ids)):
+            rows[(change_feed.RESOURCE, resource.id)] = resource
+    if reservation_ids:
+        for held in (
+            db.query(Reservation)
+            .options(joinedload(Reservation.resource))
+            .filter(Reservation.id.in_(reservation_ids))
+        ):
+            rows[(change_feed.RESERVATION, held.id)] = reservation_view(held, held.resource)
+    return rows

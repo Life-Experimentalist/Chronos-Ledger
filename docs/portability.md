@@ -79,6 +79,8 @@ These columns are left off every row unless the export was made with
 | `users` | `calendar_feed_token` | The secret in the account's calendar feed URL. |
 | `api_keys` | `key_hash` | The hash of the key a client sends. |
 | `guest_gate_registry` | `visit_code_hash` | The hash of a guest's visit code. |
+| `webhook_subscriptions` | `secret` | The key outgoing webhooks are signed with. |
+| `webhook_subscriptions` | `previous_secret` | The key before the last rotation, while it still signs. |
 
 The manifest lists them under `omitted_columns`, so a reader can tell a
 missing value from a null one.
@@ -101,6 +103,10 @@ The import fills each left-out column with a value that opens nothing:
 - Every API key hash becomes the hash of a random value nobody holds, so every
   key stops working. The key rows stay, with their labels, scopes and expiry.
 - Calendar feed tokens and visit code hashes become null.
+- Every webhook subscription gets a new random signing secret that no
+  receiver knows, loses any previous secret, and is paused. A paused
+  subscription sends nothing, so nothing goes out signed with a key the
+  receiver would refuse. It keeps its place in the change feed.
 
 Then, on the new deployment:
 
@@ -117,6 +123,12 @@ Then, on the new deployment:
    subscribes again.
 5. A guest visit that was approved but not yet used has no code anymore. The
    guest registers again.
+6. For each webhook subscription, rotate the secret
+   (`POST /webhooks/{subscription_id}/rotate-secret`), give the new one to
+   the receiver, remove the random one it replaced
+   (`DELETE /webhooks/{subscription_id}/previous-secret`), and resume it
+   (`POST /webhooks/{subscription_id}/resume`). It then sends what changed
+   since its place, oldest first ([webhooks.md](webhooks.md)).
 
 An archive with secrets needs none of this, except that everyone signs in
 again. Treat it like a database backup: anyone holding it can try password
@@ -163,7 +175,8 @@ in Chronos. A booking that runs past midnight has an end before its start.
   "omitted_columns": {
     "api_keys": ["key_hash"],
     "guest_gate_registry": ["visit_code_hash"],
-    "users": ["calendar_feed_token", "credential_secure_hash"]
+    "users": ["calendar_feed_token", "credential_secure_hash"],
+    "webhook_subscriptions": ["previous_secret", "secret"]
   },
   "schema_version": "3",
   "secrets_included": false,
@@ -241,6 +254,17 @@ Terms or cycles: a label, the first and last date, and whether it is open.
 People, including service accounts and the seeded administrator.
 `credential_secure_hash` and `calendar_feed_token` are secrets.
 
+### webhook_subscriptions
+
+Outgoing webhooks ([webhooks.md](webhooks.md)): the URL, the event types,
+whether each is active or paused, and `cursor`, the last change feed marker
+it has turned into deliveries. The markers come across with their ids, so
+an imported subscription carries on from the same place. `secret` and
+`previous_secret` are secrets. An archive made without them pauses every
+subscription on import, active ones included, so a round trip through a
+redacted archive leaves them all paused until an administrator resumes
+them.
+
 ### activities
 
 Courses or other recurring activities, each in a unit and a cycle.
@@ -308,6 +332,8 @@ Attendance marks: one per member per ledger day.
 |---|---|
 | `refresh_tokens` | Hashes of one-use session tokens that expire within days. Carrying them would carry live sessions into another deployment. After an import everyone signs in again. |
 | `idempotency_records` | Stored responses for `Idempotency-Key` retries, deleted after `IDEMPOTENCY_RETENTION_HOURS`. They copy what a write already returned. A client that retries against the imported deployment has its write treated as a new request. |
+| `webhook_deliveries` | The outgoing webhook queue and what was sent. An imported subscription carries on from its cursor instead, so nothing that was already sent from the old deployment is sent again from the new one. Anything still pending there when the archive was made is not sent from the new one either. |
+| `webhook_attempts` | The record of each send: status code, time taken and the start of the reply. It describes the deployment that made the calls, not the organization's data. |
 
 `backend/tests/test_portability.py` fails when a table is neither exported
 nor on this list, so a new table cannot be left out of the archive by
