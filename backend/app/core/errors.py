@@ -21,12 +21,14 @@ path or method it does not serve, still leaves with a code: the handler picks
 one by status from FALLBACK_BY_STATUS.
 """
 
+import logging
 from enum import StrEnum
 
 from fastapi import FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.utils import is_body_allowed_for_status_code
+from sqlalchemy.exc import InterfaceError, OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -96,6 +98,7 @@ class ErrorCode(StrEnum):
     IMPORT_REJECTED = "IMPORT_REJECTED"
     CHANGE_FEED_DISABLED = "CHANGE_FEED_DISABLED"
     SERVER_BUSY = "SERVER_BUSY"
+    DATABASE_UNAVAILABLE = "DATABASE_UNAVAILABLE"
 
     # Webhooks.
     WEBHOOK_URL_REFUSED = "WEBHOOK_URL_REFUSED"
@@ -119,6 +122,7 @@ FALLBACK_BY_STATUS: dict[int, ErrorCode] = {
 }
 
 INTERNAL_ERROR_DETAIL = "Internal server error"
+DATABASE_UNAVAILABLE_DETAIL = "Database unavailable, try again shortly."
 
 
 class ChronosError(HTTPException):
@@ -172,6 +176,20 @@ async def _validation_error(_request: Request, exc: RequestValidationError) -> J
     )
 
 
+async def _database_unavailable(_request: Request, exc: Exception) -> JSONResponse:
+    # The database refused the connection or dropped it: down, restarting,
+    # failed over, or (on SQLite) locked past the busy timeout. The request's
+    # transaction did not commit, short of a drop during COMMIT itself
+    # (docs/failure-modes.md), so a 503 that a client retries is the answer.
+    # The driver's message stays in the log: it can name the database host.
+    logging.getLogger(__name__).warning("Database unavailable: %s", exc)
+    return JSONResponse(
+        status_code=503,
+        headers={"Retry-After": "1"},
+        content=error_body(ErrorCode.DATABASE_UNAVAILABLE, DATABASE_UNAVAILABLE_DETAIL),
+    )
+
+
 async def _unhandled_error(_request: Request, _exc: Exception) -> JSONResponse:
     # Starlette raises the exception again once this response has gone out,
     # so the server still logs the traceback. The caller gets none of it.
@@ -190,4 +208,8 @@ def register_error_handlers(app: FastAPI) -> None:
     """
     app.add_exception_handler(StarletteHTTPException, _http_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
+    # Not DBAPIError as a whole: an IntegrityError is a request losing a race,
+    # and the routes that expect one catch it themselves.
+    app.add_exception_handler(OperationalError, _database_unavailable)
+    app.add_exception_handler(InterfaceError, _database_unavailable)
     app.add_exception_handler(Exception, _unhandled_error)
