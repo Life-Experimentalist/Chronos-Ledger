@@ -1,0 +1,236 @@
+# Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
+#
+# Defaults for the chronos-ledger chart. It runs the two images the compose
+# files run (docker-compose.prod.yml), with the same environment variables.
+# PostgreSQL is not part of the chart: bring your own and put its URL in the
+# Secret named by existingSecret. This file holds no secret values and the
+# chart never writes one into a ConfigMap.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# The name of a Secret that already exists in the release namespace. The
+# chart refuses to render without it. Keys, named after the variable they
+# become:
+#
+#   DATABASE_URL            required. postgresql://user:password@host:5432/db
+#   JWT_SECRET_SIGNING_KEY  required. At least 32 characters, e.g. openssl rand -hex 32
+#   INITIAL_ADMIN_PASSWORD  optional. Without it the seeded administrator
+#                           account cannot sign in (docs/deployment.md, "First login")
+#   VAPID_PRIVATE_KEY       optional. Web Push
+#   REDIS_URL               optional. Read only when redis.urlFromSecret is true
+#
+# Create it with kubectl or your secret manager, never from this chart:
+#   kubectl create secret generic <name> --from-literal=KEY=value ...
+existingSecret: ""
+
+imagePullSecrets: []
+
+# The backend: FastAPI behind uvicorn, image chronos-ledger-backend.
+backend:
+  # Replicas. 1 unless you have read docs/deployment.md, "Scaling", and the
+  # note in the Kubernetes section. Every replica runs the in-process
+  # scheduler. The ledger jobs need no leader (the database allows one
+  # generated day per slot per date) and the schema step takes a PostgreSQL
+  # advisory lock, but the guest overstay notice reads and then stamps rows
+  # with no lock, so two replicas can announce one overstay twice. More than
+  # one replica also needs redis.enabled, so WebSocket events reach sockets
+  # held by another replica. Nothing in the chart elects a leader.
+  replicaCount: 1
+
+  image:
+    repository: ghcr.io/life-experimentalist/chronos-ledger-backend
+    # Empty means "v" plus the chart appVersion, the tag cd.yml gives a release.
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  service:
+    # Do not change while web.enabled is true. The web image's nginx.conf
+    # dials chronos-app:8000 and cannot be told another name, so the
+    # backend Service must carry this one. It also means one release per
+    # namespace unless you turn the web Deployment off.
+    name: chronos-app
+    type: ClusterIP
+    port: 8000
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+  # The image has no USER, so runAsUser has to be named for runAsNonRoot to
+  # hold. Files under /app are world readable, so any uid works.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+
+  # The only paths the app writes are the temporary files for a CSV upload
+  # and an export, so /tmp is an emptyDir and the rest of the image is
+  # read-only. If the container will not start, set readOnlyRootFilesystem
+  # to false and report what it tried to write.
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+
+  # /health is liveness and answers without touching anything. /health/ready
+  # is readiness and fails with 503 while PostgreSQL does not answer. The
+  # image runs the schema step before uvicorn binds, so the startup probe
+  # gives a first boot on an empty database up to three minutes.
+  probes:
+    startup:
+      periodSeconds: 5
+      failureThreshold: 36
+    liveness:
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+
+# The web tier: image chronos-ledger-web, which is nginx with the static
+# frontend baked in. It serves the pages and proxies /api/v1, /ws and /health
+# to the backend. There is no separate frontend image to run. Turn it off
+# only if your ingress serves the frontend some other way.
+web:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: ghcr.io/life-experimentalist/chronos-ledger-web
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+  # nginx listens on :80, which a non-root user may bind only when the
+  # sysctl below lowers the limit. It is one of the sysctls Kubernetes
+  # treats as safe, so it needs no kubelet flag from 1.22 on. A cluster
+  # whose runtime refuses it can run the pod as root with the capabilities
+  # nginx needs instead: runAsNonRoot false, runAsUser 0, and add CHOWN,
+  # SETGID, SETUID and NET_BIND_SERVICE under securityContext.capabilities.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
+    sysctls:
+      - name: net.ipv4.ip_unprivileged_port_start
+        value: "80"
+
+  # nginx writes its pid file, its proxy and client temp files, and a copy of
+  # the TLS server block, so those paths are emptyDirs. TLS is not used here:
+  # terminate it at the ingress. If nginx will not start, set
+  # readOnlyRootFilesystem to false.
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+
+# Redis is optional. The app works without it: rate limits fail open, the
+# location cache is skipped, and readiness does not depend on it. With it
+# off REDIS_URL is not set, so the app tries localhost, is refused at once,
+# and carries on. Do not use memory://: that needs a Python extra the image
+# does not install. Run more than one backend replica only with Redis on.
+redis:
+  enabled: false
+  # An external Redis with no credentials in the URL, e.g. redis://redis.example.svc:6379/0.
+  # The chart refuses a URL with "@" in it. For one that carries a password,
+  # set urlFromSecret and add a REDIS_URL key to existingSecret.
+  url: ""
+  urlFromSecret: false
+
+# Not secret. These become the ConfigMap that the backend reads, with the same
+# names and defaults as docker-compose.prod.yml. Anything backend/app/core/config.py
+# reads can be added here. Secrets are refused: DATABASE_URL,
+# JWT_SECRET_SIGNING_KEY, INITIAL_ADMIN_PASSWORD, VAPID_PRIVATE_KEY and
+# REDIS_URL belong in existingSecret, and APP_ENV is always production.
+config:
+  JWT_ALGORITHM: HS256
+  JWT_ACCESS_TOKEN_EXPIRE_MINUTES: 15
+  JWT_REFRESH_TOKEN_EXPIRE_DAYS: 30
+  PASSWORD_MIN_LENGTH: 12
+  RATE_LIMIT_ENABLED: true
+  RATE_LIMIT_LOGIN_PER_IP: 10
+  RATE_LIMIT_LOGIN_PER_EMAIL: 5
+  RATE_LIMIT_GUEST_CHECKIN: 300
+  RATE_LIMIT_CALENDAR_FEED: 60
+  CSV_UPLOAD_MAX_MB: 25
+  GEOFENCE_ACCURACY_FACTOR: 2
+  LEDGER_HORIZON_DAYS: 28
+  GUEST_RETENTION_DAYS: 0
+  GUEST_ADMIN_CAN_DECIDE: false
+  GUEST_VISIT_CODE_TTL_MINUTES: 0
+  GUEST_VISIT_LENGTH_MINUTES: 0
+  GUEST_VISIT_EXTENSION_MAX_MINUTES: 240
+  CHANGE_FEED_ENABLED: false
+  FEDERATED_IDENTITY_ENABLED: false
+  FEDERATED_TOKEN_MAX_LIFETIME_SECONDS: 120
+  FEDERATED_CLOCK_SKEW_SECONDS: 60
+  # Which upstream addresses uvicorn believes X-Forwarded-For from. The web
+  # tier overwrites that header, as the compose stack does.
+  FORWARDED_ALLOW_IPS: "*"
+  # Blank follows APP_ENV, which is production, so /docs is off. Set "true" to publish it.
+  DOCS_ENABLED: ""
+  # An IANA name, not an offset. Decides what "today" means.
+  ORG_TIMEZONE: UTC
+  # What the interface calls the engine's six nouns. Blank means the neutral word.
+  LABEL_STAFF: ""
+  LABEL_MEMBER: ""
+  LABEL_ACTIVITY: ""
+  LABEL_UNIT: ""
+  LABEL_LEAD: ""
+  LABEL_CYCLE: ""
+  ORG_DOMAIN_MASK: org.internal
+  # Browsers reach the app on one origin through the web tier, so this only
+  # matters for a page served from somewhere else.
+  APP_CORS_ORIGINS: http://localhost
+  # The public half of the Web Push key pair. The private half is a secret.
+  VAPID_PUBLIC_KEY: ""
+  VAPID_CONTACT_EMAIL: admin@org.internal
+  TELEMETRY_ENABLED: false
+  TELEMETRY_ENDPOINT: ""
+
+# Off by default. With the web tier on, everything goes to the web Service,
+# which proxies the API itself. With it off, everything goes to the backend.
+# The nginx in the web image sets X-Forwarded-For to the address that
+# connected to it, which behind an ingress controller is the controller. The
+# sign-in rate limit then counts everyone as one caller, so raise
+# config.RATE_LIMIT_LOGIN_PER_IP or accept it; docs/deployment.md explains.
+# A CSV upload can be 25 MB, so set your controller's body size limit in
+# annotations if it has a smaller default.
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: chronos.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  # Each entry names a Secret that already exists. The chart does not make certificates.
+  tls: []
+  #  - secretName: chronos-tls
+  #    hosts:
+  #      - chronos.example.com

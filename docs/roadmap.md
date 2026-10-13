@@ -270,6 +270,12 @@ these SDKs are how it will call Chronos.
 They follow the same rules as the other two: generated from the spec, checked
 in CI against it, versioned with the server's tags.
 
+The Helm chart is in the repository at `charts/chronos-ledger` (see
+[Kubernetes (Helm)](deployment.md#kubernetes-helm)). `helm.yml` lints it,
+renders it three ways and checks the output against the Kubernetes schemas. It
+is not published to a chart registry; that, and the deb/rpm packages, remain
+on request.
+
 ---
 
 ## 0.17: Engine, part 2 (breaking)
