@@ -4,11 +4,11 @@
 import createClient from "openapi-fetch";
 
 import type { components, paths } from "./generated/schema.ts";
-import { chronosFetch, type Tokens } from "./transport.ts";
+import { chronosFetch, type RetryOptions, resolveRetry, type Tokens } from "./transport.ts";
 
 export { ChronosError, type Conflict } from "./errors.ts";
 export { paginate } from "./paginate.ts";
-export type { Tokens } from "./transport.ts";
+export type { RetryOptions, Tokens } from "./transport.ts";
 export { VERSION } from "./version.ts";
 export type { components, operations, paths } from "./generated/schema.ts";
 
@@ -21,8 +21,12 @@ export interface ChronosOptions {
   tokens?: Tokens;
   /** Called with each refreshed pair, so it can be stored. */
   onTokens?: (tokens: Tokens) => void | Promise<void>;
-  /** Retries for 429, 502, 503, 504 and network errors. Default 3. */
-  maxRetries?: number;
+  /**
+   * How a failed request is tried again: attempts, base delay, delay cap and
+   * overall deadline. `false` turns retries off. The defaults are 4 attempts,
+   * 250 ms, 8 s and 30 s.
+   */
+  retry?: RetryOptions | false;
   /** The underlying fetch. Defaults to the global one. */
   fetch?: typeof globalThis.fetch;
 }
@@ -42,7 +46,7 @@ export function createChronosClient(options: ChronosOptions) {
       apiKey: options.apiKey,
       tokens: options.tokens,
       onTokens: options.onTokens,
-      maxRetries: options.maxRetries ?? 3,
+      retry: resolveRetry(options.retry),
       fetch: options.fetch ?? globalThis.fetch.bind(globalThis),
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     }),

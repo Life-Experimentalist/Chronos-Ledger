@@ -168,7 +168,7 @@ Idempotency-Replayed: true
 
 - The same key and the same request: the first response comes back, status
   and body, with `Idempotency-Replayed: true`. Nothing runs a second time.
-- The same key and a different request: `409` with `IDEMPOTENCY_KEY_REUSED`.
+- The same key and a different request: `422` with `IDEMPOTENCY_KEY_REUSED`.
   The request is the method, the path, the query string (in any order) and the
   JSON body (in any key order or spacing).
 - The same key while the first request is still running: `409` with
@@ -205,10 +205,9 @@ The key is ignored, and a retry runs again, on:
   is already a no-op, and the file is not held in memory to be hashed.
 
 `POST /resources/{id}/reservations` had a required key of its own before this
-existed, and keeps the answers it gave: a reused key is `422`, not `409`, and
-a retry gets `200` with the hold as it is now (cancelled, if it was) rather
-than a replay. Its key is unique per caller. Moving it to `409` is a breaking
-change, left for 0.17.
+existed, and keeps its own answer to a retry: `200` with the hold as it is now
+(cancelled, if it was) rather than a replay. A reused key is `422`, as on every
+other write. Its key is unique per caller.
 
 One gap is left. The key is claimed in the same transaction as the request's
 own changes, and the response is recorded just after it has been sent. If the

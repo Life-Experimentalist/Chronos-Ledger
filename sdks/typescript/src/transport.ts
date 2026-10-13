@@ -10,20 +10,61 @@ export interface Tokens {
   refreshToken: string;
 }
 
+/** How a failed request is tried again. Pass `retry: false` to turn retries off. */
+export interface RetryOptions {
+  /** Tries in all, the first one included. Default 4. */
+  maxAttempts?: number;
+  /** The wait before retry `n` is random between 0 and `baseDelayMs * 2 ** n`. Default 250. */
+  baseDelayMs?: number;
+  /** The most any one jittered wait can reach. Default 8000. */
+  maxDelayMs?: number;
+  /** Milliseconds from the first send. No retry starts a wait that would run past it. Default 30000. */
+  deadlineMs?: number;
+}
+
+export type RetryPolicy = Required<RetryOptions>;
+
+export const DEFAULT_RETRY: RetryPolicy = { maxAttempts: 4, baseDelayMs: 250, maxDelayMs: 8_000, deadlineMs: 30_000 };
+
+/** Fills in the defaults and refuses values that cannot work. `false` means no retries. */
+export function resolveRetry(retry: RetryOptions | false | undefined): RetryPolicy | null {
+  if (retry === false) return null;
+  const policy: RetryPolicy = {
+    maxAttempts: retry?.maxAttempts ?? DEFAULT_RETRY.maxAttempts,
+    baseDelayMs: retry?.baseDelayMs ?? DEFAULT_RETRY.baseDelayMs,
+    maxDelayMs: retry?.maxDelayMs ?? DEFAULT_RETRY.maxDelayMs,
+    deadlineMs: retry?.deadlineMs ?? DEFAULT_RETRY.deadlineMs,
+  };
+  if (!Number.isInteger(policy.maxAttempts) || policy.maxAttempts < 1) {
+    throw new RangeError("maxAttempts must be a whole number, at least 1");
+  }
+  if (Math.min(policy.baseDelayMs, policy.maxDelayMs, policy.deadlineMs) < 0) {
+    throw new RangeError("delays and the deadline cannot be negative");
+  }
+  return policy;
+}
+
 export interface TransportOptions {
   baseUrl: string;
   apiKey?: string;
   tokens?: Tokens;
   /** Called with each new pair. A refresh token works once, so store the new one. */
   onTokens?: (tokens: Tokens) => void | Promise<void>;
-  maxRetries: number;
+  /** Null for no retries. */
+  retry: RetryPolicy | null;
   fetch: typeof globalThis.fetch;
   sleep: (ms: number) => Promise<void>;
+  /** A monotonic clock in milliseconds. Defaults to `performance.now`. */
+  now?: () => number;
+  /** A number in [0, 1). Defaults to `Math.random`. */
+  random?: () => number;
 }
 
 const RETRY_STATUSES = new Set([429, 502, 503, 504]);
-const IDEMPOTENT_METHODS = new Set(["GET", "HEAD", "PUT", "DELETE", "OPTIONS"]);
-const MAX_DELAY_MS = 30_000;
+/** The code of a 409 that says the first request under this key is still running. */
+const IN_PROGRESS_CODE = "IDEMPOTENCY_KEY_IN_PROGRESS";
+/** Methods that change nothing. Every other method is a write and goes out with an Idempotency-Key. */
+const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const USER_AGENT = `chronos-ts/${VERSION}`;
 
 /** The `fetch` handed to openapi-fetch. Auth, retries and errors happen here. */
@@ -31,9 +72,13 @@ export function chronosFetch(options: TransportOptions): (request: Request) => P
   let tokens = options.tokens;
   let refreshing: Promise<boolean> | undefined;
 
-  const authorize = (request: Request): Request => {
+  const now = options.now ?? (() => performance.now());
+  const random = options.random ?? Math.random;
+
+  const authorize = (request: Request, idempotencyKey: string | undefined): Request => {
     const out = request.clone();
     out.headers.set("User-Agent", USER_AGENT);
+    if (idempotencyKey) out.headers.set("Idempotency-Key", idempotencyKey);
     if (options.apiKey) out.headers.set("X-API-Key", options.apiKey);
     else if (tokens) out.headers.set("Authorization", `Bearer ${tokens.accessToken}`);
     return out;
@@ -63,17 +108,38 @@ export function chronosFetch(options: TransportOptions): (request: Request) => P
   };
 
   return async (request: Request): Promise<Response> => {
-    const retryable = IDEMPOTENT_METHODS.has(request.method) || request.headers.has("Idempotency-Key");
+    // One key for the whole call, so every try of a write is the same write.
+    const idempotencyKey =
+      READ_METHODS.has(request.method) || request.headers.has("Idempotency-Key") ? undefined : crypto.randomUUID();
+    const started = now();
     let refreshed = false;
     let attempt = 0;
+
+    /** Milliseconds to sleep before the next try, or undefined when this failure is final. */
+    const waitFor = (response?: Response): number | undefined => {
+      const policy = options.retry;
+      if (!policy || attempt + 1 >= policy.maxAttempts) return undefined;
+      const ceiling = Math.min(policy.maxDelayMs, policy.baseDelayMs * 2 ** attempt);
+      const wait = (response && retryAfter(response)) ?? random() * ceiling;
+      return now() + wait - started > policy.deadlineMs ? undefined : wait;
+    };
+    /** Sleeps, unless the caller gave up while this was waiting. */
+    const pause = async (wait: number): Promise<void> => {
+      await options.sleep(wait);
+      request.signal.throwIfAborted();
+      attempt++;
+    };
+
     for (;;) {
       const sentWith = tokens;
       let response: Response;
       try {
-        response = await options.fetch(authorize(request));
+        response = await options.fetch(authorize(request, idempotencyKey));
       } catch (error) {
-        if (!retryable || attempt >= options.maxRetries) throw error;
-        await options.sleep(backoff(attempt++));
+        // The caller's own abort or timeout is an answer, not a failure to retry.
+        const wait = request.signal.aborted ? undefined : waitFor();
+        if (wait === undefined) throw error;
+        await pause(wait);
         continue;
       }
 
@@ -85,23 +151,18 @@ export function chronosFetch(options: TransportOptions): (request: Request) => P
           continue;
         }
       }
-      if (RETRY_STATUSES.has(response.status) && retryable && attempt < options.maxRetries) {
-        const wait = retryAfter(response) ?? backoff(attempt);
-        if (wait <= MAX_DELAY_MS) {
-          await response.body?.cancel();
-          await options.sleep(wait);
-          attempt++;
+      if (response.status < 400) return response;
+      const error = await ChronosError.fromResponse(response);
+      if (RETRY_STATUSES.has(response.status) || error.code === IN_PROGRESS_CODE) {
+        const wait = waitFor(response);
+        if (wait !== undefined) {
+          await pause(wait);
           continue;
         }
       }
-      if (response.status >= 400) throw await ChronosError.fromResponse(response);
-      return response;
+      throw error;
     }
   };
-}
-
-function backoff(attempt: number): number {
-  return Math.min(500 * 2 ** attempt, 8_000);
 }
 
 /** Milliseconds from a Retry-After header, given in seconds or as an HTTP date. */
