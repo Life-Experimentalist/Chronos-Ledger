@@ -160,7 +160,7 @@ in Chronos. A booking that runs past midnight has an end before its start.
     "guest_gate_registry": ["visit_code_hash"],
     "users": ["calendar_feed_token", "credential_secure_hash"]
   },
-  "schema_version": "1",
+  "schema_version": "2",
   "secrets_included": false,
   "tables": [
     { "file": "audit_records.jsonl", "name": "audit_records", "rows": 4812 }
@@ -277,7 +277,8 @@ Which member is in which activity.
 ### reservations
 
 Bookings on resources, held and cancelled ones alike, with the
-idempotency key and request fingerprint that make a retried request safe.
+idempotency key (unique per requester) and request fingerprint that make a
+retried booking safe.
 
 ### structural_master_slots
 
@@ -301,6 +302,7 @@ Attendance marks: one per member per ledger day.
 | Table | Why it stays behind |
 |---|---|
 | `refresh_tokens` | Hashes of one-use session tokens that expire within days. Carrying them would carry live sessions into another deployment. After an import everyone signs in again. |
+| `idempotency_records` | Stored responses for `Idempotency-Key` retries, deleted after `IDEMPOTENCY_RETENTION_HOURS`. They copy what a write already returned. A client that retries against the imported deployment has its write treated as a new request. |
 
 `backend/tests/test_portability.py` fails when a table is neither exported
 nor on this list, so a new table cannot be left out of the archive by

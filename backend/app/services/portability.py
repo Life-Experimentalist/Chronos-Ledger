@@ -71,6 +71,12 @@ EXCLUDED: dict[str, str] = {
     # means everyone signs in again after an import, which is the point.
     "refresh_tokens": "one-use session tokens that expire within days; "
     "an imported deployment signs everyone in again",
+    # Stored responses for Idempotency-Key retries, deleted by the nightly job
+    # after IDEMPOTENCY_RETENTION_HOURS. They are a short-lived cache of what a
+    # write already returned, not data of their own; a client retrying against
+    # the imported deployment gets its write treated as a new request.
+    "idempotency_records": "stored responses to retried writes, kept for hours; "
+    "a retry after an import is treated as a new request",
 }
 
 # Exported tables in foreign key order, which is also the order an import

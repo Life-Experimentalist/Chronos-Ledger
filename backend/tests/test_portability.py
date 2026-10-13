@@ -33,6 +33,7 @@ from app.models.db import (
     FederatedIssuerKey,
     FederatedRoleMap,
     GuestGateRegistry,
+    IdempotencyRecord,
     InstitutionalRole,
     LedgerAnnotation,
     LogVerificationState,
@@ -376,6 +377,18 @@ def seed(engine):
             )
         )
         db.add(
+            IdempotencyRecord(
+                id=1,
+                caller="user:BM200",
+                key="retry-1",
+                request_hash="c" * 64,
+                status_code=201,
+                response_headers='{"content-type": "application/json"}',
+                response_body=b"{}",
+                created_at=datetime(2026, 1, 5, 9, 0, tzinfo=UTC),
+            )
+        )
+        db.add(
             ApiKey(
                 id=1,
                 key_hash=hash_api_key(SEEDED_KEY),
@@ -529,7 +542,10 @@ def test_the_archive_layout(source):
     assert manifest["format"] == "chronos-ledger-archive"
     assert manifest["format_version"] == FORMAT_VERSION
     assert manifest["schema_version"] == SCHEMA_VERSION
+    # The seed has a row in each excluded table, and none of them is here.
     assert "refresh_tokens.jsonl" not in names
+    assert "idempotency_records.jsonl" not in names
+    assert {entry["name"] for entry in manifest["tables"]}.isdisjoint(EXCLUDED)
 
 
 def test_values_are_written_in_one_form(source):
