@@ -27,6 +27,7 @@
         "sdks/python/src/chronos_ledger_client/__init__.py",
         "sdks/go/version.go",
         "docs/openapi.yaml",
+        "sdks/rust/openapi.yaml",
         "backend/app/main.py",
         "charts/chronos-ledger/Chart.yaml"
       ],
