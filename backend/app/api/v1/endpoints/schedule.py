@@ -3,28 +3,44 @@
 
 
 import datetime
+import logging
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.database import get_db
 from app.core.errors import ChronosError, ErrorCode
 from app.core.pagination import Page
 from app.core.redis_client import get_redis
 from app.core.security import ensure_unit_scope, get_current_user, require_roles
 from app.core.time import org_today
-from app.models.db import Activity, DailyLedger, PlanningCycle, StructuralMasterSlot, User
+from app.cron.ledger_generator import materialize_horizon
+from app.models.db import (
+    Activity,
+    ActivityEnrollment,
+    DailyLedger,
+    PlanningCycle,
+    StructuralMasterSlot,
+    User,
+)
 from app.schemas.resources import ReservationConflict
 from app.schemas.schedule import (
+    ActivityCreate,
+    ActivityResponse,
+    ActivityUpdate,
     ConflictReport,
     CycleActivationConflict,
     DailyLedgerUpdate,
+    EnrollmentCreate,
+    EnrollmentResponse,
     MasterSlotCreate,
     MasterSlotUpdate,
     PlanningCycleCreate,
     PlanningCycleResponse,
+    RetireResult,
     StaffLocationResponse,
 )
 from app.services.availability import (
@@ -36,6 +52,8 @@ from app.services.conflicts import MAX_CONFLICT_RANGE_DAYS, find_conflicts
 from app.services.location_resolver import determine_staff_current_states
 from app.services.master_slot import propagate_slot_corrections, rows_in_use
 from app.services.resource import get_or_create_room
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -271,7 +289,11 @@ def open_cycle(cycle_id: int, db: Session = Depends(get_db), _=Depends(require_r
     slots = (
         db.query(StructuralMasterSlot)
         .join(Activity, StructuralMasterSlot.activity_id == Activity.id)
-        .filter(Activity.cycle_id == cycle_id)
+        .filter(
+            Activity.cycle_id == cycle_id,
+            StructuralMasterSlot.retired_at.is_(None),
+            Activity.retired_at.is_(None),
+        )
         .order_by(StructuralMasterSlot.id)
         .all()
     )
@@ -319,7 +341,8 @@ def clone_cycle_offerings(
     timetable and the documented rollover left an admin an empty week to type
     in again. The slots come across now, each pointed at its activity's copy
     with the same lead, room and window. Enrollments do not: the next cycle's
-    groups come from the next import.
+    groups come from the next import. Retired activities and retired slots are
+    left behind.
 
     The target has to be closed and empty. Closed, because the copied slots
     are not checked against the rooms here. Opening a cycle runs every check
@@ -350,7 +373,10 @@ def clone_cycle_offerings(
         )
 
     old_offerings = (
-        db.query(Activity).filter(Activity.cycle_id == old_id).order_by(Activity.id).all()
+        db.query(Activity)
+        .filter(Activity.cycle_id == old_id, Activity.retired_at.is_(None))
+        .order_by(Activity.id)
+        .all()
     )
     cloned_slots = 0
     for offering in old_offerings:
@@ -363,6 +389,8 @@ def clone_cycle_offerings(
         db.add(new)
         db.flush()
         for slot in offering.master_slots:
+            if slot.retired_at is not None:
+                continue
             db.add(
                 StructuralMasterSlot(
                     day_of_week_index=slot.day_of_week_index,
@@ -379,12 +407,318 @@ def clone_cycle_offerings(
     return {"cloned": len(old_offerings), "cloned_slots": cloned_slots}
 
 
+# ── Activities ───────────────────────────────────────────────────────────────
+
+
+def _refuse_if_retired(thing, what: str) -> None:
+    """Refuse a write to an activity or a slot that has been retired.
+
+    Retiring is what keeps a finished class's history, so a retired one is
+    read but not changed. A slot or an enrollment added to it would produce
+    nothing, and a title changed after the fact would rewrite what the days
+    it ran were called.
+    """
+    if thing.retired_at is not None:
+        raise ChronosError(
+            status_code=409, detail=f"{what} is retired", code=ErrorCode.STATE_CONFLICT
+        )
+
+
+def _fill_horizon(db: Session, cycle_id: int) -> None:
+    """Write the days ahead for a cycle, the same way an import does.
+
+    The same function the CSV upload and the nightly job call, so a class
+    created here is on the calendar at once and gets exactly the days an
+    imported one would. The write before this is committed already, so a
+    failure here is logged rather than reported: the nightly job writes the
+    same days if this does not.
+    """
+    try:
+        materialize_horizon(db, cycle_id)
+    except Exception:
+        db.rollback()
+        logger.exception("ledger: filling the horizon for cycle %s failed", cycle_id)
+
+
+def _get_activity(db: Session, activity_id: int) -> Activity:
+    activity = db.query(Activity).filter(Activity.id == activity_id).first()
+    if not activity:
+        raise ChronosError(status_code=404, detail="Activity not found", code=ErrorCode.NOT_FOUND)
+    return activity
+
+
+def _retire_days_ahead(db: Session, rows: list[DailyLedger]) -> tuple[int, int]:
+    """Remove the days ahead that are still plans and keep the ones in use.
+
+    The same rule closing a cycle applies: a day from today onward that
+    nobody has marked or annotated is removed, and one that has been is kept
+    as the record it already is. Returns how many were removed and kept.
+    """
+    kept = rows_in_use([row.id for row in rows], db)
+    for row in rows:
+        if row.id not in kept:
+            db.delete(row)
+    return len(rows) - len(kept), len(kept)
+
+
+@router.get(
+    "/activities", operation_id="schedule.listActivities", response_model=list[ActivityResponse]
+)
+def list_activities(
+    cycle_id: int | None = None,
+    include_retired: bool = False,
+    page: Page = Depends(),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """The activities, without the retired ones unless include_retired is set."""
+    q = db.query(Activity)
+    if cycle_id:
+        q = q.filter(Activity.cycle_id == cycle_id)
+    if not include_retired:
+        q = q.filter(Activity.retired_at.is_(None))
+    return page.rows(q, Activity.id)
+
+
+@router.get(
+    "/activities/{activity_id}",
+    operation_id="schedule.getActivity",
+    response_model=ActivityResponse,
+)
+def get_activity(
+    activity_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    return _get_activity(db, activity_id)
+
+
+@router.post(
+    "/activities",
+    operation_id="schedule.createActivity",
+    response_model=ActivityResponse,
+    status_code=201,
+)
+def create_activity(
+    payload: ActivityCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
+):
+    """Add an activity to a cycle, the way a CSV row does, without its slots.
+
+    The code is unique within the cycle, retired activities included: a
+    retired activity keeps its code, so its history is never confused with a
+    new class that happens to reuse it.
+    """
+    ensure_unit_scope(current_user, payload.unit_code)
+    if not db.query(PlanningCycle.id).filter(PlanningCycle.id == payload.cycle_id).first():
+        raise ChronosError(status_code=404, detail="Cycle not found", code=ErrorCode.NOT_FOUND)
+    taken = (
+        db.query(Activity)
+        .filter(
+            Activity.cycle_id == payload.cycle_id,
+            Activity.activity_code == payload.activity_code,
+        )
+        .first()
+    )
+    if taken:
+        raise ChronosError(
+            status_code=409,
+            detail=(
+                f"Activity '{payload.activity_code}' already exists in cycle "
+                f"{payload.cycle_id} as activity {taken.id}"
+                + (", retired" if taken.retired_at is not None else "")
+            ),
+            code=ErrorCode.ALREADY_EXISTS,
+        )
+    activity = Activity(**payload.model_dump())
+    db.add(activity)
+    try:
+        db.commit()
+    except IntegrityError:
+        # Another request created the same code between the check and here.
+        db.rollback()
+        raise ChronosError(
+            status_code=409,
+            detail=f"Activity '{payload.activity_code}' already exists in cycle {payload.cycle_id}",
+            code=ErrorCode.ALREADY_EXISTS,
+        ) from None
+    db.refresh(activity)
+    return activity
+
+
+@router.patch(
+    "/activities/{activity_id}",
+    operation_id="schedule.updateActivity",
+    response_model=ActivityResponse,
+)
+def update_activity(
+    activity_id: int,
+    payload: ActivityUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
+):
+    activity = _get_activity(db, activity_id)
+    ensure_unit_scope(current_user, activity.unit_code)
+    _refuse_if_retired(activity, "Activity")
+    activity.activity_title = payload.activity_title
+    db.commit()
+    db.refresh(activity)
+    return activity
+
+
+@router.post(
+    "/activities/{activity_id}/retire",
+    operation_id="schedule.retireActivity",
+    response_model=RetireResult,
+)
+def retire_activity(
+    activity_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
+):
+    """Take an activity off the timetable and keep everything it has recorded.
+
+    The activity and every slot it still has are marked retired, so the
+    generator writes no more days for them and they hold no room. Days from
+    today onward that are still plans are removed; days somebody has marked
+    or annotated are kept, and days before today are not touched. The
+    activity stays readable, and is left out of GET /schedule/activities
+    unless include_retired is set.
+    """
+    activity = _get_activity(db, activity_id)
+    ensure_unit_scope(current_user, activity.unit_code)
+    _refuse_if_retired(activity, "Activity")
+    now = clock.now()
+    activity.retired_at = now
+    slots_retired = 0
+    for slot in activity.master_slots:
+        if slot.retired_at is None:
+            slot.retired_at = now
+            slots_retired += 1
+    ahead = (
+        db.query(DailyLedger)
+        .filter(DailyLedger.activity_id == activity.id, DailyLedger.target_date >= org_today())
+        .all()
+    )
+    removed, kept = _retire_days_ahead(db, ahead)
+    db.commit()
+    return {
+        "retired_at": now,
+        "slots_retired": slots_retired,
+        "ledger_rows_removed": removed,
+        "ledger_rows_kept": kept,
+    }
+
+
+@router.get(
+    "/activities/{activity_id}/enrollments",
+    operation_id="schedule.listEnrollments",
+    response_model=list[EnrollmentResponse],
+)
+def list_enrollments(
+    activity_id: int,
+    page: Page = Depends(),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
+):
+    activity = _get_activity(db, activity_id)
+    ensure_unit_scope(current_user, activity.unit_code)
+    q = db.query(ActivityEnrollment).filter(ActivityEnrollment.activity_id == activity.id)
+    return page.rows(q, ActivityEnrollment.id)
+
+
+@router.post(
+    "/activities/{activity_id}/enrollments",
+    operation_id="schedule.createEnrollment",
+    response_model=EnrollmentResponse,
+    status_code=201,
+)
+def create_enrollment(
+    activity_id: int,
+    payload: EnrollmentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
+):
+    """Put a member on an activity's roster, as a CSV row does.
+
+    The member has to exist and be active: an import refuses a deactivated
+    member for the same reason. Days are per slot, not per member, so this
+    writes no days; the member sees the activity's days from now on.
+    """
+    activity = _get_activity(db, activity_id)
+    ensure_unit_scope(current_user, activity.unit_code)
+    _refuse_if_retired(activity, "Activity")
+    _refuse_unless_active(db, payload.member_id, "Member")
+    taken = (
+        db.query(ActivityEnrollment.id)
+        .filter(
+            ActivityEnrollment.activity_id == activity.id,
+            ActivityEnrollment.member_id == payload.member_id,
+        )
+        .first()
+    )
+    if taken:
+        raise ChronosError(
+            status_code=409,
+            detail=f"Member '{payload.member_id}' is already enrolled",
+            code=ErrorCode.ALREADY_EXISTS,
+        )
+    enrollment = ActivityEnrollment(activity_id=activity.id, member_id=payload.member_id)
+    db.add(enrollment)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise ChronosError(
+            status_code=409,
+            detail=f"Member '{payload.member_id}' is already enrolled",
+            code=ErrorCode.ALREADY_EXISTS,
+        ) from None
+    db.refresh(enrollment)
+    return enrollment
+
+
+@router.delete(
+    "/activities/{activity_id}/enrollments/{member_id}",
+    operation_id="schedule.deleteEnrollment",
+)
+def delete_enrollment(
+    activity_id: int,
+    member_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
+):
+    """Take a member off an activity's roster.
+
+    Only the enrollment goes. Days belong to slots, not to members, so no day
+    is removed, and the attendance already recorded for the member stays.
+    """
+    activity = _get_activity(db, activity_id)
+    ensure_unit_scope(current_user, activity.unit_code)
+    _refuse_if_retired(activity, "Activity")
+    enrollment = (
+        db.query(ActivityEnrollment)
+        .filter(
+            ActivityEnrollment.activity_id == activity.id,
+            ActivityEnrollment.member_id == member_id,
+        )
+        .first()
+    )
+    if not enrollment:
+        raise ChronosError(status_code=404, detail="Enrollment not found", code=ErrorCode.NOT_FOUND)
+    db.delete(enrollment)
+    db.commit()
+    return {"activity_id": activity.id, "member_id": member_id, "removed": True}
+
+
 # ── Master Slots ──────────────────────────────────────────────────────────────
 
 
 @router.get("/slots", operation_id="schedule.listSlots", response_model=list[dict])
 def list_master_slots(
     cycle_id: int | None = None,
+    include_retired: bool = False,
     page: Page = Depends(),
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
@@ -392,6 +726,8 @@ def list_master_slots(
     q = db.query(StructuralMasterSlot)
     if cycle_id:
         q = q.join(Activity).filter(Activity.cycle_id == cycle_id)
+    if not include_retired:
+        q = q.filter(StructuralMasterSlot.retired_at.is_(None))
     return [
         {
             "id": s.id,
@@ -402,6 +738,7 @@ def list_master_slots(
             "primary_lead_id": s.primary_lead_id,
             "resource_id": s.resource_id,
             "target_room_identifier": s.target_room_identifier,
+            "retired_at": s.retired_at,
         }
         for s in page.rows(q, StructuralMasterSlot.id)
     ]
@@ -437,6 +774,7 @@ def create_master_slot(
             status_code=404, detail="Activity offering not found", code=ErrorCode.NOT_FOUND
         )
     ensure_unit_scope(current_user, offering.unit_code)
+    _refuse_if_retired(offering, "Activity")
     if payload.primary_lead_id is not None:
         _refuse_unless_active(db, payload.primary_lead_id, "Lead")
     room = get_or_create_room(payload.target_room_identifier, db)
@@ -474,8 +812,9 @@ def create_master_slot(
     )
     db.add(slot)
     db.commit()
-    db.refresh(slot)
-    return {"id": slot.id}
+    slot_id = slot.id
+    _fill_horizon(db, offering.cycle_id)
+    return {"id": slot_id}
 
 
 @router.patch(
@@ -513,6 +852,7 @@ def update_master_slot(
             status_code=404, detail="Master slot not found", code=ErrorCode.NOT_FOUND
         )
     ensure_unit_scope(current_user, slot.activity.unit_code)
+    _refuse_if_retired(slot, "Slot")
 
     fields = payload.model_dump(exclude_unset=True)
     if fields.get("primary_lead_id") is not None:
@@ -607,6 +947,7 @@ def delete_master_slot(
             status_code=404, detail="Master slot not found", code=ErrorCode.NOT_FOUND
         )
     ensure_unit_scope(current_user, slot.activity.unit_code)
+    _refuse_if_retired(slot, "Slot")
 
     detached = (
         db.query(DailyLedger)
@@ -620,6 +961,46 @@ def delete_master_slot(
     db.delete(slot)
     db.commit()
     return {"ledger_rows_removed": removed, "ledger_rows_detached": detached}
+
+
+@router.post(
+    "/slots/{slot_id}/retire",
+    operation_id="schedule.retireSlot",
+    response_model=RetireResult,
+)
+def retire_master_slot(
+    slot_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
+):
+    """Take a slot off the timetable and keep everything it has recorded.
+
+    Where DELETE refuses while a day ahead carries attendance or a note,
+    this keeps that day and removes the rest. The slot stays, marked retired,
+    so the generator writes no more days for it and it holds no room.
+    """
+    slot = db.query(StructuralMasterSlot).filter(StructuralMasterSlot.id == slot_id).first()
+    if not slot:
+        raise ChronosError(
+            status_code=404, detail="Master slot not found", code=ErrorCode.NOT_FOUND
+        )
+    ensure_unit_scope(current_user, slot.activity.unit_code)
+    _refuse_if_retired(slot, "Slot")
+    now = clock.now()
+    slot.retired_at = now
+    ahead = (
+        db.query(DailyLedger)
+        .filter(DailyLedger.master_slot_id == slot.id, DailyLedger.target_date >= org_today())
+        .all()
+    )
+    removed, kept = _retire_days_ahead(db, ahead)
+    db.commit()
+    return {
+        "retired_at": now,
+        "slots_retired": 1,
+        "ledger_rows_removed": removed,
+        "ledger_rows_kept": kept,
+    }
 
 
 def _withdraw_planned_days(slot: StructuralMasterSlot, db: Session, why: str) -> int:

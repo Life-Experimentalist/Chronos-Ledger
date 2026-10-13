@@ -156,7 +156,11 @@ def find_conflicts(db: Session, from_date: datetime.date, to_date: datetime.date
         db.query(StructuralMasterSlot)
         .join(Activity, StructuralMasterSlot.activity_id == Activity.id)
         .join(PlanningCycle, Activity.cycle_id == PlanningCycle.id)
-        .filter(PlanningCycle.operational_status)
+        .filter(
+            PlanningCycle.operational_status,
+            StructuralMasterSlot.retired_at.is_(None),
+            Activity.retired_at.is_(None),
+        )
         .options(joinedload(StructuralMasterSlot.activity).joinedload(Activity.cycle))
         .all()
     )
