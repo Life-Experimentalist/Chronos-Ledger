@@ -214,6 +214,15 @@ def test_a_unit_admin_writes_only_inside_their_unit(client, db, seed_users):
         activity_code="EC201", activity_title="Signals", unit_code="ECE", cycle_id=cycle.id
     )
     db.add(other)
+    db.flush()
+    other_slot = StructuralMasterSlot(
+        day_of_week_index=2,
+        time_window_start=datetime.time(9, 0),
+        time_window_end=datetime.time(10, 0),
+        activity_id=other.id,
+        target_room_identifier="EC-1",
+    )
+    db.add(other_slot)
     db.commit()
     headers = _unit_admin(client, db)
 
@@ -227,6 +236,7 @@ def test_a_unit_admin_writes_only_inside_their_unit(client, db, seed_users):
         ("post", f"/api/v1/schedule/activities/{other.id}/enrollments", {"member_id": "STU001"}),
         ("delete", f"/api/v1/schedule/activities/{other.id}/enrollments/STU001", None),
         ("get", f"/api/v1/schedule/activities/{other.id}/enrollments", None),
+        ("post", f"/api/v1/schedule/slots/{other_slot.id}/retire", None),
     ):
         kwargs = {"headers": headers}
         if body is not None:
@@ -235,8 +245,18 @@ def test_a_unit_admin_writes_only_inside_their_unit(client, db, seed_users):
         assert r.status_code == 403, (method, url, r.text)
         assert r.json()["code"] == "OUTSIDE_UNIT"
 
+    # Inside their own unit they create, enroll and retire.
     r = _create_activity(client, headers, cycle.id, code="CS301", unit="CSE")
     assert r.status_code == 201, r.text
+    own = r.json()["id"]
+    r = client.post(
+        f"/api/v1/schedule/activities/{own}/enrollments",
+        json={"member_id": "STU001"},
+        headers=headers,
+    )
+    assert r.status_code == 201, r.text
+    r = client.post(f"/api/v1/schedule/activities/{own}/retire", headers=headers)
+    assert r.status_code == 200, r.text
 
 
 def test_staff_cannot_write_activities(client, db, seed_users):
