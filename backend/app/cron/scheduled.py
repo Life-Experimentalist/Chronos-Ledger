@@ -35,6 +35,7 @@ from app.cron.ledger_generator import (
     missed_ledger_dates,
 )
 from app.cron.refresh_token_cleanup import purge_expired_refresh_tokens
+from app.services import webhooks
 
 NIGHTLY_LEDGER_HOUR = 23
 OVERSTAY_INTERVAL = timedelta(minutes=5)
@@ -108,6 +109,14 @@ async def announce_guest_overstays():
         db.close()
 
 
+def deliver_webhooks():
+    db = SessionLocal()
+    try:
+        webhooks.run_pass(db)
+    finally:
+        db.close()
+
+
 Moments = Callable[[datetime, datetime], Iterator[datetime]]
 
 
@@ -144,6 +153,19 @@ def every(interval: timedelta) -> Moments:
     return moments
 
 
+def every_webhook_interval(previous: datetime, current: datetime) -> Iterator[datetime]:
+    """every() on WEBHOOK_DELIVERY_INTERVAL_SECONDS, read when asked rather than at import.
+
+    Never, while the change feed is off: webhooks are made from its markers,
+    so there is nothing to send, and a deployment that does not use them is
+    not woken every few seconds to find that out.
+    """
+    settings = get_settings()
+    if not settings.change_feed_enabled:
+        return iter(())
+    return every(timedelta(seconds=settings.webhook_delivery_interval_seconds))(previous, current)
+
+
 @dataclass(frozen=True)
 class Job:
     name: str
@@ -159,6 +181,10 @@ JOBS: tuple[Job, ...] = (
     Job("guest_retention_purge", purge_guest_check_ins, daily_at(3, 30)),
     Job("idempotency_purge", purge_idempotency_records, daily_at(3, 45)),
     Job("guest_overstay_notice", announce_guest_overstays, every(OVERSTAY_INTERVAL)),
+    # Last, so a pass sees every marker the jobs before it at the same instant
+    # wrote. One pass per advance, like the overstay notice: a delivery whose
+    # retry falls between two advances goes out at the second.
+    Job("webhook_delivery", deliver_webhooks, every_webhook_interval),
 )
 
 

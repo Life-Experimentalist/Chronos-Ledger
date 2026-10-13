@@ -1324,6 +1324,160 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/webhooks/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List webhook subscriptions
+         * @description Requires `ORG_ADMIN`; an API key needs `webhooks:read`. Every subscription, oldest first, without its secrets. docs/webhooks.md describes what is sent, how it is signed and how failures are retried.
+         */
+        get: operations["webhooks.list"];
+        put?: never;
+        /**
+         * Subscribe a URL to changes
+         * @description Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Events are made from the change feed, so the feed has to be on. The subscription starts at the newest change and is sent nothing that happened before it existed: read the rooms and the bookings in full once, as a change feed consumer does.
+         *
+         *     The signing secret is in the response and nowhere else. An Idempotency-Key is ignored here, because keeping the response would keep the secret.
+         */
+        post: operations["webhooks.create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/{subscription_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a webhook subscription
+         * @description Requires `ORG_ADMIN`; an API key needs `webhooks:read`.
+         */
+        get: operations["webhooks.get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a webhook subscription
+         * @description Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Stops sending at once and removes the subscription with its deliveries and their attempts.
+         */
+        delete: operations["webhooks.delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a webhook subscription
+         * @description Requires `ORG_ADMIN`; an API key needs `webhooks:write`. New event types apply to changes fanned out from now on. Switched off, a subscription keeps its place and sends nothing; switched back on, it sends what happened in between.
+         */
+        patch: operations["webhooks.update"];
+        trace?: never;
+    };
+    "/api/v1/webhooks/{subscription_id}/rotate-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue a new signing secret
+         * @description Requires `ORG_ADMIN`; an API key needs `webhooks:write`. The new secret is in the response and nowhere else. The old one keeps signing alongside it for 24 hours, or until it is removed, so every send in that time carries two signatures and receivers can switch over at their own pace. An Idempotency-Key is ignored here, for the reason it is on create.
+         */
+        post: operations["webhooks.rotateSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/{subscription_id}/previous-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Stop signing with the previous secret
+         * @description Requires `ORG_ADMIN`; an API key needs `webhooks:write`. For when every receiver has moved to the new secret before the 24 hours are up. Nothing to remove is not an error.
+         */
+        delete: operations["webhooks.removePreviousSecret"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/{subscription_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume a paused subscription
+         * @description Requires `ORG_ADMIN`; an API key needs `webhooks:write`. Clears the pause and the failure count. Nothing is skipped: what changed while it was paused is sent, oldest first. Resuming one that is not paused changes nothing.
+         */
+        post: operations["webhooks.resume"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/{subscription_id}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What was sent and what came back
+         * @description Requires `ORG_ADMIN`; an API key needs `webhooks:read`. Deliveries newest first, each with every attempt made at it.
+         */
+        get: operations["webhooks.listDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/{subscription_id}/deliveries/{delivery_id}/redeliver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a delivery again
+         * @description Requires `ORG_ADMIN`; an API key needs `webhooks:write`. The delivery goes back in the queue with a fresh set of attempts and is sent on the worker's next pass, with the same `webhook-id` and body and a new timestamp and signature.
+         */
+        post: operations["webhooks.redeliver"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/feed-token": {
         parameters: {
             query?: never;
@@ -2397,6 +2551,94 @@ export interface components {
             /** @description What the next poll sends as `since`. The cursor that was sent in when nothing changed, so storing it unconditionally keeps the caller's place. */
             next_cursor?: number;
         };
+        /** @enum {string} */
+        WebhookEventType: "reservation.created" | "reservation.updated" | "resource.created" | "resource.updated";
+        WebhookCreate: {
+            /**
+             * @description Where to POST each event. HTTPS, unless the host is listed in `WEBHOOK_ALLOW_HTTP_HOSTS`. A name that resolves to a loopback, private, link-local or otherwise internal address is refused unless `WEBHOOK_ALLOW_PRIVATE_TARGETS` is on.
+             * @example https://receiver.example.com/hooks/chronos
+             */
+            url: string;
+            /**
+             * @description Which events to send. Stored sorted and deduplicated.
+             * @example [
+             *       "reservation.created",
+             *       "reservation.updated"
+             *     ]
+             */
+            event_types: components["schemas"]["WebhookEventType"][];
+            /**
+             * @description An inactive subscription keeps its place and sends nothing. Made active again, it sends what happened in between.
+             * @default true
+             */
+            active: boolean;
+        };
+        /** @description Only the fields sent are changed. */
+        WebhookUpdate: {
+            url?: string | null;
+            event_types?: components["schemas"]["WebhookEventType"][] | null;
+            active?: boolean | null;
+        };
+        /** @description A subscription, without its secrets. */
+        WebhookResponse: {
+            id?: number;
+            url?: string;
+            event_types?: components["schemas"]["WebhookEventType"][];
+            active?: boolean;
+            /**
+             * Format: date-time
+             * @description Set while the subscription is paused, after five deliveries in a row ran out of attempts or by an import that carried no secrets. Cleared by resume.
+             */
+            paused_at?: string | null;
+            /** @description Deliveries in a row that ran out of attempts. A success resets it. */
+            consecutive_failures?: number;
+            /**
+             * Format: date-time
+             * @description Set while the secret before the last rotation still signs alongside the current one.
+             */
+            previous_secret_expires_at?: string | null;
+            /** Format: date-time */
+            created_at?: string | null;
+            /** Format: date-time */
+            updated_at?: string | null;
+        };
+        WebhookWithSecret: components["schemas"]["WebhookResponse"] & {
+            /** @description The signing secret, `whsec_` and the base64 of 32 random bytes. Returned here and nowhere else, so keep it: it cannot be read back, only replaced by rotating. */
+            secret: string;
+        };
+        WebhookAttemptResponse: {
+            /** Format: date-time */
+            at?: string;
+            /** @description Null when no response came back. */
+            status_code?: number | null;
+            response_ms?: number;
+            /** @description Why the attempt failed, briefly. Null on success. */
+            error?: string | null;
+            /** @description The start of the response body, cut short. */
+            response_excerpt?: string | null;
+        };
+        WebhookDeliveryResponse: {
+            id?: number;
+            subscription_id?: number;
+            /** @description The `webhook-id` header, the same on every attempt. */
+            event_id?: string;
+            event_type?: components["schemas"]["WebhookEventType"];
+            /** @enum {string} */
+            entity_kind?: "resource" | "reservation";
+            entity_id?: number;
+            /** @description The change feed cursor this delivery was made from. */
+            marker_id?: number;
+            /** @enum {string} */
+            status?: "pending" | "succeeded" | "failed";
+            attempt_count?: number;
+            /** Format: date-time */
+            next_attempt_at?: string | null;
+            /** Format: date-time */
+            created_at?: string | null;
+            /** Format: date-time */
+            completed_at?: string | null;
+            attempts?: components["schemas"]["WebhookAttemptResponse"][];
+        };
         /** @description The body of every error. detail is for a person to read and code is for a program to branch on. A 409 that names what stood in the way has its own schema, with detail as an object; see ReservationConflict. */
         ErrorResponse: {
             code: components["schemas"]["ErrorCode"];
@@ -2408,7 +2650,7 @@ export interface components {
          * @example NOT_FOUND
          * @enum {string}
          */
-        ErrorCode: "BAD_REQUEST" | "NOT_AUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "STATE_CONFLICT" | "PAYLOAD_TOO_LARGE" | "INVALID_VALUE" | "RATE_LIMITED" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE" | "VALIDATION_FAILED" | "INVALID_CREDENTIALS" | "TOKEN_INVALID" | "API_KEY_INVALID" | "API_KEY_EXPIRED" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_DEACTIVATED" | "REFRESH_TOKEN_INVALID" | "REFRESH_TOKEN_EXPIRED" | "REFRESH_TOKEN_USED" | "REFRESH_TOKEN_REUSED" | "FEDERATED_TOKEN_INVALID" | "FEDERATED_EMAIL_MISSING" | "FEDERATED_ADMIN_REFUSED" | "FEDERATION_UNAVAILABLE" | "CURRENT_PASSWORD_INCORRECT" | "PASSWORD_UNCHANGED" | "PASSWORD_CHANGE_REQUIRED" | "INSUFFICIENT_ROLE" | "SCOPE_MISSING" | "OUTSIDE_UNIT" | "RESOURCE_CONFLICT" | "ALREADY_EXISTS" | "EMAIL_TAKEN" | "USER_DEACTIVATED" | "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_KEY_IN_PROGRESS" | "LOCATION_REQUIRED" | "LOCATION_TOO_COARSE" | "OUTSIDE_GEOFENCE" | "MANAGER_NOT_SET" | "IMPORT_REJECTED" | "CHANGE_FEED_DISABLED" | "SERVER_BUSY";
+        ErrorCode: "BAD_REQUEST" | "NOT_AUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "STATE_CONFLICT" | "PAYLOAD_TOO_LARGE" | "INVALID_VALUE" | "RATE_LIMITED" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE" | "VALIDATION_FAILED" | "INVALID_CREDENTIALS" | "TOKEN_INVALID" | "API_KEY_INVALID" | "API_KEY_EXPIRED" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_DEACTIVATED" | "REFRESH_TOKEN_INVALID" | "REFRESH_TOKEN_EXPIRED" | "REFRESH_TOKEN_USED" | "REFRESH_TOKEN_REUSED" | "FEDERATED_TOKEN_INVALID" | "FEDERATED_EMAIL_MISSING" | "FEDERATED_ADMIN_REFUSED" | "FEDERATION_UNAVAILABLE" | "CURRENT_PASSWORD_INCORRECT" | "PASSWORD_UNCHANGED" | "PASSWORD_CHANGE_REQUIRED" | "INSUFFICIENT_ROLE" | "SCOPE_MISSING" | "OUTSIDE_UNIT" | "RESOURCE_CONFLICT" | "ALREADY_EXISTS" | "EMAIL_TAKEN" | "USER_DEACTIVATED" | "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_KEY_IN_PROGRESS" | "LOCATION_REQUIRED" | "LOCATION_TOO_COARSE" | "OUTSIDE_GEOFENCE" | "MANAGER_NOT_SET" | "IMPORT_REJECTED" | "CHANGE_FEED_DISABLED" | "SERVER_BUSY" | "WEBHOOK_URL_REFUSED" | "WEBHOOK_SECRET_LIMIT";
     };
     responses: {
         /** @description Missing or invalid JWT. */
@@ -5157,6 +5399,317 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+        };
+    };
+    "webhooks.list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every subscription. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookResponse"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    "webhooks.create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookCreate"];
+            };
+        };
+        responses: {
+            /** @description Subscribed. The `secret` field will not be shown again. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookWithSecret"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description `WEBHOOK_URL_REFUSED` for a URL that may not receive webhooks (not HTTPS, an internal address, credentials in the URL), or `VALIDATION_FAILED` for an unknown event type. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The change feed is off, so there would be nothing to send. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    "webhooks.get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The subscription, without its secrets. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "webhooks.delete": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                subscription_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "webhooks.update": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                subscription_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated subscription. */
+            200: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description `WEBHOOK_URL_REFUSED` for a URL that may not receive webhooks, or `VALIDATION_FAILED` for an unknown event type. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    "webhooks.rotateSecret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rotated. The `secret` field will not be shown again. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookWithSecret"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description `WEBHOOK_SECRET_LIMIT`: two secrets are already live. Remove the previous one first. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    "webhooks.removePreviousSecret": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                subscription_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Only the current secret signs now. */
+            204: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "webhooks.resume": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                subscription_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The subscription, no longer paused. */
+            200: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "webhooks.listDeliveries": {
+        parameters: {
+            query?: {
+                /** @description At most this many rows. Every matching row if omitted. */
+                limit?: components["parameters"]["Limit"];
+                /** @description Skip this many rows first. Rows come in id order. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path: {
+                subscription_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deliveries, newest first. */
+            200: {
+                headers: {
+                    "X-Total-Count": components["headers"]["XTotalCount"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookDeliveryResponse"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "webhooks.redeliver": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                subscription_id: number;
+                delivery_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Queued. */
+            202: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookDeliveryResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     "sync.getFeedToken": {

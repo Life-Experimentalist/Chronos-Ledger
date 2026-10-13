@@ -859,3 +859,105 @@ class FederatedIdentity(Base):
     created_at = Column(DateTime(timezone=True), default=clock.now)
 
     __table_args__ = (UniqueConstraint("issuer_id", "subject", name="uq_federated_identity"),)
+
+
+class WebhookSubscription(Base):
+    """A URL that is told about changes as they happen, instead of polling for them.
+
+    Fed from change_markers and nothing else, so it says what the change feed
+    says. cursor is the last marker this subscription has turned into
+    deliveries; a new one starts at the newest marker, so it hears about what
+    happens from then on and never about history.
+
+    The secrets are kept as they are, not hashed: signing needs the key
+    itself. They are in portability's SECRET_COLUMNS for that reason.
+    """
+
+    __tablename__ = "webhook_subscriptions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    url = Column(String(2000), nullable=False)
+    # The event types it wants, comma separated and sorted, for example
+    # "reservation.created,resource.updated".
+    event_types = Column(String(200), nullable=False)
+    # The admin's switch. Off, nothing is fanned out or sent until it is on.
+    active = Column(Boolean, nullable=False, default=True)
+    # Set when deliveries kept failing (services/webhooks.py says how many) or
+    # when an import gave it a secret nobody holds. Paused, it fans out and
+    # sends nothing until an admin resumes it.
+    paused_at = Column(DateTime(timezone=True), nullable=True)
+    consecutive_failures = Column(Integer, nullable=False, default=0)
+    cursor = Column(BigInteger, nullable=False, default=0)
+    secret = Column(String(100), nullable=False)
+    # The secret before the last rotation, still signed with until it expires
+    # or an admin removes it, so a receiver can switch over without a gap.
+    previous_secret = Column(String(100), nullable=True)
+    previous_secret_expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=clock.now)
+    updated_at = Column(DateTime(timezone=True), default=clock.now, onupdate=clock.now)
+
+
+class WebhookDelivery(Base):
+    """One event for one subscription, and whether it has arrived.
+
+    payload is the exact body, built when the marker was fanned out, so every
+    retry sends the same bytes. event_id is the webhook-id header and the same
+    on every retry, which is what a receiver deduplicates on.
+    """
+
+    __tablename__ = "webhook_deliveries"
+
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    subscription_id = Column(
+        Integer,
+        ForeignKey("webhook_subscriptions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    marker_id = Column(BigInteger, nullable=False)
+    event_id = Column(String(40), nullable=False, unique=True)
+    event_type = Column(String(40), nullable=False)
+    entity_kind = Column(String(20), nullable=False)
+    entity_id = Column(Integer, nullable=False)
+    payload = Column(Text, nullable=False)
+    # "pending" until it arrives ("succeeded") or runs out of attempts ("failed").
+    status = Column(String(10), nullable=False, default="pending")
+    attempt_count = Column(Integer, nullable=False, default=0)
+    next_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=clock.now)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        # One delivery per marker per subscription, whatever two dispatchers
+        # racing each other try to write.
+        UniqueConstraint("subscription_id", "marker_id", name="uq_webhook_delivery_marker"),
+        Index("ix_webhook_deliveries_due", "status", "next_attempt_at"),
+        Index(
+            "ix_webhook_deliveries_entity",
+            "subscription_id",
+            "entity_kind",
+            "entity_id",
+            "marker_id",
+        ),
+    )
+
+
+class WebhookAttempt(Base):
+    """One try at sending a delivery: what came back and how long it took."""
+
+    __tablename__ = "webhook_attempts"
+
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    delivery_id = Column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        ForeignKey("webhook_deliveries.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    at = Column(DateTime(timezone=True), nullable=False, default=clock.now)
+    # Null when nothing came back: a timeout, a refused connection, or a
+    # target the SSRF check turned down.
+    status_code = Column(Integer, nullable=True)
+    response_ms = Column(Integer, nullable=False)
+    error = Column(String(200), nullable=True)
+    # The first couple of hundred characters of the response body, no more.
+    response_excerpt = Column(String(300), nullable=True)
