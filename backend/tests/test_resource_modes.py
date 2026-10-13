@@ -50,7 +50,8 @@ def _book(client, headers, resource_id, key, start="09:00", end="10:00", on=DAY,
     return client.post(
         f"/api/v1/resources/{resource_id}/reservations",
         json={"date": str(on), "start": start, "end": end, "purpose": "Ward", **extra},
-        headers={**headers, "Idempotency-Key": key},
+        # Prefixed because the route wants at least eight characters.
+        headers={**headers, "Idempotency-Key": f"booking-{key}"},
     )
 
 
