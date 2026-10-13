@@ -383,7 +383,9 @@ async def _send_replay(send, replay: Replay) -> None:
     headers = [
         (name.encode("latin-1"), value.encode("latin-1")) for name, value in replay.headers.items()
     ]
-    headers.append((b"content-length", str(len(replay.body)).encode()))
+    if replay.status_code not in (204, 304):
+        # Starlette sends no Content-Length on these, so neither does a replay.
+        headers.append((b"content-length", str(len(replay.body)).encode()))
     headers.append((REPLAYED_HEADER.lower().encode(), b"true"))
     await send({"type": "http.response.start", "status": replay.status_code, "headers": headers})
     await send({"type": "http.response.body", "body": replay.body, "more_body": False})

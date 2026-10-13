@@ -153,6 +153,27 @@ def test_the_same_key_for_a_different_request_is_409(client, db, seed_users):
     assert db.query(Resource).count() == 1
 
 
+def test_a_retry_while_the_first_is_still_running_is_409(client, db, seed_users):
+    """The claim is there and no response yet: say so, and run nothing."""
+    admin = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    db.add(
+        IdempotencyRecord(
+            caller="user:ADM001",
+            key="pending-1",
+            request_hash=request_hash("POST", "/api/v1/resources/", b"", b'{"code": "LH-201"}'),
+            created_at=clock.now(),
+        )
+    )
+    db.commit()
+
+    res = _create_room(client, admin, "pending-1")
+
+    assert res.status_code == 409
+    assert res.json()["code"] == "IDEMPOTENCY_KEY_IN_PROGRESS"
+    assert res.headers["Retry-After"] == "1"
+    assert db.query(Resource).count() == 0
+
+
 @pytest.mark.parametrize("key", ["", "k" * 256])
 def test_a_malformed_key_is_refused(client, db, seed_users, key):
     admin = login(client, "admin@test.internal", ADMIN_PASSWORD)
