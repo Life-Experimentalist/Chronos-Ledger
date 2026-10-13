@@ -1,0 +1,59 @@
+name: SDK, Go
+
+# Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
+#
+# Checks the Go client: the generated code matches docs/openapi.yaml, the
+# package vets clean, and its tests pass under the race detector. Kept apart
+# from ci.yml so a Go-only change does not wait on the backend jobs.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "sdks/go/**"
+      - "docs/openapi.yaml"
+      - ".github/workflows/sdk-go.yml"
+  push:
+    branches: [main]
+    paths:
+      - "sdks/go/**"
+      - "docs/openapi.yaml"
+      - ".github/workflows/sdk-go.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  sdk-go:
+    name: SDK, Go
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/go
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: sdks/go/go.mod
+          cache-dependency-path: sdks/go/go.sum
+
+      # A spec change that was not regenerated fails here.
+      - name: Generated client matches docs/openapi.yaml
+        run: |
+          go generate ./...
+          git diff --exit-code -- generated
+
+      - name: go.mod and go.sum are tidy
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - run: gofmt -l . | tee /dev/stderr | (! read)
+      - run: go vet ./...
+      - run: go test -race ./...
