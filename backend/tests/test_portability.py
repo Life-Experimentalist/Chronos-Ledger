@@ -65,7 +65,7 @@ IMPORT_PASSWORD = "import-test-password-not-real"
 # Values the secret columns hold in the seed, so a test can look for them in
 # the archive's bytes.
 FEED_TOKEN = "feed-token-for-tests-only"
-API_KEY = "ck_portability_test_key_for_the_seed"
+SEEDED_KEY = "ck_portability_test_key_for_the_seed"
 VISIT_CODE_HASH = "a" * 64
 
 
@@ -378,8 +378,8 @@ def seed(engine):
         db.add(
             ApiKey(
                 id=1,
-                key_hash=hash_api_key(API_KEY),
-                key_prefix=API_KEY[:12],
+                key_hash=hash_api_key(SEEDED_KEY),
+                key_prefix=SEEDED_KEY[:12],
                 label="Scheduler",
                 user_id="SVC001",
                 scopes="schedule:read,resources:write",
@@ -580,7 +580,7 @@ def test_secrets_are_left_out_by_default(source):
     assert manifest["omitted_columns"] == {k: list(v) for k, v in SECRET_COLUMNS.items()}
     everything = b"".join(contents.values())
     assert FEED_TOKEN.encode() not in everything
-    assert hash_api_key(API_KEY).encode() not in everything
+    assert hash_api_key(SEEDED_KEY).encode() not in everything
     assert VISIT_CODE_HASH.encode() not in everything
     assert b"$2b$" not in everything
     for table, columns in SECRET_COLUMNS.items():
@@ -595,7 +595,7 @@ def test_secrets_are_written_with_the_flag(source):
     assert manifest["omitted_columns"] == {}
     everything = b"".join(contents.values())
     assert FEED_TOKEN.encode() in everything
-    assert hash_api_key(API_KEY).encode() in everything
+    assert hash_api_key(SEEDED_KEY).encode() in everything
     assert VISIT_CODE_HASH.encode() in everything
     assert b"$2b$" in everything
 
@@ -610,7 +610,7 @@ def test_an_import_without_secrets_opens_nothing_but_the_administrator(source, e
         assert staff.credential_secure_hash == ABSENT_ACCOUNT_HASH
         assert staff.calendar_feed_token is None
         key = db.get(ApiKey, 1)
-        assert key.key_hash != hash_api_key(API_KEY)
+        assert key.key_hash != hash_api_key(SEEDED_KEY)
         assert key.scopes == "schedule:read,resources:write"
         assert db.get(GuestGateRegistry, 1).visit_code_hash is None
 
@@ -630,7 +630,7 @@ def test_an_import_with_secrets_keeps_every_password(source, engines):
             db.get(User, SEEDED_ADMIN_ID).credential_secure_hash
             == original.get(User, SEEDED_ADMIN_ID).credential_secure_hash
         )
-        assert db.get(ApiKey, 1).key_hash == hash_api_key(API_KEY)
+        assert db.get(ApiKey, 1).key_hash == hash_api_key(SEEDED_KEY)
 
 
 # Refusals.
