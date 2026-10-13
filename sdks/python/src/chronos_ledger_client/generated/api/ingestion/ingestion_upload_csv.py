@@ -100,7 +100,8 @@ def sync_detailed(
     scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`,
     `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO
     8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`,
-    `room`.
+    `room`. A row's weekday becomes the rule FREQ=WEEKLY;BYDAY=.. on its slot, starting on the first
+    such date in the cycle.
     Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent,
     re-uploading the same CSV is safe: an existing member keeps their password.
 
@@ -158,7 +159,8 @@ def sync(
     scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`,
     `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO
     8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`,
-    `room`.
+    `room`. A row's weekday becomes the rule FREQ=WEEKLY;BYDAY=.. on its slot, starting on the first
+    such date in the cycle.
     Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent,
     re-uploading the same CSV is safe: an existing member keeps their password.
 
@@ -211,7 +213,8 @@ async def asyncio_detailed(
     scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`,
     `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO
     8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`,
-    `room`.
+    `room`. A row's weekday becomes the rule FREQ=WEEKLY;BYDAY=.. on its slot, starting on the first
+    such date in the cycle.
     Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent,
     re-uploading the same CSV is safe: an existing member keeps their password.
 
@@ -267,7 +270,8 @@ async def asyncio(
     scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`,
     `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO
     8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`,
-    `room`.
+    `room`. A row's weekday becomes the rule FREQ=WEEKLY;BYDAY=.. on its slot, starting on the first
+    such date in the cycle.
     Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent,
     re-uploading the same CSV is safe: an existing member keeps their password.
 

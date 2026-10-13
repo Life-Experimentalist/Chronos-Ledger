@@ -113,8 +113,8 @@ def sync_detailed(
     class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say
     09:00.
 
-    Moving the slot to another weekday is the one change that cannot be copied across, because the days
-    already generated sit on the old weekday. Those are withdrawn for the generator to lay down again,
+    A new rrule or dtstart is the one change that cannot be copied across, because the days already
+    generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again,
     and the request is refused with 409 if any of them has been marked.
 
     Also refused with 409 where the room it would move to is already taken for part of the window it
@@ -122,8 +122,8 @@ def sync_detailed(
     widening one is not refused by the window it replaces. A refusal changes nothing: the room is
     resolved and the clashes are checked before any day is withdrawn or any field is written.
 
-    A change that leaves the room, weekday and window alone is not checked, so a new lead can be set on
-    a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the
+    A change that leaves the room, rule and window alone is not checked, so a new lead can be set on a
+    slot a hold is already sitting on. Such a hold predates this rule or was written straight into the
     database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
 
     A day already generated on that room in part of the window refuses the change as well, with no cycle
@@ -176,8 +176,8 @@ def sync(
     class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say
     09:00.
 
-    Moving the slot to another weekday is the one change that cannot be copied across, because the days
-    already generated sit on the old weekday. Those are withdrawn for the generator to lay down again,
+    A new rrule or dtstart is the one change that cannot be copied across, because the days already
+    generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again,
     and the request is refused with 409 if any of them has been marked.
 
     Also refused with 409 where the room it would move to is already taken for part of the window it
@@ -185,8 +185,8 @@ def sync(
     widening one is not refused by the window it replaces. A refusal changes nothing: the room is
     resolved and the clashes are checked before any day is withdrawn or any field is written.
 
-    A change that leaves the room, weekday and window alone is not checked, so a new lead can be set on
-    a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the
+    A change that leaves the room, rule and window alone is not checked, so a new lead can be set on a
+    slot a hold is already sitting on. Such a hold predates this rule or was written straight into the
     database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
 
     A day already generated on that room in part of the window refuses the change as well, with no cycle
@@ -234,8 +234,8 @@ async def asyncio_detailed(
     class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say
     09:00.
 
-    Moving the slot to another weekday is the one change that cannot be copied across, because the days
-    already generated sit on the old weekday. Those are withdrawn for the generator to lay down again,
+    A new rrule or dtstart is the one change that cannot be copied across, because the days already
+    generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again,
     and the request is refused with 409 if any of them has been marked.
 
     Also refused with 409 where the room it would move to is already taken for part of the window it
@@ -243,8 +243,8 @@ async def asyncio_detailed(
     widening one is not refused by the window it replaces. A refusal changes nothing: the room is
     resolved and the clashes are checked before any day is withdrawn or any field is written.
 
-    A change that leaves the room, weekday and window alone is not checked, so a new lead can be set on
-    a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the
+    A change that leaves the room, rule and window alone is not checked, so a new lead can be set on a
+    slot a hold is already sitting on. Such a hold predates this rule or was written straight into the
     database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
 
     A day already generated on that room in part of the window refuses the change as well, with no cycle
@@ -295,8 +295,8 @@ async def asyncio(
     class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say
     09:00.
 
-    Moving the slot to another weekday is the one change that cannot be copied across, because the days
-    already generated sit on the old weekday. Those are withdrawn for the generator to lay down again,
+    A new rrule or dtstart is the one change that cannot be copied across, because the days already
+    generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again,
     and the request is refused with 409 if any of them has been marked.
 
     Also refused with 409 where the room it would move to is already taken for part of the window it
@@ -304,8 +304,8 @@ async def asyncio(
     widening one is not refused by the window it replaces. A refusal changes nothing: the room is
     resolved and the clashes are checked before any day is withdrawn or any field is written.
 
-    A change that leaves the room, weekday and window alone is not checked, so a new lead can be set on
-    a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the
+    A change that leaves the room, rule and window alone is not checked, so a new lead can be set on a
+    slot a hold is already sitting on. Such a hold predates this rule or was written straight into the
     database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
 
     A day already generated on that room in part of the window refuses the change as well, with no cycle

@@ -18,8 +18,8 @@ class SlotUpdateResult:
         ledger_rows_updated (int | Unset): Days that were still plans and now carry the new lead or room.
         ledger_rows_kept (int | Unset): Days left as they were because attendance or a note has been recorded against
             them. They now disagree with the timetable, and that is deliberate: they record what happened.
-        ledger_rows_removed (int | Unset): Days withdrawn because the slot moved to another weekday and they sit on the
-            old one. Zero for every other change.
+        ledger_rows_removed (int | Unset): Days withdrawn because the slot was given another rrule or dtstart and they
+            sit on dates it no longer gives. Zero for every other change.
     """
 
     ledger_rows_updated: int | Unset = UNSET

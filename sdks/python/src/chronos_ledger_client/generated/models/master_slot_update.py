@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
 from typing import Any, TypeVar, cast
 
@@ -19,14 +20,23 @@ class MasterSlotUpdate:
     edit.
 
         Attributes:
-            day_of_week_index (int | Unset):
+            rrule (str | Unset): The value of one RFC 5545 RRULE property, with or without "RRULE:" in front, stored upper
+                case without it. The dates it gives are calendar dates in ORG_TIMEZONE and the slot's own times are read on each
+                of them, so a 09:00 class stays at 09:00 across a daylight saving change. FREQ must be DAILY, WEEKLY, MONTHLY or
+                YEARLY; BYHOUR, BYMINUTE and BYSECOND are refused, since a slot runs at most once a date; UNTIL must be a local
+                date or date-time, not one ending in Z; DTSTART, EXDATE and line breaks are not part of it. Any of these is a
+                422. The stored rule is at most 255 characters.
+                 Example: FREQ=WEEKLY;BYDAY=MO.
+            dtstart (datetime.date | Unset): Moved forward to the rule's first date on or after it. A new rrule sent without
+                a dtstart starts again from the start of the cycle, not from the old dtstart.
             time_window_start (str | Unset):
             time_window_end (str | Unset):
             primary_lead_id (None | str | Unset):
             target_room_identifier (str | Unset):
     """
 
-    day_of_week_index: int | Unset = UNSET
+    rrule: str | Unset = UNSET
+    dtstart: datetime.date | Unset = UNSET
     time_window_start: str | Unset = UNSET
     time_window_end: str | Unset = UNSET
     primary_lead_id: None | str | Unset = UNSET
@@ -34,7 +44,11 @@ class MasterSlotUpdate:
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        day_of_week_index = self.day_of_week_index
+        rrule = self.rrule
+
+        dtstart: str | Unset = UNSET
+        if not isinstance(self.dtstart, Unset):
+            dtstart = self.dtstart.isoformat()
 
         time_window_start = self.time_window_start
 
@@ -51,8 +65,10 @@ class MasterSlotUpdate:
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({})
-        if day_of_week_index is not UNSET:
-            field_dict["day_of_week_index"] = day_of_week_index
+        if rrule is not UNSET:
+            field_dict["rrule"] = rrule
+        if dtstart is not UNSET:
+            field_dict["dtstart"] = dtstart
         if time_window_start is not UNSET:
             field_dict["time_window_start"] = time_window_start
         if time_window_end is not UNSET:
@@ -67,7 +83,14 @@ class MasterSlotUpdate:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        day_of_week_index = d.pop("day_of_week_index", UNSET)
+        rrule = d.pop("rrule", UNSET)
+
+        _dtstart = d.pop("dtstart", UNSET)
+        dtstart: datetime.date | Unset
+        if isinstance(_dtstart, Unset):
+            dtstart = UNSET
+        else:
+            dtstart = datetime.date.fromisoformat(_dtstart)
 
         time_window_start = d.pop("time_window_start", UNSET)
 
@@ -85,7 +108,8 @@ class MasterSlotUpdate:
         target_room_identifier = d.pop("target_room_identifier", UNSET)
 
         master_slot_update = cls(
-            day_of_week_index=day_of_week_index,
+            rrule=rrule,
+            dtstart=dtstart,
             time_window_start=time_window_start,
             time_window_end=time_window_end,
             primary_lead_id=primary_lead_id,

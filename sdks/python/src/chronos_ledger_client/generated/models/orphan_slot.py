@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
 from typing import Any, TypeVar, cast
 
@@ -17,13 +18,18 @@ class OrphanSlot:
     Attributes:
         id (int): What DELETE /schedule/slots/{slot_id} takes, if it should go.
         activity_code (str):
-        day_of_week_index (int):
+        rrule (str):  Example: FREQ=WEEKLY;BYDAY=MO.
+        dtstart (datetime.date):
+        day_of_week_index (int): The ISO weekday of the slot's first date. Use rrule and dtstart. Sent through 0.17 and
+            then removed.
         time_window_start (str):
         room (None | str | Unset):
     """
 
     id: int
     activity_code: str
+    rrule: str
+    dtstart: datetime.date
     day_of_week_index: int
     time_window_start: str
     room: None | str | Unset = UNSET
@@ -33,6 +39,10 @@ class OrphanSlot:
         id = self.id
 
         activity_code = self.activity_code
+
+        rrule = self.rrule
+
+        dtstart = self.dtstart.isoformat()
 
         day_of_week_index = self.day_of_week_index
 
@@ -50,6 +60,8 @@ class OrphanSlot:
             {
                 "id": id,
                 "activity_code": activity_code,
+                "rrule": rrule,
+                "dtstart": dtstart,
                 "day_of_week_index": day_of_week_index,
                 "time_window_start": time_window_start,
             }
@@ -65,6 +77,10 @@ class OrphanSlot:
         id = d.pop("id")
 
         activity_code = d.pop("activity_code")
+
+        rrule = d.pop("rrule")
+
+        dtstart = datetime.date.fromisoformat(d.pop("dtstart"))
 
         day_of_week_index = d.pop("day_of_week_index")
 
@@ -82,6 +98,8 @@ class OrphanSlot:
         orphan_slot = cls(
             id=id,
             activity_code=activity_code,
+            rrule=rrule,
+            dtstart=dtstart,
             day_of_week_index=day_of_week_index,
             time_window_start=time_window_start,
             room=room,
