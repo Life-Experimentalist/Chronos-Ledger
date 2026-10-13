@@ -27,6 +27,7 @@ import ipaddress
 import json
 import secrets
 import socket
+import threading
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -81,12 +82,21 @@ MAX_ATTEMPTS = len(RETRY_DELAYS) + 1
 # rather than one having a bad hour.
 PAUSE_AFTER_FAILED_DELIVERIES = 5
 
+# httpx applies these to each operation on its own: the connect, and then
+# every single read or write. A receiver that drips its answer a byte at a
+# time never trips the read timeout, so ATTEMPT_DEADLINE is what bounds an
+# attempt as a whole, the name lookup in vet included.
 CONNECT_TIMEOUT = 3.0
-TOTAL_TIMEOUT = 10.0
+READ_TIMEOUT = 10.0
+ATTEMPT_DEADLINE = 15.0
 # How long a claimed delivery is left alone while it is being sent, so a
-# second worker does not send it too. Longer than an attempt can take; a
-# worker that dies mid-send leaves it to be retried once this runs out.
+# second worker does not send it too. A worker that dies mid-send leaves it
+# to be retried once this runs out. A pass starts an attempt only while at
+# least ATTEMPT_DEADLINE plus LEASE_MARGIN of its lease is left, so every
+# request it makes is made inside the lease; the margin covers writing the
+# outcome down and clocks on two machines that do not quite agree.
 CLAIM_LEASE = timedelta(seconds=60)
+LEASE_MARGIN = timedelta(seconds=10)
 EXCERPT_CHARS = 200
 
 FAN_OUT_BATCH = 500
@@ -97,7 +107,9 @@ SEND_BATCH = 50
 # cursor that has already moved past it. Markers younger than this are left
 # for the next pass, by which time the transaction that wrote them has
 # committed or rolled back. SQLite writes one transaction at a time, so it
-# needs no wait.
+# needs no wait. Neither does a host clock: commit latency is real time and
+# the wait would be measured in host time, and the host advances the clock
+# after its writes have returned, so there is nothing still in flight.
 POSTGRES_COMMIT_GRACE = timedelta(seconds=5)
 
 # None is httpx's own transport. Tests put an httpx.MockTransport here.
@@ -248,7 +260,7 @@ def fan_out(db: Session) -> int:
     """
     if not get_settings().change_feed_enabled:
         return 0
-    postgres = _is_postgres(db)
+    wait_for_commits = _is_postgres(db) and not clock.is_host()
     now = clock.now()
     settled = now - POSTGRES_COMMIT_GRACE
 
@@ -257,7 +269,7 @@ def fan_out(db: Session) -> int:
         .filter(WebhookSubscription.active.is_(True), WebhookSubscription.paused_at.is_(None))
         .order_by(WebhookSubscription.id)
     )
-    if postgres:
+    if _is_postgres(db):
         # Two instances fanning out at once take a subscription each, rather
         # than both reading the same markers for it.
         query = query.with_for_update(skip_locked=True)
@@ -273,7 +285,7 @@ def fan_out(db: Session) -> int:
         ):
             # Stop at the first one too young to trust, rather than skipping
             # it, so the cursor never passes a marker that was left behind.
-            if postgres and _aware(marker.at) > settled:
+            if wait_for_commits and _aware(marker.at) > settled:
                 break
             markers.append(marker)
         if not markers:
@@ -347,6 +359,10 @@ class Outgoing:
     Plain values and not ORM rows, so nothing touches the session while the
     request is in flight: on SQLite a read there would open a transaction and
     hold the write lock for as long as the receiver takes to answer.
+
+    lease is the next_attempt_at the claim wrote. It is how record tells that
+    the row is still this pass's to write: once the lease runs out another
+    pass can claim the row and write its own lease over it.
     """
 
     delivery_id: int
@@ -355,6 +371,7 @@ class Outgoing:
     event_id: str
     payload: str
     secrets: tuple[str, ...]
+    lease: datetime
 
 
 @dataclass(frozen=True)
@@ -370,25 +387,31 @@ class Outcome:
 
 
 def run_pass(db: Session) -> int:
-    """Fan out what is new, then send what is due. Returns how many were sent."""
+    """Fan out what is new, then send what is due. Returns how many were sent.
+
+    The lease is measured from just before the claim, on a real-time counter
+    rather than the clock, because what can outlast it is a real receiver
+    taking real seconds. Once too little of it is left for another attempt,
+    the pass stops, and what it claimed and did not send comes due again
+    when the lease runs out.
+    """
     fan_out(db)
+    started = time.perf_counter()
     claimed = claim_due(db)
-    if not claimed:
-        return 0
-    with httpx.Client(
-        transport=TRANSPORT,
-        follow_redirects=False,
-        trust_env=False,
-        timeout=httpx.Timeout(TOTAL_TIMEOUT, connect=CONNECT_TIMEOUT),
-    ) as client:
-        for outgoing in claimed:
-            record(db, outgoing, send(client, outgoing))
-    return len(claimed)
+    last_start = (CLAIM_LEASE - LEASE_MARGIN).total_seconds() - ATTEMPT_DEADLINE
+    sent = 0
+    for outgoing in claimed:
+        if time.perf_counter() - started > last_start:
+            break
+        record(db, outgoing, send(outgoing))
+        sent += 1
+    return sent
 
 
 def claim_due(db: Session) -> list[Outgoing]:
     """The deliveries due now that nothing earlier is holding up, leased to this pass."""
     now = clock.now()
+    lease = now + CLAIM_LEASE
     earlier = aliased(WebhookDelivery)
     held_up = exists().where(
         earlier.subscription_id == WebhookDelivery.subscription_id,
@@ -425,24 +448,64 @@ def claim_due(db: Session) -> list[Outgoing]:
                 event_id=delivery.event_id,
                 payload=delivery.payload,
                 secrets=tuple(signing_secrets(subscription, now)),
+                lease=lease,
             )
         )
-        delivery.next_attempt_at = now + CLAIM_LEASE
+        delivery.next_attempt_at = lease
     db.commit()
     return claimed
 
 
-def send(client: httpx.Client, outgoing: Outgoing) -> Outcome:
-    """One attempt. Never raises: whatever goes wrong is the outcome."""
+def send(outgoing: Outgoing) -> Outcome:
+    """One attempt, given up on after ATTEMPT_DEADLINE. Never raises.
+
+    httpx has no deadline for a request as a whole, and a name lookup cannot
+    be interrupted at all, so the attempt runs on a thread of its own and
+    this one stops waiting for it at the deadline. The client is then closed
+    under it, which ends the attempt at its next read or write at the latest,
+    and an attempt still looking the name up when that happens never sends.
+    """
     started = time.perf_counter()
+    client = httpx.Client(
+        transport=TRANSPORT,
+        follow_redirects=False,
+        trust_env=False,
+        timeout=httpx.Timeout(READ_TIMEOUT, connect=CONNECT_TIMEOUT),
+    )
+    gave_up = threading.Event()
+    result: list[Outcome] = []
 
-    def elapsed() -> int:
-        return int((time.perf_counter() - started) * 1000)
+    def attempt() -> None:
+        try:
+            result.append(_attempt(client, outgoing, started, gave_up))
+        except Exception as problem:
+            # Closing the client under the attempt lands here, after nobody
+            # is waiting for the result; anything else is still a failed
+            # attempt rather than a pass that stops.
+            result.append(
+                Outcome(None, _ms_since(started), _short(f"failed: {type(problem).__name__}"), None)
+            )
 
+    worker = threading.Thread(target=attempt, name="webhook-attempt", daemon=True)
+    worker.start()
+    worker.join(ATTEMPT_DEADLINE)
+    if worker.is_alive():
+        gave_up.set()
+        client.close()
+        return Outcome(None, _ms_since(started), "timed out", None)
+    client.close()
+    return result[0]
+
+
+def _attempt(
+    client: httpx.Client, outgoing: Outgoing, started: float, gave_up: threading.Event
+) -> Outcome:
     try:
         target = vet(outgoing.url)
     except Refused as refused:
-        return Outcome(None, elapsed(), _short(f"refused: {refused}"), None)
+        return Outcome(None, _ms_since(started), _short(f"refused: {refused}"), None)
+    if gave_up.is_set():
+        return Outcome(None, _ms_since(started), "timed out", None)
 
     timestamp = int(clock.now().timestamp())
     body = outgoing.payload.encode()
@@ -461,13 +524,13 @@ def send(client: httpx.Client, outgoing: Outgoing) -> Outcome:
         with client.stream(
             "POST", target.address_url, content=body, headers=headers, extensions=extensions
         ) as response:
-            excerpt = _excerpt(response, started)
+            excerpt = _excerpt(response)
             status_code = response.status_code
     except httpx.TimeoutException:
-        return Outcome(None, elapsed(), "timed out", None)
+        return Outcome(None, _ms_since(started), "timed out", None)
     except httpx.HTTPError as problem:
         return Outcome(
-            None, elapsed(), _short(f"connection failed: {type(problem).__name__}"), None
+            None, _ms_since(started), _short(f"connection failed: {type(problem).__name__}"), None
         )
 
     if 200 <= status_code < 300:
@@ -476,21 +539,52 @@ def send(client: httpx.Client, outgoing: Outgoing) -> Outcome:
         error = "redirect not followed"
     else:
         error = f"HTTP {status_code}"
-    return Outcome(status_code, elapsed(), error, excerpt)
+    return Outcome(status_code, _ms_since(started), error, excerpt)
 
 
-def record(db: Session, outgoing: Outgoing, outcome: Outcome) -> None:
-    """Write the attempt down and decide what happens to the delivery next."""
+def record(db: Session, outgoing: Outgoing, outcome: Outcome) -> bool:
+    """Write the attempt down and decide what happens to the delivery next.
+
+    Only while the row still carries this pass's lease. If the lease ran out
+    and another pass claimed the row, or an administrator redelivered it, or
+    it was deleted, nothing is written and this returns False: the attempt
+    belongs to a claim that no longer exists, and charging it would count
+    one send twice.
+    """
     delivery = db.get(WebhookDelivery, outgoing.delivery_id)
     subscription = db.get(WebhookSubscription, outgoing.subscription_id)
     if delivery is None or subscription is None:
-        # Deleted while the request was in flight. Nothing left to record on.
         db.rollback()
-        return
+        return False
     now = clock.now()
+    attempts = delivery.attempt_count + 1
+    if outcome.succeeded:
+        changes = {"status": SUCCEEDED, "completed_at": now, "next_attempt_at": None}
+    elif attempts >= MAX_ATTEMPTS:
+        changes = {"status": FAILED, "completed_at": now, "next_attempt_at": None}
+    else:
+        changes = {"next_attempt_at": now + backoff(delivery.event_id, attempts)}
+    changes["attempt_count"] = attempts
+
+    # The lease is checked by the update itself rather than by the read
+    # above, so a claim that lands between the two cannot be written over.
+    held = (
+        db.query(WebhookDelivery)
+        .filter(
+            WebhookDelivery.id == outgoing.delivery_id,
+            WebhookDelivery.status == PENDING,
+            WebhookDelivery.next_attempt_at == outgoing.lease,
+            WebhookDelivery.attempt_count == delivery.attempt_count,
+        )
+        .update(changes, synchronize_session=False)
+    )
+    if not held:
+        db.rollback()
+        return False
+
     db.add(
         WebhookAttempt(
-            delivery_id=delivery.id,
+            delivery_id=outgoing.delivery_id,
             at=now,
             status_code=outcome.status_code,
             response_ms=outcome.response_ms,
@@ -498,25 +592,17 @@ def record(db: Session, outgoing: Outgoing, outcome: Outcome) -> None:
             response_excerpt=outcome.excerpt,
         )
     )
-    delivery.attempt_count += 1
     if outcome.succeeded:
-        delivery.status = SUCCEEDED
-        delivery.completed_at = now
-        delivery.next_attempt_at = None
         subscription.consecutive_failures = 0
-    elif delivery.attempt_count >= MAX_ATTEMPTS:
-        delivery.status = FAILED
-        delivery.completed_at = now
-        delivery.next_attempt_at = None
+    elif attempts >= MAX_ATTEMPTS:
         subscription.consecutive_failures += 1
         if (
             subscription.consecutive_failures >= PAUSE_AFTER_FAILED_DELIVERIES
             and subscription.paused_at is None
         ):
             subscription.paused_at = now
-    else:
-        delivery.next_attempt_at = now + backoff(delivery.event_id, delivery.attempt_count)
     db.commit()
+    return True
 
 
 def backoff(event_id: str, attempts: int) -> timedelta:
@@ -552,15 +638,19 @@ def _event_type(marker: ChangeMarker) -> str:
     return f"{marker.entity_kind}.{marker.change_kind}"
 
 
-def _excerpt(response: httpx.Response, started: float) -> str | None:
-    """The start of the body and no more, given up on once the total timeout is spent."""
+def _excerpt(response: httpx.Response) -> str | None:
+    """The start of the body and no more. send's deadline bounds how long it takes."""
     kept = b""
     for chunk in response.iter_bytes():
         kept += chunk
-        if len(kept) >= EXCERPT_CHARS * 4 or time.perf_counter() - started > TOTAL_TIMEOUT:
+        if len(kept) >= EXCERPT_CHARS * 4:
             break
     text = kept.decode("utf-8", errors="replace")[:EXCERPT_CHARS]
     return text or None
+
+
+def _ms_since(started: float) -> int:
+    return int((time.perf_counter() - started) * 1000)
 
 
 def _short(text: str) -> str:

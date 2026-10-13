@@ -138,6 +138,15 @@ replay the same way, and it adds nothing to the list of real-time reads
 above. While the change feed is off the job has no moments, so it never
 runs and is not in the list `advance` returns.
 
+Two limits in the worker stay in real seconds, because they guard against
+a receiver that is slow in real seconds: the deadline on one attempt and
+the share of a pass's lease it may spend sending. They are durations
+measured with a counter, not instants read from a clock, so they are not
+among the reads above, and a receiver that answers promptly never reaches
+them. On PostgreSQL the worker also skips its 5 second wait for late
+commits under a host clock, which leans on the host advancing only after
+its own writes have returned ([webhooks.md](webhooks.md#under-a-host-clock)).
+
 The cost is that `webhook-timestamp` is host time as well. A receiver that
 follows the Standard Webhooks rule and refuses a timestamp more than five
 minutes from its own clock will refuse every delivery from a host clock

@@ -159,9 +159,12 @@ the previous one at once.
 ## Retries
 
 A `2xx` answer is a success. Anything else is a failed attempt: another
-status, a timeout (3 seconds to connect, 10 seconds waiting on the
-receiver), a connection that failed, and a redirect, which is never
-followed.
+status, a timeout, a connection that failed, and a redirect, which is never
+followed. An attempt times out when connecting takes more than 3 seconds,
+when the receiver goes 10 seconds without sending anything, or when the
+whole attempt, from looking the name up to the last byte of the answer
+that is kept, takes more than 15 seconds, however steadily the answer
+trickles in.
 
 After a failed attempt the delivery waits and tries again. The waits follow
 the Standard Webhooks schedule: up to 5 seconds, 5 minutes, 30 minutes, 2
@@ -186,8 +189,17 @@ lists deliveries newest first, each with its attempts, and pages like the
 other lists ([api.md](api.md#paging)).
 
 A receiver should answer quickly and do its work afterwards. A receiver
-that keeps the request waiting more than 10 seconds has timed out, and the
+that keeps the request waiting more than 15 seconds has timed out, and the
 delivery is sent again.
+
+An attempt is counted once, by the worker that made it. Each pass leases
+what it claims for 60 seconds and starts an attempt only while at least 25
+of them are left, so with a slow receiver a pass sends a few deliveries and
+leaves the rest for a later pass. If an answer is written down after its
+lease ran out and another pass has claimed the delivery since, it is
+dropped rather than written over the newer claim, so the receiver may get
+that delivery twice (deduplicate on `webhook-id`), but no attempt is
+counted twice.
 
 ## Ordering
 
@@ -289,17 +301,30 @@ one.
    race. A change that was rolled back left no marker, so it is never sent.
 2. `claim_due` picks the pending deliveries whose time has come and that no
    earlier delivery for the same row is holding up, and leases them for 60
-   seconds so another instance leaves them alone.
+   seconds so another instance leaves them alone. The lease is the
+   `next_attempt_at` the claim writes.
 3. `send` makes each attempt and `record` writes it down and decides what
    happens next: done, retried later, or failed. Nothing reads the database
-   while a request is in flight.
+   while a request is in flight. `send` runs the attempt on a thread of its
+   own and stops waiting for it after `ATTEMPT_DEADLINE`, since httpx times
+   each read on its own and a name lookup cannot be cut short. `record`
+   writes only if the row still carries the lease this pass wrote, in the
+   same update that writes the outcome, so it never overwrites another
+   pass's claim.
+
+`run_pass` measures its lease on a real-time counter from just before the
+claim and starts an attempt only while `ATTEMPT_DEADLINE` plus
+`LEASE_MARGIN` of it is left, which keeps every request inside the lease.
+The margin covers writing the outcome and two machines whose clocks differ
+by a few seconds. What it claimed and did not get to stays leased and comes
+due again when the lease runs out.
 
 On PostgreSQL, fan-out and claiming lock with `FOR UPDATE SKIP LOCKED`, so
 several instances share the work instead of queuing behind each other. A
 marker's id there is handed out at insert and not at commit, so a
 transaction that commits late could leave a lower id behind a cursor that
-has already moved past it. Fan-out therefore leaves markers younger than 5
-seconds for the next pass. A transaction that holds a marker uncommitted
+has already moved past it. Fan-out on the system clock therefore leaves
+markers younger than 5 seconds for the next pass. A transaction that holds a marker uncommitted
 for longer than that can still be passed over, and its change is then not
 sent; the full re-read that change feed consumers already do on a slow timer
 covers that case as well. SQLite writes one transaction at a time and has
@@ -312,7 +337,21 @@ With `CLOCK_MODE=host` APScheduler does not run, and the worker is a job in
 ([clock.md](clock.md#jobs-under-a-host-clock)). It runs last at each
 instant and once per advance. Every time it reads, from the retry schedule
 to the 24 hours an old secret lives, is host time, so a replay sends the
-same deliveries at the same instants.
+same deliveries at the same instants. The two exceptions are the attempt
+deadline and the pass's lease budget, which guard against a receiver that
+is slow in real seconds and so are measured in real seconds. A receiver
+that answers promptly never reaches either.
+
+Fan-out does not wait the 5 seconds for late commits under a host clock,
+on PostgreSQL either. The wait would be measured in host time, which says
+nothing about how long a commit takes: a host stepping a few seconds at a
+time would see each change held back for a step or two, and a write still
+in flight across a longer step would not be covered anyway. What makes it
+safe is the host's side of the
+contract: it advances the clock after its own writes have returned. A
+host that sends requests concurrently and advances before they return can
+leave a change behind the cursor on PostgreSQL, and that change is then
+not sent.
 
 `webhook-timestamp` is host time too. A receiver that applies the five
 minute rule refuses deliveries from a host clock that is far from real time,

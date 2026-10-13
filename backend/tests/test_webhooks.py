@@ -13,6 +13,7 @@ import datetime
 import hashlib
 import hmac
 import json
+import threading
 from datetime import UTC
 
 import httpx
@@ -21,7 +22,7 @@ import pytest
 from app.core import change_feed, clock
 from app.core.config import get_settings
 from app.cron import scheduled
-from app.models.db import ChangeMarker, WebhookDelivery, WebhookSubscription
+from app.models.db import ChangeMarker, WebhookAttempt, WebhookDelivery, WebhookSubscription
 from app.services import webhooks
 from tests.conftest import ADMIN_PASSWORD, STAFF_PASSWORD, login
 
@@ -375,16 +376,149 @@ def test_one_success_resets_the_failure_count(db, seed_users, feed_on, host_cloc
         change_feed.record(db, change_feed.RESOURCE, entity, change_feed.CREATED)
     db.commit()
     webhooks.fan_out(db)
-    first, second = _deliveries(db)
+    first, second = (delivery.id for delivery in _deliveries(db))
 
-    def outgoing(delivery):
-        return webhooks.Outgoing(delivery.id, subscription.id, URL, delivery.event_id, "{}", ())
+    def claim(delivery_id):
+        # Past the longest retry wait and the lease, so both are due again.
+        clock.advance_to(clock.now() + datetime.timedelta(hours=11))
+        return {o.delivery_id: o for o in webhooks.claim_due(db)}[delivery_id]
 
     for _ in range(webhooks.MAX_ATTEMPTS):
-        webhooks.record(db, outgoing(first), webhooks.Outcome(500, 3, "HTTP 500", None))
+        assert webhooks.record(db, claim(first), webhooks.Outcome(500, 3, "HTTP 500", None))
     assert db.get(WebhookSubscription, subscription.id).consecutive_failures == 1
-    webhooks.record(db, outgoing(second), webhooks.Outcome(200, 3, None, None))
+    assert webhooks.record(db, claim(second), webhooks.Outcome(200, 3, None, None))
     assert db.get(WebhookSubscription, subscription.id).consecutive_failures == 0
+
+
+def _one_change(db):
+    """A subscription to new rooms, and one new room it has not been told about."""
+    db.add(
+        WebhookSubscription(
+            url=URL, event_types="resource.created", cursor=0, secret=webhooks.new_secret()
+        )
+    )
+    db.commit()
+    change_feed.record(db, change_feed.RESOURCE, 1, change_feed.CREATED)
+    db.commit()
+
+
+def test_a_claim_whose_lease_ran_out_writes_nothing_over_the_next_claim(
+    db, seed_users, feed_on, host_clock
+):
+    _one_change(db)
+    assert webhooks.fan_out(db) == 1
+    (late,) = webhooks.claim_due(db)
+    clock.advance_to(clock.now() + webhooks.CLAIM_LEASE + datetime.timedelta(seconds=1))
+    (current,) = webhooks.claim_due(db)
+    assert current.delivery_id == late.delivery_id
+    assert current.lease > late.lease
+
+    # The first pass's answer comes back after its lease ran out. It is
+    # dropped: the row is the second pass's now, and no attempt is charged.
+    assert not webhooks.record(db, late, webhooks.Outcome(200, 3, None, None))
+    (delivery,) = _deliveries(db)
+    assert delivery.status == webhooks.PENDING
+    assert delivery.attempt_count == 0
+    assert webhooks._aware(delivery.next_attempt_at) == current.lease
+    assert db.query(WebhookAttempt).count() == 0
+
+    assert webhooks.record(db, current, webhooks.Outcome(200, 3, None, None))
+    (delivery,) = _deliveries(db)
+    assert delivery.status == webhooks.SUCCEEDED
+    assert delivery.attempt_count == 1
+    assert db.query(WebhookAttempt).count() == 1
+
+
+class _Stopwatch:
+    """Stands in for the time module in webhooks, so a pass's lease runs out on cue."""
+
+    def __init__(self):
+        self.seconds = 0.0
+
+    def perf_counter(self):
+        return self.seconds
+
+
+def test_a_pass_stops_sending_before_its_lease_runs_out(
+    client, db, seed_users, feed_on, host_clock, receiver, monkeypatch
+):
+    headers = _admin(client)
+    _subscribe(client, headers)
+    for number in range(3):
+        _room(client, headers, f"LH-{number}")
+
+    # Each send takes 20 seconds of the lease. A pass starts a send only
+    # while ATTEMPT_DEADLINE plus LEASE_MARGIN of its 60 seconds is left, so
+    # it sends two and leaves the third alone.
+    stopwatch = _Stopwatch()
+    monkeypatch.setattr(webhooks, "time", stopwatch)
+    answer = webhooks.TRANSPORT.handler
+
+    def slow(request):
+        stopwatch.seconds += 20
+        return answer(request)
+
+    monkeypatch.setattr(webhooks, "TRANSPORT", httpx.MockTransport(slow))
+    webhooks.fan_out(db)
+    assert webhooks.run_pass(db) == 2
+    assert len(receiver.seen) == 2
+
+    pending = [d for d in _deliveries(db) if d.status == webhooks.PENDING]
+    assert len(pending) == 1
+    assert pending[0].attempt_count == 0
+    # Still leased, so no other pass sends it before this lease runs out.
+    assert webhooks.claim_due(db) == []
+
+
+def test_an_attempt_is_given_up_on_at_the_deadline(
+    client, db, seed_users, feed_on, host_clock, receiver, monkeypatch
+):
+    headers = _admin(client)
+    _subscribe(client, headers)
+    _room(client, headers, "LH-201")
+
+    # A receiver that has not finished answering when the deadline comes. A
+    # per-read timeout would never fire on one that drips its headers; the
+    # deadline covers the attempt as a whole.
+    released = threading.Event()
+
+    def stalled(request):
+        released.wait(30)
+        return httpx.Response(200)
+
+    monkeypatch.setattr(webhooks, "ATTEMPT_DEADLINE", 0.2)
+    monkeypatch.setattr(webhooks, "TRANSPORT", httpx.MockTransport(stalled))
+    try:
+        webhooks.fan_out(db)
+        assert webhooks.run_pass(db) == 1
+    finally:
+        released.set()
+    (delivery,) = _deliveries(db)
+    assert delivery.status == webhooks.PENDING
+    assert delivery.attempt_count == 1
+    (attempt,) = db.query(WebhookAttempt).all()
+    assert attempt.error == "timed out"
+    assert attempt.status_code is None
+
+
+def test_fan_out_on_postgres_waits_for_commits_on_the_system_clock_only(
+    db, seed_users, feed_on, monkeypatch
+):
+    # SQLite has no FOR UPDATE and writes one transaction at a time, so
+    # standing in for PostgreSQL here only switches the commit grace on.
+    monkeypatch.setattr(webhooks, "_is_postgres", lambda db: True)
+    try:
+        clock.install(clock.SystemClock())
+        _one_change(db)
+        assert webhooks.fan_out(db) == 0
+
+        # The same change a moment old, under a host clock: the host advances
+        # only after its writes return, so there is nothing in flight to wait
+        # for.
+        clock.install(clock.HostClock(clock.now()))
+        assert webhooks.fan_out(db) == 1
+    finally:
+        clock.reset()
 
 
 def test_retries_wait_with_full_jitter_under_the_schedule():
