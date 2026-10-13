@@ -32,10 +32,8 @@ database, and the changelog for each tag is the contract they upgrade against.
 | 0.13 | Platform: contract check, hardening, `chronos` CLI and channels, first SDKs, ledger range queries, audit log | No |
 | 0.14 | Roles renamed, guest desk (visit expiry, configurable approver, change feed), federated identity | Yes |
 | 0.15 | Standalone engine (`chronos-engine`, no Docker or Redis, on PostgreSQL or a SQLite file), embedded flavour with the host clock, Alembic removed (the models own the schema, `SCHEMA_VERSION`), PostgreSQL-first `--database-url`, optional Cloudflare tunnel compose profile, psycopg 3 and SQLAlchemy 2.1 | Yes |
-| 0.16 | Engine, part 1: resource modes, conflict report, rolling horizon, Go and Rust SDKs, Helm | Additive |
-| 0.17 | Engine, part 2: recurrence rules, editable timetable, exclusion on instances | Yes |
-| Designed, waiting for approval | Integration contract: error codes, idempotency on every write, export and import, per-organization uniqueness | Mostly additive |
-| Waiting on a decision | Webhooks, activities CRUD, reservation external reference | n/a |
+| 0.16 | Integration contract (error codes, idempotency on every write, export and import, SDK retries, failure modes written down), webhooks, activities CRUD, reservation external reference; engine part 1: resource modes, conflict report, rolling horizon; Go and Rust SDKs, Helm | Additive |
+| 0.17 | Engine, part 2: recurrence rules, editable timetable, exclusion on instances; per-organization uniqueness | Yes |
 
 PostgreSQL is the database Chronos is designed for. SQLite exists so the
 engine can be tried and tested with no setup; a behaviour that works only on
@@ -210,6 +208,11 @@ against the spec. Publishing to npm and PyPI is added on request.
 
 ## 0.16: Engine, part 1
 
+0.16 also carries the integration contract (C-1, C-2, C-3, C-5, C-6) and the
+integration features (W-1 to W-3), described further down. The order of work
+is C-1 first, then C-2, C-3, E-2 and E-3, then the W items, then E-1, and the
+Go and Rust SDKs once the spec has settled.
+
 Background: a schedule in Chronos is a set of intervals on resources. Today a
 resource is a room or a person and every booking takes the whole resource.
 This release lets a resource be consumed in three ways.
@@ -271,6 +274,9 @@ in CI against it, versioned with the server's tags.
 
 ## 0.17: Engine, part 2 (breaking)
 
+C-4, uniqueness scoped to an organization, is breaking too and ships in this
+release; it is described with the integration contract below.
+
 ### E-5. Recurrence rules
 
 - **Scope:** a slot carries an RFC 5545 `rrule` and a `dtstart` in the
@@ -301,12 +307,14 @@ in CI against it, versioned with the server's tags.
 
 ---
 
-## Integration contract (designed, waiting for approval)
+## Integration contract (approved)
 
 The HTTP contract is what integrators build against, from any language, so
 it has to be predictable enough to code against without reading Chronos
-source. These items are designed but not built; the maintainer decides
-whether and when.
+source, and it has to behave well when a network, a database or the caller
+fails halfway. Approved on 2026-10-13. C-1, C-2, C-3, C-5 and C-6 ship in
+0.16, with C-1 first because the others report their failures through its
+codes. C-4 is breaking and ships with 0.17.
 
 ### C-1. A stable error code on every error
 
@@ -373,6 +381,29 @@ whether and when.
 - **Breaking:** for anyone relying on a code being unique across
   organizations.
 
+### C-5. Retries in the SDKs
+
+- **Scope:** every SDK retries a request that failed before a response
+  arrived, or got a 429, 502, 503 or 504, with exponential backoff and full
+  jitter, honouring `Retry-After`. Reads retry freely. A write retries only
+  when it carries an `Idempotency-Key` (C-2), and the SDK generates one for
+  every write unless the caller passes their own. Attempts, the base delay and
+  the overall deadline are settings with safe defaults.
+- **Done when:** a test server that drops the first response and answers the
+  second sees one effect for a create through each SDK; a 400 is never
+  retried.
+
+### C-6. Failure modes written down
+
+- **Scope:** a page that says what an integrator sees when each part fails:
+  PostgreSQL down or restarting, Redis down, the embedded child process
+  killed, a host clock that goes backwards, a request that times out after the
+  commit. Each case names the status, the error code (C-1) and whether a retry
+  is safe. Anything found that behaves worse than the page says is fixed in
+  the same release.
+- **Done when:** each case on the page has a test or a CI job that produces
+  it.
+
 ---
 
 ## Host clock
@@ -391,17 +422,56 @@ ids, and `POST /api/v1/clock/advance`, open to the host's own actor
 saved instant back as `--clock-start`. Neither route exists in `serve` or the
 container ([embedded.md](embedded.md)).
 
-## Waiting on a decision
+## Integration features (approved, 0.16)
 
-These were requested for integrations. They are designed enough to estimate
-but are not scheduled until the maintainer decides on them; an integrator that
-needs one should say so.
+Requested for integrations and approved on 2026-10-13. They build on C-1 and
+C-2, so they start once those are in.
 
-| Item | Sketch |
-|---|---|
-| Webhooks | Subscriptions per event type (`reservation.created`, `ledger.updated`, ...), HMAC-signed bodies, retries with backoff, delivery log |
-| Activities CRUD | Create, edit and retire activities through the API instead of only through CSV import |
-| Reservation external reference | An optional `external_ref` on a reservation, unique per API key, so an integrator can find and update a booking by its own identifier and retry a create safely |
+### W-1. Webhooks
+
+- **Scope:** an admin subscribes a URL to event types
+  (`reservation.created`, `reservation.updated`, `resource.updated`,
+  `ledger.updated`, ...). Events come from the change feed markers, which are
+  written in the same transaction as the change, so a rolled-back change never
+  sends an event and a committed one is never lost if the process dies before
+  delivery. A delivery worker posts each event with:
+  - a signature over the event id, the timestamp and the body (HMAC-SHA256,
+    in the shape of the Standard Webhooks headers), so the receiver can check
+    it came from Chronos and reject a replay older than five minutes;
+  - up to two active secrets per subscription, so a secret can be rotated
+    without dropping deliveries;
+  - a short timeout, no redirects followed, and retries with exponential
+    backoff and jitter for about a day, after which the delivery is marked
+    failed and a subscription that keeps failing is paused;
+  - a delivery log (attempts, status, response time) and a redeliver call.
+- **Security:** targets must be HTTPS unless an admin allows plain HTTP for
+  named hosts. Loopback, private and link-local addresses are refused unless
+  allowed by a setting, which a sibling container on a private network needs.
+  The address is checked after DNS resolution, so a name cannot point a
+  delivery at an internal service. Payloads carry ids and the changed fields,
+  never secrets.
+- **Done when:** a receiver that is down for an hour gets every event once it
+  is back, in order per entity, each with a valid signature; a subscription to
+  a loopback URL is refused without the setting.
+
+### W-2. Activities CRUD
+
+- **Scope:** create, edit and retire activities, their slots and their
+  enrollments through the API instead of only through CSV import. Retiring
+  keeps history: past ledger rows stay, future rows without attendance are
+  removed. Each write takes an `Idempotency-Key` and reports failures with
+  C-1 codes.
+- **Done when:** an activity created through the API materializes the same
+  ledger rows as the same activity imported from CSV.
+
+### W-3. Reservation external reference
+
+- **Scope:** an optional `external_ref` on a reservation, unique per caller,
+  so an integrator can find and update a booking by its own identifier.
+  `GET /reservations?external_ref=` finds it; creating a second reservation
+  with the same reference is a 409 with its own code and the existing id.
+- **Done when:** an integrator can create, find, update and cancel a booking
+  using only its own reference.
 
 ## Later
 
