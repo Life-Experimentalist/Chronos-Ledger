@@ -1459,13 +1459,103 @@ opening the target is what checks them.
 { "cloned": 14, "cloned_slots": 31 }
 ```
 
+### GET /schedule/activities?cycle_id=&include_retired=
+### GET /schedule/activities/{id}
+### POST /schedule/activities `[ADMIN]`
+### PATCH /schedule/activities/{id} `[ADMIN]`
+
+An activity is what a CSV row names by code, title and unit, and these build
+one without a file. Anyone signed in can read them; the list is paged and
+leaves retired activities out unless `include_retired=true`.
+
+```json
+{ "activity_code": "CS201", "activity_title": "Data Structures", "unit_code": "CSE", "cycle_id": 3 }
+```
+
+`POST` answers `201` with the activity, its `id` and a `retired_at` of
+`null`. It starts with no slots and no members: add slots with
+`POST /schedule/slots` and members with the enrollment routes below. Each slot
+fills the days ahead as soon as it is added, through `materialize_horizon`,
+the same function a CSV import and the nightly job call, so an activity built
+here ends up with exactly the days the same activity imported from a CSV
+would.
+
+The code is unique within its cycle, retired activities included, and a
+second one is refused with `409` `ALREADY_EXISTS`. A cycle that does not exist
+is a `404`.
+
+`PATCH` changes the title and nothing else. The code and the cycle are what
+identify an activity, the same pair an import matches on, so changing either
+is a different activity. The unit is left out because it is what a unit
+admin's permission is checked against; moving an activity between units is
+done by an import, which only an org admin can run.
+
+A UNIT_ADMIN can create, change, retire and enroll only inside their own unit,
+and is refused with `403` `OUTSIDE_UNIT` elsewhere.
+
+### POST /schedule/activities/{id}/retire `[ADMIN]`
+### POST /schedule/slots/{id}/retire `[ADMIN]`
+
+Retiring takes a class off the timetable without losing what it recorded.
+Nothing is deleted outright:
+
+- The activity, and every slot it still has, gets a `retired_at`. Retiring a
+  slot marks just that slot.
+- The generator writes no more days for a retired slot, and it no longer
+  holds its room, so a booking or another class can take the window. A day it
+  keeps (below) still holds the room on that date.
+- Days from today onward that nobody has marked or annotated are removed.
+- Days from today onward that carry attendance or a note are kept.
+- Days before today are not touched.
+
+```json
+{ "retired_at": "2026-10-13T09:12:44Z", "slots_retired": 2, "ledger_rows_removed": 14, "ledger_rows_kept": 1 }
+```
+
+That is the rule `PATCH /schedule/cycles/{id}/close` applies to a whole cycle.
+It differs from `DELETE /schedule/slots/{id}`, which refuses with `409` while a
+day ahead has been marked and detaches the days already past from the slot.
+A retired slot keeps them.
+
+A retired activity or slot can still be read, and `include_retired=true` puts
+it back in `GET /schedule/activities` and `GET /schedule/slots`. It cannot be
+edited, given slots or members, deleted or retired again, all refused with
+`409` `STATE_CONFLICT`. A CSV import that names a retired activity, or a row
+that lands on a retired slot, is refused with `422` and the file has to leave
+it out. The retired activity's code stays taken in its cycle.
+
+### GET /schedule/activities/{id}/enrollments `[ADMIN]`
+### POST /schedule/activities/{id}/enrollments `[ADMIN]`
+### DELETE /schedule/activities/{id}/enrollments/{member_id} `[ADMIN]`
+
+The activity's roster, the same rows a CSV import writes. The list is paged.
+
+```json
+{ "member_id": "STU001" }
+```
+
+`POST` answers `201` with `{ "activity_id": 12, "member_id": "STU001" }`. The
+member has to exist (`404`) and be active (`422` `USER_DEACTIVATED`), and a
+second enrollment of the same member is refused with `409` `ALREADY_EXISTS`.
+
+Days belong to slots, not to members, so neither route writes or removes a
+day. An enrolled member sees the activity's days from then on; a member taken
+off the roster stops seeing them, and the attendance already recorded for
+them stays where it is. `DELETE` answers
+`{ "activity_id": 12, "member_id": "STU001", "removed": true }`, or `404`
+when the member is not enrolled.
+
 ### POST /schedule/slots `[ADMIN]`
 ### PATCH /schedule/slots/{id} `[ADMIN]`
 
-Create a weekly slot, or move an existing one. Both are refused with `409`
-where the room is already taken for part of that window, by a booking, by
-another class already on the timetable, or by a day already generated onto
-that room:
+Create a weekly slot, or move an existing one. A new slot fills the days ahead
+as soon as it is added, the same way an import does, rather than waiting for
+the nightly job. Neither is allowed on a retired activity or slot (`409`
+`STATE_CONFLICT`).
+
+Both are refused with `409` where the room is already taken for part of that
+window, by a booking, by another class already on the timetable, or by a day
+already generated onto that room:
 
 ```json
 {

@@ -4181,6 +4181,9 @@ paths:
       summary: Add a master slot
       description: >
         Admin only. A UNIT_ADMIN may only add slots inside their own unit.
+        The new slot fills the days ahead at once, through the same generator
+        a CSV import and the nightly job use. A retired activity takes no new
+        slots (409 `STATE_CONFLICT`).
 
 
         Refused with 409 where the room is already taken for part of that
