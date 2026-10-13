@@ -80,6 +80,8 @@ services:
       # How coarse a member's location fix may be, as a multiple of the
       # fence radius. 0 turns the check off.
       - GEOFENCE_ACCURACY_FACTOR=${GEOFENCE_ACCURACY_FACTOR:-2}
+      # Days ahead the ledger is kept written, 1 to 366.
+      - LEDGER_HORIZON_DAYS=${LEDGER_HORIZON_DAYS:-28}
       # Days a visitor check-in is kept before a daily job deletes it. 0
       # keeps them forever.
       - GUEST_RETENTION_DAYS=${GUEST_RETENTION_DAYS:-0}

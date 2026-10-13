@@ -1769,10 +1769,15 @@ POST /api/v1/ingestion/generate-ledger?target_date=2026-09-01
 `target_date` is a query parameter, optional, and defaults to tomorrow in
 `ORG_TIMEZONE`.
 
-The nightly job does this for tomorrow at 23:00 in `ORG_TIMEZONE`. A server
-that starts also does it once for today, and for tomorrow as well if it starts
-at or after 23:00, because a run missed while the server was down is not
-remembered. That catch-up never writes a date that has already passed.
+The nightly job at 23:00 in `ORG_TIMEZONE` writes every missing day from
+tomorrow through `LEDGER_HORIZON_DAYS` ahead (28 by default), not just
+tomorrow, and `POST /ingestion/upload-csv` does the same for the cycle it
+imported before it returns. Its response is unchanged. A day that already
+exists is left alone, a day inside approved leave is written `ON_LEAVE`, and
+nothing is written past a cycle's end date. A server that starts also runs
+the single-day generation once for today, and for tomorrow as well if it
+starts at or after 23:00, because a run missed while the server was down is
+not remembered. That catch-up never writes a date that has already passed.
 
 A slot gets a day only while its cycle is open and the date is inside the
 cycle's own dates. Running this again for a date is harmless: a slot has at

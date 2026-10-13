@@ -84,6 +84,21 @@ def _rate_limiter_off():
     get_settings.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def _import_leaves_the_ledger_alone(request, monkeypatch):
+    """A CSV import writes the next LEDGER_HORIZON_DAYS of days, and most tests do not want that.
+
+    They upload a timetable and then lay down one chosen day by hand with
+    generate_daily_ledger_entries, and count on that day not being there yet.
+    So the fill an import does is switched off here. A test module that is
+    about the fill sets FILL_LEDGER_ON_IMPORT = True at module level.
+    """
+    if not getattr(request.module, "FILL_LEDGER_ON_IMPORT", False):
+        from app.api.v1.endpoints import ingestion
+
+        monkeypatch.setattr(ingestion, "materialize_horizon", lambda db, cycle_id=None: 0)
+
+
 @pytest.fixture()
 def db():
     Base.metadata.drop_all(bind=engine)
