@@ -65,7 +65,7 @@ IMPORT_PASSWORD = "import-test-password-not-real"
 # Values the secret columns hold in the seed, so a test can look for them in
 # the archive's bytes.
 FEED_TOKEN = "feed-token-for-tests-only"
-API_KEY = "ck_portability_test_key_not_a_real_secret"
+API_KEY = "ck_portability_test_key_for_the_seed"
 VISIT_CODE_HASH = "a" * 64
 
 

@@ -458,8 +458,8 @@ def export(args) -> int:
     finally:
         engine.dispose()
     rows = sum(entry["rows"] for entry in manifest["tables"])
-    secrets_note = "with secrets" if args.include_secrets else "without secrets"
-    print(f"Exported {rows} rows, {secrets_note}, to {target_path}")
+    left_out = "nothing left out" if not manifest["omitted_columns"] else "secrets left out"
+    print(f"Exported {rows} rows, {left_out}, to {target_path}")
     return 0
 
 
