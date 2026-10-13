@@ -13,8 +13,11 @@ starts here can move to the container later without changing a call.
     chronos-engine serve --data-dir ./chronos-data
     chronos-engine serve --database-url postgresql://user:pass@localhost/chronos
     chronos-engine backup --data-dir ./chronos-data --to backup.db
+    chronos-engine export --data-dir ./chronos-data --to chronos.zip
+    chronos-engine import --data-dir ./new-data --from chronos.zip
 
-docs/standalone.md has what this profile gives up for being one process.
+docs/standalone.md has what this profile gives up for being one process,
+and docs/portability.md the archive export and import read and write.
 
 `chronos-engine embedded` is the same process started by another program as
 a hidden child: loopback only, the host's secret on every request, the
@@ -398,6 +401,100 @@ def backup(args) -> int:
     return 0
 
 
+def portable_engine(args):
+    """An engine for export or import, on the database --data-dir or --database-url names.
+
+    Its own engine rather than app.core.database's, which is built at import
+    from whatever the environment said first. SQLite gets the same setup the
+    server runs with, foreign keys on included.
+    """
+    from sqlalchemy import create_engine, text
+
+    from app.core.database import is_sqlite, sqlite_engine, use_schema
+
+    url = os.environ["DATABASE_URL"]
+    if is_sqlite(url):
+        return sqlite_engine(url)
+    engine = create_engine(url)
+    if args.schema:
+        # use_schema first: it checks the name, and it has to be attached
+        # before the first connection. A search_path naming a schema that is
+        # not there yet is allowed, and takes effect once it is created.
+        use_schema(engine, args.schema)
+        with engine.begin() as connection:
+            connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{args.schema}"'))
+    return engine
+
+
+def export(args) -> int:
+    """Write the organization's data to a new zip archive (docs/portability.md)."""
+    data_dir = Path(args.data_dir).resolve()
+    if args.database_url is None and not (data_dir / DATABASE_FILE).exists():
+        print(f"No database at {data_dir / DATABASE_FILE}", file=sys.stderr)
+        return 1
+    target_path = Path(args.to).resolve()
+    if target_path.exists():
+        print(f"{target_path} already exists; choose a new file", file=sys.stderr)
+        return 1
+    # An export signs nothing. A throwaway key keeps configure_environment
+    # from leaving a signing.key behind in a directory that had none.
+    os.environ.setdefault("JWT_SECRET_SIGNING_KEY", secrets.token_hex(32))
+    configure_environment(data_dir, args.database_url)
+
+    from app.services.portability import export_archive
+
+    engine = portable_engine(args)
+    try:
+        with open(target_path, "xb") as target:
+            try:
+                with engine.connect() as connection:
+                    manifest = export_archive(
+                        connection, target, include_secrets=args.include_secrets
+                    )
+            except BaseException:
+                target.close()
+                target_path.unlink()
+                raise
+    finally:
+        engine.dispose()
+    rows = sum(entry["rows"] for entry in manifest["tables"])
+    left_out = "nothing left out" if not manifest["omitted_columns"] else "secrets left out"
+    print(f"Exported {rows} rows, {left_out}, to {target_path}")
+    return 0
+
+
+def import_(args) -> int:
+    """Load an archive into an empty database (docs/portability.md)."""
+    source_path = Path(args.from_).resolve()
+    if not source_path.exists():
+        print(f"No archive at {source_path}", file=sys.stderr)
+        return 1
+    data_dir = Path(args.data_dir).resolve()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    configure_environment(data_dir, args.database_url)
+
+    from app.services.portability import ArchiveError, import_archive
+
+    engine = portable_engine(args)
+    try:
+        manifest = import_archive(
+            engine, source_path, admin_password=os.environ.get("INITIAL_ADMIN_PASSWORD")
+        )
+    except ArchiveError as problem:
+        print(f"chronos-engine import: {problem}", file=sys.stderr)
+        return 1
+    finally:
+        engine.dispose()
+    rows = sum(entry["rows"] for entry in manifest["tables"])
+    print(f"Imported {rows} rows from {source_path}")
+    if not manifest["secrets_included"]:
+        print(
+            "The archive had no secrets: passwords, API keys and calendar feed links "
+            "have to be set again (docs/portability.md)."
+        )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="chronos-engine", description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
@@ -467,6 +564,33 @@ def build_parser() -> argparse.ArgumentParser:
     copy.add_argument("--data-dir", default="chronos-data")
     copy.add_argument("--to", required=True, help="new file to write the copy to")
     copy.set_defaults(handler=backup)
+
+    out = commands.add_parser(
+        "export", help="write the organization's data to a zip archive (docs/portability.md)"
+    )
+    out.add_argument("--data-dir", default="chronos-data")
+    out.add_argument("--database-url", help="a PostgreSQL URL; without one, the SQLite file")
+    out.add_argument(
+        "--schema", help="the PostgreSQL schema the tables live in, if not the default"
+    )
+    out.add_argument("--to", required=True, help="new file to write the archive to")
+    out.add_argument(
+        "--include-secrets",
+        action="store_true",
+        help="also write password hashes, API key hashes, feed tokens and visit code hashes",
+    )
+    out.set_defaults(handler=export)
+
+    load = commands.add_parser(
+        "import", help="load an archive into an empty database (docs/portability.md)"
+    )
+    load.add_argument("--data-dir", default="chronos-data")
+    load.add_argument("--database-url", help="a PostgreSQL URL; without one, the SQLite file")
+    load.add_argument(
+        "--schema", help="the PostgreSQL schema to build the tables in, made if missing"
+    )
+    load.add_argument("--from", dest="from_", required=True, help="the archive to load")
+    load.set_defaults(handler=import_)
     return parser
 
 

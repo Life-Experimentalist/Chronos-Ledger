@@ -59,6 +59,21 @@ class AuditMiddleware:
             )
 
 
+def record(request, status_code):
+    """Write the audit row for a read worth a trace, which the middleware skips.
+
+    The organization export is the one today: a GET that hands out every row.
+    Same caller fields, same opener and same failure handling as a write's row.
+    """
+    state = request.state
+    _write(
+        request.scope,
+        getattr(state, "actor_id", None),
+        getattr(state, "api_key_id", None),
+        status_code,
+    )
+
+
 def _write(scope, actor_id, api_key_id, status_code):
     from app.models.db import AuditRecord
 
