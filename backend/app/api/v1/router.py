@@ -4,6 +4,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
+    admin,
     api_keys,
     attendance,
     audit,
@@ -38,6 +39,7 @@ ROUTERS = (
     (audit.router, "/audit", "Audit"),
     (changes.router, "/changes", "Changes"),
     (federation.router, "/federation", "Federation"),
+    (admin.router, "/admin", "Admin"),
 )
 
 api_router = APIRouter()

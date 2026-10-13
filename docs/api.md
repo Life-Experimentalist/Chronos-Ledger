@@ -1940,6 +1940,22 @@ most one day per date, and the database refuses a second
 
 ---
 
+## Admin
+
+### GET /admin/export `[ORG_ADMIN]`
+
+The organization's data as one zip archive, sent as an attachment named
+`chronos-ledger-export.zip`. An API key needs `admin:read`. The archive holds
+`manifest.json` and one JSON Lines file per table; its layout, what it leaves
+out and how to load it are in [portability.md](portability.md).
+
+Password hashes, API key hashes, calendar feed tokens and visit code hashes
+are left out unless `include_secrets=true` is given. Refresh tokens and the
+signing key are never in it. There is no import route: `chronos-engine
+import` loads an archive into an empty database.
+
+---
+
 ## Audit
 
 Every request under `/api/v1` that can change something (any method other

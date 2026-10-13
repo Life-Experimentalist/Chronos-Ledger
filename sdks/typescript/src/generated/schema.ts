@@ -1254,6 +1254,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The organization's data as one archive
+         * @description Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON Lines file per table, described in docs/portability.md. Password hashes, API key hashes, calendar feed tokens and visit code hashes are left out unless `include_secrets` is true. Refresh tokens and the signing key are never in it. `chronos-engine import` loads it into an empty database.
+         */
+        get: operations["admin.export"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/audit/": {
         parameters: {
             query?: never;
@@ -4899,6 +4919,31 @@ export interface operations {
                 };
             };
             403: components["responses"]["Forbidden"];
+        };
+    };
+    "admin.export": {
+        parameters: {
+            query?: {
+                include_secrets?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The archive, as an attachment named chronos-ledger-export.zip. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
     "audit.list": {

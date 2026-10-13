@@ -119,6 +119,24 @@ them in itself, so after a stop `chronos.db` alone is the whole database.
 Keep `signing.key` with the backups if restoring should keep people signed in.
 Without it, a restored database works and everyone signs in again.
 
+## Export and import
+
+To move a deployment, between SQLite and PostgreSQL or to another machine,
+use an archive rather than a backup:
+
+```bash
+chronos-engine export --data-dir ./chronos-data --to ./chronos.zip
+INITIAL_ADMIN_PASSWORD='a password you choose' \
+  chronos-engine import --database-url postgresql://chronos:PASSWORD@localhost:5432/chronos --from ./chronos.zip
+```
+
+Both take `--data-dir` and `--database-url` as `serve` does, plus `--schema`
+for an embedded deployment's schema. The import needs an empty database, so
+run it before the first `serve` on the new one. Secrets are left out unless
+the export is given `--include-secrets`, and importing an archive without
+them needs `INITIAL_ADMIN_PASSWORD`. [portability.md](portability.md) describes the
+archive and what to do after an import without secrets.
+
 ## Do not put the data directory in a synced folder
 
 OneDrive, Dropbox, Google Drive and iCloud rewrite files underneath a program

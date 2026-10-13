@@ -4921,6 +4921,41 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  # ── Admin ─────────────────────────────────
+  /api/v1/admin/export:
+    get:
+      operationId: admin.export
+      tags: [Admin]
+      summary: The organization's data as one archive
+      description: >
+        Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding
+        `manifest.json` and one JSON Lines file per table, described in
+        docs/portability.md. Password hashes, API key hashes, calendar feed
+        tokens and visit code hashes are left out unless `include_secrets` is
+        true. Refresh tokens and the signing key are never in it.
+        `chronos-engine import` loads it into an empty database.
+      parameters:
+        - name: include_secrets
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: The archive, as an attachment named chronos-ledger-export.zip.
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
   # ── Calendar Sync ─────────────────────────
   /api/v1/audit/:
     get:
