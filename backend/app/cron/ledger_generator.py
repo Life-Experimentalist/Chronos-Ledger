@@ -17,12 +17,16 @@ missing date from tomorrow to LEDGER_HORIZON_DAYS ahead, which is what the
 nightly job and an import call; it follows the same rules and the same
 refusals, but reads the window once instead of asking per slot per day.
 
-Two slots can be on one room at one hour despite every check in the API, so
-this has to survive finding out. daily_ledger carries an exclusion constraint
-on PostgreSQL, which means the second insert on a taken window is refused by
-the database rather than accepted. Without a savepoint around each insert the
-refusal would poison the whole transaction and the night's other classes would
-be lost with it, so each row gets its own and a refused one is skipped.
+Two slots can be on one room at one hour despite every check in the API, a
+slot written straight into the database being the plainest way, so this has
+to survive finding out. Before a day is written it is checked against the days
+already on its room, and one that would sit on another is not written. That
+check is what holds the line on SQLite, which has no exclusion constraint.
+On PostgreSQL daily_ledger also carries one, which catches the race the check
+cannot: two writers that both looked before either wrote. Without a savepoint
+around each insert that refusal would poison the whole transaction and the
+night's other classes would be lost with it, so each row gets its own and a
+refused one is skipped.
 
 Skipped is not the same as silent. Nothing else in the system would ever
 mention the day that did not get written, so it is logged, with the slot that
@@ -38,7 +42,7 @@ from sqlalchemy.orm import Session
 
 from app.core import recurrence
 from app.core.config import get_settings
-from app.core.time import org_today, org_tomorrow
+from app.core.time import org_today, org_tomorrow, window_span
 from app.models.db import (
     Activity,
     DailyLedger,
@@ -77,11 +81,62 @@ def _day_fields(
     }
 
 
+def _claims_a_window(fields: dict) -> bool:
+    """Whether a day names a room and an hour, the rows the no-overlap rule covers."""
+    return (
+        fields["resource_id"] is not None
+        and fields["time_window_start"] is not None
+        and fields["time_window_end"] is not None
+    )
+
+
+def _report_taken(db: Session, fields: dict, taken: list) -> None:
+    """Log a day that was not written because its room was taken.
+
+    Nothing else in the system would ever mention it. taken is the days that
+    were there first, as (slot, date, start) triples.
+    """
+    activity = db.get(Activity, fields["activity_id"])
+    logger.warning(
+        "ledger: no day written for slot %s (%s) on %s in %s, the room is already taken by %s",
+        fields["master_slot_id"],
+        activity.activity_code if activity else "unknown activity",
+        fields["target_date"],
+        fields["target_room_identifier"] or fields["resource_id"],
+        taken or "a row this query could not find",
+    )
+
+
+def _taken_by(db: Session, fields: dict) -> list:
+    """The days already on this day's room that its window would sit on."""
+    if not _claims_a_window(fields):
+        return []
+    found = days_against_window(
+        db,
+        fields["resource_id"],
+        fields["target_date"],
+        fields["time_window_start"],
+        fields["time_window_end"],
+        exclude_slot_id=fields["master_slot_id"],
+    )
+    return [(day["master_slot_id"], day["date"], str(day["start"])) for day in found]
+
+
 def _insert_day(db: Session, fields: dict) -> bool:
-    """Write one day, or find out why it could not be. True if it was written."""
-    entry = DailyLedger(**fields)
+    """Write one day, or find out why it could not be. True if it was written.
+
+    A day that would sit on another day on its room is not written, on any
+    database. Its own slot's other days are left out of that check: the only
+    one that could collide is the same date, and the unique key below is
+    what answers for that.
+    """
     slot_id = fields["master_slot_id"]
     target_date = fields["target_date"]
+    taken = _taken_by(db, fields)
+    if taken:
+        _report_taken(db, fields, taken)
+        return False
+    entry = DailyLedger(**fields)
     try:
         # The flush is inside the savepoint on purpose: it is the flush
         # that sends the INSERT, so a flush outside would be refused with
@@ -110,24 +165,7 @@ def _insert_day(db: Session, fields: dict) -> bool:
         )
         if lost_race:
             return False
-        taken = days_against_window(
-            db,
-            fields["resource_id"],
-            target_date,
-            fields["time_window_start"],
-            fields["time_window_end"],
-            exclude_slot_id=slot_id,
-        )
-        activity = db.get(Activity, fields["activity_id"])
-        logger.warning(
-            "ledger: no day written for slot %s (%s) on %s in %s, the room is already taken by %s",
-            slot_id,
-            activity.activity_code if activity else "unknown activity",
-            target_date,
-            fields["target_room_identifier"] or fields["resource_id"],
-            [(day["master_slot_id"], day["date"], str(day["start"])) for day in taken]
-            or "a row this query could not find",
-        )
+        _report_taken(db, fields, _taken_by(db, fields))
         return False
     return True
 
@@ -286,6 +324,7 @@ def materialize_horizon(db: Session, cycle_id: int | None = None) -> int:
         on_leave = any(a <= day <= b for a, b in leave.get(slot.primary_lead_id, ()))
         state = DynamicState.ON_LEAVE if on_leave else DynamicState.SCHEDULED
         rows.append(_day_fields(slot, day, state))
+    rows = _without_overlaps(db, rows, first, last)
 
     created = 0
     for offset in range(0, len(rows), LEDGER_BATCH_SIZE):
@@ -302,6 +341,68 @@ def materialize_horizon(db: Session, cycle_id: int | None = None) -> int:
             created += sum(_insert_day(db, fields) for fields in batch)
         db.commit()
     return created
+
+
+def _without_overlaps(db: Session, rows: list[dict], first, last) -> list[dict]:
+    """The rows that can be written without one sitting on another on its room.
+
+    A batch goes to the database in one flush, so a check per row against the
+    table cannot see two new rows that collide with each other, and SQLite has
+    no constraint to refuse them either. So the days already on the rooms
+    involved are read once, the rows are walked in the order they will be
+    written (earliest day, then the older slot), and a row is kept only if it
+    sits on nothing already there or already kept. A dropped row is logged the
+    same way _insert_day logs one.
+
+    A day from the day before the window can run into its first morning, and
+    one from the day after can start inside its last night, so the read
+    reaches one day further at each end.
+    """
+    rooms = {fields["resource_id"] for fields in rows if _claims_a_window(fields)}
+    if not rooms:
+        return rows
+    one_day = datetime.timedelta(days=1)
+    held: dict[int, list[tuple]] = {}
+    for day in db.query(DailyLedger).filter(
+        DailyLedger.resource_id.in_(rooms),
+        DailyLedger.target_date >= first - one_day,
+        DailyLedger.target_date <= last + one_day,
+        DailyLedger.time_window_start.isnot(None),
+        DailyLedger.time_window_end.isnot(None),
+    ):
+        opens, closes = window_span(day.target_date, day.time_window_start, day.time_window_end)
+        held.setdefault(day.resource_id, []).append(
+            (opens, closes, day.master_slot_id, day.target_date, str(day.time_window_start))
+        )
+
+    kept = []
+    for fields in rows:
+        if not _claims_a_window(fields):
+            kept.append(fields)
+            continue
+        opens, closes = window_span(
+            fields["target_date"], fields["time_window_start"], fields["time_window_end"]
+        )
+        on_room = held.setdefault(fields["resource_id"], [])
+        taken = [
+            (slot_id, day, start)
+            for other_opens, other_closes, slot_id, day, start in on_room
+            if other_opens < closes and opens < other_closes
+        ]
+        if taken:
+            _report_taken(db, fields, taken)
+            continue
+        on_room.append(
+            (
+                opens,
+                closes,
+                fields["master_slot_id"],
+                fields["target_date"],
+                str(fields["time_window_start"]),
+            )
+        )
+        kept.append(fields)
+    return kept
 
 
 def missed_ledger_dates(now: datetime.datetime, nightly_hour: int) -> list[datetime.date]:
