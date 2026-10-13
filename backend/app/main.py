@@ -33,6 +33,7 @@ from app.cron.scheduled import (
     OVERSTAY_INTERVAL,
     announce_guest_overstays,
     catch_up_ledger,
+    deliver_webhooks,
     purge_guest_check_ins,
     purge_idempotency_records,
     purge_refresh_tokens,
@@ -142,6 +143,20 @@ def _start_the_scheduler():
         id="guest_overstay_notice",
         replace_existing=True,
     )
+    # Fans new changes out to webhook subscriptions and sends what is due. A
+    # few seconds, so a receiver hears about a change about as soon as a poll
+    # of the change feed would have; a pass with nothing to do is two small
+    # queries. One run at a time (APScheduler's default), so a slow receiver
+    # delays the next pass rather than overlapping it. Only with the change
+    # feed on, since webhooks are made from its markers.
+    if settings.change_feed_enabled:
+        scheduler.add_job(
+            deliver_webhooks,
+            "interval",
+            seconds=settings.webhook_delivery_interval_seconds,
+            id="webhook_delivery",
+            replace_existing=True,
+        )
     scheduler.start()
 
 
