@@ -134,6 +134,8 @@ way.
 | `IDEMPOTENCY_KEY_REUSED` | The `Idempotency-Key` was already used for a different request. |
 | `IDEMPOTENCY_KEY_IN_PROGRESS` | A request with this `Idempotency-Key` is still running. `Retry-After` says when to try again. |
 | `RESERVATION_EXTERNAL_REF_TAKEN` | Another of the caller's reservations, cancelled or not, already has that `external_ref`. `detail.reservation_id` names it. |
+| `RESOURCE_CAPACITY_EXCEEDED` | A `POOLED` resource has too few units free for the whole window. `detail` carries `conflicts`, `capacity`, `taken` and `requested`. |
+| `RESOURCE_BOOKINGS_WOULD_NOT_FIT` | A change of a resource's `mode` or `capacity` that bookings still to come would no longer fit. `detail.reservations` lists them. |
 | `LOCATION_REQUIRED` | The session is geofenced and no location was sent. |
 | `LOCATION_TOO_COARSE` | The location's accuracy is too poor to check against the geofence. |
 | `OUTSIDE_GEOFENCE` | The location is outside the session's geofence. |
@@ -930,6 +932,18 @@ or ahead of that through `POST /resources/`, which is how a system that manages
 its own rooms registers one. An imported room knows only its name, so its
 capacity and coordinates are filled in with `PATCH`.
 
+A resource's `mode` says how a reservation takes it:
+
+- `EXCLUSIVE`, the default, is one booking at a time, which is every resource
+  made before modes existed.
+- `POOLED` is a stock of `capacity` interchangeable units, such as twelve
+  ventilators. A booking takes `quantity` of them, and is refused when the
+  bookings already there leave too few free at some moment of its window.
+- `SHARED` records who is there and refuses nobody, such as a common room.
+
+The mode governs reservations only. The timetable is one class at a time on
+every resource, and a class on a pooled resource takes the whole pool.
+
 ### GET /resources/
 
 Optional filters: `resource_type` (`ROOM` or `PERSON`), `active`, `code`.
@@ -945,6 +959,7 @@ Readable by anyone signed in. Ordered by code, and pages with `limit` and
     "resource_type": "ROOM",
     "unit_code": null,
     "capacity": 90,
+    "mode": "EXCLUSIVE",
     "user_id": null,
     "latitude": 12.9716,
     "longitude": 77.5946,
@@ -974,7 +989,8 @@ Only `code` is required. It is trimmed, the same as the importer trims a room
 name, so a room created here and the same name in a later CSV are one row and
 the import attaches its slots to this one. `label` defaults to the code.
 `latitude` and `longitude` come as a pair or not at all, the same rule as on
-`PATCH`.
+`PATCH`. `mode` defaults to `EXCLUSIVE`; `"mode": "POOLED"` needs a `capacity`
+of at least 1, and without one is `422`.
 
 The answer is `201` with the room in the shape `GET /resources/` returns. A code
 already taken, whether by a room created here or one an import made, is `409`
@@ -1067,6 +1083,12 @@ returned it. Grouping by `date` alone files that hold under a day nobody asked
 about, and discarding anything outside the range shows a ward as free while it
 is staffed.
 
+The mode changes which reservations count. On a `POOLED` resource a single
+booking does not make it busy; what is reported is each stretch in which the
+bookings together hold the whole pool, as an interval with every id null,
+alongside the timetable as usual. On a `SHARED` resource reservations are
+never reported, since nothing is ever refused for them.
+
 `PATCH /schedule/ledger/{id}` cannot move a day's date, hour or resource, so
 nothing it changes shows up here. An inactive resource still answers:
 retiring a room does not clear its calendar.
@@ -1081,6 +1103,7 @@ leaves room for the next twelve months from any date, leap years included.
 {
   "label": "Lecture Hall 3",
   "capacity": 90,
+  "mode": "EXCLUSIVE",
   "latitude": 12.9716,
   "longitude": 77.5946,
   "altitude_target": 920.0,
@@ -1088,7 +1111,17 @@ leaves room for the next twelve months from any date, leap years included.
 }
 ```
 
-Every field is optional, and a field left out is left alone. `latitude` and
+Every field is optional, and a field left out is left alone.
+
+`mode` cannot be null, and a `POOLED` resource keeps a `capacity` of at least
+1: leaving it without one is `422`. A change of `mode`, or of `capacity` on a
+pooled resource, is checked against the bookings still standing from yesterday
+on. If any would no longer fit, two that overlap on a resource made exclusive
+or more than the new capacity at once on a pool, the answer is `409` with
+`RESOURCE_BOOKINGS_WOULD_NOT_FIT` and the bookings in `detail.reservations`,
+and nothing changes. Cancel or rebook them and try again. A change that fits
+is written onto those bookings too. Leaving `SHARED` also checks them against
+the timetable, which a shared booking was never refused by. `latitude` and
 `longitude` are set or cleared together: sending one without the other is
 `422`, since half a location fences the room to a point on the equator.
 Setting them is what switches geofencing on for every session held there, so
@@ -1126,7 +1159,8 @@ than one that fails outright.
 `external_ref` is optional: the caller's own name for the booking, 1 to 120
 characters, kept exactly as sent. With it, a caller can find, change and
 cancel the booking later without having kept the `id`. See
-[External references](#external-references).
+[External references](#external-references). `quantity` is optional too, and
+defaults to 1; see [Pooled and shared resources](#pooled-and-shared-resources).
 
 `201` with the hold:
 
@@ -1142,6 +1176,7 @@ cancel the booking later without having kept the `id`. See
   "status": "HELD",
   "requested_by_id": "ADM001",
   "idempotency_key": "6f1c2e40-2c5f-4d0e-9a5b-1c7c0f9c3a11",
+  "quantity": 1,
   "external_ref": "visit-42",
   "created_at": "2026-01-05T09:14:22Z",
   "cancelled_at": null
@@ -1207,6 +1242,43 @@ underneath both sits an exclusion constraint over the window itself,
 arrive in. When the constraint is what catches it, the window is looked up
 again and the `409` names the hold that won rather than only saying this
 one lost.
+
+#### Pooled and shared resources
+
+All of the above is the `EXCLUSIVE` rule. On a `POOLED` resource a window the
+timetable holds is still the `409` with `RESOURCE_CONFLICT`, because a class
+takes the whole pool. Other bookings are not in the way one by one: they are
+summed. The booking is taken when, at every moment of its window, the units
+already held plus `quantity` come to no more than `capacity`. Otherwise it is
+`409` with `RESOURCE_CAPACITY_EXCEEDED`:
+
+```json
+{
+  "detail": {
+    "message": "the resource does not have that many units left for that window",
+    "conflicts": [ ... the bookings that hold it, as above ... ],
+    "capacity": 12,
+    "taken": 12,
+    "requested": 1
+  },
+  "code": "RESOURCE_CAPACITY_EXCEEDED"
+}
+```
+
+`taken` is the most held at any one moment of the window, so `capacity`
+minus `taken` is the most this window could still have. Two bookings back to
+back never add up, by the same half open rule. Callers racing for the last
+units are serialized by the row lock on the resource, which on PostgreSQL is
+`SELECT ... FOR UPDATE`, so the sum each one checks includes every booking
+committed before it.
+
+On a `SHARED` resource nothing is refused: not other bookings, and not the
+timetable. A shared booking does not stop a class being put there either.
+
+`quantity` above 1 on a resource that is not `POOLED` is `422`. It is part of
+what a retry under the same key is compared on only when it is sent, so a
+retry that leaves it out still matches a booking made before the field
+existed.
 
 #### External references
 
@@ -1382,6 +1454,14 @@ activities that run at the same moment, on any resource or on none. `date`,
 they share; each item carries its own full window. `kind` and the item `type`
 are strings, and a reader should skip a value it does not know, because more
 kinds are expected.
+
+A resource's mode changes what counts. On a `POOLED` resource two
+reservations are never a `resource_overlap`. Instead a `resource_overbooked`
+names each stretch in which the reservations together hold more than the
+capacity: `items` is every reservation open in it, and `capacity` and `taken`
+(the most held at once) say by how much. Those two fields are null on every
+other kind. The timetable on a pooled resource still clashes as usual. On a
+`SHARED` resource reservations are never reported.
 
 What holds a resource is what `GET /resources/{id}/availability` reports as
 busy, by the same rules, so the two never disagree:

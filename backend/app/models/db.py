@@ -124,13 +124,37 @@ class ResourceType(enum.StrEnum):
     the import and the backfill produce. PERSON exists because
     Resource.user_id ships alongside it: a resource row carrying a user is a
     person, and a column that says so with no value to say it with would be
-    incoherent. Adding a kind later is one ALTER TYPE, and the modes a kind
-    can be consumed in (exclusive, pooled, shared) are a separate axis that
-    is not stored yet.
+    incoherent. Adding a kind later is one ALTER TYPE. How a resource is
+    consumed is a separate axis, ResourceMode, so any kind can be any mode.
     """
 
     ROOM = "ROOM"
     PERSON = "PERSON"
+
+
+class ResourceMode(enum.StrEnum):
+    """How bookings on one resource stand against each other.
+
+    EXCLUSIVE is one booking at a time, which is what every resource was
+    before modes existed and what every resource is unless it says
+    otherwise. POOLED is a stock of interchangeable units, capacity of them,
+    and a booking takes quantity of them: twelve ventilators, any one as
+    good as another. SHARED records who is there and never refuses anybody:
+    a corridor, a common room.
+
+    The mode governs reservations only. Weekly slots and generated days hold
+    a resource exclusively whatever its mode, as they always did, and on a
+    pooled resource a slot or a day takes the whole pool for its window. On
+    a shared resource a reservation is not refused by them either.
+    """
+
+    EXCLUSIVE = "EXCLUSIVE"
+    POOLED = "POOLED"
+    SHARED = "SHARED"
+
+
+# One Enum object for both tables, so PostgreSQL makes the type once.
+RESOURCE_MODE = Enum(ResourceMode, name="resource_mode")
 
 
 class ReservationStatus(enum.StrEnum):
@@ -259,6 +283,15 @@ class Resource(Base):
     """
 
     __tablename__ = "resources"
+    __table_args__ = (
+        # A pool with nothing in it, or with no size at all, refuses every
+        # booking and says nothing about why. capacity on any other mode is
+        # what it always was: seats, for information.
+        CheckConstraint(
+            "mode <> 'POOLED' OR (capacity IS NOT NULL AND capacity >= 1)",
+            name="ck_resources_pool_capacity",
+        ),
+    )
 
     id = Column(Integer, primary_key=True)
     code = Column(String(30), nullable=False, unique=True, index=True)
@@ -270,7 +303,15 @@ class Resource(Base):
         server_default="ROOM",
     )
     unit_code = Column(String(50), nullable=True)
+    # Seats, for information, on an exclusive or shared resource. The size of
+    # the pool on a pooled one, and then a limit the booking route enforces.
     capacity = Column(Integer, nullable=True)
+    mode = Column(
+        RESOURCE_MODE,
+        nullable=False,
+        default=ResourceMode.EXCLUSIVE,
+        server_default="EXCLUSIVE",
+    )
     # A resource row with user_id set is a person. Without it, staff
     # availability and room availability become two mechanisms that drift.
     user_id = Column(String(50), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
@@ -411,12 +452,22 @@ class Reservation(Base):
     be a recurring slot and not only a one off booking, and a booking that
     runs past midnight is compared against the whole timetable.
 
-    Two HELD rows on one resource may not overlap, and on PostgreSQL the
-    database refuses them: ex_reservations_no_overlap below, an EXCLUDE USING
-    gist constraint. SQLite has no such thing, so there the constraint is
-    skipped and the route's own conflict check, run under BEGIN IMMEDIATE, is
-    the whole of the protection. The tests that prove the constraint only run
-    against a real PostgreSQL (tests/*_pg.py).
+    Two HELD rows on one exclusive resource may not overlap, and on
+    PostgreSQL the database refuses them: ex_reservations_no_overlap below,
+    an EXCLUDE USING gist constraint. SQLite has no such thing, so there the
+    constraint is skipped and the route's own conflict check, run under BEGIN
+    IMMEDIATE, is the whole of the protection. The tests that prove the
+    constraint only run against a real PostgreSQL (tests/*_pg.py).
+
+    mode is the resource's mode, copied onto the row, because an exclusion
+    constraint can only read the row it is checking and the constraint has
+    to know whether this row is one that excludes. The route writes it at
+    booking time, and changing a resource's mode rewrites it on the holds
+    still to come (app.api.v1.endpoints.resources.update_resource), where on
+    PostgreSQL the rewrite is itself checked by the constraint. Pooled and
+    shared rows are outside the constraint: a pool is a sum, which no
+    exclusion constraint can express, and is checked by the route under the
+    resource's row lock.
     """
 
     __tablename__ = "reservations"
@@ -425,9 +476,14 @@ class Reservation(Base):
         # The conflict check reads one resource on one date.
         Index("ix_reservations_resource_date", "resource_id", "reserved_date"),
         # A cancelled hold keeps its row and frees its window, so only HELD
-        # rows take part. The reservations route matches the name in the
-        # IntegrityError it gets and answers 409.
-        _no_overlap("ex_reservations_no_overlap", "reserved_date", "status = 'HELD'"),
+        # rows take part, and only on an exclusive resource. The reservations
+        # route matches the name in the IntegrityError it gets and answers 409.
+        _no_overlap(
+            "ex_reservations_no_overlap",
+            "reserved_date",
+            "status = 'HELD' AND mode = 'EXCLUSIVE'",
+        ),
+        CheckConstraint("quantity >= 1", name="ck_reservations_quantity"),
         # A key belongs to the person who sent it, so two callers cannot
         # collide on one by chance. SQLite and PostgreSQL both let any number
         # of rows share a key once their requester is deleted (SET NULL).
@@ -468,6 +524,15 @@ class Reservation(Base):
     # change the booking without keeping Chronos's id. Optional, and the same
     # length as the key.
     external_ref = Column(String(120), nullable=True)
+    # How many units of a pooled resource this holds. Always 1 on any other
+    # mode.
+    quantity = Column(Integer, nullable=False, default=1, server_default="1")
+    mode = Column(
+        RESOURCE_MODE,
+        nullable=False,
+        default=ResourceMode.EXCLUSIVE,
+        server_default="EXCLUSIVE",
+    )
     status = Column(
         Enum(ReservationStatus, name="reservation_status"),
         nullable=False,

@@ -35,6 +35,16 @@ named twice.
 
 A weekly clash is reported once per date it happens in the range, the same
 way availability lists a weekly slot once per date.
+
+A resource's mode changes what counts, by the rules the booking route
+refuses by (app.models.db.ResourceMode). On a shared resource a reservation
+clashes with nothing and is left out; the timetable on it still clashes with
+itself, as the write paths still refuse that. On a pooled resource the
+timetable clashes as everywhere else, against itself and against any
+reservation, because a class takes the whole pool, and two reservations do
+not clash in pairs at all: what is reported is a resource_overbooked, a
+stretch in which the reservations together hold more than the capacity,
+naming every one of them that is open in it.
 """
 
 import datetime
@@ -51,9 +61,12 @@ from app.models.db import (
     PlanningCycle,
     Reservation,
     ReservationStatus,
+    Resource,
+    ResourceMode,
     StructuralMasterSlot,
     User,
 )
+from app.services.availability import pool_peak, pool_stretches
 
 # A quarter of a year. Smaller than the 366 days availability allows because
 # this expands every resource and every member at once rather than one
@@ -61,6 +74,7 @@ from app.models.db import (
 MAX_CONFLICT_RANGE_DAYS = 92
 
 RESOURCE_OVERLAP = "resource_overlap"
+RESOURCE_OVERBOOKED = "resource_overbooked"
 MEMBER_OVERLAP = "member_overlap"
 
 SLOT = "slot"
@@ -117,6 +131,10 @@ def _sweep(entries: Iterable[Entry]) -> Iterator[tuple[Entry, Entry]]:
 def _conflict(kind: str, first: Entry, second: Entry, **subject) -> dict:
     starts = max(first[0], second[0])
     ends = min(first[1], second[1])
+    return _report(kind, starts, ends, [first[2], second[2]], **subject)
+
+
+def _report(kind: str, starts, ends, items: list[dict], **subject) -> dict:
     return {
         "kind": kind,
         "resource_id": subject.get("resource_id"),
@@ -125,9 +143,37 @@ def _conflict(kind: str, first: Entry, second: Entry, **subject) -> dict:
         "start": starts.time(),
         "end_date": ends.date(),
         "end": ends.time(),
-        "items": [first[2], second[2]],
+        "items": items,
+        "capacity": subject.get("capacity"),
+        "taken": subject.get("taken"),
         "_starts": starts,
     }
+
+
+def _overbooked(resource: Resource, held_on: list[Entry], holds: dict) -> Iterator[dict]:
+    """Every stretch in which a pool's reservations hold more than it has.
+
+    One report per stretch, not per pair: a pool of twelve with thirteen
+    bookings open at once is one overbooking, and the thirteen are its
+    items. taken is the most they hold at any moment of the stretch.
+    """
+    booked = [entry for entry in held_on if entry[2]["type"] == RESERVATION]
+    rows = [holds[entry[2]["id"]] for entry in booked]
+    for starts, ends in pool_stretches(rows, resource.capacity + 1):
+        items = [
+            entry[2]
+            for entry in sorted(booked, key=_sort_key)
+            if entry[0] < ends and starts < entry[1]
+        ]
+        yield _report(
+            RESOURCE_OVERBOOKED,
+            starts,
+            ends,
+            items,
+            resource_id=resource.id,
+            capacity=resource.capacity,
+            taken=pool_peak(rows, (starts, ends)),
+        )
 
 
 def _report_key(conflict: dict) -> tuple:
@@ -246,9 +292,21 @@ def find_conflicts(db: Session, from_date: datetime.date, to_date: datetime.date
     for entry in entries:
         if entry[2]["resource_id"] is not None:
             by_resource[entry[2]["resource_id"]].append(entry)
+    resources = {
+        resource.id: resource
+        for resource in db.query(Resource).filter(Resource.id.in_(list(by_resource)))
+    }
+    holds_by_id = {held.id: held for held in holds}
     for resource_id, held_on in by_resource.items():
+        mode = resources[resource_id].mode
+        if mode is ResourceMode.SHARED:
+            held_on = [entry for entry in held_on if entry[2]["type"] != RESERVATION]
         for first, second in _sweep(held_on):
+            if mode is ResourceMode.POOLED and first[2]["type"] == second[2]["type"] == RESERVATION:
+                continue
             conflicts.append(_conflict(RESOURCE_OVERLAP, first, second, resource_id=resource_id))
+        if mode is ResourceMode.POOLED:
+            conflicts.extend(_overbooked(resources[resource_id], held_on, holds_by_id))
 
     by_activity: dict[int, list[Entry]] = defaultdict(list)
     for entry in entries:

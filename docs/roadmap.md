@@ -235,6 +235,16 @@ This release lets a resource be consumed in three ways.
   the resource. Shared is never refused.
 - **Done when:** booking 13 of 12 ventilators is refused with a conflict body;
   two shared bookings at once both succeed; every existing test passes unchanged.
+- **Status:** shipped, except the requirements half. `mode`, `capacity` and
+  `quantity` are in, a pool full is `409 RESOURCE_CAPACITY_EXCEEDED`, a mode
+  or capacity change the bookings ahead would not fit is
+  `409 RESOURCE_BOOKINGS_WOULD_NOT_FIT`, and availability and the conflict
+  report understand the modes (`tests/test_resource_modes.py`,
+  `tests/test_resource_modes_pg.py`). The mode governs reservations only; the
+  timetable stays one class at a time on every resource. Deferred to 0.17:
+  the `resource_requirement` table, and turning `target_room_identifier` into
+  a foreign key, since the CSV import and the slot responses still work by the
+  room's name.
 
 ### E-2. Conflict report
 
