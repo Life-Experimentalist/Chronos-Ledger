@@ -1,0 +1,56 @@
+name: SDK, Rust
+
+# Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
+#
+# Checks the Rust client: its copy of the spec equals docs/openapi.yaml, the
+# crate is formatted, lints clean, and its tests pass. The client is generated
+# by build.rs on every build, so a spec change that progenitor cannot read
+# fails here. Kept apart from ci.yml so a Rust SDK change does not wait on the
+# backend jobs.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "sdks/rust/**"
+      - "docs/openapi.yaml"
+      - ".github/workflows/sdk-rust.yml"
+  push:
+    branches: [main]
+    paths:
+      - "sdks/rust/**"
+      - "docs/openapi.yaml"
+      - ".github/workflows/sdk-rust.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  sdk-rust:
+    name: SDK, Rust
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/rust
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: The spec copy equals docs/openapi.yaml
+        run: cmp ../../docs/openapi.yaml openapi.yaml
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: sdks/rust
+
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
