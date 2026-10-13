@@ -18,6 +18,7 @@ from datetime import UTC
 
 import httpx
 import pytest
+from sqlalchemy import update
 
 from app.core import change_feed, clock
 from app.core.config import get_settings
@@ -388,6 +389,36 @@ def test_one_success_resets_the_failure_count(db, seed_users, feed_on, host_cloc
     assert db.get(WebhookSubscription, subscription.id).consecutive_failures == 1
     assert webhooks.record(db, claim(second), webhooks.Outcome(200, 3, None, None))
     assert db.get(WebhookSubscription, subscription.id).consecutive_failures == 0
+
+
+def test_a_failure_counted_by_another_replica_is_not_lost(db, seed_users, feed_on, host_clock):
+    _one_change(db)
+    webhooks.fan_out(db)
+
+    def claim():
+        clock.advance_to(clock.now() + datetime.timedelta(hours=11))
+        (outgoing,) = webhooks.claim_due(db)
+        return outgoing
+
+    for _ in range(webhooks.MAX_ATTEMPTS - 1):
+        assert webhooks.record(db, claim(), webhooks.Outcome(500, 3, "HTTP 500", None))
+    outgoing = claim()
+
+    # This replica has the subscription loaded with nothing counted, while
+    # other replicas count their own failed deliveries in the database.
+    subscription = db.get(WebhookSubscription, outgoing.subscription_id)
+    assert subscription.consecutive_failures == 0
+    db.execute(
+        update(WebhookSubscription.__table__).values(
+            consecutive_failures=webhooks.PAUSE_AFTER_FAILED_DELIVERIES - 1
+        )
+    )
+
+    assert webhooks.record(db, outgoing, webhooks.Outcome(500, 3, "HTTP 500", None))
+    db.expire_all()
+    subscription = db.get(WebhookSubscription, outgoing.subscription_id)
+    assert subscription.consecutive_failures == webhooks.PAUSE_AFTER_FAILED_DELIVERIES
+    assert subscription.paused_at is not None
 
 
 def _one_change(db):

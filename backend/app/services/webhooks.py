@@ -595,12 +595,19 @@ def record(db: Session, outgoing: Outgoing, outcome: Outcome) -> bool:
     if outcome.succeeded:
         subscription.consecutive_failures = 0
     elif attempts >= MAX_ATTEMPTS:
-        subscription.consecutive_failures += 1
-        if (
-            subscription.consecutive_failures >= PAUSE_AFTER_FAILED_DELIVERIES
-            and subscription.paused_at is None
-        ):
-            subscription.paused_at = now
+        # Counted by the database rather than read here and written back, so
+        # two replicas that fail a delivery each at the same moment both count.
+        db.query(WebhookSubscription).filter(
+            WebhookSubscription.id == outgoing.subscription_id
+        ).update(
+            {"consecutive_failures": WebhookSubscription.consecutive_failures + 1},
+            synchronize_session=False,
+        )
+        db.query(WebhookSubscription).filter(
+            WebhookSubscription.id == outgoing.subscription_id,
+            WebhookSubscription.consecutive_failures >= PAUSE_AFTER_FAILED_DELIVERIES,
+            WebhookSubscription.paused_at.is_(None),
+        ).update({"paused_at": now}, synchronize_session=False)
     db.commit()
     return True
 
