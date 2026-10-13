@@ -21,6 +21,8 @@
 //! it with `Error::from` to get an [`ApiError`] for any status of 400 or above.
 
 #![forbid(unsafe_code)]
+// `Error::Client` holds the generator's error as it is, so callers can match on it.
+#![allow(clippy::result_large_err)]
 
 mod builder;
 mod error;
