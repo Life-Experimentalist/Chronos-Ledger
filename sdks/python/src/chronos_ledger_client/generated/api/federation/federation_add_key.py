@@ -9,15 +9,18 @@ from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
 from ...models.issuer_key_create import IssuerKeyCreate
 from ...models.issuer_key_response import IssuerKeyResponse
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     issuer_id: int,
     *,
     body: IssuerKeyCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -89,6 +92,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: IssuerKeyCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | IssuerKeyResponse]:
     """Add a signing key
 
@@ -98,6 +102,7 @@ def sync_detailed(
 
     Args:
         issuer_id (int):
+        idempotency_key (str | Unset):
         body (IssuerKeyCreate):
 
     Raises:
@@ -111,6 +116,7 @@ def sync_detailed(
     kwargs = _get_kwargs(
         issuer_id=issuer_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -125,6 +131,7 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     body: IssuerKeyCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | IssuerKeyResponse | None:
     """Add a signing key
 
@@ -134,6 +141,7 @@ def sync(
 
     Args:
         issuer_id (int):
+        idempotency_key (str | Unset):
         body (IssuerKeyCreate):
 
     Raises:
@@ -148,6 +156,7 @@ def sync(
         issuer_id=issuer_id,
         client=client,
         body=body,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -156,6 +165,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: IssuerKeyCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | IssuerKeyResponse]:
     """Add a signing key
 
@@ -165,6 +175,7 @@ async def asyncio_detailed(
 
     Args:
         issuer_id (int):
+        idempotency_key (str | Unset):
         body (IssuerKeyCreate):
 
     Raises:
@@ -178,6 +189,7 @@ async def asyncio_detailed(
     kwargs = _get_kwargs(
         issuer_id=issuer_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -190,6 +202,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     body: IssuerKeyCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | IssuerKeyResponse | None:
     """Add a signing key
 
@@ -199,6 +212,7 @@ async def asyncio(
 
     Args:
         issuer_id (int):
+        idempotency_key (str | Unset):
         body (IssuerKeyCreate):
 
     Raises:
@@ -214,5 +228,6 @@ async def asyncio(
             issuer_id=issuer_id,
             client=client,
             body=body,
+            idempotency_key=idempotency_key,
         )
     ).parsed

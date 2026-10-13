@@ -40,6 +40,7 @@ from app.core.host_identity import (
     host_actor,
     seed_system_account,
 )
+from app.core.idempotency import IdempotencyMiddleware
 from app.core.schema import ensure_schema
 
 # Routes that exist for Chronos-owned credentials, which the embedded
@@ -106,7 +107,10 @@ def build_app(secret: str) -> FastAPI:
         openapi_url=None,
         lifespan=main.lifespan,
     )
-    # Innermost, so a refused request is still written to the audit log the
+    # Inside the host secret check, so a request without the secret is never
+    # hashed or recorded.
+    embedded.add_middleware(IdempotencyMiddleware)
+    # Inside the audit log, so a refused request is still written to it the
     # way a bad token is in the ordinary application.
     embedded.add_middleware(HostSecretMiddleware, secret=secret)
     embedded.add_middleware(GZipMiddleware, minimum_size=1000)

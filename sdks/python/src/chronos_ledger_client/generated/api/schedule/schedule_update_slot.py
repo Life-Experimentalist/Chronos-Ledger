@@ -10,15 +10,18 @@ from ...models.error_response import ErrorResponse
 from ...models.master_slot_update import MasterSlotUpdate
 from ...models.reservation_conflict import ReservationConflict
 from ...models.slot_update_result import SlotUpdateResult
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     slot_id: int,
     *,
     body: MasterSlotUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "patch",
@@ -101,6 +104,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: MasterSlotUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | ErrorResponse | ReservationConflict | SlotUpdateResult]:
     """Change a master slot, and the days it has already produced
 
@@ -130,6 +134,7 @@ def sync_detailed(
 
     Args:
         slot_id (int):
+        idempotency_key (str | Unset):
         body (MasterSlotUpdate): Every field is optional and only the fields present are changed.
             Only primary_lead_id may be null, which takes the lead off the slot; a null for any other
             field is a 422. activity_id is absent on purpose: every day the slot has produced carries
@@ -147,6 +152,7 @@ def sync_detailed(
     kwargs = _get_kwargs(
         slot_id=slot_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -161,6 +167,7 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     body: MasterSlotUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | ErrorResponse | ReservationConflict | SlotUpdateResult | None:
     """Change a master slot, and the days it has already produced
 
@@ -190,6 +197,7 @@ def sync(
 
     Args:
         slot_id (int):
+        idempotency_key (str | Unset):
         body (MasterSlotUpdate): Every field is optional and only the fields present are changed.
             Only primary_lead_id may be null, which takes the lead off the slot; a null for any other
             field is a 422. activity_id is absent on purpose: every day the slot has produced carries
@@ -208,6 +216,7 @@ def sync(
         slot_id=slot_id,
         client=client,
         body=body,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -216,6 +225,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: MasterSlotUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | ErrorResponse | ReservationConflict | SlotUpdateResult]:
     """Change a master slot, and the days it has already produced
 
@@ -245,6 +255,7 @@ async def asyncio_detailed(
 
     Args:
         slot_id (int):
+        idempotency_key (str | Unset):
         body (MasterSlotUpdate): Every field is optional and only the fields present are changed.
             Only primary_lead_id may be null, which takes the lead off the slot; a null for any other
             field is a 422. activity_id is absent on purpose: every day the slot has produced carries
@@ -262,6 +273,7 @@ async def asyncio_detailed(
     kwargs = _get_kwargs(
         slot_id=slot_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -274,6 +286,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     body: MasterSlotUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | ErrorResponse | ReservationConflict | SlotUpdateResult | None:
     """Change a master slot, and the days it has already produced
 
@@ -303,6 +316,7 @@ async def asyncio(
 
     Args:
         slot_id (int):
+        idempotency_key (str | Unset):
         body (MasterSlotUpdate): Every field is optional and only the fields present are changed.
             Only primary_lead_id may be null, which takes the lead off the slot; a null for any other
             field is a 422. activity_id is absent on purpose: every day the slot has produced carries
@@ -322,5 +336,6 @@ async def asyncio(
             slot_id=slot_id,
             client=client,
             body=body,
+            idempotency_key=idempotency_key,
         )
     ).parsed

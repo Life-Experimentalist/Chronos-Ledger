@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core import change_feed, clock
 from app.core.database import get_db
 from app.core.errors import ChronosError, ErrorCode
+from app.core.idempotency import KEY_REUSED
 from app.core.pagination import Page
 from app.core.security import get_current_user, require_roles
 from app.models.db import Reservation, ReservationStatus, Resource, ResourceType
@@ -38,7 +39,6 @@ router = APIRouter()
 RANGE_BACKWARDS = "from must not be after to"
 RANGE_TOO_LONG = f"the range must not exceed {MAX_RANGE_DAYS} days"
 ALREADY_TAKEN = "the resource is already taken for part of that window"
-KEY_REUSED = "that Idempotency-Key was used for a different request"
 NOT_YOUR_HOLD = "only the caller that took a hold may cancel it"
 CODE_TAKEN = "a resource with that code already exists"
 # The name of the exclusion constraint on reservations. Postgres puts it in
@@ -99,8 +99,8 @@ def create_resource(
     different thing to create, so no resource_type is taken.
 
     A code already taken is 409. A caller retrying after a lost response
-    reads the room back with GET /resources/?code= and needs no idempotency
-    key: the code already is one.
+    reads the room back with GET /resources/?code=, or sends an
+    Idempotency-Key and gets the first 201 back.
     """
     fields = payload.model_dump()
     if fields["label"] is None:
@@ -321,7 +321,7 @@ def create_reservation(
         alias="Idempotency-Key",
         min_length=8,
         max_length=120,
-        description="Unique across every caller. A UUID is the right shape.",
+        description="Unique per caller. A UUID is the right shape.",
     ),
     db: Session = Depends(get_db),
     current_user=Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
@@ -365,7 +365,7 @@ def create_reservation(
         raise ChronosError(status_code=404, detail="Resource not found", code=ErrorCode.NOT_FOUND)
 
     fingerprint = _fingerprint(resource_id, payload)
-    seen = db.query(Reservation).filter(Reservation.idempotency_key == idempotency_key).first()
+    seen = _by_key(db, current_user.id, idempotency_key)
     if seen is not None:
         if seen.request_fingerprint != fingerprint:
             raise ChronosError(
@@ -411,7 +411,7 @@ def create_reservation(
             raise _already_taken(_conflicts_for(db, resource_id, payload)) from None
         # Two copies of the same request arrived at once and the loser lands
         # here. The winner's row is the answer to both.
-        won = db.query(Reservation).filter(Reservation.idempotency_key == idempotency_key).first()
+        won = _by_key(db, current_user.id, idempotency_key)
         if won is None or won.request_fingerprint != fingerprint:
             raise ChronosError(
                 status_code=422, detail=KEY_REUSED, code=ErrorCode.IDEMPOTENCY_KEY_REUSED
@@ -421,6 +421,18 @@ def create_reservation(
 
     db.refresh(reservation)
     return reservation_view(reservation, resource)
+
+
+def _by_key(db: Session, requester_id: str, idempotency_key: str) -> Reservation | None:
+    """The booking this requester already made under this key, if any."""
+    return (
+        db.query(Reservation)
+        .filter(
+            Reservation.requested_by_id == requester_id,
+            Reservation.idempotency_key == idempotency_key,
+        )
+        .first()
+    )
 
 
 @router.delete(

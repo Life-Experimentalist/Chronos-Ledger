@@ -16,6 +16,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -420,6 +421,12 @@ class Reservation(Base):
         # rows take part. The reservations route matches the name in the
         # IntegrityError it gets and answers 409.
         _no_overlap("ex_reservations_no_overlap", "reserved_date", "status = 'HELD'"),
+        # A key belongs to the person who sent it, so two callers cannot
+        # collide on one by chance. SQLite and PostgreSQL both let any number
+        # of rows share a key once their requester is deleted (SET NULL).
+        UniqueConstraint(
+            "requested_by_id", "idempotency_key", name="uq_reservations_requester_key"
+        ),
     )
 
     id = Column(Integer, primary_key=True)
@@ -434,10 +441,12 @@ class Reservation(Base):
     # key acts as the user it is bound to, so a machine booking a room is
     # recorded as that service account and needs no identity of its own.
     requested_by_id = Column(String(50), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    # Unique across every resource, not per resource. A caller reusing one
-    # key for two different rooms has a bug, and a collision here says so
-    # rather than quietly booking both.
-    idempotency_key = Column(String(120), nullable=False, unique=True, index=True)
+    # Unique per requester across every resource, not per resource. A caller
+    # reusing one key for two different rooms has a bug, and a collision here
+    # says so rather than quietly booking both. The same key also has a row in
+    # idempotency_records (app/core/idempotency.py); this column stays because
+    # the route answers a retry from the reservation itself, as it stands now.
+    idempotency_key = Column(String(120), nullable=False, index=True)
     # sha256 of what was asked for, the resource included. The same key with
     # the same request gets the original row back; the same key with a
     # different request is refused, because at that point the caller has lost
@@ -644,6 +653,35 @@ class AuditRecord(Base):
     method = Column(String(10), nullable=False)
     path = Column(String(500), nullable=False)
     status_code = Column(Integer, nullable=False)
+
+
+class IdempotencyRecord(Base):
+    """A write sent with an Idempotency-Key, and the response it got.
+
+    app/core/idempotency.py writes and reads these. A row with no
+    status_code is a request still running, or one whose process stopped
+    after its handler committed and before the response was recorded. The
+    nightly job deletes rows older than IDEMPOTENCY_RETENTION_HOURS.
+
+    caller is "key:<api key id>" or "user:<user id>" (security.caller_identity),
+    so a key means something only to whoever sent it. No foreign keys, for
+    the reason audit_records has none: a row should not take a user or a key
+    down with it, and it expires on its own.
+    """
+
+    __tablename__ = "idempotency_records"
+    __table_args__ = (UniqueConstraint("caller", "key", name="uq_idempotency_caller_key"),)
+
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    caller = Column(String(80), nullable=False)
+    key = Column(String(255), nullable=False)
+    # sha256 of the method, path, query string and body (idempotency.request_hash).
+    request_hash = Column(String(64), nullable=False)
+    status_code = Column(Integer, nullable=True)
+    # The headers worth sending again (Content-Type, Location), as a JSON object.
+    response_headers = Column(Text, nullable=True)
+    response_body = Column(LargeBinary, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=clock.now, index=True)
 
 
 class ChangeMarker(Base):

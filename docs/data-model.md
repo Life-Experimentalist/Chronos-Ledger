@@ -146,7 +146,7 @@ erDiagram
         time time_window_end
         string purpose
         string requested_by_id FK "→ User.id (nullable)"
-        string idempotency_key UK
+        string idempotency_key "unique per requester"
         string request_fingerprint "sha256 of the request"
         string status "ReservationStatus enum"
         datetime created_at
@@ -291,7 +291,10 @@ Records each organization visitor interaction. `handshake_status` transitions fr
 Free-form notes attached to a ledger entry (e.g., "lab equipment failure", "class started late"). Used for post-session audits. No schema constraint on `classification_tag`, it's a freeform string at the application layer.
 
 ### `Reservation`
-A hold on a resource for one date and window. Two `HELD` rows on the same resource cannot overlap: `ex_reservations_no_overlap`, an exclusion constraint the model declares for PostgreSQL only (SQLite has none; there `BEGIN IMMEDIATE` and the route's own check stand in). Cancelling sets `status` to `CANCELLED` and `cancelled_at` and keeps the row. `idempotency_key` is unique across every resource, and `request_fingerprint` is a SHA-256 of what was asked for, so a retry with the same key and the same request gets the original row back and the same key with a different request is refused.
+A hold on a resource for one date and window. Two `HELD` rows on the same resource cannot overlap: `ex_reservations_no_overlap`, an exclusion constraint the model declares for PostgreSQL only (SQLite has none; there `BEGIN IMMEDIATE` and the route's own check stand in). Cancelling sets `status` to `CANCELLED` and `cancelled_at` and keeps the row. `idempotency_key` is unique per requester (`uq_reservations_requester_key`) across every resource, and `request_fingerprint` is a SHA-256 of what was asked for, so a retry with the same key and the same request gets the original row back and the same key with a different request is refused.
+
+### `IdempotencyRecord`
+One row per `Idempotency-Key` a caller has sent with a write, in `idempotency_records`, unique on (`caller`, `key`). `caller` is `key:<api key id>` or `user:<user id>`, so a key belongs to the API key or the signed-in user that sent it. `request_hash` is a SHA-256 of the method, path, sorted query string and canonical JSON body. `status_code`, `response_headers` and `response_body` are the response that went out, null while the first request is still running. A daily job deletes the rows older than `IDEMPOTENCY_RETENTION_HOURS`. No foreign keys, hence its absence from the diagram above: it outlives the key or account that made it, and is gone within a day anyway. What is kept and what is not is in [api.md](api.md#idempotency).
 
 ### `RefreshToken`
 One row per refresh token until it expires. Only the SHA-256 hash is stored. A token works once: using it sets `consumed_at` and issues its successor in the same `family_id`, and a sign-in starts a new family. Presenting a used token again ends the whole family. Rows are deleted at logout (the family), at a password change (every family the user has), and a day after expiry by a nightly job.

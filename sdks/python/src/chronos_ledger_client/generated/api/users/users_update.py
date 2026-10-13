@@ -9,15 +9,18 @@ from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
 from ...models.user_response import UserResponse
 from ...models.user_update import UserUpdate
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     user_id: str,
     *,
     body: UserUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "patch",
@@ -84,6 +87,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: UserUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | UserResponse]:
     """Update a user
 
@@ -93,6 +97,7 @@ def sync_detailed(
 
     Args:
         user_id (str):
+        idempotency_key (str | Unset):
         body (UserUpdate): A field left out keeps its value and a null clears it, except full_name
             and email_address, which cannot be null (422).
 
@@ -107,6 +112,7 @@ def sync_detailed(
     kwargs = _get_kwargs(
         user_id=user_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -121,6 +127,7 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     body: UserUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | UserResponse | None:
     """Update a user
 
@@ -130,6 +137,7 @@ def sync(
 
     Args:
         user_id (str):
+        idempotency_key (str | Unset):
         body (UserUpdate): A field left out keeps its value and a null clears it, except full_name
             and email_address, which cannot be null (422).
 
@@ -145,6 +153,7 @@ def sync(
         user_id=user_id,
         client=client,
         body=body,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -153,6 +162,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: UserUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | UserResponse]:
     """Update a user
 
@@ -162,6 +172,7 @@ async def asyncio_detailed(
 
     Args:
         user_id (str):
+        idempotency_key (str | Unset):
         body (UserUpdate): A field left out keeps its value and a null clears it, except full_name
             and email_address, which cannot be null (422).
 
@@ -176,6 +187,7 @@ async def asyncio_detailed(
     kwargs = _get_kwargs(
         user_id=user_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -188,6 +200,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     body: UserUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | UserResponse | None:
     """Update a user
 
@@ -197,6 +210,7 @@ async def asyncio(
 
     Args:
         user_id (str):
+        idempotency_key (str | Unset):
         body (UserUpdate): A field left out keeps its value and a null clears it, except full_name
             and email_address, which cannot be null (422).
 
@@ -213,5 +227,6 @@ async def asyncio(
             user_id=user_id,
             client=client,
             body=body,
+            idempotency_key=idempotency_key,
         )
     ).parsed

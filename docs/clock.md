@@ -108,7 +108,8 @@ sorted, and jobs that fall on one instant run in table order:
 | 1 | `nightly_ledger_gen` | 23:00 daily | Writes the `daily_ledger` rows still missing from tomorrow through `LEDGER_HORIZON_DAYS` ahead |
 | 2 | `refresh_token_purge` | 03:00 daily | Deletes refresh tokens a day past expiry |
 | 3 | `guest_retention_purge` | 03:30 daily | Deletes visitor check-ins older than `GUEST_RETENTION_DAYS`, when set |
-| 4 | `guest_overstay_notice` | every 5 minutes | Announces approved visits that have run past their end |
+| 4 | `idempotency_purge` | 03:45 daily | Deletes `Idempotency-Key` records older than `IDEMPOTENCY_RETENTION_HOURS` |
+| 5 | `guest_overstay_notice` | every 5 minutes | Announces approved visits that have run past their end |
 
 Before each job runs the clock is set to that job's moment, so the nightly
 run at 23:00 sees the same "tomorrow" it would have seen at 23:00, and the
@@ -120,7 +121,7 @@ The overstay notice runs once per window, at the last five-minute mark
 inside it, rather than once per mark. That is how APScheduler treats runs
 it missed while the process was busy, and the job is a sweep that announces
 whatever is overdue, so the last run does the work of all of them. An
-advance that crosses a whole day therefore runs four jobs, not three
+advance that crosses a whole day therefore runs five jobs, not three
 hundred.
 
 ## The determinism guarantee

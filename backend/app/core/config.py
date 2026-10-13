@@ -162,6 +162,11 @@ class Settings(BaseSettings):
     # instance behaved before this setting existed.
     guest_retention_days: int = 0
 
+    # How long a write sent with an Idempotency-Key is remembered, in hours.
+    # Within it a retry with the same key gets the first response back; past
+    # it the key is new again. A job at 03:45 deletes the older records.
+    idempotency_retention_hours: int = 24
+
     # How long a visit code opens GET /guest/visit/{code}, in minutes. The code
     # is the visitor's only credential and it is shown to them once, so a code
     # printed or scanned today goes on working for as long as the row lives.
@@ -290,6 +295,16 @@ class Settings(BaseSettings):
                 "check-ins forever, or a number of days such as 90."
             )
         return days
+
+    @field_validator("idempotency_retention_hours")
+    @classmethod
+    def _idempotency_window_is_positive(cls, hours: int) -> int:
+        if hours < 1:
+            raise ValueError(
+                f"IDEMPOTENCY_RETENTION_HOURS={hours} is below 1. A retry has to find the "
+                "first response, so set a number of hours such as 24."
+            )
+        return hours
 
     @field_validator("guest_visit_length_minutes")
     @classmethod

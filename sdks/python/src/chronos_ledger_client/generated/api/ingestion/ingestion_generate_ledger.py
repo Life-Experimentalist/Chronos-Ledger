@@ -14,7 +14,11 @@ from ...types import UNSET, Response, Unset
 def _get_kwargs(
     *,
     target_date: datetime.date | Unset = UNSET,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
+    headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     params: dict[str, Any] = {}
 
@@ -31,6 +35,7 @@ def _get_kwargs(
         "params": params,
     }
 
+    _kwargs["headers"] = headers
     return _kwargs
 
 
@@ -68,6 +73,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     target_date: datetime.date | Unset = UNSET,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | IngestionGenerateLedgerResponse200]:
     """Trigger daily ledger generation
 
@@ -82,6 +88,7 @@ def sync_detailed(
 
     Args:
         target_date (datetime.date | Unset):
+        idempotency_key (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -93,6 +100,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         target_date=target_date,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -106,6 +114,7 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     target_date: datetime.date | Unset = UNSET,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | IngestionGenerateLedgerResponse200 | None:
     """Trigger daily ledger generation
 
@@ -120,6 +129,7 @@ def sync(
 
     Args:
         target_date (datetime.date | Unset):
+        idempotency_key (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -132,6 +142,7 @@ def sync(
     return sync_detailed(
         client=client,
         target_date=target_date,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -139,6 +150,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     target_date: datetime.date | Unset = UNSET,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | IngestionGenerateLedgerResponse200]:
     """Trigger daily ledger generation
 
@@ -153,6 +165,7 @@ async def asyncio_detailed(
 
     Args:
         target_date (datetime.date | Unset):
+        idempotency_key (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -164,6 +177,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         target_date=target_date,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -175,6 +189,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     target_date: datetime.date | Unset = UNSET,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | IngestionGenerateLedgerResponse200 | None:
     """Trigger daily ledger generation
 
@@ -189,6 +204,7 @@ async def asyncio(
 
     Args:
         target_date (datetime.date | Unset):
+        idempotency_key (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -202,5 +218,6 @@ async def asyncio(
         await asyncio_detailed(
             client=client,
             target_date=target_date,
+            idempotency_key=idempotency_key,
         )
     ).parsed

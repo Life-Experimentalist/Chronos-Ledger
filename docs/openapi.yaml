@@ -1890,6 +1890,7 @@ components:
         - EMAIL_TAKEN
         - USER_DEACTIVATED
         - IDEMPOTENCY_KEY_REUSED
+        - IDEMPOTENCY_KEY_IN_PROGRESS
         - LOCATION_REQUIRED
         - LOCATION_TOO_COARSE
         - OUTSIDE_GEOFENCE
@@ -1968,6 +1969,26 @@ components:
         type: integer
         minimum: 0
         default: 0
+    # Optional on every write that needs a signed-in caller. See "Idempotency"
+    # in docs/api.md for what is stored and for how long.
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: >
+        Makes a retry safe. Send the same key with the same request again and
+        the first response comes back, with `Idempotency-Replayed: true`,
+        instead of a second effect. A key belongs to the API key, or the
+        user, that sent it, and is remembered for
+        `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a
+        different request is `409` with `IDEMPOTENCY_KEY_REUSED`; a retry
+        while the first request is still running is `409` with
+        `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to
+        255 printable ASCII characters is `422` with `INVALID_VALUE`.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
 
   headers:
     XTotalCount:
@@ -1976,6 +1997,14 @@ components:
         cut the page. Sent whether or not the request paged.
       schema:
         type: integer
+    IdempotencyReplayed:
+      description: >
+        `true` when this response is the stored answer to an earlier request
+        with the same Idempotency-Key, sent again rather than made again.
+        Absent otherwise.
+      schema:
+        type: string
+        enum: ["true"]
 
 # Either credential is accepted on every endpoint below.
 security:
@@ -2333,6 +2362,8 @@ paths:
         Requires `ORG_ADMIN` or `UNIT_ADMIN`. A unit admin can create users
         only in their own unit, and only an organization admin can create an admin
         account; either is refused with `403`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -2341,6 +2372,9 @@ paths:
               $ref: "#/components/schemas/UserCreate"
       responses:
         "201":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: User created.
           content:
             application/json:
@@ -2449,6 +2483,7 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -2457,6 +2492,9 @@ paths:
               $ref: "#/components/schemas/UserUpdate"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Updated user.
           content:
             application/json:
@@ -2552,8 +2590,12 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: The account, with `deactivated_at` set and what it leaves behind.
           content:
             application/json:
@@ -2590,8 +2632,12 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: The account, with `deactivated_at` null.
           content:
             application/json:
@@ -2619,6 +2665,7 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -2627,6 +2674,9 @@ paths:
               $ref: "#/components/schemas/UserStatusUpdate"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Status updated.
           content:
             application/json:
@@ -2721,8 +2771,12 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "204":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Revoked.
         "403":
           $ref: "#/components/responses/Forbidden"
@@ -2764,6 +2818,8 @@ paths:
         names its key by `kid`, so the issuer needs at least one key before any
         note it mints will verify. A role map is optional, and an issuer without
         one puts everybody it sends on `MEMBER`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -2772,6 +2828,9 @@ paths:
               $ref: "#/components/schemas/IssuerCreate"
       responses:
         "201":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Registered.
           content:
             application/json:
@@ -2805,6 +2864,7 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -2813,6 +2873,9 @@ paths:
               $ref: "#/components/schemas/IssuerUpdate"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Changed.
           content:
             application/json:
@@ -2842,8 +2905,12 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "204":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Removed.
         "401":
           $ref: "#/components/responses/Unauthorized"
@@ -2898,6 +2965,7 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -2906,6 +2974,9 @@ paths:
               $ref: "#/components/schemas/IssuerKeyCreate"
       responses:
         "201":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Added.
           content:
             application/json:
@@ -2953,6 +3024,7 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -2961,6 +3033,9 @@ paths:
               $ref: "#/components/schemas/IssuerKeyRetire"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Retired at the moment given.
           content:
             application/json:
@@ -3001,8 +3076,12 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "204":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Removed.
         "401":
           $ref: "#/components/responses/Unauthorized"
@@ -3057,6 +3136,7 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -3065,6 +3145,9 @@ paths:
               $ref: "#/components/schemas/RoleMapEntryCreate"
       responses:
         "201":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Mapped.
           content:
             application/json:
@@ -3115,8 +3198,12 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "204":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Unmapped.
         "401":
           $ref: "#/components/responses/Unauthorized"
@@ -3172,6 +3259,8 @@ paths:
         are ones federation created itself, so this is how somebody who already
         has a password here starts arriving through their institution instead.
         One account may hold several links, one per issuer.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -3180,6 +3269,9 @@ paths:
               $ref: "#/components/schemas/LinkCreate"
       responses:
         "201":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Linked. The next note carrying that pair is this account.
           content:
             application/json:
@@ -3224,8 +3316,12 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "204":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Unlinked.
         "401":
           $ref: "#/components/responses/Unauthorized"
@@ -3285,9 +3381,11 @@ paths:
         Requires `ORG_ADMIN`. Registers a room before any timetable names
         it, for a system that manages its own rooms. The row is the one an
         import would have made, so a later CSV naming the room finds it
-        rather than creating a second. A retry after a lost response reads
-        the room back with `GET /api/v1/resources/?code=`: the code already
-        identifies it, so no Idempotency-Key is taken.
+        rather than creating a second. A retry after a lost response can
+        send an Idempotency-Key, or read the room back with
+        `GET /api/v1/resources/?code=`: the code already identifies it.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -3296,6 +3394,9 @@ paths:
               $ref: "#/components/schemas/ResourceCreate"
       responses:
         "201":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: The room as created.
           content:
             application/json:
@@ -3335,6 +3436,8 @@ paths:
         Fill in what a CSV could not know: capacity, and where the room
         physically is. Setting latitude and longitude is what switches
         geofencing on for every session held there.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -3343,6 +3446,9 @@ paths:
               $ref: "#/components/schemas/ResourceUpdate"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: The resource as it now stands.
           content:
             application/json:
@@ -3478,10 +3584,12 @@ paths:
           in: header
           required: true
           description: >
-            Unique across every caller and every resource. A UUID is the right
+            Unique per caller across every resource. A UUID is the right
             shape. Required rather than optional because a booking client
             retries, and a retry that books a second room is worse than one
-            that fails.
+            that fails. This route keeps the answers it gave before the
+            shared Idempotency-Key: a reused key is `422`, not `409`, and a
+            retry gets the hold as it is now with `200`, not a replay.
           schema:
             type: string
             minLength: 8
@@ -3561,8 +3669,12 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: The cancelled hold.
           content:
             application/json:
@@ -3633,6 +3745,8 @@ paths:
         behind the days that carry attendance. Both of those read as free to the two checks above
         while somebody is still due at the door, so this one has no cycle
         gate on either side.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -3641,6 +3755,9 @@ paths:
               $ref: "#/components/schemas/MasterSlotCreate"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: The slot's id.
           content:
             application/json:
@@ -3726,6 +3843,7 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -3734,6 +3852,9 @@ paths:
               $ref: "#/components/schemas/MasterSlotUpdate"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: What the change reached and what it left alone.
           content:
             application/json:
@@ -3793,8 +3914,12 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: What was removed and what was kept.
           content:
             application/json:
@@ -3934,6 +4059,7 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -3942,6 +4068,9 @@ paths:
               $ref: "#/components/schemas/DailyLedgerUpdate"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: The entry was updated.
           content:
             application/json:
@@ -4037,6 +4166,8 @@ paths:
         Requires `ORG_ADMIN`. The two dates are the days the cycle's slots
         run on, both included. An end earlier than the start is refused with
         422; equal dates are a cycle of one day.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -4045,6 +4176,9 @@ paths:
               $ref: "#/components/schemas/PlanningCycleCreate"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Cycle created.
           content:
             application/json:
@@ -4076,8 +4210,12 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Cycle closed.
           content:
             application/json:
@@ -4125,8 +4263,12 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Cycle opened, or already open.
           content:
             application/json:
@@ -4172,8 +4314,12 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Clone complete.
           content:
             application/json:
@@ -4216,6 +4362,8 @@ paths:
         the radius also returns 400.
         Marking a member again replaces their status rather than adding a
         second row.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -4224,6 +4372,9 @@ paths:
               $ref: "#/components/schemas/AttendanceMarkRequest"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Attendance marked.
           content:
             application/json:
@@ -4267,6 +4418,8 @@ paths:
         twice, or the batch is refused with 422. A member id matching nobody
         is refused with 404. A refused batch writes nothing; an accepted one
         is written in one transaction.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -4275,6 +4428,9 @@ paths:
               $ref: "#/components/schemas/AttendanceBatchRequest"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Every record written.
           content:
             application/json:
@@ -4346,6 +4502,8 @@ paths:
         On approval, every daily ledger row the submitter leads on that date
         becomes `ON_LEAVE` and loses its substitute. Either decision sends the
         submitter an `ABSENCE_DECISION` frame.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -4354,6 +4512,9 @@ paths:
               $ref: "#/components/schemas/ReverseRsvpCreate"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Absence request created.
           content:
             application/json:
@@ -4406,6 +4567,7 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -4414,6 +4576,9 @@ paths:
               $ref: "#/components/schemas/RsvpDecision"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: >
             Decision recorded. Approval turns the submitter's sessions that
             day `ON_LEAVE`, and either decision sends them an
@@ -4443,6 +4608,8 @@ paths:
         Freeform notes about a session: lab issues, late starts, a handover.
         Restricted to whoever runs it, meaning the assigned lead, the
         substitute, an organization admin, or a unit admin inside that unit.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -4451,6 +4618,9 @@ paths:
               $ref: "#/components/schemas/AnnotationCreate"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Annotation created.
           content:
             application/json:
@@ -4671,6 +4841,7 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -4679,6 +4850,9 @@ paths:
               $ref: "#/components/schemas/GuestDecisionRequest"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Decision recorded. The kiosk reads it from `/guest/visit/{code}`.
           content:
             application/json:
@@ -4721,6 +4895,7 @@ paths:
           required: true
           schema:
             type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -4729,6 +4904,9 @@ paths:
               $ref: "#/components/schemas/GuestExtensionRequest"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: The visit's new end.
           content:
             application/json:
@@ -4904,8 +5082,12 @@ paths:
           schema:
             type: string
             format: date
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
           description: Generation complete.
           content:
             application/json:
