@@ -409,7 +409,9 @@ codes. C-4 is breaking and ships with 0.17.
   is safe. Anything found that behaves worse than the page says is fixed in
   the same release.
 - **Done when:** each case on the page has a test or a CI job that produces
-  it.
+  it. Shipped in 0.16.0: [failure-modes.md](failure-modes.md), and a database
+  that drops or refuses the connection is now `503 DATABASE_UNAVAILABLE`
+  instead of a `500`.
 
 ---
 
