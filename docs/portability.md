@@ -165,7 +165,7 @@ in Chronos. A booking that runs past midnight has an end before its start.
     "guest_gate_registry": ["visit_code_hash"],
     "users": ["calendar_feed_token", "credential_secure_hash"]
   },
-  "schema_version": "2",
+  "schema_version": "3",
   "secrets_included": false,
   "tables": [
     { "file": "audit_records.jsonl", "name": "audit_records", "rows": 4812 }
