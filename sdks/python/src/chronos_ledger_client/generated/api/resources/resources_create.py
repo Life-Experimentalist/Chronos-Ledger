@@ -8,14 +8,17 @@ from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
 from ...models.resource_create import ResourceCreate
 from ...models.resource_response import ResourceResponse
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     *,
     body: ResourceCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -79,15 +82,17 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: ResourceCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | ResourceResponse]:
     """Create a room
 
      Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its
     own rooms. The row is the one an import would have made, so a later CSV naming the room finds it
-    rather than creating a second. A retry after a lost response reads the room back with `GET
-    /api/v1/resources/?code=`: the code already identifies it, so no Idempotency-Key is taken.
+    rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read
+    the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
 
     Args:
+        idempotency_key (str | Unset):
         body (ResourceCreate): A room. Every string is trimmed first, code included, the same as
             the importer trims a room name, so this room and the same name in a later CSV are one row.
 
@@ -101,6 +106,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -114,15 +120,17 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     body: ResourceCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | ResourceResponse | None:
     """Create a room
 
      Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its
     own rooms. The row is the one an import would have made, so a later CSV naming the room finds it
-    rather than creating a second. A retry after a lost response reads the room back with `GET
-    /api/v1/resources/?code=`: the code already identifies it, so no Idempotency-Key is taken.
+    rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read
+    the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
 
     Args:
+        idempotency_key (str | Unset):
         body (ResourceCreate): A room. Every string is trimmed first, code included, the same as
             the importer trims a room name, so this room and the same name in a later CSV are one row.
 
@@ -137,6 +145,7 @@ def sync(
     return sync_detailed(
         client=client,
         body=body,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -144,15 +153,17 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: ResourceCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | ResourceResponse]:
     """Create a room
 
      Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its
     own rooms. The row is the one an import would have made, so a later CSV naming the room finds it
-    rather than creating a second. A retry after a lost response reads the room back with `GET
-    /api/v1/resources/?code=`: the code already identifies it, so no Idempotency-Key is taken.
+    rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read
+    the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
 
     Args:
+        idempotency_key (str | Unset):
         body (ResourceCreate): A room. Every string is trimmed first, code included, the same as
             the importer trims a room name, so this room and the same name in a later CSV are one row.
 
@@ -166,6 +177,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -177,15 +189,17 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     body: ResourceCreate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | ResourceResponse | None:
     """Create a room
 
      Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its
     own rooms. The row is the one an import would have made, so a later CSV naming the room finds it
-    rather than creating a second. A retry after a lost response reads the room back with `GET
-    /api/v1/resources/?code=`: the code already identifies it, so no Idempotency-Key is taken.
+    rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read
+    the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
 
     Args:
+        idempotency_key (str | Unset):
         body (ResourceCreate): A room. Every string is trimmed first, code included, the same as
             the importer trims a room name, so this room and the same name in a later CSV are one row.
 
@@ -201,5 +215,6 @@ async def asyncio(
         await asyncio_detailed(
             client=client,
             body=body,
+            idempotency_key=idempotency_key,
         )
     ).parsed

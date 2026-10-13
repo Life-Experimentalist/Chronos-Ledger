@@ -8,12 +8,17 @@ from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.deactivated_user_response import DeactivatedUserResponse
 from ...models.error_response import ErrorResponse
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     user_id: str,
+    *,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
+    headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -22,6 +27,7 @@ def _get_kwargs(
         ),
     }
 
+    _kwargs["headers"] = headers
     return _kwargs
 
 
@@ -74,6 +80,7 @@ def sync_detailed(
     user_id: str,
     *,
     client: AuthenticatedClient | Client,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[DeactivatedUserResponse | ErrorResponse]:
     """Stop an account without deleting it
 
@@ -95,6 +102,7 @@ def sync_detailed(
 
     Args:
         user_id (str):
+        idempotency_key (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -106,6 +114,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         user_id=user_id,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -119,6 +128,7 @@ def sync(
     user_id: str,
     *,
     client: AuthenticatedClient | Client,
+    idempotency_key: str | Unset = UNSET,
 ) -> DeactivatedUserResponse | ErrorResponse | None:
     """Stop an account without deleting it
 
@@ -140,6 +150,7 @@ def sync(
 
     Args:
         user_id (str):
+        idempotency_key (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -152,6 +163,7 @@ def sync(
     return sync_detailed(
         user_id=user_id,
         client=client,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -159,6 +171,7 @@ async def asyncio_detailed(
     user_id: str,
     *,
     client: AuthenticatedClient | Client,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[DeactivatedUserResponse | ErrorResponse]:
     """Stop an account without deleting it
 
@@ -180,6 +193,7 @@ async def asyncio_detailed(
 
     Args:
         user_id (str):
+        idempotency_key (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -191,6 +205,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         user_id=user_id,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -202,6 +217,7 @@ async def asyncio(
     user_id: str,
     *,
     client: AuthenticatedClient | Client,
+    idempotency_key: str | Unset = UNSET,
 ) -> DeactivatedUserResponse | ErrorResponse | None:
     """Stop an account without deleting it
 
@@ -223,6 +239,7 @@ async def asyncio(
 
     Args:
         user_id (str):
+        idempotency_key (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -236,5 +253,6 @@ async def asyncio(
         await asyncio_detailed(
             user_id=user_id,
             client=client,
+            idempotency_key=idempotency_key,
         )
     ).parsed

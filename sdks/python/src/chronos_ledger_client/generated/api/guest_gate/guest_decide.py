@@ -9,15 +9,18 @@ from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
 from ...models.guest_decide_response_200 import GuestDecideResponse200
 from ...models.guest_decision_request import GuestDecisionRequest
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     entry_id: int,
     *,
     body: GuestDecisionRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "patch",
@@ -74,11 +77,13 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: GuestDecisionRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | GuestDecideResponse200]:
     """Accept or decline a guest visit
 
     Args:
         entry_id (int):
+        idempotency_key (str | Unset):
         body (GuestDecisionRequest):
 
     Raises:
@@ -92,6 +97,7 @@ def sync_detailed(
     kwargs = _get_kwargs(
         entry_id=entry_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -106,11 +112,13 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     body: GuestDecisionRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | GuestDecideResponse200 | None:
     """Accept or decline a guest visit
 
     Args:
         entry_id (int):
+        idempotency_key (str | Unset):
         body (GuestDecisionRequest):
 
     Raises:
@@ -125,6 +133,7 @@ def sync(
         entry_id=entry_id,
         client=client,
         body=body,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -133,11 +142,13 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: GuestDecisionRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | GuestDecideResponse200]:
     """Accept or decline a guest visit
 
     Args:
         entry_id (int):
+        idempotency_key (str | Unset):
         body (GuestDecisionRequest):
 
     Raises:
@@ -151,6 +162,7 @@ async def asyncio_detailed(
     kwargs = _get_kwargs(
         entry_id=entry_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -163,11 +175,13 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     body: GuestDecisionRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | GuestDecideResponse200 | None:
     """Accept or decline a guest visit
 
     Args:
         entry_id (int):
+        idempotency_key (str | Unset):
         body (GuestDecisionRequest):
 
     Raises:
@@ -183,5 +197,6 @@ async def asyncio(
             entry_id=entry_id,
             client=client,
             body=body,
+            idempotency_key=idempotency_key,
         )
     ).parsed

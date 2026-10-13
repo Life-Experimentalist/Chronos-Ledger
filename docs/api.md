@@ -130,6 +130,7 @@ way.
 | `EMAIL_TAKEN` | The email address belongs to another account. |
 | `USER_DEACTIVATED` | The account named in the request is deactivated. |
 | `IDEMPOTENCY_KEY_REUSED` | The `Idempotency-Key` was already used for a different request. |
+| `IDEMPOTENCY_KEY_IN_PROGRESS` | A request with this `Idempotency-Key` is still running. `Retry-After` says when to try again. |
 | `LOCATION_REQUIRED` | The session is geofenced and no location was sent. |
 | `LOCATION_TOO_COARSE` | The location's accuracy is too poor to check against the geofence. |
 | `OUTSIDE_GEOFENCE` | The location is outside the session's geofence. |
@@ -137,6 +138,74 @@ way.
 | `IMPORT_REJECTED` | A CSV import failed. `detail` is the import's error log. |
 | `CHANGE_FEED_DISABLED` | The change feed is turned off on this deployment. |
 | `SERVER_BUSY` | The server is out of database connections or request slots. Try again shortly. |
+
+---
+
+## Idempotency
+
+A write whose response is lost may or may not have happened. Every `POST`,
+`PATCH`, `PUT` and `DELETE` under `/api/v1` takes an optional
+`Idempotency-Key` header so that a retry can find out instead of doing it
+twice. Pick a fresh key for each operation (a UUID is the right shape), and
+send the same key, with the same request, on every retry of it.
+
+```http
+POST /api/v1/resources/
+Idempotency-Key: 0b8e6a52-3c1d-4f0e-8f43-5d2a7c9e1b60
+
+HTTP/1.1 201 Created
+Idempotency-Replayed: true
+```
+
+- The same key and the same request: the first response comes back, status
+  and body, with `Idempotency-Replayed: true`. Nothing runs a second time.
+- The same key and a different request: `409` with `IDEMPOTENCY_KEY_REUSED`.
+  The request is the method, the path, the query string (in any order) and the
+  JSON body (in any key order or spacing).
+- The same key while the first request is still running: `409` with
+  `IDEMPOTENCY_KEY_IN_PROGRESS` and `Retry-After: 1`. Two copies sent at once
+  run once.
+- A key that is empty, longer than 255 characters, or not printable ASCII:
+  `422` with `INVALID_VALUE`.
+
+A key belongs to whoever sent it: the API key when the request used one,
+otherwise the signed-in user. Two callers can use the same key without
+meeting. A key is remembered for `IDEMPOTENCY_RETENTION_HOURS`, 24 by default,
+counted from its first use; after that it is new again, and a job at 03:45
+deletes the old records.
+
+What is kept for a replay is the response that was sent:
+
+| First response | Kept and replayed |
+| -------------- | ----------------- |
+| `2xx` | Yes. |
+| `4xx` | Yes, except `401`, `403` and `429`: the request ran and was refused, and would be refused again. |
+| `401`, `403`, `429` | No. They are about who may ask, and a retry after signing in or waiting should run. |
+| `5xx` | No, and the key is let go, so a retry runs the request again. |
+| The `409` and `422` above | No. Nothing ran. |
+
+The key is ignored, and a retry runs again, on:
+
+- routes that need no sign-in (`/auth/login`, `/auth/refresh`,
+  `/auth/logout`, `/auth/federated`): no caller to file the key under.
+- routes whose response carries a secret that is stored nowhere else:
+  `POST /auth/change-password`, `POST /users/{user_id}/reset-password`,
+  `POST /api-keys/`, `POST /sync/feed-token/rotate` and
+  `POST /guest/register-checkin`. Keeping the response would keep the secret.
+- `POST /ingestion/upload-csv`, a multipart upload. An upload of the same file
+  is already a no-op, and the file is not held in memory to be hashed.
+
+`POST /resources/{id}/reservations` had a required key of its own before this
+existed, and keeps the answers it gave: a reused key is `422`, not `409`, and
+a retry gets `200` with the hold as it is now (cancelled, if it was) rather
+than a replay. Its key is unique per caller. Moving it to `409` is a breaking
+change, left for 0.17.
+
+One gap is left. The key is claimed in the same transaction as the request's
+own changes, and the response is recorded just after it has been sent. If the
+server stops between the two, the changes are kept and the response is not,
+and a retry under that key gets `IDEMPOTENCY_KEY_IN_PROGRESS` until the key
+expires. That errs on the side of no duplicate.
 
 ---
 
@@ -907,8 +976,9 @@ The answer is `201` with the room in the shape `GET /resources/` returns. A code
 already taken, whether by a room created here or one an import made, is `409`
 (`a resource with that code already exists`). That is also what a retry gets
 when its first attempt went through and the response was lost, so a caller that
-meets `409` reads the room back with `GET /resources/?code=` and carries on. No
-`Idempotency-Key` is taken: the code already is one.
+meets `409` reads the room back with `GET /resources/?code=` and carries on, or
+sends an `Idempotency-Key` ([Idempotency](#idempotency)) and gets the first
+`201` back.
 
 Rooms only. There is no delete either: retiring a room is `PATCH` with
 `"active": false`, which keeps its calendar and every slot and day that points
@@ -1032,8 +1102,8 @@ Hold a resource for one dated window. This is the route an outside system uses
 to take a room: a hospital system books a consulting room here the same way an
 admin would.
 
-An `Idempotency-Key` header is required, 8 to 120 characters, and a UUID is
-the right shape. It is required rather than optional because a booking client
+An `Idempotency-Key` header is required, 8 to 120 characters and unique per
+caller, and a UUID is the right shape. It is required rather than optional because a booking client
 talking over a network retries, and a retry that books a second room is worse
 than one that fails outright.
 

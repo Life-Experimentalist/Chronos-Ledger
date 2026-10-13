@@ -22,6 +22,7 @@ from app.core.concurrency import ConcurrencyGate
 from app.core.config import docs_are_published, get_settings
 from app.core.database import POOL_CAPACITY, SessionLocal, engine, is_sqlite
 from app.core.errors import ErrorCode, error_body, register_error_handlers
+from app.core.idempotency import REPLAYED_HEADER, IdempotencyMiddleware
 from app.core.pagination import TOTAL_COUNT_HEADER
 from app.core.redis_client import get_redis, is_memory
 from app.core.schema import SCHEMA_VERSION, ensure_schema
@@ -33,6 +34,7 @@ from app.cron.scheduled import (
     announce_guest_overstays,
     catch_up_ledger,
     purge_guest_check_ins,
+    purge_idempotency_records,
     purge_refresh_tokens,
     run_ledger_generator,
 )
@@ -118,6 +120,16 @@ def _start_the_scheduler():
         id="guest_retention_purge",
         replace_existing=True,
     )
+    # Daily, after the visitor purge. Keys past IDEMPOTENCY_RETENTION_HOURS
+    # are already treated as new; this only takes their rows away.
+    scheduler.add_job(
+        purge_idempotency_records,
+        "cron",
+        hour=3,
+        minute=45,
+        id="idempotency_purge",
+        replace_existing=True,
+    )
     # Often enough that a desk hears about an overstay while the visitor is
     # still in the building, seldom enough to be nothing on a database: it
     # reads the approved visits that have run over and not been announced,
@@ -193,6 +205,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Innermost, so it records a response before compression and CORS touch it.
+app.add_middleware(IdempotencyMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(AuditMiddleware)
 # The last middleware added runs first. The gate wraps the audit write, which
@@ -207,7 +221,7 @@ app.add_middleware(
     allow_headers=["*"],
     # A browser hides every response header outside a short safe list from
     # a cross-origin page unless it is named here.
-    expose_headers=[TOTAL_COUNT_HEADER],
+    expose_headers=[TOTAL_COUNT_HEADER, REPLAYED_HEADER],
 )
 
 app.include_router(api_router, prefix="/api/v1")

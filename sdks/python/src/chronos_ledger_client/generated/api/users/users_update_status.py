@@ -9,15 +9,18 @@ from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
 from ...models.user_status_update import UserStatusUpdate
 from ...models.users_update_status_response_200 import UsersUpdateStatusResponse200
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     user_id: str,
     *,
     body: UserStatusUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "put",
@@ -74,6 +77,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: UserStatusUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | UsersUpdateStatusResponse200]:
     """Update staff availability status
 
@@ -82,6 +86,7 @@ def sync_detailed(
 
     Args:
         user_id (str):
+        idempotency_key (str | Unset):
         body (UserStatusUpdate):
 
     Raises:
@@ -95,6 +100,7 @@ def sync_detailed(
     kwargs = _get_kwargs(
         user_id=user_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -109,6 +115,7 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     body: UserStatusUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | UsersUpdateStatusResponse200 | None:
     """Update staff availability status
 
@@ -117,6 +124,7 @@ def sync(
 
     Args:
         user_id (str):
+        idempotency_key (str | Unset):
         body (UserStatusUpdate):
 
     Raises:
@@ -131,6 +139,7 @@ def sync(
         user_id=user_id,
         client=client,
         body=body,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -139,6 +148,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: UserStatusUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | UsersUpdateStatusResponse200]:
     """Update staff availability status
 
@@ -147,6 +157,7 @@ async def asyncio_detailed(
 
     Args:
         user_id (str):
+        idempotency_key (str | Unset):
         body (UserStatusUpdate):
 
     Raises:
@@ -160,6 +171,7 @@ async def asyncio_detailed(
     kwargs = _get_kwargs(
         user_id=user_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -172,6 +184,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     body: UserStatusUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | UsersUpdateStatusResponse200 | None:
     """Update staff availability status
 
@@ -180,6 +193,7 @@ async def asyncio(
 
     Args:
         user_id (str):
+        idempotency_key (str | Unset):
         body (UserStatusUpdate):
 
     Raises:
@@ -195,5 +209,6 @@ async def asyncio(
             user_id=user_id,
             client=client,
             body=body,
+            idempotency_key=idempotency_key,
         )
     ).parsed

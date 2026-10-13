@@ -54,7 +54,7 @@ When the process is listening, with the schema built and the scheduler
 running, it prints exactly one line to stdout and nothing else, ever:
 
 ```json
-{"chronos": "ready", "port": 54321, "schema_version": "1", "clock": "system"}
+{"chronos": "ready", "port": 54321, "schema_version": "2", "clock": "system"}
 ```
 
 With `--socket` the line carries `"socket": "/path"` in place of `"port"`.
@@ -156,7 +156,7 @@ mounted by `backend/app/embedded.py::build_app`):
 `advance` moves the clock to `to`, running on the way every job that came
 due, in the order it would have run, and names them in `ran`
 (`nightly_ledger_gen`, `refresh_token_purge`, `guest_retention_purge`,
-`guest_overstay_notice`, as `backend/app/cron/scheduled.py::JOBS` lists
+`idempotency_purge`, `guest_overstay_notice`, as `backend/app/cron/scheduled.py::JOBS` lists
 them). `now` comes back in UTC whatever offset `to` carried. The answers:
 
 - `403` for any actor but `system`. An administrator the host names is a

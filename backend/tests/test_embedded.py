@@ -468,13 +468,13 @@ def test_the_ready_line_is_one_json_object():
     assert json.loads(standalone.ready_line(_listening())) == {
         "chronos": "ready",
         "port": 54321,
-        "schema_version": "1",
+        "schema_version": "2",
         "clock": "system",
     }
     assert json.loads(standalone.ready_line(_listening(uds="/run/chronos.sock"))) == {
         "chronos": "ready",
         "socket": "/run/chronos.sock",
-        "schema_version": "1",
+        "schema_version": "2",
         "clock": "system",
     }
 

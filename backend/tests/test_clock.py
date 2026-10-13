@@ -217,6 +217,7 @@ def test_a_day_runs_every_job_once_in_order():
         (NIGHTLY, "nightly_ledger_gen"),
         (datetime.datetime(2026, 9, 8, 3, 0, tzinfo=UTC), "refresh_token_purge"),
         (datetime.datetime(2026, 9, 8, 3, 30, tzinfo=UTC), "guest_retention_purge"),
+        (datetime.datetime(2026, 9, 8, 3, 45, tzinfo=UTC), "idempotency_purge"),
         (datetime.datetime(2026, 9, 8, 4, 0, tzinfo=UTC), "guest_overstay_notice"),
     ]
 

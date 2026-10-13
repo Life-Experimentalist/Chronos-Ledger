@@ -7,12 +7,17 @@ import httpx
 from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     issuer_id: int,
+    *,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
+    headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "delete",
@@ -21,6 +26,7 @@ def _get_kwargs(
         ),
     }
 
+    _kwargs["headers"] = headers
     return _kwargs
 
 
@@ -67,6 +73,7 @@ def sync_detailed(
     issuer_id: int,
     *,
     client: AuthenticatedClient | Client,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[Any | ErrorResponse]:
     """Remove a registration
 
@@ -76,6 +83,7 @@ def sync_detailed(
 
     Args:
         issuer_id (int):
+        idempotency_key (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -87,6 +95,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         issuer_id=issuer_id,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -100,6 +109,7 @@ def sync(
     issuer_id: int,
     *,
     client: AuthenticatedClient | Client,
+    idempotency_key: str | Unset = UNSET,
 ) -> Any | ErrorResponse | None:
     """Remove a registration
 
@@ -109,6 +119,7 @@ def sync(
 
     Args:
         issuer_id (int):
+        idempotency_key (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -121,6 +132,7 @@ def sync(
     return sync_detailed(
         issuer_id=issuer_id,
         client=client,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -128,6 +140,7 @@ async def asyncio_detailed(
     issuer_id: int,
     *,
     client: AuthenticatedClient | Client,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[Any | ErrorResponse]:
     """Remove a registration
 
@@ -137,6 +150,7 @@ async def asyncio_detailed(
 
     Args:
         issuer_id (int):
+        idempotency_key (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -148,6 +162,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         issuer_id=issuer_id,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -159,6 +174,7 @@ async def asyncio(
     issuer_id: int,
     *,
     client: AuthenticatedClient | Client,
+    idempotency_key: str | Unset = UNSET,
 ) -> Any | ErrorResponse | None:
     """Remove a registration
 
@@ -168,6 +184,7 @@ async def asyncio(
 
     Args:
         issuer_id (int):
+        idempotency_key (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -181,5 +198,6 @@ async def asyncio(
         await asyncio_detailed(
             issuer_id=issuer_id,
             client=client,
+            idempotency_key=idempotency_key,
         )
     ).parsed

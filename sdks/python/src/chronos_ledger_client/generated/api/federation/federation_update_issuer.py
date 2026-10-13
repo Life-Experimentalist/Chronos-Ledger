@@ -9,15 +9,18 @@ from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
 from ...models.issuer_response import IssuerResponse
 from ...models.issuer_update import IssuerUpdate
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     issuer_id: int,
     *,
     body: IssuerUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "patch",
@@ -84,6 +87,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: IssuerUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | IssuerResponse]:
     """Change a registration
 
@@ -92,6 +96,7 @@ def sync_detailed(
 
     Args:
         issuer_id (int):
+        idempotency_key (str | Unset):
         body (IssuerUpdate): Every field is optional and one left out is unchanged. `issuer`
             cannot be changed: it is the value notes already in the wild carry, and editing it would
             retarget a registration rather than register another.
@@ -107,6 +112,7 @@ def sync_detailed(
     kwargs = _get_kwargs(
         issuer_id=issuer_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -121,6 +127,7 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     body: IssuerUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | IssuerResponse | None:
     """Change a registration
 
@@ -129,6 +136,7 @@ def sync(
 
     Args:
         issuer_id (int):
+        idempotency_key (str | Unset):
         body (IssuerUpdate): Every field is optional and one left out is unchanged. `issuer`
             cannot be changed: it is the value notes already in the wild carry, and editing it would
             retarget a registration rather than register another.
@@ -145,6 +153,7 @@ def sync(
         issuer_id=issuer_id,
         client=client,
         body=body,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -153,6 +162,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: IssuerUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | IssuerResponse]:
     """Change a registration
 
@@ -161,6 +171,7 @@ async def asyncio_detailed(
 
     Args:
         issuer_id (int):
+        idempotency_key (str | Unset):
         body (IssuerUpdate): Every field is optional and one left out is unchanged. `issuer`
             cannot be changed: it is the value notes already in the wild carry, and editing it would
             retarget a registration rather than register another.
@@ -176,6 +187,7 @@ async def asyncio_detailed(
     kwargs = _get_kwargs(
         issuer_id=issuer_id,
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -188,6 +200,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     body: IssuerUpdate,
+    idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | IssuerResponse | None:
     """Change a registration
 
@@ -196,6 +209,7 @@ async def asyncio(
 
     Args:
         issuer_id (int):
+        idempotency_key (str | Unset):
         body (IssuerUpdate): Every field is optional and one left out is unchanged. `issuer`
             cannot be changed: it is the value notes already in the wild carry, and editing it would
             retarget a registration rather than register another.
@@ -213,5 +227,6 @@ async def asyncio(
             issuer_id=issuer_id,
             client=client,
             body=body,
+            idempotency_key=idempotency_key,
         )
     ).parsed

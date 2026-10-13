@@ -8,14 +8,17 @@ from ...client import AuthenticatedClient, Client
 from ...models.attendance_batch_request import AttendanceBatchRequest
 from ...models.attendance_mark_batch_response_200 import AttendanceMarkBatchResponse200
 from ...models.error_response import ErrorResponse
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     *,
     body: AttendanceBatchRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
+    if not isinstance(idempotency_key, Unset):
+        headers["Idempotency-Key"] = idempotency_key
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -74,6 +77,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: AttendanceBatchRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[AttendanceMarkBatchResponse200 | ErrorResponse]:
     """Batch mark attendance for multiple members
 
@@ -84,6 +88,7 @@ def sync_detailed(
     written in one transaction.
 
     Args:
+        idempotency_key (str | Unset):
         body (AttendanceBatchRequest):
 
     Raises:
@@ -96,6 +101,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = client.get_httpx_client().request(
@@ -109,6 +115,7 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
     body: AttendanceBatchRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> AttendanceMarkBatchResponse200 | ErrorResponse | None:
     """Batch mark attendance for multiple members
 
@@ -119,6 +126,7 @@ def sync(
     written in one transaction.
 
     Args:
+        idempotency_key (str | Unset):
         body (AttendanceBatchRequest):
 
     Raises:
@@ -132,6 +140,7 @@ def sync(
     return sync_detailed(
         client=client,
         body=body,
+        idempotency_key=idempotency_key,
     ).parsed
 
 
@@ -139,6 +148,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
     body: AttendanceBatchRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> Response[AttendanceMarkBatchResponse200 | ErrorResponse]:
     """Batch mark attendance for multiple members
 
@@ -149,6 +159,7 @@ async def asyncio_detailed(
     written in one transaction.
 
     Args:
+        idempotency_key (str | Unset):
         body (AttendanceBatchRequest):
 
     Raises:
@@ -161,6 +172,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         body=body,
+        idempotency_key=idempotency_key,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -172,6 +184,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
     body: AttendanceBatchRequest,
+    idempotency_key: str | Unset = UNSET,
 ) -> AttendanceMarkBatchResponse200 | ErrorResponse | None:
     """Batch mark attendance for multiple members
 
@@ -182,6 +195,7 @@ async def asyncio(
     written in one transaction.
 
     Args:
+        idempotency_key (str | Unset):
         body (AttendanceBatchRequest):
 
     Raises:
@@ -196,5 +210,6 @@ async def asyncio(
         await asyncio_detailed(
             client=client,
             body=body,
+            idempotency_key=idempotency_key,
         )
     ).parsed
