@@ -93,6 +93,11 @@ One response is not an error body: `GET /health/ready` answers `503` with the
 same shape it answers `200` with, so a load balancer reads one body either
 way.
 
+What a caller sees when something underneath fails (the database, Redis, the
+embedded process, the clock, a lost response) and whether a retry is safe is
+in [Failure modes](failure-modes.md), one case at a time, each with the test
+that holds it.
+
 | Code | Means |
 | ---- | ----- |
 | `BAD_REQUEST` | A `400` with no more specific code. |
@@ -141,6 +146,7 @@ way.
 | `IMPORT_REJECTED` | A CSV import failed. `detail` is the import's error log. |
 | `CHANGE_FEED_DISABLED` | The change feed is turned off on this deployment. |
 | `SERVER_BUSY` | The server is out of database connections or request slots. Try again shortly. |
+| `DATABASE_UNAVAILABLE` | The database refused the connection or dropped it mid-request. Nothing was committed; `Retry-After` says when to try again. |
 
 ---
 
