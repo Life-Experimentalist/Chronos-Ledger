@@ -192,7 +192,7 @@ async def _crowd(email: str, room_ids: list[int]) -> list[httpx.Response]:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         token = await client.post(
-            "/api/v1/auth/login", json={"email": email, "password": ADMIN_PASSWORD}
+            "/api/v1/auth/login", json={"email_address": email, "password": ADMIN_PASSWORD}
         )
         assert token.status_code == 200, token.text
         bearer = {"Authorization": f"Bearer {token.json()['access_token']}"}

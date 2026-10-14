@@ -2020,8 +2020,9 @@ a date; an `UNTIL` ending in `Z`, since slot times are wall clock; anything
 that is not a single rule (a `DTSTART` line, an `EXDATE`, a line break); and
 a stored rule longer than 255 characters.
 
-Both return `requirements_unmet` next to the slot's `id`, the requirements of
-the slot's activity or room that its next run cannot have, see
+Both return `requirements_unmet` (the `POST` next to the slot's `id`, the
+`PATCH` next to the ledger counts), the requirements of the slot's activity or
+room that its next run cannot have, see
 [Requirements](#get-resourcesidrequirements). The slot is saved either way.
 
 `GET /schedule/slots` returns `rrule` and `dtstart` on each slot. It still
