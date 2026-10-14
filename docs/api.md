@@ -131,7 +131,7 @@ that holds it.
 | `PASSWORD_CHANGE_REQUIRED` | The account must change its initial password before anything else. |
 | `INSUFFICIENT_ROLE` | The account's role is too low for this route, or for the account it is changing. |
 | `SCOPE_MISSING` | The API key lacks the scope this route needs. `detail` names it. |
-| `OUTSIDE_UNIT` | A unit administrator acting on someone in another unit. |
+| `OUTSIDE_UNIT` | A unit administrator acting on someone, an activity, a room or a resource of another unit, or any unit when the account has none. |
 | `IMPERSONATION_NOT_ALLOWED` | `X-Chronos-Actor` was sent by a caller that may not use it: a signed-in person, or an API key without the `impersonate` scope. |
 | `IMPERSONATION_REFUSED` | `X-Chronos-Actor` named nobody the key can act for: empty, unknown, deactivated or in another organization. |
 | `RESOURCE_CONFLICT` | A booking or schedule clashes with another. `detail.conflicts` lists what is in the way. |
@@ -1315,6 +1315,10 @@ Hold a resource for one dated window. This is the route an outside system uses
 to take a room: a hospital system books a consulting room here the same way an
 admin would.
 
+A UNIT_ADMIN holds only a resource their own unit owns, or one with no unit,
+which is shared by the whole organization. A resource of another unit is `403`
+`OUTSIDE_UNIT`. An ORG_ADMIN holds any resource.
+
 An `Idempotency-Key` header is required, 8 to 120 characters and unique per
 caller, and a UUID is the right shape. It is required rather than optional because a booking client
 talking over a network retries, and a retry that books a second room is worse
@@ -1713,7 +1717,8 @@ never refused:
 Returns today's `DailyLedger` entries scoped to the caller's role:
 - **Staff** → sessions where they are active or substitute lead
 - **Member** → sessions for their registered activities
-- **Admin** → all sessions
+- **ORG_ADMIN** → all sessions
+- **UNIT_ADMIN** → sessions of the activities in their own unit
 
 ### GET /schedule/ledger?from=&to=
 
@@ -1829,6 +1834,12 @@ not exceed 92 days"`; both carry code `INVALID_VALUE`. The cap is lower than
 availability's because this expands every resource and every member at once.
 Admins only, because the member and lead sides name who is enrolled and who
 leads where.
+
+An ORG_ADMIN gets every clash. A UNIT_ADMIN gets the clashes in which at least
+one item belongs to their own unit, each one whole, so a clash with another
+unit's class still lists that class. An item belongs to a unit through its
+activity, or through its resource for a reservation or a row with no activity.
+A UNIT_ADMIN whose account has no unit gets none.
 
 ### PATCH /schedule/ledger/{ledger_id} `[ORG_ADMIN, UNIT_ADMIN]`
 
@@ -2069,6 +2080,11 @@ Create a slot, or move an existing one. A new slot fills the days ahead
 as soon as it is added, the same way an import does, rather than waiting for
 the nightly job. Neither is allowed on a retired activity or slot (`409`
 `STATE_CONFLICT`).
+
+A UNIT_ADMIN may use the room of their own unit, or a room with no unit, and
+is refused with `403` `OUTSIDE_UNIT` for a room of another unit. That applies
+to the room a slot is created in and to the room it is moved to. Editing the
+room itself stays with the ORG_ADMIN.
 
 ```json
 {

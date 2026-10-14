@@ -423,9 +423,11 @@ def in_unit_scope(current_user, unit_code) -> bool:
     refusal, for a caller that has to fold it into a larger decision and
     should not have to catch an exception of its own making to do it.
     """
-    return not (
-        current_user.role_type.value == "UNIT_ADMIN" and unit_code != current_user.unit_code
-    )
+    if current_user.role_type.value != "UNIT_ADMIN":
+        return True
+    # A unit admin with no unit of their own has no unit to act in. Left to the
+    # comparison, they would match every row that has no unit either.
+    return current_user.unit_code is not None and unit_code == current_user.unit_code
 
 
 def ensure_unit_scope(current_user, unit_code) -> None:
@@ -436,6 +438,17 @@ def ensure_unit_scope(current_user, unit_code) -> None:
             detail="Outside your unit",
             code=ErrorCode.OUTSIDE_UNIT,
         )
+
+
+def ensure_resource_scope(current_user, resource) -> None:
+    """A unit admin may use a resource their unit owns, or one nobody owns.
+
+    A resource with no unit_code is shared by the whole organization, so it
+    is open to a unit admin the way it is to anyone. One with a unit belongs
+    to it, and putting a booking or a class on it is acting inside that unit.
+    """
+    if resource.unit_code is not None:
+        ensure_unit_scope(current_user, resource.unit_code)
 
 
 def require_roles(*roles: str):

@@ -108,10 +108,11 @@ def sync_detailed(
 ) -> Response[ErrorResponse | ErrorResponse | ReservationConflict | SlotUpdateResult]:
     """Change a master slot, and the days it has already produced
 
-     Admin only. A new window, lead or room is copied onto the days that are still plans, while days
-    carrying attendance or a note are counted and left alone. Only days after today are moved, so a
-    class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say
-    09:00.
+     Admin only. A UNIT_ADMIN may only change slots of their own unit, and only move one into a room of
+    their own unit or a room with no unit (403 `OUTSIDE_UNIT` otherwise). A new window, lead or room is
+    copied onto the days that are still plans, while days carrying attendance or a note are counted and
+    left alone. Only days after today are moved, so a class shifted to 10:00 runs at 10:00 from tomorrow
+    and the days it already ran at 09:00 still say 09:00.
 
     A new rrule or dtstart is the one change that cannot be copied across, because the days already
     generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again,
@@ -171,10 +172,11 @@ def sync(
 ) -> ErrorResponse | ErrorResponse | ReservationConflict | SlotUpdateResult | None:
     """Change a master slot, and the days it has already produced
 
-     Admin only. A new window, lead or room is copied onto the days that are still plans, while days
-    carrying attendance or a note are counted and left alone. Only days after today are moved, so a
-    class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say
-    09:00.
+     Admin only. A UNIT_ADMIN may only change slots of their own unit, and only move one into a room of
+    their own unit or a room with no unit (403 `OUTSIDE_UNIT` otherwise). A new window, lead or room is
+    copied onto the days that are still plans, while days carrying attendance or a note are counted and
+    left alone. Only days after today are moved, so a class shifted to 10:00 runs at 10:00 from tomorrow
+    and the days it already ran at 09:00 still say 09:00.
 
     A new rrule or dtstart is the one change that cannot be copied across, because the days already
     generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again,
@@ -229,10 +231,11 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | ErrorResponse | ReservationConflict | SlotUpdateResult]:
     """Change a master slot, and the days it has already produced
 
-     Admin only. A new window, lead or room is copied onto the days that are still plans, while days
-    carrying attendance or a note are counted and left alone. Only days after today are moved, so a
-    class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say
-    09:00.
+     Admin only. A UNIT_ADMIN may only change slots of their own unit, and only move one into a room of
+    their own unit or a room with no unit (403 `OUTSIDE_UNIT` otherwise). A new window, lead or room is
+    copied onto the days that are still plans, while days carrying attendance or a note are counted and
+    left alone. Only days after today are moved, so a class shifted to 10:00 runs at 10:00 from tomorrow
+    and the days it already ran at 09:00 still say 09:00.
 
     A new rrule or dtstart is the one change that cannot be copied across, because the days already
     generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again,
@@ -290,10 +293,11 @@ async def asyncio(
 ) -> ErrorResponse | ErrorResponse | ReservationConflict | SlotUpdateResult | None:
     """Change a master slot, and the days it has already produced
 
-     Admin only. A new window, lead or room is copied onto the days that are still plans, while days
-    carrying attendance or a note are counted and left alone. Only days after today are moved, so a
-    class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say
-    09:00.
+     Admin only. A UNIT_ADMIN may only change slots of their own unit, and only move one into a room of
+    their own unit or a room with no unit (403 `OUTSIDE_UNIT` otherwise). A new window, lead or room is
+    copied onto the days that are still plans, while days carrying attendance or a note are counted and
+    left alone. Only days after today are moved, so a class shifted to 10:00 runs at 10:00 from tomorrow
+    and the days it already ran at 09:00 still say 09:00.
 
     A new rrule or dtstart is the one change that cannot be copied across, because the days already
     generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again,

@@ -627,7 +627,7 @@ export interface paths {
         put?: never;
         /**
          * Hold a resource for one dated window
-         * @description Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it refuses is exactly what GET availability calls busy, through the same queries and the same expansion, so a caller cannot read an hour as free and then be refused it.
+         * @description Requires `ORG_ADMIN` or `UNIT_ADMIN`. A UNIT_ADMIN may hold a resource their own unit owns, or one with no unit (shared by the whole organization), and is refused a resource of another unit with 403 `OUTSIDE_UNIT`. The route an outside system uses to take a room. What it refuses is exactly what GET availability calls busy, through the same queries and the same expansion, so a caller cannot read an hour as free and then be refused it.
          *
          *     The rule runs both ways. A class cannot be put on top of a hold either, so POST /schedule/slots, PATCH /schedule/slots/{slot_id} and a CSV upload are each refused where a booking already stands. A hold taken here holds against the timetable and not only against other holds.
          *
@@ -897,7 +897,7 @@ export interface paths {
         put?: never;
         /**
          * Add a master slot
-         * @description Admin only. A UNIT_ADMIN may only add slots inside their own unit. The new slot fills the days ahead at once, through the same generator a CSV import and the nightly job use. A retired activity takes no new slots (409 `STATE_CONFLICT`).
+         * @description Admin only. A UNIT_ADMIN may only add slots inside their own unit, and only in a room of their own unit or a room with no unit (403 `OUTSIDE_UNIT` otherwise). The new slot fills the days ahead at once, through the same generator a CSV import and the nightly job use. A retired activity takes no new slots (409 `STATE_CONFLICT`).
          *
          *     Refused with 409 where the room is already taken for part of that window, whether by a booking or by another class. Only holds from today forward count, because a slot lays down days from now onwards and never backwards, and a slot in a closed cycle is neither checked nor counted against, because such a slot does not occupy the room and a booking is already accepted on top of one. Every open cycle counts, including a second one covering a different part of the year: the nightly generator lays every open cycle onto today, so all of them hold the room today.
          *
@@ -931,7 +931,7 @@ export interface paths {
         head?: never;
         /**
          * Change a master slot, and the days it has already produced
-         * @description Admin only. A new window, lead or room is copied onto the days that are still plans, while days carrying attendance or a note are counted and left alone. Only days after today are moved, so a class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say 09:00.
+         * @description Admin only. A UNIT_ADMIN may only change slots of their own unit, and only move one into a room of their own unit or a room with no unit (403 `OUTSIDE_UNIT` otherwise). A new window, lead or room is copied onto the days that are still plans, while days carrying attendance or a note are counted and left alone. Only days after today are moved, so a class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say 09:00.
          *
          *     A new rrule or dtstart is the one change that cannot be copied across, because the days already generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
          *
@@ -973,7 +973,7 @@ export interface paths {
         };
         /**
          * Today's ledger entries for the authenticated user
-         * @description Staff receive entries where they are the active or substitute lead. Members receive entries for their registered activities. Admins receive all entries.
+         * @description Staff receive entries where they are the active or substitute lead. Members receive entries for their registered activities. An ORG_ADMIN receives all entries; a UNIT_ADMIN receives the entries of the activities in their own unit.
          */
         get: operations["schedule.getTodayLedger"];
         put?: never;
@@ -1013,7 +1013,7 @@ export interface paths {
         };
         /**
          * Clashes already in the schedule between two dates
-         * @description Reports two rows holding one resource at once, one member enrolled in two activities that run at once, and one lead leading two activities at once. It reads and reports; nothing is refused or changed. Both dates are included. `to` before `from`, or a range longer than 92 days, is refused with 422 and code INVALID_VALUE. ORG_ADMIN and UNIT_ADMIN only.
+         * @description Reports two rows holding one resource at once, one member enrolled in two activities that run at once, and one lead leading two activities at once. It reads and reports; nothing is refused or changed. Both dates are included. `to` before `from`, or a range longer than 92 days, is refused with 422 and code INVALID_VALUE. ORG_ADMIN and UNIT_ADMIN only. An ORG_ADMIN gets every clash. A UNIT_ADMIN gets the clashes in which at least one item belongs to their own unit (through its activity, or through its resource for a reservation or a row with no activity), each returned whole.
          */
         get: operations["schedule.listConflicts"];
         put?: never;

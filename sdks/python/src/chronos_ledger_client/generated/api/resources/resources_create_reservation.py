@@ -131,9 +131,11 @@ def sync_detailed(
 ]:
     """Hold a resource for one dated window
 
-     Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
-    refuses is exactly what GET availability calls busy, through the same queries and the same
-    expansion, so a caller cannot read an hour as free and then be refused it.
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`. A UNIT_ADMIN may hold a resource their own unit owns, or one
+    with no unit (shared by the whole organization), and is refused a resource of another unit with 403
+    `OUTSIDE_UNIT`. The route an outside system uses to take a room. What it refuses is exactly what GET
+    availability calls busy, through the same queries and the same expansion, so a caller cannot read an
+    hour as free and then be refused it.
 
     The rule runs both ways. A class cannot be put on top of a hold either, so POST /schedule/slots,
     PATCH /schedule/slots/{slot_id} and a CSV upload are each refused where a booking already stands. A
@@ -205,9 +207,11 @@ def sync(
 ) -> CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationCreated | None:
     """Hold a resource for one dated window
 
-     Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
-    refuses is exactly what GET availability calls busy, through the same queries and the same
-    expansion, so a caller cannot read an hour as free and then be refused it.
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`. A UNIT_ADMIN may hold a resource their own unit owns, or one
+    with no unit (shared by the whole organization), and is refused a resource of another unit with 403
+    `OUTSIDE_UNIT`. The route an outside system uses to take a room. What it refuses is exactly what GET
+    availability calls busy, through the same queries and the same expansion, so a caller cannot read an
+    hour as free and then be refused it.
 
     The rule runs both ways. A class cannot be put on top of a hold either, so POST /schedule/slots,
     PATCH /schedule/slots/{slot_id} and a CSV upload are each refused where a booking already stands. A
@@ -276,9 +280,11 @@ async def asyncio_detailed(
 ]:
     """Hold a resource for one dated window
 
-     Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
-    refuses is exactly what GET availability calls busy, through the same queries and the same
-    expansion, so a caller cannot read an hour as free and then be refused it.
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`. A UNIT_ADMIN may hold a resource their own unit owns, or one
+    with no unit (shared by the whole organization), and is refused a resource of another unit with 403
+    `OUTSIDE_UNIT`. The route an outside system uses to take a room. What it refuses is exactly what GET
+    availability calls busy, through the same queries and the same expansion, so a caller cannot read an
+    hour as free and then be refused it.
 
     The rule runs both ways. A class cannot be put on top of a hold either, so POST /schedule/slots,
     PATCH /schedule/slots/{slot_id} and a CSV upload are each refused where a booking already stands. A
@@ -348,9 +354,11 @@ async def asyncio(
 ) -> CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationCreated | None:
     """Hold a resource for one dated window
 
-     Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
-    refuses is exactly what GET availability calls busy, through the same queries and the same
-    expansion, so a caller cannot read an hour as free and then be refused it.
+     Requires `ORG_ADMIN` or `UNIT_ADMIN`. A UNIT_ADMIN may hold a resource their own unit owns, or one
+    with no unit (shared by the whole organization), and is refused a resource of another unit with 403
+    `OUTSIDE_UNIT`. The route an outside system uses to take a room. What it refuses is exactly what GET
+    availability calls busy, through the same queries and the same expansion, so a caller cannot read an
+    hour as free and then be refused it.
 
     The rule runs both ways. A class cannot be put on top of a hold either, so POST /schedule/slots,
     PATCH /schedule/slots/{slot_id} and a CSV upload are each refused where a booking already stands. A

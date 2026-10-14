@@ -355,6 +355,11 @@ def _decidable_by(current_user: User):
         ReverseRsvpLog.submitting_user_id != current_user.id,
     )
     if role == "UNIT_ADMIN":
+        # An admin account with no unit of its own reaches nothing this way.
+        # Compared with None the column reads IS NULL, which would be every
+        # account that has no unit rather than none of them.
+        if current_user.unit_code is None:
+            return mine
         admin_roles = (InstitutionalRole.ORG_ADMIN, InstitutionalRole.UNIT_ADMIN)
         left_behind = and_(
             left_behind,

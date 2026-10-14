@@ -87,9 +87,10 @@ def sync_detailed(
 ) -> Response[ErrorResponse | ReservationConflict | ScheduleCreateSlotResponse200]:
     """Add a master slot
 
-     Admin only. A UNIT_ADMIN may only add slots inside their own unit. The new slot fills the days ahead
-    at once, through the same generator a CSV import and the nightly job use. A retired activity takes
-    no new slots (409 `STATE_CONFLICT`).
+     Admin only. A UNIT_ADMIN may only add slots inside their own unit, and only in a room of their own
+    unit or a room with no unit (403 `OUTSIDE_UNIT` otherwise). The new slot fills the days ahead at
+    once, through the same generator a CSV import and the nightly job use. A retired activity takes no
+    new slots (409 `STATE_CONFLICT`).
 
     Refused with 409 where the room is already taken for part of that window, whether by a booking or by
     another class. Only holds from today forward count, because a slot lays down days from now onwards
@@ -136,9 +137,10 @@ def sync(
 ) -> ErrorResponse | ReservationConflict | ScheduleCreateSlotResponse200 | None:
     """Add a master slot
 
-     Admin only. A UNIT_ADMIN may only add slots inside their own unit. The new slot fills the days ahead
-    at once, through the same generator a CSV import and the nightly job use. A retired activity takes
-    no new slots (409 `STATE_CONFLICT`).
+     Admin only. A UNIT_ADMIN may only add slots inside their own unit, and only in a room of their own
+    unit or a room with no unit (403 `OUTSIDE_UNIT` otherwise). The new slot fills the days ahead at
+    once, through the same generator a CSV import and the nightly job use. A retired activity takes no
+    new slots (409 `STATE_CONFLICT`).
 
     Refused with 409 where the room is already taken for part of that window, whether by a booking or by
     another class. Only holds from today forward count, because a slot lays down days from now onwards
@@ -180,9 +182,10 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | ReservationConflict | ScheduleCreateSlotResponse200]:
     """Add a master slot
 
-     Admin only. A UNIT_ADMIN may only add slots inside their own unit. The new slot fills the days ahead
-    at once, through the same generator a CSV import and the nightly job use. A retired activity takes
-    no new slots (409 `STATE_CONFLICT`).
+     Admin only. A UNIT_ADMIN may only add slots inside their own unit, and only in a room of their own
+    unit or a room with no unit (403 `OUTSIDE_UNIT` otherwise). The new slot fills the days ahead at
+    once, through the same generator a CSV import and the nightly job use. A retired activity takes no
+    new slots (409 `STATE_CONFLICT`).
 
     Refused with 409 where the room is already taken for part of that window, whether by a booking or by
     another class. Only holds from today forward count, because a slot lays down days from now onwards
@@ -227,9 +230,10 @@ async def asyncio(
 ) -> ErrorResponse | ReservationConflict | ScheduleCreateSlotResponse200 | None:
     """Add a master slot
 
-     Admin only. A UNIT_ADMIN may only add slots inside their own unit. The new slot fills the days ahead
-    at once, through the same generator a CSV import and the nightly job use. A retired activity takes
-    no new slots (409 `STATE_CONFLICT`).
+     Admin only. A UNIT_ADMIN may only add slots inside their own unit, and only in a room of their own
+    unit or a room with no unit (403 `OUTSIDE_UNIT` otherwise). The new slot fills the days ahead at
+    once, through the same generator a CSV import and the nightly job use. A retired activity takes no
+    new slots (409 `STATE_CONFLICT`).
 
     Refused with 409 where the room is already taken for part of that window, whether by a booking or by
     another class. Only holds from today forward count, because a slot lays down days from now onwards
