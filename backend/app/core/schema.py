@@ -12,7 +12,9 @@ What it does not do is change a table that already exists. Until the first
 real deployment a schema change means recreating the database, and a release
 does not upgrade the database the one before it made. Chronos 0.14 and
 earlier did keep an Alembic history, and a database made by them is refused
-at start (_refuse_pre_015_database) rather than left half upgraded.
+at start (_refuse_pre_015_database) rather than left half upgraded. So is a
+database whose tables lack columns the models have (_refuse_missing_columns),
+such as one made before a release added a column.
 Migrations come back as a fresh baseline when there is a deployment worth
 upgrading.
 
@@ -33,7 +35,7 @@ from app.core.database import Base
 # What /health reports in place of a migration revision. A string a maintainer
 # bumps when the models change, so two instances can be told apart by what
 # their database looks like without either reading its catalog.
-SCHEMA_VERSION = "3"
+SCHEMA_VERSION = "4"
 
 # Two replicas starting together would both find the tables missing and both
 # try to make them. On PostgreSQL the first one to start holds this advisory
@@ -60,6 +62,7 @@ def ensure_schema(engine: Engine) -> str:
         if connection.dialect.name == "postgresql":
             connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": SCHEMA_LOCK_KEY})
         _refuse_pre_015_database(connection)
+        _refuse_missing_columns(connection)
         had_users = inspect(connection).has_table("users")
         Base.metadata.create_all(connection)
         _seed_administrator(connection)
@@ -87,6 +90,38 @@ def _refuse_pre_015_database(connection) -> None:
         "table beside Chronos's tables), and 0.15 does not upgrade it in place. There are "
         "no migrations before the first real deployment. Export what you need, then "
         "recreate the database and start again on an empty one."
+    )
+
+
+def _refuse_missing_columns(connection) -> None:
+    """Stop on a database whose tables lack columns the models now have.
+
+    create_all builds a table that is absent and leaves one that exists alone,
+    even when a release has since added columns to it. Starting on such a
+    database would pass and then fail on the first query that names the new
+    column, so it is refused here instead, naming each missing column. A table
+    the database lacks entirely is fine (create_all makes it), and so is a
+    column the models do not know. The lookup is unqualified, like the one in
+    _refuse_pre_015_database, so on PostgreSQL it sees only the schema the
+    engine is confined to or the default one.
+    """
+    inspector = inspect(connection)
+    missing = []
+    for table in Base.metadata.sorted_tables:
+        if not inspector.has_table(table.name):
+            continue
+        present = {column["name"] for column in inspector.get_columns(table.name)}
+        missing.extend(
+            f"{table.name}.{column.name}" for column in table.columns if column.name not in present
+        )
+    if not missing:
+        return
+    raise RuntimeError(
+        "This database has tables that lack columns this release needs: "
+        + ", ".join(sorted(missing))
+        + ". It was made by an older release, and this release does not upgrade a database "
+        "in place. There are no migrations before the first real deployment. Export what "
+        "you need, then recreate the database and start again on an empty one."
     )
 
 

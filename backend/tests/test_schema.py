@@ -18,7 +18,7 @@ from sqlalchemy import func, inspect, select, text
 
 from app.core.bootstrap import SEEDED_ADMIN_ID
 from app.core.database import Base, sqlite_engine
-from app.core.schema import SCHEMA_VERSION, ensure_schema
+from app.core.schema import SCHEMA_VERSION, _refuse_pre_015_database, ensure_schema
 from app.models.db import InstitutionalRole, User
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -85,14 +85,48 @@ def test_a_host_programs_own_alembic_version_is_not_refused(tmp_path):
         engine.dispose()
 
 
-def test_a_host_table_called_reservations_does_not_look_like_chronos(tmp_path):
+def test_a_host_table_called_reservations_is_not_a_0_14_database(tmp_path):
     engine = sqlite_engine(_url(tmp_path))
     try:
         _alembic_version(engine)
         with engine.begin() as connection:
             connection.execute(text("CREATE TABLE reservations (id INTEGER PRIMARY KEY)"))
-        # Only one marker table is the host's; create_all then leaves it alone.
-        assert ensure_schema(engine) == "created"
+        # Only one marker table is the host's, so it is not a 0.14 database.
+        with engine.begin() as connection:
+            _refuse_pre_015_database(connection)
+    finally:
+        engine.dispose()
+
+
+def _drop_column(engine, table: str, column: str) -> None:
+    with engine.begin() as connection:
+        connection.execute(text(f"ALTER TABLE {table} DROP COLUMN {column}"))
+
+
+def test_a_table_missing_a_model_column_is_refused(tmp_path):
+    """create_all never adds a column, so an older 0.15 database would start and then fail."""
+    engine = sqlite_engine(_url(tmp_path))
+    try:
+        Base.metadata.create_all(engine)
+        _drop_column(engine, "structural_master_slots", "retired_at")
+        _drop_column(engine, "activities", "retired_at")
+        with pytest.raises(RuntimeError, match="does not upgrade a database in place") as refused:
+            ensure_schema(engine)
+        assert "activities.retired_at, structural_master_slots.retired_at" in str(refused.value)
+        # Refused before anything was seeded.
+        assert _administrators(engine) == []
+    finally:
+        engine.dispose()
+
+
+def test_a_database_with_an_extra_column_still_starts(tmp_path):
+    engine = sqlite_engine(_url(tmp_path))
+    try:
+        Base.metadata.create_all(engine)
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE reservations ADD COLUMN host_note VARCHAR(20)"))
+        assert ensure_schema(engine) == "current"
+        assert len(_administrators(engine)) == 1
     finally:
         engine.dispose()
 

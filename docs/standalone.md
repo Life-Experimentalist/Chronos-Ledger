@@ -178,7 +178,8 @@ whatever tables a database lacks when it starts
 (`backend/app/core/schema.py::ensure_schema`) and changes nothing that is
 already there, so a file made by one release is not brought forward by the
 next when the schema has changed: 0.15 does not upgrade a 0.14 file. A schema
-change means recreating the database. `/health` reports `schema_version`,
+change means recreating the database, and the engine refuses to start on a file
+whose tables lack columns the models have, naming them. `/health` reports `schema_version`,
 which the maintainers bump when the models change; when the new release's
 number differs from the one your file was made with, stop the engine, move
 the old file aside (or recreate the PostgreSQL database), and start again on
