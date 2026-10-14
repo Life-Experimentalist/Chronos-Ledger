@@ -54,7 +54,7 @@ When the process is listening, with the schema built and the scheduler
 running, it prints exactly one line to stdout and nothing else, ever:
 
 ```json
-{"chronos": "ready", "port": 54321, "schema_version": "3", "clock": "system"}
+{"chronos": "ready", "port": 54321, "schema_version": "4", "clock": "system"}
 ```
 
 With `--socket` the line carries `"socket": "/path"` in place of `"port"`.

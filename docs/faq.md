@@ -63,7 +63,7 @@ The most common cause is a password mismatch. Run `docker compose down -v` to wi
 
 ### The server fails on a database made by an older release
 
-There are no migrations before the first real deployment. The server builds the tables that are missing when it starts and changes none that exist, so a database made with an older `schema_version` (see `/health`) keeps its old shape and the new code does not fit it. Wipe it and start again (dev only):
+There are no migrations before the first real deployment. The server builds the tables that are missing when it starts and changes none that exist, so a database made with an older `schema_version` (see `/health`) keeps its old shape and the new code does not fit it. When tables lack columns the models have, the server refuses to start and names them. Wipe it and start again (dev only):
 
 ```bash
 docker compose down -v
