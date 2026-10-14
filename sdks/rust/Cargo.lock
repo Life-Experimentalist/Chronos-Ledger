@@ -129,7 +129,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "chronos-ledger-client"
+name = "chronosledger-client"
 version = "0.17.0"
 dependencies = [
  "base64",

@@ -1,4 +1,4 @@
-module github.com/Life-Experimentalist/Chronos-Ledger/sdks/go
+module chronos.vkrishna04.me/sdks/go
 
 go 1.24.0
 

@@ -1,5 +1,5 @@
 [package]
-name = "chronos-ledger-cli"
+name = "chronosledger"
 # Moves with the server: release-please writes this line (release-please-config.json),
 # and `chronos upgrade` refuses a server newer than the CLI running it.
 version = "0.17.0"
@@ -9,6 +9,36 @@ license = "Apache-2.0"
 repository = "https://github.com/Life-Experimentalist/Chronos-Ledger"
 rust-version = "1.88"
 publish = false
+
+[package.metadata.binstall]
+# cargo-binstall fetches the bare binaries that release.yml (cli-build) attaches
+# to each release, named chronos-vX.Y.Z-<os>-<arch>[.exe]. One override per
+# build target; a target with no override falls back to a source build.
+pkg-fmt = "bin"
+
+[package.metadata.binstall.overrides.x86_64-unknown-linux-musl]
+pkg-url = "{ repo }/releases/download/v{ version }/chronos-v{ version }-linux-x64"
+pkg-fmt = "bin"
+
+[package.metadata.binstall.overrides.aarch64-unknown-linux-musl]
+pkg-url = "{ repo }/releases/download/v{ version }/chronos-v{ version }-linux-arm64"
+pkg-fmt = "bin"
+
+[package.metadata.binstall.overrides.x86_64-apple-darwin]
+pkg-url = "{ repo }/releases/download/v{ version }/chronos-v{ version }-darwin-x64"
+pkg-fmt = "bin"
+
+[package.metadata.binstall.overrides.aarch64-apple-darwin]
+pkg-url = "{ repo }/releases/download/v{ version }/chronos-v{ version }-darwin-arm64"
+pkg-fmt = "bin"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/v{ version }/chronos-v{ version }-windows-x64.exe"
+pkg-fmt = "bin"
+
+[package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/v{ version }/chronos-v{ version }-windows-arm64.exe"
+pkg-fmt = "bin"
 
 [[bin]]
 name = "chronos"

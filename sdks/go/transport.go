@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Life-Experimentalist/Chronos-Ledger/sdks/go/generated"
+	"chronos.vkrishna04.me/sdks/go/generated"
 )
 
 const (

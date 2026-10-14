@@ -68,9 +68,9 @@ and Windows x64 and arm64. Each binary is run once, then uploaded with a
 | Scoop | `scoop bucket add le https://github.com/Life-Experimentalist/scoop-bucket` then `scoop install chronos` | `chronos.json` attached to each release; the bucket copies it the same way | v0.13 |
 | Container images | `docker compose pull` | existing `cd.yml` | already shipping |
 | WinGet | `winget install LifeExperimentalist.Chronos` | `wingetcreate submit` | on request |
-| npm | `npx @life-experimentalist/chronos` | per-platform packages, trusted publishing | on request |
-| PyPI | `uvx chronos-ledger` | wheels wrapping the binary, trusted publishing | on request |
-| crates.io | `cargo install chronos-ledger` | `cargo publish` | on request |
+| npm | `npx chronosledger` | per-platform packages, trusted publishing | on request |
+| PyPI | `uvx chronosledger` | wheels wrapping the binary, trusted publishing | on request |
+| crates.io | `cargo install chronosledger` | `cargo publish` | on request |
 | Helm chart | `helm install chronos ./charts/chronos-ledger` from a checkout | `charts/chronos-ledger`, checked by `helm.yml` | in the repository; not pushed to a chart registry |
 | deb / rpm, MSI | | | on request |
 

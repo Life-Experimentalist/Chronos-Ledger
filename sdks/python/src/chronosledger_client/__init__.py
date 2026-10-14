@@ -3,7 +3,7 @@
 """Typed client for the Chronos Ledger REST API.
 
 The calls themselves are generated from docs/openapi.yaml and live in
-``chronos_ledger_client.generated.api``. This module adds what a generator
+``chronosledger_client.generated.api``. This module adds what a generator
 cannot know: how to authenticate, when a retry is safe, and how to page.
 """
 

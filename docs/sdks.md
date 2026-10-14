@@ -41,12 +41,16 @@ before the first library is published.
 
 | Language | Package | Generator | Runtime deps | Registry |
 |---|---|---|---|---|
-| TypeScript / JavaScript | `@life-experimentalist/chronos` | `openapi-typescript` for types, `openapi-fetch` for calls | none beyond `fetch` | npm, trusted publishing |
-| Python | `chronos-ledger-client` | `openapi-python-client` | `httpx`, `attrs` | PyPI, trusted publishing |
-| Go | `github.com/Life-Experimentalist/Chronos-Ledger/sdks/go` | `oapi-codegen` (client + types) | standard library, `oapi-codegen/runtime` | Go module proxy, via tag |
-| Rust | `chronos-ledger-client` | `progenitor`, run from `build.rs` | `reqwest`, `serde`, `tokio` | crates.io |
+| TypeScript / JavaScript | `chronosledger-client` | `openapi-typescript` for types, `openapi-fetch` for calls | none beyond `fetch` | npm, trusted publishing |
+| Python | `chronosledger-client` | `openapi-python-client` | `httpx`, `attrs` | PyPI, trusted publishing |
+| Go | `chronos.vkrishna04.me/sdks/go` | `oapi-codegen` (client + types) | standard library, `oapi-codegen/runtime` | Go module proxy, via tag |
+| Rust | `chronosledger-client` | `progenitor`, run from `build.rs` | `reqwest`, `serde`, `tokio` | crates.io |
 
-Names are proposals; confirm availability before the first publish.
+The package name is `chronosledger-client` on npm, PyPI and crates.io. The registry
+packages appear from 0.18.0; until then each language page below has the
+install-from-checkout steps. The Go module path is a vanity import served from
+this project's Pages site (`go-import` meta tags), so the code stays in this
+repository and `sdks/go/vX.Y.Z` tags keep working.
 
 TypeScript works in Node 18+, Deno, Bun and browsers. JavaScript users get the
 same package with no type checking needed.
@@ -75,7 +79,7 @@ generated call, and the calendar feed (it is a URL you give a calendar app).
 ## 3. Versioning
 
 Library versions match the server release they were generated from:
-`chronos-ledger-client 0.13.0` targets server `0.13.x`. A library works
+`chronosledger-client 0.13.0` targets server `0.13.x`. A library works
 against a newer server in the same minor series. While the server is `0.x`,
 a minor bump may break the API, and the libraries break with it.
 

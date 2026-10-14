@@ -13,10 +13,10 @@ from collections.abc import Callable
 import httpx
 import pytest
 
-import chronos_ledger_client as chronos
-from chronos_ledger_client._transport import ChronosTransport, RetryPolicy
-from chronos_ledger_client.generated.api.resources import resources_list
-from chronos_ledger_client.generated.models import ReservationCreate
+import chronosledger_client as chronos
+from chronosledger_client._transport import ChronosTransport, RetryPolicy
+from chronosledger_client.generated.api.resources import resources_list
+from chronosledger_client.generated.models import ReservationCreate
 
 BODY = ReservationCreate(date=dt.date(2026, 1, 6), start="14:00", end="15:00", purpose="Viva")
 HOLD = {"id": 7, "resource_id": 3}

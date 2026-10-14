@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Life-Experimentalist/Chronos-Ledger/sdks/go/generated"
+	"chronos.vkrishna04.me/sdks/go/generated"
 )
 
 // Client is the generated client with the transport this package adds. Every

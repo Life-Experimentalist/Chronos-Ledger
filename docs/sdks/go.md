@@ -2,7 +2,7 @@
 
 <!-- Copyright 2026 Chronos Ledger Contributors (Apache 2.0) -->
 
-Module `github.com/Life-Experimentalist/Chronos-Ledger/sdks/go`, package
+Module `chronos.vkrishna04.me/sdks/go`, package
 `chronos`, in [`sdks/go`](../../sdks/go). The calls are generated from
 [openapi.yaml](../openapi.yaml) by `oapi-codegen` and live in the `generated`
 package. Go 1.24 or newer to use it (regenerating needs Go 1.25). The only
@@ -10,23 +10,31 @@ dependency outside the standard library is `oapi-codegen/runtime`.
 
 ## Install
 
-The module is in this repository and has no release tags yet. Until it does,
-add it with a `replace` directive pointing at a checkout:
+From 0.18.0:
 
 ```bash
-go mod edit -require=github.com/Life-Experimentalist/Chronos-Ledger/sdks/go@v0.0.0
-go mod edit -replace=github.com/Life-Experimentalist/Chronos-Ledger/sdks/go=../Chronos-Ledger/sdks/go
+go get chronos.vkrishna04.me/sdks/go@latest
 ```
 
-Once tags exist they are prefixed with the module directory, for example
-`sdks/go/v0.15.0`, and `go get` works as usual.
+The import path is served by this project's site (`go-import` meta tags at
+`https://chronos.vkrishna04.me/sdks/go`) and points at this repository, so
+the tags stay `sdks/go/vX.Y.Z`. The existing `sdks/go/v0.17.0` tag still
+declares the old GitHub module path and cannot be fetched under the new one.
+Until 0.18.0, add the module with a `replace` directive pointing at a checkout:
+
+```bash
+go mod edit -require=chronos.vkrishna04.me/sdks/go@v0.0.0
+go mod edit -replace=chronos.vkrishna04.me/sdks/go=../Chronos-Ledger/sdks/go
+```
+
+Tags are prefixed with the module directory, for example `sdks/go/v0.18.0`.
 
 ## Construct a client
 
 ```go
 import (
-	chronos "github.com/Life-Experimentalist/Chronos-Ledger/sdks/go"
-	"github.com/Life-Experimentalist/Chronos-Ledger/sdks/go/generated"
+	chronos "chronos.vkrishna04.me/sdks/go"
+	"chronos.vkrishna04.me/sdks/go/generated"
 )
 
 c, err := chronos.New("https://chronos.example.org", chronos.WithAPIKey(os.Getenv("CHRONOS_API_KEY")))
@@ -156,5 +164,6 @@ The command in `generate.go` pins `oapi-codegen` to one version, and
 the spec change. CI regenerates it and fails when the committed file is out of
 date. The first run downloads the generator and can take several minutes.
 
-Nothing here is published to a registry. The module becomes installable with
-`go get` when a prefixed tag is pushed.
+Nothing here is published to a registry. The module becomes installable under
+`chronos.vkrishna04.me/sdks/go` with the `sdks/go/v0.18.0` tag; `v0.17.0`
+resolves only under the old GitHub path.

@@ -2,26 +2,32 @@
 
 <!-- Copyright 2026 Chronos Ledger Contributors (Apache 2.0) -->
 
-Package `@life-experimentalist/chronos`, in [`sdks/typescript`](../../sdks/typescript).
+Package `chronosledger-client`, in [`sdks/typescript`](../../sdks/typescript).
 Types come from [openapi.yaml](../openapi.yaml) through `openapi-typescript`,
 and calls go through `openapi-fetch`, the only runtime dependency. Works on
 Node 20 or newer, Deno, Bun and browsers.
 
 ## Install
 
-The package is not on npm yet. Build it from a checkout:
+From 0.18.0 the package is on npm:
+
+```bash
+npm install chronosledger-client
+```
+
+Until then, build it from a checkout:
 
 ```bash
 cd sdks/typescript && npm ci && npm run build && npm pack
 ```
 
 Then install the `.tgz` that `npm pack` wrote, with
-`npm install ./life-experimentalist-chronos-<version>.tgz` from your project.
+`npm install ./chronosledger-client-<version>.tgz` from your project.
 
 ## Construct a client
 
 ```ts
-import { createChronosClient } from "@life-experimentalist/chronos";
+import { createChronosClient } from "chronosledger-client";
 
 const chronos = createChronosClient({
   baseUrl: "https://chronos.example.org",
@@ -128,7 +134,7 @@ network error is thrown as it came from `fetch`.
 ## Paging
 
 ```ts
-import { paginate } from "@life-experimentalist/chronos";
+import { paginate } from "chronosledger-client";
 
 for await (const user of paginate((limit, offset) =>
   chronos.GET("/api/v1/users/", { params: { query: { limit, offset } } }),
@@ -145,7 +151,7 @@ The page size defaults to 100 and is the second argument.
 Every status of 400 or above throws `ChronosError`:
 
 ```ts
-import { ChronosError } from "@life-experimentalist/chronos";
+import { ChronosError } from "chronosledger-client";
 
 try {
   await chronos.createReservation(3, body);

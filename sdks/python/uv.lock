@@ -35,7 +35,7 @@ wheels = [
 ]
 
 [[package]]
-name = "chronos-ledger-client"
+name = "chronosledger-client"
 version = "0.17.0"
 source = { editable = "." }
 dependencies = [

@@ -59,7 +59,7 @@ Want to demo it to someone? `./setup.sh --build --demo` boots it with sample dat
 ### Or pull a published image (no build required)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Life-Experimentalist/chronos-ledger/main/docker-compose.prod.yml \
+curl -fsSL https://chronos.vkrishna04.me/compose.yml \
   -o docker-compose.prod.yml
 
 export JWT_SECRET_SIGNING_KEY=$(openssl rand -hex 32)
@@ -382,7 +382,7 @@ the first login is the only thing it can do: use Admin Portal → Profile
 | [`docs/quickstart.md`](docs/quickstart.md)     | Call the REST API from any language: auth, keys, paging, idempotency |
 | [`docs/roadmap.md`](docs/roadmap.md)           | Planned releases 0.13 to 0.16 with scope and acceptance checks       |
 | [`docs/distribution.md`](docs/distribution.md) | Planned installer, channels, drift handling and signing              |
-| [`docs/sdks.md`](docs/sdks.md)                 | Planned TypeScript, Python, Go and Rust client libraries             |
+| [`docs/sdks.md`](docs/sdks.md)                 | TypeScript, Python, Go and Rust client libraries (registries from 0.18.0) |
 | [`docs/federated-identity.md`](docs/federated-identity.md) | Planned sign-in from a registered outside issuer, threat model first |
 | [`docs/clock.md`](docs/clock.md)               | The one clock the backend reads, the host clock a simulation drives, seeded ids |
 | [`docs/webhooks.md`](docs/webhooks.md)         | Signed outgoing webhooks from the change feed: events, signatures, retries, URL rules |

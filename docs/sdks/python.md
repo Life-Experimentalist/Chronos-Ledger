@@ -2,15 +2,23 @@
 
 <!-- Copyright 2026 Chronos Ledger Contributors (Apache 2.0) -->
 
-Package `chronos-ledger-client`, import name `chronos_ledger_client`, in
+Package `chronosledger-client`, import name `chronosledger_client`, in
 [`sdks/python`](../../sdks/python). The calls are generated from
 [openapi.yaml](../openapi.yaml) by `openapi-python-client` and live in
-`chronos_ledger_client.generated`. Python 3.10 or newer; depends on `httpx`
+`chronosledger_client.generated`. Python 3.10 or newer; depends on `httpx`
 and `attrs`.
 
 ## Install
 
-The package is not on PyPI yet. Install it from a checkout:
+From 0.18.0 the package is on PyPI:
+
+```bash
+pip install chronosledger-client
+# or
+uv add chronosledger-client
+```
+
+Until then, install it from a checkout:
 
 ```bash
 pip install ./sdks/python
@@ -23,8 +31,8 @@ With uv, `uv add ./sdks/python` from your project does the same.
 ```python
 import os
 
-import chronos_ledger_client as chronos
-from chronos_ledger_client.generated.api.resources import resources_list
+import chronosledger_client as chronos
+from chronosledger_client.generated.api.resources import resources_list
 
 client = chronos.connect("https://chronos.example.org", api_key=os.environ["CHRONOS_API_KEY"])
 resources = resources_list.sync(client=client)
@@ -57,7 +65,7 @@ token pair), the original `401` is raised as `ChronosError`. Passing both
 ```python
 import datetime as dt
 
-from chronos_ledger_client.generated.models import ReservationCreate
+from chronosledger_client.generated.models import ReservationCreate
 
 hold = chronos.create_reservation(
     client,
@@ -128,7 +136,7 @@ transport error is raised as the `httpx` exception it was.
 ## Paging
 
 ```python
-from chronos_ledger_client.generated.api.users import users_list
+from chronosledger_client.generated.api.users import users_list
 
 for user in chronos.paginate(users_list, client=client, page_size=50):
     print(user.id)
@@ -156,7 +164,7 @@ except chronos.ChronosError as error:
 After a change to `docs/openapi.yaml`, from `sdks/python`:
 
 ```bash
-uvx --from openapi-python-client==0.29.1 openapi-python-client generate --path ../../docs/openapi.yaml --meta none --config openapi-python-client.yaml --output-path src/chronos_ledger_client/generated --overwrite
+uvx --from openapi-python-client==0.29.1 openapi-python-client generate --path ../../docs/openapi.yaml --meta none --config openapi-python-client.yaml --output-path src/chronosledger_client/generated --overwrite
 ```
 
 Delete the `.ruff_cache` it leaves inside `generated`, then commit the result
