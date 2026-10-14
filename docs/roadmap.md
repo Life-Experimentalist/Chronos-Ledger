@@ -2,8 +2,8 @@
 
 <!-- Copyright 2026 Chronos Ledger Contributors (Apache 2.0) -->
 
-Current release: 0.15.0, with 0.16 next. This page plans the releases after
-it. The plan is detailed on purpose: each item has a scope, the files it touches and
+Current release: 0.17.0. This page records how each release was planned and
+what it shipped. The plan is detailed on purpose: each item has a scope, the files it touches and
 a check that says when it is done, so it can be picked up without
 re-deciding anything.
 
@@ -33,7 +33,7 @@ database, and the changelog for each tag is the contract they upgrade against.
 | 0.14 | Roles renamed, guest desk (visit expiry, configurable approver, change feed), federated identity | Yes |
 | 0.15 | Standalone engine (`chronos-engine`, no Docker or Redis, on PostgreSQL or a SQLite file), embedded flavour with the host clock, Alembic removed (the models own the schema, `SCHEMA_VERSION`), PostgreSQL-first `--database-url`, optional Cloudflare tunnel compose profile, psycopg 3 and SQLAlchemy 2.1 | Yes |
 | 0.16 | Integration contract (error codes, idempotency on every write, export and import, SDK retries, failure modes written down), webhooks, activities CRUD, reservation external reference; engine part 1: resource modes, conflict report, rolling horizon; Go and Rust SDKs, Helm | Additive API; needs a fresh database |
-| 0.17 | Engine, part 2: recurrence rules, editable timetable, exclusion on instances; per-organization uniqueness | Yes; needs a fresh database |
+| 0.17 | Engine, part 2: recurrence rules, editable timetable, exclusion on instances, resource requirements, resource classes per organization, lead clashes in the conflict report; per-organization uniqueness, narrow impersonation for API keys, unit admins scoped to their unit | Yes; needs a fresh database |
 
 PostgreSQL is the database Chronos is designed for. SQLite exists so the
 engine can be tried and tested with no setup; a behaviour that works only on
@@ -235,7 +235,7 @@ This release lets a resource be consumed in three ways.
   the resource. Shared is never refused.
 - **Done when:** booking 13 of 12 ventilators is refused with a conflict body;
   two shared bookings at once both succeed; every existing test passes unchanged.
-- **Status:** shipped, except the requirements half. `mode`, `capacity` and
+- **Status:** shipped, the modes in 0.16 and the requirements in 0.17. `mode`, `capacity` and
   `quantity` are in, a pool full is `409 RESOURCE_CAPACITY_EXCEEDED`, a mode
   or capacity change the bookings ahead would not fit is
   `409 RESOURCE_BOOKINGS_WOULD_NOT_FIT`, and availability and the conflict
@@ -264,8 +264,8 @@ This release lets a resource be consumed in three ways.
 - **Done when:** a seeded clash of each kind appears exactly once in the report.
 - **Status:** shipped in 0.16 (`tests/test_conflict_report.py`). Open to
   `ORG_ADMIN` and `UNIT_ADMIN`. A range is at most 92 days. Member clashes
-  count enrollments only. A lead leading two activities at once is a separate
-  `lead_overlap`, with `lead_id` set (a substitute replaces the lead on a day).
+  count enrollments only. Since 0.17 a lead leading two activities at once is
+  a separate `lead_overlap`, with `lead_id` set (a substitute replaces the lead on a day).
 
 ### E-3. Rolling materialization horizon
 
@@ -324,7 +324,7 @@ integration contract applies.
   returned, derived, through 0.17, and was removed after it.
 - **Done when:** a weekly slot across a DST change materializes at the same
   local time on both sides; migrated slots materialize the same days as before.
-- **Status:** built in #91 for 0.17.
+- **Status:** shipped in 0.17.0 (#91).
 
 ### E-6. Editable timetable
 
@@ -336,7 +336,7 @@ integration contract applies.
 - **Done when:** changing a room in the CSV and re-importing changes the room
   on future days; a day with recorded attendance is left as it was and listed
   in the import report.
-- **Status:** built in #95 for 0.17.
+- **Status:** shipped in 0.17.0 (#95).
 
 ### E-7. Exclusion on materialized instances
 
@@ -344,7 +344,7 @@ integration contract applies.
   no-overlap guarantee moves entirely to materialized instances, and
   template-level checks expand rules in the application before saving.
 - **Done when:** two rules that only collide on one date in the horizon are refused at save time and cannot be forced in through the ledger.
-- **Status:** built in PR #93, held for 0.17.
+- **Status:** shipped in 0.17.0 (#93).
 
 ---
 
@@ -421,7 +421,7 @@ codes. C-4 is breaking and ships with 0.17.
   the same time; neither can read or book the other's.
 - **Breaking:** for anyone relying on a code being unique across
   organizations.
-- **Status:** built for 0.17 and held until 0.16.0 is out. The organization
+- **Status:** shipped in 0.17.0 (#97). The organization
   comes from the caller, another organization's rows answer `404`, a user's
   id and email address stay unique across the deployment, and a second
   organization is made with `chronos-engine organization create`. Which keys
