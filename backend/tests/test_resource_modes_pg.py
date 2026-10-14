@@ -12,14 +12,14 @@ This file can.
 Skipped without TEST_DATABASE_URL, the same as the other *_pg.py files.
 """
 
+import asyncio
 import datetime
 import os
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 
+import httpx
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, delete, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -190,6 +190,30 @@ def crowd(engine):
             session.commit()
 
 
+async def _crowd(email: str, resource_id: int) -> list[httpx.Response]:
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        token = await client.post(
+            "/api/v1/auth/login", json={"email": email, "password": ADMIN_PASSWORD}
+        )
+        assert token.status_code == 200, token.text
+        bearer = {"Authorization": f"Bearer {token.json()['access_token']}"}
+
+        def book(n: int):
+            return client.post(
+                f"/api/v1/resources/{resource_id}/reservations",
+                headers={**bearer, "Idempotency-Key": f"pg-crowd-{n:04d}"},
+                json={
+                    "date": DAY.isoformat(),
+                    "start": "09:00:00",
+                    "end": "10:00:00",
+                    "purpose": f"Patient {n}",
+                },
+            )
+
+        return await asyncio.gather(*(book(n) for n in range(CALLERS)))
+
+
 def test_forty_callers_at_once_get_exactly_twelve_of_twelve(engine, crowd):
     """Forty bookings of one unit each, on a pool of twelve, all at once.
 
@@ -218,27 +242,13 @@ def test_forty_callers_at_once_get_exactly_twelve_of_twelve(engine, crowd):
     app.dependency_overrides[get_db] = own_session
     app.dependency_overrides[get_session_opener] = lambda: own_open_session
     try:
-        # Not entered as a context manager: that runs the app's startup,
-        # which connects to the configured database, not this one.
-        client = TestClient(app)
-        token = client.post("/api/v1/auth/login", json={"email": email, "password": ADMIN_PASSWORD})
-        assert token.status_code == 200, token.text
-        bearer = {"Authorization": f"Bearer {token.json()['access_token']}"}
-
-        def book(n: int):
-            return client.post(
-                f"/api/v1/resources/{resource_id}/reservations",
-                headers={**bearer, "Idempotency-Key": f"pg-crowd-{n:04d}"},
-                json={
-                    "date": DAY.isoformat(),
-                    "start": "09:00:00",
-                    "end": "10:00:00",
-                    "purpose": f"Patient {n}",
-                },
-            )
-
-        with ThreadPoolExecutor(max_workers=CALLERS) as pool:
-            answers = list(pool.map(book, range(CALLERS)))
+        # One event loop for all forty, as a server has. The app's
+        # ConcurrencyGate holds an asyncio.Semaphore, and a TestClient gives
+        # each request a loop of its own, which that semaphore refuses. The
+        # handlers still run side by side in the threadpool. ASGITransport
+        # also skips the app's startup, which would connect to the configured
+        # database rather than this one.
+        answers = asyncio.run(_crowd(email, resource_id))
     finally:
         app.dependency_overrides.clear()
 
