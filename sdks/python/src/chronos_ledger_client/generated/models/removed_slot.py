@@ -21,8 +21,6 @@ class RemovedSlot:
         activity_code (str):
         rrule (str):  Example: FREQ=WEEKLY;BYDAY=MO.
         dtstart (datetime.date):
-        day_of_week_index (int): The ISO weekday of the slot's first date. Use rrule and dtstart. Sent through 0.17 and
-            then removed.
         time_window_start (str):
         ledger_rows_removed (int): Days from today on that the slot had produced, now withdrawn.
         ledger_rows_detached (int): Days already past, kept with everything recorded on them and no longer pointing at a
@@ -34,7 +32,6 @@ class RemovedSlot:
     activity_code: str
     rrule: str
     dtstart: datetime.date
-    day_of_week_index: int
     time_window_start: str
     ledger_rows_removed: int
     ledger_rows_detached: int
@@ -49,8 +46,6 @@ class RemovedSlot:
         rrule = self.rrule
 
         dtstart = self.dtstart.isoformat()
-
-        day_of_week_index = self.day_of_week_index
 
         time_window_start = self.time_window_start
 
@@ -72,7 +67,6 @@ class RemovedSlot:
                 "activity_code": activity_code,
                 "rrule": rrule,
                 "dtstart": dtstart,
-                "day_of_week_index": day_of_week_index,
                 "time_window_start": time_window_start,
                 "ledger_rows_removed": ledger_rows_removed,
                 "ledger_rows_detached": ledger_rows_detached,
@@ -94,8 +88,6 @@ class RemovedSlot:
 
         dtstart = datetime.date.fromisoformat(d.pop("dtstart"))
 
-        day_of_week_index = d.pop("day_of_week_index")
-
         time_window_start = d.pop("time_window_start")
 
         ledger_rows_removed = d.pop("ledger_rows_removed")
@@ -116,7 +108,6 @@ class RemovedSlot:
             activity_code=activity_code,
             rrule=rrule,
             dtstart=dtstart,
-            day_of_week_index=day_of_week_index,
             time_window_start=time_window_start,
             ledger_rows_removed=ledger_rows_removed,
             ledger_rows_detached=ledger_rows_detached,

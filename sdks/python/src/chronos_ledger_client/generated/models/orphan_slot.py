@@ -20,8 +20,6 @@ class OrphanSlot:
         activity_code (str):
         rrule (str):  Example: FREQ=WEEKLY;BYDAY=MO.
         dtstart (datetime.date):
-        day_of_week_index (int): The ISO weekday of the slot's first date. Use rrule and dtstart. Sent through 0.17 and
-            then removed.
         time_window_start (str):
         room (None | str | Unset):
     """
@@ -30,7 +28,6 @@ class OrphanSlot:
     activity_code: str
     rrule: str
     dtstart: datetime.date
-    day_of_week_index: int
     time_window_start: str
     room: None | str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
@@ -43,8 +40,6 @@ class OrphanSlot:
         rrule = self.rrule
 
         dtstart = self.dtstart.isoformat()
-
-        day_of_week_index = self.day_of_week_index
 
         time_window_start = self.time_window_start
 
@@ -62,7 +57,6 @@ class OrphanSlot:
                 "activity_code": activity_code,
                 "rrule": rrule,
                 "dtstart": dtstart,
-                "day_of_week_index": day_of_week_index,
                 "time_window_start": time_window_start,
             }
         )
@@ -82,8 +76,6 @@ class OrphanSlot:
 
         dtstart = datetime.date.fromisoformat(d.pop("dtstart"))
 
-        day_of_week_index = d.pop("day_of_week_index")
-
         time_window_start = d.pop("time_window_start")
 
         def _parse_room(data: object) -> None | str | Unset:
@@ -100,7 +92,6 @@ class OrphanSlot:
             activity_code=activity_code,
             rrule=rrule,
             dtstart=dtstart,
-            day_of_week_index=day_of_week_index,
             time_window_start=time_window_start,
             room=room,
         )

@@ -253,7 +253,7 @@ def test_a_moved_weekday_is_refused_while_a_marked_day_stands(client, db, seed_u
 
     db.expire_all()
     # Refused means nothing moved, not the weekday moved and the day survived.
-    assert _slots(db)[0].day_of_week_index == TOMORROW.isoweekday()
+    assert _slots(db)[0].dtstart.isoweekday() == TOMORROW.isoweekday()
     assert db.query(DailyLedger).count() == 1
 
 
@@ -303,7 +303,7 @@ def test_a_slot_cannot_be_patched_out_of_a_field_it_needs(client, db, seed_users
 
     db.expire_all()
     kept = _slots(db)[0]
-    assert (kept.day_of_week_index, kept.time_window_start, kept.time_window_end) == (
+    assert (kept.dtstart.isoweekday(), kept.time_window_start, kept.time_window_end) == (
         TOMORROW.isoweekday(),
         datetime.time(9, 0),
         datetime.time(10, 0),

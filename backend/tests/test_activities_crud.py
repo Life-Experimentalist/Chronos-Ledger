@@ -114,7 +114,7 @@ def _ledger_snapshot(db):
         record = {name: getattr(row, name) for name in columns}
         record["activity_id"] = db.get(Activity, row.activity_id).activity_code
         slot = db.get(StructuralMasterSlot, row.master_slot_id)
-        record["master_slot_id"] = (slot.day_of_week_index, slot.time_window_start)
+        record["master_slot_id"] = (slot.dtstart.isoweekday(), slot.time_window_start)
         record["resource_id"] = db.get(Resource, row.resource_id).code
         rows.append(record)
     return sorted(rows, key=lambda r: (r["target_date"], r["time_window_start"]))

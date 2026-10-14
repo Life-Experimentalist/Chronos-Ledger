@@ -19,8 +19,6 @@ class MasterSlotResponse:
         id (int | Unset):
         rrule (str | Unset):  Example: FREQ=WEEKLY;BYDAY=MO.
         dtstart (datetime.date | Unset): The first date the rule gives. Always one of its dates.
-        day_of_week_index (int | Unset): The ISO weekday of the slot's first date, worked out from rrule and dtstart.
-            Sent through 0.17 and then removed. A rule on several weekdays has more than one, and this names only the first.
         time_window_start (str | Unset):
         time_window_end (str | Unset):
         activity_id (int | Unset):
@@ -34,7 +32,6 @@ class MasterSlotResponse:
     id: int | Unset = UNSET
     rrule: str | Unset = UNSET
     dtstart: datetime.date | Unset = UNSET
-    day_of_week_index: int | Unset = UNSET
     time_window_start: str | Unset = UNSET
     time_window_end: str | Unset = UNSET
     activity_id: int | Unset = UNSET
@@ -52,8 +49,6 @@ class MasterSlotResponse:
         dtstart: str | Unset = UNSET
         if not isinstance(self.dtstart, Unset):
             dtstart = self.dtstart.isoformat()
-
-        day_of_week_index = self.day_of_week_index
 
         time_window_start = self.time_window_start
 
@@ -96,8 +91,6 @@ class MasterSlotResponse:
             field_dict["rrule"] = rrule
         if dtstart is not UNSET:
             field_dict["dtstart"] = dtstart
-        if day_of_week_index is not UNSET:
-            field_dict["day_of_week_index"] = day_of_week_index
         if time_window_start is not UNSET:
             field_dict["time_window_start"] = time_window_start
         if time_window_end is not UNSET:
@@ -128,8 +121,6 @@ class MasterSlotResponse:
             dtstart = UNSET
         else:
             dtstart = datetime.date.fromisoformat(_dtstart)
-
-        day_of_week_index = d.pop("day_of_week_index", UNSET)
 
         time_window_start = d.pop("time_window_start", UNSET)
 
@@ -185,7 +176,6 @@ class MasterSlotResponse:
             id=id,
             rrule=rrule,
             dtstart=dtstart,
-            day_of_week_index=day_of_week_index,
             time_window_start=time_window_start,
             time_window_end=time_window_end,
             activity_id=activity_id,

@@ -823,8 +823,6 @@ def list_master_slots(
             "id": s.id,
             "rrule": s.rrule,
             "dtstart": s.dtstart.isoformat(),
-            # Deprecated: derived from the rule, returned through 0.17.
-            "day_of_week_index": s.day_of_week_index,
             "time_window_start": str(s.time_window_start),
             "time_window_end": str(s.time_window_end),
             "activity_id": s.activity_id,

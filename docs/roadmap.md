@@ -320,8 +320,8 @@ integration contract applies.
   organization's timezone, replacing `day_of_week_index`. Existing slots
   migrate to `FREQ=WEEKLY;BYDAY=..`. Expansion uses `dateutil.rrule` and is
   DST-correct: a weekly 09:00 stays 09:00 local time all year.
-- **API:** slots return `rrule` and `dtstart`. `day_of_week_index` is still
-  returned, derived, through 0.17, and removed after.
+- **API:** slots return `rrule` and `dtstart`. `day_of_week_index` was
+  returned, derived, through 0.17, and was removed after it.
 - **Done when:** a weekly slot across a DST change materializes at the same
   local time on both sides; migrated slots materialize the same days as before.
 - **Status:** built in #91 for 0.17.

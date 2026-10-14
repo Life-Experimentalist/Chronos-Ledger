@@ -1419,10 +1419,6 @@ type MasterSlotCreate struct {
 type MasterSlotResponse struct {
 	ActivityId *int `json:"activity_id,omitempty"`
 
-	// DayOfWeekIndex The ISO weekday of the slot's first date, worked out from rrule and dtstart. Sent through 0.17 and then removed. A rule on several weekdays has more than one, and this names only the first.
-	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-	DayOfWeekIndex *int `json:"day_of_week_index,omitempty"`
-
 	// Dtstart The first date the rule gives. Always one of its dates.
 	Dtstart       *openapi_types.Date `json:"dtstart,omitempty"`
 	Id            *int                `json:"id,omitempty"`
@@ -1456,12 +1452,8 @@ type MasterSlotUpdate struct {
 
 // NotRemovedSlot A slot the upload did not remove, as it was listed in `not_in_file`. It stays on the timetable with all its days.
 type NotRemovedSlot struct {
-	ActivityCode string `json:"activity_code"`
-
-	// DayOfWeekIndex The ISO weekday of the slot's first date. Use rrule and dtstart. Sent through 0.17 and then removed.
-	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-	DayOfWeekIndex int                `json:"day_of_week_index"`
-	Dtstart        openapi_types.Date `json:"dtstart"`
+	ActivityCode string             `json:"activity_code"`
+	Dtstart      openapi_types.Date `json:"dtstart"`
 
 	// Id What DELETE /schedule/slots/{slot_id} takes, if it should go.
 	Id int `json:"id"`
@@ -1515,12 +1507,8 @@ type OrphanEnrollment struct {
 
 // OrphanSlot defines model for OrphanSlot.
 type OrphanSlot struct {
-	ActivityCode string `json:"activity_code"`
-
-	// DayOfWeekIndex The ISO weekday of the slot's first date. Use rrule and dtstart. Sent through 0.17 and then removed.
-	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-	DayOfWeekIndex int                `json:"day_of_week_index"`
-	Dtstart        openapi_types.Date `json:"dtstart"`
+	ActivityCode string             `json:"activity_code"`
+	Dtstart      openapi_types.Date `json:"dtstart"`
 
 	// Id What DELETE /schedule/slots/{slot_id} takes, if it should go.
 	Id              int     `json:"id"`
@@ -1583,12 +1571,8 @@ type RefreshRequest struct {
 
 // RemovedSlot A slot the upload removed, as it was listed in `not_in_file`.
 type RemovedSlot struct {
-	ActivityCode string `json:"activity_code"`
-
-	// DayOfWeekIndex The ISO weekday of the slot's first date. Use rrule and dtstart. Sent through 0.17 and then removed.
-	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-	DayOfWeekIndex int                `json:"day_of_week_index"`
-	Dtstart        openapi_types.Date `json:"dtstart"`
+	ActivityCode string             `json:"activity_code"`
+	Dtstart      openapi_types.Date `json:"dtstart"`
 
 	// Id What DELETE /schedule/slots/{slot_id} takes, if it should go.
 	Id int `json:"id"`

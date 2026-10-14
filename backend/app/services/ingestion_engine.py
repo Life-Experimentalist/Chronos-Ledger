@@ -690,8 +690,6 @@ class ChronosIngestionEngine:
                 "activity_code": codes[slot.activity_id],
                 "rrule": slot.rrule,
                 "dtstart": slot.dtstart.isoformat(),
-                # Deprecated: derived from the rule, returned through 0.17.
-                "day_of_week_index": slot.day_of_week_index,
                 "time_window_start": str(slot.time_window_start),
                 "room": slot.target_room_identifier,
             }
@@ -717,7 +715,7 @@ class ChronosIngestionEngine:
                 slots,
                 key=lambda s: (
                     s["activity_code"],
-                    s["day_of_week_index"],
+                    s["dtstart"],
                     s["time_window_start"],
                 ),
             ),
