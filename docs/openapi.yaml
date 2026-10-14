@@ -10,7 +10,7 @@ openapi: "3.1.0"
 
 info:
   title: Chronos Ledger API
-  version: "0.15.0" # x-release-please-version
+  version: "0.16.0" # x-release-please-version
   description: |
     Organization Schedule & Attendance Management REST API.
 
@@ -481,7 +481,7 @@ components:
           minLength: 1
           maxLength: 100
           description: What this key is for, so it can be recognized in the list.
-          example: PulseWard HMS
+          example: Hospital information system
         user_id:
           type: string
           description: >
@@ -6245,6 +6245,7 @@ paths:
       description: >
         Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per
         request under `/api/v1` with a method other than GET, HEAD or OPTIONS,
+        and one per GET of the conflict report (`schedule.listConflicts`),
         including refused ones. Bodies are never stored. `from` and `to` are
         dates in the organization's timezone, both included.
       parameters:

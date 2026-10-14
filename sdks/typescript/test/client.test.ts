@@ -68,6 +68,48 @@ test("a refused refresh ends in the original 401, without looping", async () => 
   assert.equal(seen.length, 2);
 });
 
+for (const failure of ["refused", "no JSON", "no refresh token"] as const) {
+  test(`a refresh that fails (${failure}) ends in the original 401`, async () => {
+    const { seen, fetch } = server((request) => {
+      if (request.url.endsWith("/auth/refresh")) {
+        if (failure === "refused") throw new TypeError("fetch failed");
+        return failure === "no JSON" ? new Response("oops", { status: 200 }) : json(200, { access_token: "a2" });
+      }
+      return json(401, { detail: "expired" });
+    });
+    const stored: unknown[] = [];
+    const chronos = createChronosClient({
+      baseUrl: "https://c.test",
+      tokens: { accessToken: "a1", refreshToken: "r1" },
+      onTokens: (tokens) => void stored.push(tokens),
+      fetch,
+    });
+    await assert.rejects(chronos.GET("/api/v1/resources/"), { status: 401, detail: "expired" });
+    assert.equal(seen.length, 2);
+    assert.deepEqual(stored, []);
+  });
+}
+
+test("a file upload is not sent again after a token refresh", async () => {
+  const { seen, fetch } = server(() => json(401, { detail: "expired" }));
+  const send = chronosFetch({
+    baseUrl: "https://c.test",
+    tokens: { accessToken: "a1", refreshToken: "r1" },
+    retry: resolveRetry({}),
+    fetch,
+    sleep: noSleep,
+  });
+  const form = new FormData();
+  form.set("file", new Blob(["member_id,unit\n1,A\n"], { type: "text/csv" }), "matrix.csv");
+  await assert.rejects(send(new Request("https://c.test/api/v1/ingestion/upload-csv", { method: "POST", body: form })), {
+    status: 401,
+  });
+  assert.deepEqual(
+    seen.map((r) => new URL(r.url).pathname),
+    ["/api/v1/ingestion/upload-csv"],
+  );
+});
+
 test("requests that see a 401 together spend the refresh token once", async () => {
   let refreshes = 0;
   const { fetch } = server(async (request) => {
@@ -157,6 +199,8 @@ test("Retry-After reads seconds and HTTP dates", () => {
   const ms = retryAfter(new Response(null, { headers: { "Retry-After": later } }))!;
   assert.ok(ms > 3000 && ms <= 5000);
   assert.equal(retryAfter(new Response(null)), undefined);
+  assert.equal(retryAfter(new Response(null, { headers: { "Retry-After": "-1" } })), undefined);
+  assert.equal(retryAfter(new Response(null, { headers: { "Retry-After": "nan" } })), undefined);
 });
 
 test("a non-JSON error body is kept as text", async () => {

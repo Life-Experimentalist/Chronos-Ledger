@@ -245,3 +245,57 @@ def test_the_retried_body_is_the_same_body():
     harness = Harness(scripted(httpx.Response(503), httpx.Response(200, json={})), RetryPolicy())
     harness.http.post("/api/v1/resources/", json={"code": "R1"})
     assert [json.loads(r.content) for r in harness.seen] == [{"code": "R1"}, {"code": "R1"}]
+
+
+UPLOAD = {"file": ("matrix.csv", b"member_id,unit\n1,A\n", "text/csv")}
+
+
+def test_a_file_upload_is_sent_once_even_when_the_status_is_retryable():
+    answers = scripted(httpx.Response(503, json={"detail": "down"}), httpx.Response(200, json={}))
+    harness = Harness(answers, RetryPolicy())
+    with pytest.raises(chronos.ChronosError) as caught:
+        harness.http.post("/api/v1/ingestion/upload-csv", files=UPLOAD)
+    assert caught.value.status == 503
+    assert len(harness.seen) == 1
+    assert harness.waits == []
+    assert harness.keys()[0]  # the upload still carries a key, like any write
+
+
+def test_a_file_upload_is_sent_once_when_no_response_arrives():
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadError("connection reset", request=request)
+
+    harness = Harness(refuse, RetryPolicy())
+    with pytest.raises(httpx.ReadError):
+        harness.http.post("/api/v1/ingestion/upload-csv", files=UPLOAD)
+    assert len(harness.seen) == 1
+    assert harness.waits == []
+
+
+def test_a_file_upload_is_not_sent_again_after_a_token_refresh():
+    seen: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(401, json={"detail": "expired"})
+
+    transport = ChronosTransport(
+        base_url="https://c.test",
+        user_agent="test",
+        tokens=chronos.Tokens("a1", "r1"),
+        retry=RetryPolicy(),
+        inner=httpx.MockTransport(handle),
+    )
+    http = httpx.Client(transport=transport, base_url="https://c.test")
+    with pytest.raises(chronos.ChronosError) as caught:
+        http.post("/api/v1/ingestion/upload-csv", files=UPLOAD)
+    assert caught.value.status == 401
+    assert [r.url.path for r in seen] == ["/api/v1/ingestion/upload-csv"]
+
+
+@pytest.mark.parametrize("value", ["-5", "nan"])
+def test_a_retry_after_that_is_not_a_wait_falls_back_to_the_jittered_wait(value):
+    answers = scripted(httpx.Response(503, headers={"Retry-After": value}), httpx.Response(200, json={}))
+    harness = Harness(answers, RetryPolicy())
+    harness.http.get("/api/v1/resources/")
+    assert harness.waits == [0.25]  # rng() is 1.0, so the ceiling of the first retry

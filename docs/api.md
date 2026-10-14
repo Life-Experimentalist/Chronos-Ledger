@@ -533,7 +533,7 @@ meets the gate.
 
 ```json
 {
-  "label": "PulseWard HMS",
+  "label": "Hospital information system",
   "user_id": "SVC001",
   "scopes": ["schedule:read", "resources:read"],
   "expires_at": "2027-01-01T00:00:00Z"
@@ -548,7 +548,7 @@ anybody wants.
 {
   "id": 3,
   "key_prefix": "ck_8Kd2mQ7x",
-  "label": "PulseWard HMS",
+  "label": "Hospital information system",
   "user_id": "SVC001",
   "scopes": "resources:read,schedule:read",
   "expires_at": "2027-01-01T00:00:00Z",
@@ -1461,6 +1461,10 @@ before a check existed, a day kept by a closed cycle, or a row written
 straight into the database can still get in. This route finds them and
 reports them. It never refuses anything and never changes a row.
 
+Every call is written to the [audit log](#audit), refused ones included, with
+the account, the key and the status. The report names who is enrolled where,
+so who read it is kept. The `from` and `to` of the call are not.
+
 ```http
 GET /api/v1/schedule/conflicts?from=2026-01-05&to=2026-01-11
 ```
@@ -2341,8 +2345,8 @@ tokens and the signing key are never in it.
 
 Every export is written to the audit log with the account, the key and the
 status, although it is a `GET`: it hands out the whole organization. A request
-refused before the route runs (`401`, `403`) is not recorded, like any other
-refused read.
+refused before the route runs (`401`, `403`) is not recorded, unlike a refused
+call to the conflict report.
 
 There is no import route: `chronos-engine import` loads an archive into an
 empty database.
@@ -2362,8 +2366,11 @@ nobody is signed in yet when it arrives; `POST /auth/federated` is the
 exception and names the account it handed the session to, which on a first
 sign-in reads as the account having been created by its own arrival. A
 refused exchange is recorded with no account, like any other refusal.
-One read is recorded too: [GET /admin/export](#get-adminexport-org_admin),
-once it has run.
+Two reads are recorded too. [GET /admin/export](#get-adminexport-org_admin)
+is, once it has run. [GET /schedule/conflicts](#get-scheduleconflictsfromto-org_admin-unit_admin)
+is as well, and like a write it is recorded when it is refused: a `401`, a
+`403`, a `422` for a bad range. Its row holds the path and not the query
+string, so the dates asked for are not kept. Every other read leaves nothing.
 
 Records point at no other table, so deleting an account or revoking a key
 leaves its history. If a record cannot be written the request still succeeds

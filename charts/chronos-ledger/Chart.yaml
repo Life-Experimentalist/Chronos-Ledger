@@ -5,8 +5,8 @@ description: Chronos Ledger, the schedule and attendance server, against an exte
 type: application
 # Both lines move with each release (release-please-config.json). The image
 # tag is "v" plus appVersion, because that is how cd.yml tags a release.
-version: 0.15.0 # x-release-please-version
-appVersion: "0.15.0" # x-release-please-version
+version: 0.16.0 # x-release-please-version
+appVersion: "0.16.0" # x-release-please-version
 kubeVersion: ">=1.25.0-0"
 home: https://github.com/Life-Experimentalist/Chronos-Ledger
 sources:

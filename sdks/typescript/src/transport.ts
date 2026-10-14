@@ -65,6 +65,8 @@ const RETRY_STATUSES = new Set([429, 502, 503, 504]);
 const IN_PROGRESS_CODE = "IDEMPOTENCY_KEY_IN_PROGRESS";
 /** Methods that change nothing. Every other method is a write and goes out with an Idempotency-Key. */
 const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+/** A file upload goes out as this content type. Its body is sent once and never retried. */
+const MULTIPART_PREFIX = "multipart/";
 const USER_AGENT = `chronos-ts/${VERSION}`;
 
 /** The `fetch` handed to openapi-fetch. Auth, retries and errors happen here. */
@@ -88,16 +90,23 @@ export function chronosFetch(options: TransportOptions): (request: Request) => P
   // is spent on first use, so a second refresh would sign the caller out.
   const refresh = (current: Tokens): Promise<boolean> => {
     refreshing ??= (async () => {
-      const response = await options.fetch(`${options.baseUrl}/api/v1/auth/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "User-Agent": USER_AGENT },
-        body: JSON.stringify({ refresh_token: current.refreshToken }),
-      });
-      if (!response.ok) {
-        await response.body?.cancel();
+      // Any failure here ends in the caller's original 401, not in a new error.
+      let body: { access_token?: unknown; refresh_token?: unknown };
+      try {
+        const response = await options.fetch(`${options.baseUrl}/api/v1/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "User-Agent": USER_AGENT },
+          body: JSON.stringify({ refresh_token: current.refreshToken }),
+        });
+        if (!response.ok) {
+          await response.body?.cancel();
+          return false;
+        }
+        body = (await response.json()) as typeof body;
+      } catch {
         return false;
       }
-      const body = (await response.json()) as { access_token: string; refresh_token: string };
+      if (typeof body?.access_token !== "string" || typeof body.refresh_token !== "string") return false;
       tokens = { accessToken: body.access_token, refreshToken: body.refresh_token };
       await options.onTokens?.(tokens);
       return true;
@@ -111,6 +120,8 @@ export function chronosFetch(options: TransportOptions): (request: Request) => P
     // One key for the whole call, so every try of a write is the same write.
     const idempotencyKey =
       READ_METHODS.has(request.method) || request.headers.has("Idempotency-Key") ? undefined : crypto.randomUUID();
+    // A file upload is sent once: no retry and no resend after a token refresh.
+    const repeatable = !request.headers.get("Content-Type")?.toLowerCase().startsWith(MULTIPART_PREFIX);
     const started = now();
     let refreshed = false;
     let attempt = 0;
@@ -118,7 +129,7 @@ export function chronosFetch(options: TransportOptions): (request: Request) => P
     /** Milliseconds to sleep before the next try, or undefined when this failure is final. */
     const waitFor = (response?: Response): number | undefined => {
       const policy = options.retry;
-      if (!policy || attempt + 1 >= policy.maxAttempts) return undefined;
+      if (!policy || !repeatable || attempt + 1 >= policy.maxAttempts) return undefined;
       const ceiling = Math.min(policy.maxDelayMs, policy.baseDelayMs * 2 ** attempt);
       const wait = (response && retryAfter(response)) ?? random() * ceiling;
       return now() + wait - started > policy.deadlineMs ? undefined : wait;
@@ -143,7 +154,7 @@ export function chronosFetch(options: TransportOptions): (request: Request) => P
         continue;
       }
 
-      if (response.status === 401 && sentWith && !options.apiKey && !refreshed) {
+      if (response.status === 401 && sentWith && !options.apiKey && !refreshed && repeatable) {
         refreshed = true;
         // Another request may have refreshed while this one was out.
         if (sentWith !== tokens || (await refresh(sentWith))) {
@@ -170,7 +181,8 @@ export function retryAfter(response: Response): number | undefined {
   const value = response.headers.get("Retry-After");
   if (!value) return undefined;
   const seconds = Number(value);
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  // A negative or NaN value is not a wait: the caller falls back to the jittered one.
+  if (!Number.isNaN(seconds)) return seconds < 0 ? undefined : Math.min(seconds, 1e9) * 1000;
   const date = Date.parse(value);
   return Number.isNaN(date) ? undefined : Math.max(0, date - Date.now());
 }

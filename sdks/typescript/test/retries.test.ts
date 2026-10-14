@@ -208,3 +208,33 @@ test("the retried body is the same body", async () => {
   const bodies = await Promise.all(h.seen.map((r) => r.json()));
   assert.deepEqual(bodies, [{ code: "R1" }, { code: "R1" }]);
 });
+
+const upload = () => {
+  const form = new FormData();
+  form.set("file", new Blob(["member_id,unit\n1,A\n"], { type: "text/csv" }), "matrix.csv");
+  return new Request("https://c.test/api/v1/ingestion/upload-csv", { method: "POST", body: form });
+};
+
+test("a file upload is sent once even when the status is retryable", async () => {
+  const h = harness([json(503, { detail: "down" }), json(200)]);
+  await assert.rejects(h.send(upload()), { status: 503 });
+  assert.equal(h.seen.length, 1);
+  assert.deepEqual(h.waits, []);
+  assert.ok(h.keys()[0]); // the upload still carries a key, like any write
+});
+
+test("a file upload is sent once when no response arrives", async () => {
+  const failure = new TypeError("fetch failed");
+  const h = harness([failure, json(200)]);
+  await assert.rejects(h.send(upload()), (error) => error === failure);
+  assert.equal(h.seen.length, 1);
+  assert.deepEqual(h.waits, []);
+});
+
+for (const [name, value] of [["negative", "-5"], ["NaN", "nan"]] as const) {
+  test(`a ${name} Retry-After falls back to the jittered wait`, async () => {
+    const h = harness([json(503, {}, { "Retry-After": value }), json(200)]);
+    await h.send(new Request(URL));
+    assert.deepEqual(h.waits, [250]); // random() is 1, so the ceiling of the first retry
+  });
+}

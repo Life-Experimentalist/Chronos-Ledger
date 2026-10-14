@@ -2802,7 +2802,7 @@ type ClientInterface interface {
 
 	// AuditList Writes made through the API, newest first
 	//
-	// Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
+	// Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, and one per GET of the conflict report (`schedule.listConflicts`), including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
 	//
 	// Corresponds with GET /api/v1/audit/ (the `AuditList` operationId).
 	AuditList(ctx context.Context, params *AuditListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -4180,7 +4180,7 @@ func (c *Client) AttendanceMark(ctx context.Context, params *AttendanceMarkParam
 
 // AuditList Writes made through the API, newest first
 //
-// Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
+// Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, and one per GET of the conflict report (`schedule.listConflicts`), including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
 //
 // Corresponds with GET /api/v1/audit/ (the `AuditList` operationId).
 func (c *Client) AuditList(ctx context.Context, params *AuditListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -11919,7 +11919,7 @@ type ClientWithResponsesInterface interface {
 
 	// AuditListWithResponse Writes made through the API, newest first
 	//
-	// Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
+	// Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, and one per GET of the conflict report (`schedule.listConflicts`), including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -20027,7 +20027,7 @@ func (c *ClientWithResponses) AttendanceMarkWithResponse(ctx context.Context, pa
 
 // AuditListWithResponse Writes made through the API, newest first
 //
-// Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
+// Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, and one per GET of the conflict report (`schedule.listConflicts`), including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
 //
 // Returns a wrapper object for the known response body format(s).
 //
