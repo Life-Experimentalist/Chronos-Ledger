@@ -20,6 +20,8 @@ RETRY_STATUSES = frozenset({429, 502, 503, 504})
 IN_PROGRESS_CODE = "IDEMPOTENCY_KEY_IN_PROGRESS"
 #: Methods that change nothing. Every other method is a write and goes out with an Idempotency-Key.
 READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+#: A file upload goes out as this content type. Its body is sent once and never retried.
+MULTIPART_PREFIX = "multipart/"
 #: Failures where no response arrived: a refused or dropped connection, a timeout.
 NO_RESPONSE_ERRORS = (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError)
 
@@ -101,9 +103,12 @@ def retry_after(response: httpx.Response) -> float | None:
     if not value:
         return None
     try:
-        return max(0.0, float(value))
+        seconds = float(value)
     except ValueError:
         pass
+    else:
+        # A negative or NaN value is not a wait: fall back to the jittered one.
+        return seconds if seconds >= 0 else None
     try:
         when = email.utils.parsedate_to_datetime(value)
     except (TypeError, ValueError):
@@ -157,19 +162,24 @@ class ChronosTransport(httpx.BaseTransport):
                 headers={"User-Agent": self._user_agent},
                 json={"refresh_token": sent_with.refresh_token},
             )
-            response = self._inner.handle_request(request)
-            response.read()
-            if response.status_code != 200:
+            # Any failure here ends in the caller's original 401, not in a new error.
+            try:
+                response = self._inner.handle_request(request)
+                response.read()
+                if response.status_code != 200:
+                    return False
+                body = response.json()
+                self._tokens = Tokens(body["access_token"], body["refresh_token"])
+            except (httpx.TransportError, ValueError, KeyError, TypeError):
                 return False
-            body = response.json()
-            self._tokens = Tokens(body["access_token"], body["refresh_token"])
             if self._on_tokens:
                 self._on_tokens(self._tokens)
             return True
 
-    def _wait_for(self, attempt: int, response: httpx.Response | None, started: float) -> float | None:
+    def _wait_for(
+        self, policy: RetryPolicy | None, attempt: int, response: httpx.Response | None, started: float
+    ) -> float | None:
         """Seconds to sleep before the next try, or None when this failure is final."""
-        policy = self._retry
         if policy is None or attempt + 1 >= policy.max_attempts:
             return None
         wait = retry_after(response) if response is not None else None
@@ -184,6 +194,9 @@ class ChronosTransport(httpx.BaseTransport):
         # One key for the whole call, so every try of a write is the same write.
         if request.method not in READ_METHODS and "Idempotency-Key" not in request.headers:
             request.headers["Idempotency-Key"] = str(uuid.uuid4())
+        # A file upload is sent once: no retry and no resend after a token refresh.
+        repeatable = not request.headers.get("Content-Type", "").lower().startswith(MULTIPART_PREFIX)
+        policy = self._retry if repeatable else None
         started = self._clock()
         refreshed = False
         attempt = 0
@@ -193,14 +206,15 @@ class ChronosTransport(httpx.BaseTransport):
             try:
                 response = self._inner.handle_request(request)
             except NO_RESPONSE_ERRORS:
-                wait = self._wait_for(attempt, None, started)
+                wait = self._wait_for(policy, attempt, None, started)
                 if wait is None:
                     raise
                 self._sleep(wait)
                 attempt += 1
                 continue
 
-            if response.status_code == 401 and sent_with and not self._api_key and not refreshed:
+            may_refresh = sent_with and not self._api_key and not refreshed and repeatable
+            if response.status_code == 401 and may_refresh:
                 refreshed = True
                 if self._refresh(sent_with):
                     response.close()
@@ -210,7 +224,7 @@ class ChronosTransport(httpx.BaseTransport):
             error = ChronosError.from_response(response)
             response.close()
             if response.status_code in RETRY_STATUSES or error.code == IN_PROGRESS_CODE:
-                wait = self._wait_for(attempt, response, started)
+                wait = self._wait_for(policy, attempt, response, started)
                 if wait is not None:
                     self._sleep(wait)
                     attempt += 1
