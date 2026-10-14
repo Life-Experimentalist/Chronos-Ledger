@@ -304,6 +304,7 @@ release; it is described with the integration contract below.
 - **Done when:** changing a room in the CSV and re-importing changes the room
   on future days; a day with recorded attendance is left as it was and listed
   in the import report.
+- **Status:** built in PR #95, held for 0.17.
 
 ### E-7. Exclusion on materialized instances
 
