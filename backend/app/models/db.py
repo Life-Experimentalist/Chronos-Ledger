@@ -717,7 +717,8 @@ class ApiKey(Base):
 
 
 class AuditRecord(Base):
-    """One write made through the API: who, with which key, what, and how it ended.
+    """One write made through the API, or one read of the conflict report: who, with
+    which key, what, and how it ended.
 
     No foreign keys on purpose. A record has to outlive the account and the
     key that made it, and a user deleted with ON DELETE CASCADE would take
