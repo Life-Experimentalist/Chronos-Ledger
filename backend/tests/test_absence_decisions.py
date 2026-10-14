@@ -21,6 +21,7 @@ from app.models.db import (
     ReverseRsvpLog,
     StructuralMasterSlot,
 )
+from app.services.resource import get_or_create_room
 from app.services.reverse_rsvp import commit_absence_override
 from tests.conftest import weekly
 
@@ -53,7 +54,7 @@ def _materialized_day(db, seed_users):
             time_window_end=datetime.time(10, 0),
             activity_id=offering.id,
             primary_lead_id=seed_users["staff"].id,
-            target_room_identifier="LH-101",
+            resource_id=get_or_create_room("LH-101", db).id,
         )
     )
     db.commit()

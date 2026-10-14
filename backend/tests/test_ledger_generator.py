@@ -17,6 +17,7 @@ from app.models.db import (
     ReverseRsvpLog,
     StructuralMasterSlot,
 )
+from app.services.resource import get_or_create_room
 from tests.conftest import weekly
 
 # 2026-09-07 is a Monday: isoweekday() == 1.
@@ -46,7 +47,7 @@ def _build_slot(db, seed_users, active=True, day_index=1):
         time_window_end=datetime.time(10, 0),
         activity_id=offering.id,
         primary_lead_id=seed_users["staff"].id,
-        target_room_identifier="LH-101",
+        resource_id=get_or_create_room("LH-101", db).id,
     )
     db.add(slot)
     db.commit()
@@ -171,7 +172,7 @@ def test_the_startup_catch_up_writes_what_a_restart_missed(db, seed_users, monke
         time_window_end=datetime.time(10, 0),
         activity_id=monday.activity_id,
         primary_lead_id=seed_users["staff"].id,
-        target_room_identifier="LH-101",
+        resource_id=get_or_create_room("LH-101", db).id,
     )
     db.add(tuesday)
     db.commit()

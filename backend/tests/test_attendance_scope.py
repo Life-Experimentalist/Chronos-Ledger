@@ -21,6 +21,7 @@ from app.models.db import (
     VerificationLedger,
     VerificationMetric,
 )
+from app.services.resource import get_or_create_room
 from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, login
 
 TODAY = org_today()
@@ -90,7 +91,7 @@ def _world(db):
             target_date=TODAY,
             activity_id=activity.id,
             active_lead_id=lead,
-            target_room_identifier="LH-800",
+            resource_id=get_or_create_room("LH-800", db).id,
         )
         db.add(ledger)
         db.flush()

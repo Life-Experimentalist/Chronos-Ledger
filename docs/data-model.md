@@ -78,7 +78,6 @@ erDiagram
         int activity_id FK "→ Activity.id"
         string primary_lead_id FK "→ User.id (nullable)"
         int resource_id FK "→ Resource.id (nullable)"
-        string target_room_identifier "mirror of Resource.code, being retired"
     }
 
     ActivityEnrollment {
@@ -97,7 +96,6 @@ erDiagram
         string active_lead_id FK "→ User.id (nullable)"
         string substitute_lead_id FK "→ User.id (nullable)"
         int resource_id FK "→ Resource.id (nullable)"
-        string target_room_identifier "mirror of Resource.code, being retired"
         string delivery_format "PHYSICAL | ONLINE_STREAM"
         string virtual_connection_string "nullable"
         string operational_state "DynamicState enum"
@@ -304,7 +302,7 @@ Member-to-activity enrollment. Created in bulk by `ingestion_engine` during CSV 
 ### `DailyLedger`
 The materialized daily schedule. Generated nightly from `StructuralMasterSlot` by `cron/ledger_generator.py`. Contains mutable state: `operational_state` (can be flipped to `ON_LEAVE` by an approved absence), substitute lead, and geofence coordinates (overridable per-session for ad-hoc room changes).
 
-`resource_id` is the room. `target_room_identifier` is kept in step with `Resource.code` by every write path so existing readers keep working, and is dropped once they have moved to the key. Correcting a slot's room clears the row's geofence override, because a fence around the room the class has just left would shut out the people who went to the right one.
+`resource_id` is the room, and the only place it is stored. The API's `target_room_identifier` is `Resource.code`, read through the key, so renaming a resource shows up on every slot and day at once. Correcting a slot's room clears the row's geofence override, because a fence around the room the class has just left would shut out the people who went to the right one.
 
 `master_slot_id` is `ON DELETE SET NULL`, not cascade. A class that ran for six weeks and then stopped is the ordinary reason to delete a slot, and the six weeks have to survive it. `DELETE /schedule/slots/{id}` removes the days from today onward, which are still only plans, and refuses outright if any of them carries attendance or a note; the days already past keep everything recorded on them and are left pointing at no slot. `PATCH /schedule/cycles/{id}/close` removes a cycle's days from today onward the same way, except that it keeps the ones carrying attendance or a note instead of refusing. A detached row keeps its hours: `time_window_start` and `time_window_end` are copied from the slot when the day is generated and again when the slot is corrected. A row made without a slot has no window and reads as an all-day event on a calendar feed.
 

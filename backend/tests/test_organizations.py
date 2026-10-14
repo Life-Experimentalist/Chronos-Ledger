@@ -328,6 +328,8 @@ def test_a_rule_based_slot_stamps_its_days_with_its_own_organization(engine):
                 organization_id=organization,
             )
             db.add(offering)
+            room = Resource(code="LH-101", label="LH-101", organization_id=organization)
+            db.add(room)
             db.flush()
             db.add(
                 StructuralMasterSlot(
@@ -335,7 +337,7 @@ def test_a_rule_based_slot_stamps_its_days_with_its_own_organization(engine):
                     time_window_start=datetime.time(9, 0),
                     time_window_end=datetime.time(10, 0),
                     activity_id=offering.id,
-                    target_room_identifier="LH-101",
+                    resource_id=room.id,
                     organization_id=organization,
                 )
             )

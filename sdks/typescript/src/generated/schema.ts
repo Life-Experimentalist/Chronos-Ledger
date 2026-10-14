@@ -2665,7 +2665,7 @@ export interface components {
             primary_lead_id?: string | null;
             /** @description Prefer this over target_room_identifier. */
             resource_id?: number | null;
-            /** @description The room's name, mirrored from the resource. Being retired. */
+            /** @description The room's code, read from the resource. Prefer resource_id. */
             target_room_identifier?: string | null;
             /**
              * Format: date-time
@@ -2724,7 +2724,7 @@ export interface components {
             substitute_lead_id?: string | null;
             /** @description The room this is booked in. Prefer this over target_room_identifier. */
             resource_id?: number | null;
-            /** @description The room's name, mirrored from the resource. Being retired. */
+            /** @description The room's code, read from the resource. Prefer resource_id. */
             target_room_identifier?: string | null;
             delivery_format?: components["schemas"]["ExecutionMode"];
             virtual_connection_string?: string | null;

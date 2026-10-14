@@ -26,7 +26,7 @@ class MasterSlotResponse:
         activity_id (int | Unset):
         primary_lead_id (None | str | Unset):
         resource_id (int | None | Unset): Prefer this over target_room_identifier.
-        target_room_identifier (None | str | Unset): The room's name, mirrored from the resource. Being retired.
+        target_room_identifier (None | str | Unset): The room's code, read from the resource. Prefer resource_id.
         retired_at (datetime.datetime | None | Unset): When the slot was retired, on its own or with its activity. Null
             while it is live.
     """

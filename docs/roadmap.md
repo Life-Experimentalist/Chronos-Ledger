@@ -242,9 +242,10 @@ This release lets a resource be consumed in three ways.
   report understand the modes (`tests/test_resource_modes.py`,
   `tests/test_resource_modes_pg.py`). The mode governs reservations only; the
   timetable stays one class at a time on every resource. Deferred to 0.17:
-  the `resource_requirement` table, and turning `target_room_identifier` into
-  a foreign key, since the CSV import and the slot responses still work by the
-  room's name.
+  the `resource_requirement` table. The other half of the 0.17 work is in:
+  slots and days store only `resource_id`, and `target_room_identifier` in the
+  API is the resource's code, read through the key. The CSV import and the
+  slot requests still take the room by name and resolve it to a resource.
 
 ### E-2. Conflict report
 

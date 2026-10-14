@@ -22,6 +22,7 @@ from app.models.db import (
     ReverseRsvpLog,
     StructuralMasterSlot,
 )
+from app.services.resource import get_or_create_room
 from tests.conftest import ADMIN_PASSWORD, login, weekly
 from tests.test_ingestion import HEADER, _upload
 
@@ -60,7 +61,7 @@ def _week_of_slots(db, offering, lead):
             time_window_end=datetime.time(10, 0),
             activity_id=offering.id,
             primary_lead_id=lead,
-            target_room_identifier="LH-101",
+            resource_id=get_or_create_room("LH-101", db).id,
         )
         db.add(slot)
         slots.append(slot)
@@ -188,7 +189,9 @@ def test_a_refused_row_costs_only_that_row(db, timetable, monkeypatch, caplog):
         fields = real(slot, day, state)
         if not seen:
             seen.append(fields)
-            db.add(ledger_generator.DailyLedger(**fields))
+            # Without the room, so the pre-write overlap check does not drop
+            # the day before the insert it is meant to lose the race at.
+            db.add(ledger_generator.DailyLedger(**{**fields, "resource_id": None}))
             db.flush()
         return fields
 

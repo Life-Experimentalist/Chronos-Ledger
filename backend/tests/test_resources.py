@@ -48,7 +48,6 @@ def test_an_imported_room_becomes_a_resource(client, db, seed_users):
 
     slot = _slots(db)[0]
     assert slot.resource_id == rooms[0].id
-    # The name is kept in step until every reader has moved to the key.
     assert slot.target_room_identifier == "LH-201"
 
 
@@ -135,10 +134,6 @@ def test_a_renamed_room_is_not_read_as_every_class_having_moved(client, db, seed
     room = _rooms(db)[0]
     room.code = "Lecture Hall 201"
     room.label = "Lecture Hall 201"
-    # The string on the slot mirrors the code, so a rename moves it too. The
-    # day still carries the old spelling, which is exactly the state a name
-    # comparison would misread as a move.
-    _slots(db)[0].target_room_identifier = room.code
     db.commit()
 
     result = propagate_slot_corrections(_slots(db), db)
@@ -148,6 +143,25 @@ def test_a_renamed_room_is_not_read_as_every_class_having_moved(client, db, seed
     entry = db.query(DailyLedger).one()
     assert result["ledger_rows_updated"] == 1
     assert entry.latitude_target is not None
+
+
+def test_renaming_a_resource_renames_the_room_on_slots_and_days(client, db, seed_users):
+    """The reason the room is read through the key and not copied onto each row."""
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    assert _upload(client, headers, cycle.id, _csv(_row(room="LH-201"))).status_code == 200
+    assert generate_daily_ledger_entries(TOMORROW, db) == 1
+
+    room = _rooms(db)[0]
+    room.code = "Lecture Hall 201"
+    db.commit()
+
+    slots = client.get("/api/v1/schedule/slots", headers=headers).json()
+    assert [s["target_room_identifier"] for s in slots] == ["Lecture Hall 201"]
+    day = TOMORROW.isoformat()
+    days = client.get(f"/api/v1/schedule/ledger?from={day}&to={day}", headers=headers).json()
+    assert [d["target_room_identifier"] for d in days] == ["Lecture Hall 201"]
+    assert days[0]["resource_id"] == room.id
 
 
 def test_a_slot_created_through_the_api_gets_a_resource(client, db, seed_users):

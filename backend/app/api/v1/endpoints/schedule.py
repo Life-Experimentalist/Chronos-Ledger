@@ -421,7 +421,6 @@ def clone_cycle_offerings(
                     activity_id=new.id,
                     primary_lead_id=slot.primary_lead_id,
                     resource_id=slot.resource_id,
-                    target_room_identifier=slot.target_room_identifier,
                 )
             )
             cloned_slots += 1
@@ -831,14 +830,10 @@ def create_master_slot(
         payload.time_window_start,
         payload.time_window_end,
     )
-    # room.code, not the payload: get_or_create_room strips the name, and a
-    # slot whose mirror is spelled differently from its resource is exactly
-    # the drift the resource table exists to end.
     slot = StructuralMasterSlot(
         **payload.model_dump(exclude={"target_room_identifier", "dtstart"}),
         dtstart=dtstart,
         resource_id=room.id,
-        target_room_identifier=room.code,
     )
     db.add(slot)
     db.commit()
@@ -940,7 +935,6 @@ def update_master_slot(
 
     if moving_to is not None:
         slot.resource_id = moving_to.id
-        slot.target_room_identifier = moving_to.code
     for field, value in fields.items():
         setattr(slot, field, value)
 

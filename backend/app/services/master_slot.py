@@ -103,7 +103,6 @@ def propagate_slot_corrections(
             row.longitude_target = None
             row.altitude_target = None
         row.resource_id = slot.resource_id
-        row.target_room_identifier = slot.target_room_identifier
         row.active_lead_id = slot.primary_lead_id
         row.time_window_start = slot.time_window_start
         row.time_window_end = slot.time_window_end

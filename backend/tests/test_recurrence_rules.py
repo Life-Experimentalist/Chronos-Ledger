@@ -17,6 +17,7 @@ from app.core.config import get_settings
 from app.core.time import org_today
 from app.cron.ledger_generator import generate_daily_ledger_entries
 from app.models.db import Activity, DailyLedger, PlanningCycle, StructuralMasterSlot
+from app.services.resource import get_or_create_room
 from tests.conftest import ADMIN_PASSWORD, login
 from tests.test_ingestion import HEADER, _make_cycle, _upload
 
@@ -60,7 +61,7 @@ def _slot(db, offering, rule, dtstart, start=datetime.time(9, 0), end=datetime.t
         time_window_start=start,
         time_window_end=end,
         activity_id=offering.id,
-        target_room_identifier="LH-101",
+        resource_id=get_or_create_room("LH-101", db).id,
     )
     db.add(slot)
     db.commit()

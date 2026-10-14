@@ -62,7 +62,6 @@ def _slot(db, activity, room, start, end):
         time_window_end=end,
         activity_id=activity.id,
         resource_id=room.id,
-        target_room_identifier=room.code,
     )
     db.add(slot)
     db.commit()
@@ -77,7 +76,6 @@ def _day(db, activity, room, start, end, slot=None):
         master_slot_id=slot.id if slot else None,
         activity_id=activity.id,
         resource_id=room.id,
-        target_room_identifier=room.code,
     )
     db.add(day)
     db.commit()

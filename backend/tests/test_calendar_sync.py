@@ -22,6 +22,7 @@ from app.models.db import (
     StructuralMasterSlot,
     User,
 )
+from app.services.resource import get_or_create_room
 from tests.conftest import STAFF_PASSWORD, login, weekly
 
 TODAY = org_today()
@@ -81,7 +82,7 @@ def _seed_schedule(
             time_window_end=end,
             activity_id=offering.id,
             primary_lead_id="FAC001",
-            target_room_identifier="LH-500",
+            resource_id=get_or_create_room("LH-500", db).id,
         )
         db.add(slot)
         db.flush()
@@ -96,7 +97,7 @@ def _seed_schedule(
         activity_id=offering.id,
         active_lead_id="FAC001",
         substitute_lead_id=substitute,
-        target_room_identifier="LH-500",
+        resource_id=get_or_create_room("LH-500", db).id,
         operational_state=state,
     )
     db.add(ledger)

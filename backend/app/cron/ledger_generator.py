@@ -49,6 +49,7 @@ from app.models.db import (
     DynamicState,
     LogVerificationState,
     PlanningCycle,
+    Resource,
     ReverseRsvpLog,
     StructuralMasterSlot,
 )
@@ -76,7 +77,6 @@ def _day_fields(
         "activity_id": slot.activity_id,
         "active_lead_id": slot.primary_lead_id,
         "resource_id": slot.resource_id,
-        "target_room_identifier": slot.target_room_identifier,
         "operational_state": state,
         # The slot's, because the nightly job has no caller to take it from.
         "organization_id": slot.organization_id,
@@ -99,12 +99,13 @@ def _report_taken(db: Session, fields: dict, taken: list) -> None:
     were there first, as (slot, date, start) triples.
     """
     activity = db.get(Activity, fields["activity_id"])
+    room = db.get(Resource, fields["resource_id"])
     logger.warning(
         "ledger: no day written for slot %s (%s) on %s in %s, the room is already taken by %s",
         fields["master_slot_id"],
         activity.activity_code if activity else "unknown activity",
         fields["target_date"],
-        fields["target_room_identifier"] or fields["resource_id"],
+        room.code if room else fields["resource_id"],
         taken or "a row this query could not find",
     )
 
