@@ -1001,8 +1001,11 @@ type DeactivatedUserResponse struct {
 	Id            *string    `json:"id,omitempty"`
 
 	// OpenItems What still names a deactivated account. Deactivating changes none of it and is never refused because of it; calling deactivate again counts afresh.
-	OpenItems            OpenItems `json:"open_items"`
-	ReportingLineManager *string   `json:"reporting_line_manager,omitempty"`
+	OpenItems OpenItems `json:"open_items"`
+
+	// OrganizationId The organization the account belongs to. Everything the account reads and writes is in this organization.
+	OrganizationId       *string `json:"organization_id,omitempty"`
+	ReportingLineManager *string `json:"reporting_line_manager,omitempty"`
 
 	// RoleType Role assigned to a system user.
 	RoleType *InstitutionalRole `json:"role_type,omitempty"`
@@ -1661,11 +1664,14 @@ type UserResponse struct {
 	CurrentOccupancyIndex *AccessReadiness `json:"current_occupancy_index,omitempty"`
 
 	// DeactivatedAt When the account was deactivated, or null while it is active.
-	DeactivatedAt        *time.Time `json:"deactivated_at,omitempty"`
-	EmailAddress         *string    `json:"email_address,omitempty"`
-	FullName             *string    `json:"full_name,omitempty"`
-	Id                   *string    `json:"id,omitempty"`
-	ReportingLineManager *string    `json:"reporting_line_manager,omitempty"`
+	DeactivatedAt *time.Time `json:"deactivated_at,omitempty"`
+	EmailAddress  *string    `json:"email_address,omitempty"`
+	FullName      *string    `json:"full_name,omitempty"`
+	Id            *string    `json:"id,omitempty"`
+
+	// OrganizationId The organization the account belongs to. Everything the account reads and writes is in this organization.
+	OrganizationId       *string `json:"organization_id,omitempty"`
+	ReportingLineManager *string `json:"reporting_line_manager,omitempty"`
 
 	// RoleType Role assigned to a system user.
 	RoleType *InstitutionalRole `json:"role_type,omitempty"`
@@ -2668,7 +2674,7 @@ type ClientInterface interface {
 
 	// AdminExport The organization's data as one archive
 	//
-	// Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON Lines file per table, described in docs/portability.md. Password hashes, API key hashes, calendar feed tokens and visit code hashes are always left out; an archive with them comes only from `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every export is written to the audit log, although it is a read. `chronos-engine import` loads the archive into an empty database.
+	// Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON Lines file per table, described in docs/portability.md, with the caller's organization's rows only. `chronos-engine export` writes every organization. Password hashes, API key hashes, calendar feed tokens and visit code hashes are always left out; an archive with them comes only from `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every export is written to the audit log, although it is a read. `chronos-engine import` loads the archive into an empty database.
 	//
 	// Corresponds with GET /api/v1/admin/export (the `AdminExport` operationId).
 	AdminExport(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3844,7 +3850,7 @@ type ClientInterface interface {
 
 	// WsGetStats Count of people with an open websocket, on every instance
 	//
-	// Requires `ORG_ADMIN`. The count is organization-wide, and there is nothing in it a unit admin could be shown only their own share of. A person counts once however many instances they are connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis counts only its own sockets.
+	// Requires `ORG_ADMIN`. The count is of the caller's organization, and there is nothing in it a unit admin could be shown only their own share of. A person counts once however many instances they are connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis counts only its own sockets.
 	//
 	// Corresponds with GET /api/v1/ws/stats (the `WsGetStats` operationId).
 	WsGetStats(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3866,7 +3872,7 @@ type ClientInterface interface {
 
 // AdminExport The organization's data as one archive
 //
-// Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON Lines file per table, described in docs/portability.md. Password hashes, API key hashes, calendar feed tokens and visit code hashes are always left out; an archive with them comes only from `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every export is written to the audit log, although it is a read. `chronos-engine import` loads the archive into an empty database.
+// Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON Lines file per table, described in docs/portability.md, with the caller's organization's rows only. `chronos-engine export` writes every organization. Password hashes, API key hashes, calendar feed tokens and visit code hashes are always left out; an archive with them comes only from `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every export is written to the audit log, although it is a read. `chronos-engine import` loads the archive into an empty database.
 //
 // Corresponds with GET /api/v1/admin/export (the `AdminExport` operationId).
 func (c *Client) AdminExport(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -6382,7 +6388,7 @@ func (c *Client) WebhooksRotateSecret(ctx context.Context, subscriptionId int, r
 
 // WsGetStats Count of people with an open websocket, on every instance
 //
-// Requires `ORG_ADMIN`. The count is organization-wide, and there is nothing in it a unit admin could be shown only their own share of. A person counts once however many instances they are connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis counts only its own sockets.
+// Requires `ORG_ADMIN`. The count is of the caller's organization, and there is nothing in it a unit admin could be shown only their own share of. A person counts once however many instances they are connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis counts only its own sockets.
 //
 // Corresponds with GET /api/v1/ws/stats (the `WsGetStats` operationId).
 func (c *Client) WsGetStats(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -11773,7 +11779,7 @@ type ClientWithResponsesInterface interface {
 
 	// AdminExportWithResponse The organization's data as one archive
 	//
-	// Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON Lines file per table, described in docs/portability.md. Password hashes, API key hashes, calendar feed tokens and visit code hashes are always left out; an archive with them comes only from `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every export is written to the audit log, although it is a read. `chronos-engine import` loads the archive into an empty database.
+	// Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON Lines file per table, described in docs/portability.md, with the caller's organization's rows only. `chronos-engine export` writes every organization. Password hashes, API key hashes, calendar feed tokens and visit code hashes are always left out; an archive with them comes only from `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every export is written to the audit log, although it is a read. `chronos-engine import` loads the archive into an empty database.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -13071,7 +13077,7 @@ type ClientWithResponsesInterface interface {
 
 	// WsGetStatsWithResponse Count of people with an open websocket, on every instance
 	//
-	// Requires `ORG_ADMIN`. The count is organization-wide, and there is nothing in it a unit admin could be shown only their own share of. A person counts once however many instances they are connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis counts only its own sockets.
+	// Requires `ORG_ADMIN`. The count is of the caller's organization, and there is nothing in it a unit admin could be shown only their own share of. A person counts once however many instances they are connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis counts only its own sockets.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -19773,7 +19779,7 @@ func (r HealthReadyResponse) ContentType() string {
 
 // AdminExportWithResponse The organization's data as one archive
 //
-// Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON Lines file per table, described in docs/portability.md. Password hashes, API key hashes, calendar feed tokens and visit code hashes are always left out; an archive with them comes only from `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every export is written to the audit log, although it is a read. `chronos-engine import` loads the archive into an empty database.
+// Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON Lines file per table, described in docs/portability.md, with the caller's organization's rows only. `chronos-engine export` writes every organization. Password hashes, API key hashes, calendar feed tokens and visit code hashes are always left out; an archive with them comes only from `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every export is written to the audit log, although it is a read. `chronos-engine import` loads the archive into an empty database.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -21875,7 +21881,7 @@ func (c *ClientWithResponses) WebhooksRotateSecretWithResponse(ctx context.Conte
 
 // WsGetStatsWithResponse Count of people with an open websocket, on every instance
 //
-// Requires `ORG_ADMIN`. The count is organization-wide, and there is nothing in it a unit admin could be shown only their own share of. A person counts once however many instances they are connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis counts only its own sockets.
+// Requires `ORG_ADMIN`. The count is of the caller's organization, and there is nothing in it a unit admin could be shown only their own share of. A person counts once however many instances they are connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis counts only its own sockets.
 //
 // Returns a wrapper object for the known response body format(s).
 //

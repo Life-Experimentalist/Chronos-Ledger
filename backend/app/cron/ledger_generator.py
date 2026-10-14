@@ -78,6 +78,8 @@ def _day_fields(
         "resource_id": slot.resource_id,
         "target_room_identifier": slot.target_room_identifier,
         "operational_state": state,
+        # The slot's, because the nightly job has no caller to take it from.
+        "organization_id": slot.organization_id,
     }
 
 

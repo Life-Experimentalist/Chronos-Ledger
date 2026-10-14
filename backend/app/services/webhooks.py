@@ -279,7 +279,12 @@ def fan_out(db: Session) -> int:
         markers = []
         for marker in (
             db.query(ChangeMarker)
-            .filter(ChangeMarker.id > subscription.cursor)
+            # This runs with no caller, so the subscription's organization is
+            # named here: a receiver hears about its own organization only.
+            .filter(
+                ChangeMarker.id > subscription.cursor,
+                ChangeMarker.organization_id == subscription.organization_id,
+            )
             .order_by(ChangeMarker.id)
             .limit(FAN_OUT_BATCH)
         ):
@@ -307,6 +312,7 @@ def fan_out(db: Session) -> int:
                     attempt_count=0,
                     next_attempt_at=now,
                     created_at=now,
+                    organization_id=subscription.organization_id,
                 )
             )
         subscription.cursor = markers[-1].id

@@ -409,6 +409,11 @@ codes. C-4 is breaking and ships with 0.17.
   the same time; neither can read or book the other's.
 - **Breaking:** for anyone relying on a code being unique across
   organizations.
+- **Status:** built for 0.17 and held until 0.16.0 is out. The organization
+  comes from the caller, another organization's rows answer `404`, a user's
+  id and email address stay unique across the deployment, and a second
+  organization is made with `chronos-engine organization create`. Which keys
+  are scoped and which are not is in [data-model.md](data-model.md).
 
 ### C-5. Retries in the SDKs
 

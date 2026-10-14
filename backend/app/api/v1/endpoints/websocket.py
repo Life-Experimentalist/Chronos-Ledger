@@ -17,9 +17,10 @@ import asyncio
 import json
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from app.core.database import get_session_opener
+from app.core.database import get_db, get_session_opener
 from app.core.security import first_login_blocks, require_roles, verify_jwt_token_string
 from app.core.websocket_manager import socket_broker
 
@@ -131,12 +132,19 @@ async def websocket_endpoint(
 
 
 @router.get("/ws/stats", operation_id="ws.getStats")
-async def ws_stats(_=Depends(require_roles("ORG_ADMIN"))):
-    """How many people have a socket open right now, on every instance.
+async def ws_stats(_=Depends(require_roles("ORG_ADMIN")), db: Session = Depends(get_db)):
+    """How many people in the caller's organization have a socket open, on every instance.
 
     Unauthenticated, this told anybody how many people were signed in across
     the organization and let them watch that number over a day. ORG_ADMIN
     rather than any admin because the count is org-wide, and there is nothing
-    in it a unit admin could be shown only their own share of.
+    in it a unit admin could be shown only their own share of. The session is
+    the one get_current_user scoped, so the ids below are this organization's.
     """
-    return {"online_connections": await socket_broker.online_count()}
+    from app.models.db import User
+
+    def members() -> set[str]:
+        return {row[0] for row in db.query(User.id).all()}
+
+    among = await run_in_threadpool(members)
+    return {"online_connections": await socket_broker.online_count(among)}

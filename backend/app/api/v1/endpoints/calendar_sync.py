@@ -11,6 +11,7 @@ from app.core import clock, rate_limit
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.errors import ChronosError, ErrorCode
+from app.core.organization import use_organization
 from app.core.security import get_current_user
 from app.core.time import org_timezone, org_today, window_span
 from app.models.db import (
@@ -164,6 +165,9 @@ def stream_icalendar_feed(feed_token: str, db: Session = Depends(get_db)):
     )
     if not user:
         raise ChronosError(status_code=404, detail="Feed not found", code=ErrorCode.NOT_FOUND)
+    # The link is the only credential here, so the feed reads the
+    # organization of the person it belongs to and nothing else.
+    use_organization(db, user.organization_id)
 
     start_range = org_today() - datetime.timedelta(days=7)
     end_range = org_today() + datetime.timedelta(days=30)

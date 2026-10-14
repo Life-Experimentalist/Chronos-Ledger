@@ -459,6 +459,9 @@ def account_for(note: VerifiedNote, db: Session) -> User:
         # holds the two admin roles and neither is reachable from outside, so
         # this is about the field meaning what it says.
         initial_login_state=False,
+        # The issuer's organization. The exchange has no signed-in caller, so
+        # nothing else could say which one.
+        organization_id=note.issuer.organization_id,
     )
     db.add(user)
     db.add(
@@ -466,6 +469,7 @@ def account_for(note: VerifiedNote, db: Session) -> User:
             issuer_id=note.issuer.id,
             subject=note.subject,
             user_id=user.id,
+            organization_id=note.issuer.organization_id,
         )
     )
     db.flush()

@@ -40,8 +40,8 @@ def _plant_a_row_written_before_029(db, address=STORED, user_id="STU900"):
     db.execute(
         text(
             "INSERT INTO users (id, full_name, email_address, credential_secure_hash,"
-            " role_type, unit_code, initial_login_state)"
-            " VALUES (:id, 'Priya Sharma', :email, :hash, 'MEMBER', 'CSE', 0)"
+            " role_type, unit_code, initial_login_state, organization_id)"
+            " VALUES (:id, 'Priya Sharma', :email, :hash, 'MEMBER', 'CSE', 0, 'default')"
         ),
         {"id": user_id, "email": address, "hash": _LEGACY_HASH},
     )

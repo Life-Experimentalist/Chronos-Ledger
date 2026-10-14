@@ -67,11 +67,12 @@ def sync_detailed(
     """The organization's data as one archive
 
      Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON
-    Lines file per table, described in docs/portability.md. Password hashes, API key hashes, calendar
-    feed tokens and visit code hashes are always left out; an archive with them comes only from
-    `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every
-    export is written to the audit log, although it is a read. `chronos-engine import` loads the archive
-    into an empty database.
+    Lines file per table, described in docs/portability.md, with the caller's organization's rows only.
+    `chronos-engine export` writes every organization. Password hashes, API key hashes, calendar feed
+    tokens and visit code hashes are always left out; an archive with them comes only from `chronos-
+    engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every export
+    is written to the audit log, although it is a read. `chronos-engine import` loads the archive into
+    an empty database.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -97,11 +98,12 @@ def sync(
     """The organization's data as one archive
 
      Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON
-    Lines file per table, described in docs/portability.md. Password hashes, API key hashes, calendar
-    feed tokens and visit code hashes are always left out; an archive with them comes only from
-    `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every
-    export is written to the audit log, although it is a read. `chronos-engine import` loads the archive
-    into an empty database.
+    Lines file per table, described in docs/portability.md, with the caller's organization's rows only.
+    `chronos-engine export` writes every organization. Password hashes, API key hashes, calendar feed
+    tokens and visit code hashes are always left out; an archive with them comes only from `chronos-
+    engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every export
+    is written to the audit log, although it is a read. `chronos-engine import` loads the archive into
+    an empty database.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -123,11 +125,12 @@ async def asyncio_detailed(
     """The organization's data as one archive
 
      Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON
-    Lines file per table, described in docs/portability.md. Password hashes, API key hashes, calendar
-    feed tokens and visit code hashes are always left out; an archive with them comes only from
-    `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every
-    export is written to the audit log, although it is a read. `chronos-engine import` loads the archive
-    into an empty database.
+    Lines file per table, described in docs/portability.md, with the caller's organization's rows only.
+    `chronos-engine export` writes every organization. Password hashes, API key hashes, calendar feed
+    tokens and visit code hashes are always left out; an archive with them comes only from `chronos-
+    engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every export
+    is written to the audit log, although it is a read. `chronos-engine import` loads the archive into
+    an empty database.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -151,11 +154,12 @@ async def asyncio(
     """The organization's data as one archive
 
      Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON
-    Lines file per table, described in docs/portability.md. Password hashes, API key hashes, calendar
-    feed tokens and visit code hashes are always left out; an archive with them comes only from
-    `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every
-    export is written to the audit log, although it is a read. `chronos-engine import` loads the archive
-    into an empty database.
+    Lines file per table, described in docs/portability.md, with the caller's organization's rows only.
+    `chronos-engine export` writes every organization. Password hashes, API key hashes, calendar feed
+    tokens and visit code hashes are always left out; an archive with them comes only from `chronos-
+    engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every export
+    is written to the audit log, although it is a read. `chronos-engine import` loads the archive into
+    an empty database.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.

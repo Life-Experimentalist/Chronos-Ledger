@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core import recurrence
 from app.core.emails import normalize_email
+from app.core.organization import current_organization
 from app.core.security import generate_password, hash_password
 from app.models.db import (
     Activity,
@@ -78,6 +79,11 @@ def _parse_day(raw: str) -> int:
 def _where(line: int) -> str:
     """Name the file line a failure came from, when it came from one at all."""
     return f"line {line}: " if line else ""
+
+
+def _holder(owner: str, elsewhere: set[str]) -> str:
+    """Who an address belongs to, as an import may say it to its caller."""
+    return "an account in another organization" if owner in elsewhere else f"'{owner}'"
 
 
 def _chunked(values) -> list[list]:
@@ -162,15 +168,28 @@ class ChronosIngestionEngine:
                 )
                 for user in self.db.query(User).filter(User.id.in_(ids))
             }
-            email_owners = dict(
-                owner
-                for emails in _chunked(
-                    {normalize_email(str(row["member_email"])) for _, row in rows}
+            # User ids and email addresses are unique in the whole deployment,
+            # so both are looked up across organizations. An account found in
+            # another one is refused by name only, never by its id.
+            here = current_organization(self.db)
+            elsewhere: set[str] = set()
+            email_owners = {}
+            for emails in _chunked({normalize_email(str(row["member_email"])) for _, row in rows}):
+                for email, owner, organization in (
+                    self.db.query(func.lower(User.email_address), User.id, User.organization_id)
+                    .filter(func.lower(User.email_address).in_(emails))
+                    .execution_options(all_organizations=True)
+                ):
+                    email_owners[email] = owner
+                    if here is not None and organization != here:
+                        elsewhere.add(owner)
+            for ids in _chunked({str(row["member_id"]) for _, row in rows} - set(users)):
+                elsewhere.update(
+                    user_id
+                    for (user_id,) in self.db.query(User.id)
+                    .filter(User.id.in_(ids))
+                    .execution_options(all_organizations=True)
                 )
-                for owner in self.db.query(func.lower(User.email_address), User.id).filter(
-                    func.lower(User.email_address).in_(emails)
-                )
-            )
             offerings = {
                 offering.activity_code: offering
                 for codes in _chunked({str(row["activity_code"]) for _, row in rows})
@@ -212,6 +231,11 @@ class ChronosIngestionEngine:
                 member_email = normalize_email(str(row["member_email"]))
                 # 1. Upsert member user
                 member = users.get(str(row["member_id"]))
+                if not member and str(row["member_id"]) in elsewhere:
+                    raise ValueError(
+                        f"member '{row['member_id']}': that id belongs to an account "
+                        "in another organization"
+                    )
                 if not member:
                     # The same refusal as an address change below, for the
                     # same reason. A new member was never checked, so an
@@ -220,7 +244,7 @@ class ChronosIngestionEngine:
                     if owner is not None:
                         raise ValueError(
                             f"member '{row['member_id']}': email "
-                            f"{row['member_email']} already belongs to '{owner}'"
+                            f"{row['member_email']} already belongs to {_holder(owner, elsewhere)}"
                         )
                     # One password per member. The shared constant this replaces
                     # meant a single leaked credential opened every account the
@@ -264,7 +288,8 @@ class ChronosIngestionEngine:
                         if clash is not None and clash != member.id:
                             raise ValueError(
                                 f"member '{row['member_id']}': email "
-                                f"{row['member_email']} already belongs to '{clash}'"
+                                f"{row['member_email']} already belongs to "
+                                f"{_holder(clash, elsewhere)}"
                             )
                         # The address it had is free from here on, for a later
                         # row to take.

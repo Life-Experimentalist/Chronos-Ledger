@@ -18,6 +18,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.errors import ChronosError, ErrorCode
 from app.core.idempotency import claim
+from app.core.organization import use_organization
 from app.models.db import WILDCARD_SCOPE
 
 settings = get_settings()
@@ -172,7 +173,12 @@ def get_current_user_id(
     if api_key:
         from app.models.db import ApiKey
 
-        row = db.query(ApiKey).filter(ApiKey.key_hash == hash_api_key(api_key)).first()
+        row = (
+            db.query(ApiKey)
+            .filter(ApiKey.key_hash == hash_api_key(api_key))
+            .execution_options(all_organizations=True)
+            .first()
+        )
         if row is None:
             raise ChronosError(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -250,7 +256,11 @@ def get_current_user(
 ):
     from app.models.db import User
 
-    user = db.query(User).filter(User.id == user_id).first()
+    # A user id is unique in the whole deployment, and the caller's
+    # organization is what this lookup finds out.
+    user = (
+        db.query(User).filter(User.id == user_id).execution_options(all_organizations=True).first()
+    )
     if not user:
         raise ChronosError(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -284,6 +294,10 @@ def get_current_user(
             detail="Change the initial password before using other endpoints",
             code=ErrorCode.PASSWORD_CHANGE_REQUIRED,
         )
+    # From here the request sees only its caller's organization
+    # (app/core/organization.py), and its audit record is filed there.
+    use_organization(db, user.organization_id)
+    request.state.organization_id = user.organization_id
     return user
 
 
