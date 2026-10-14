@@ -21,7 +21,6 @@ from app.models.db import (
     Reservation,
     ReservationStatus,
     Resource,
-    ResourceType,
     User,
 )
 from app.services.resource import get_or_create_room
@@ -224,7 +223,7 @@ LAST = TOMORROW + datetime.timedelta(days=6)
 
 
 def _room(db, code, unit_code=None):
-    room = Resource(code=code, label=code, resource_type=ResourceType.ROOM, unit_code=unit_code)
+    room = Resource(code=code, label=code, resource_type="ROOM", unit_code=unit_code)
     db.add(room)
     db.commit()
     return room
