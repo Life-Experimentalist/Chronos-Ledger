@@ -10,6 +10,31 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.17.0](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.16.0...v0.17.0) (2026-10-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **engine:** resource_type is a string class code instead of the ROOM or PERSON enum, and SCHEMA_VERSION is 6. Start from a fresh database; there is no upgrade path before 1.0.
+* **auth:** a UNIT_ADMIN that booked or listed another unit's resources, ledger rows or conflicts is now refused or sees fewer rows, and a UNIT_ADMIN with no unit sees nothing.
+* **engine:** the target_room_identifier column is gone from the master_slots and daily_ledger tables, so a database or a portability archive made before this needs recreating. API responses are unchanged.
+* **organizations:** a resource code is unique only within an organization. UserResponse and GET /auth/me gain organization_id. GET /admin/export and GET /ws/stats cover the caller's organization only. A 0.16 database or archive (schema "4") is refused; 0.17 needs a fresh database.
+* **engine:** a slot whose rule meets another class, a booking or a generated day on the same room on any date it will run is refused with 409 RESOURCE_CONFLICT, where before only a clash on its first weekday was. The date in a slot-against-class conflict entry is the first date the two meet.
+* **engine:** POST and PATCH /schedule/slots take rrule and dtstart instead of day_of_week_index. GET still sends day_of_week_index, worked out from the rule, and it is deprecated. A 0.16 database or archive (schema "4") is refused; 0.17 needs a fresh database.
+
+### Features
+
+* **auth:** a unit admin acts only inside its own unit ([#109](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/109)) ([9918ec1](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/9918ec1656d38f17fcbff2ad8538d24f92a2c893))
+* **auth:** an API key with the impersonate scope can act for one user ([#105](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/105)) ([a5377b0](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/a5377b0433070ba7abbdfe12bb8b1bdcc68de00b))
+* **engine:** a resource can require other resources ([#107](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/107)) ([9970398](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/997039840baf3d25f6818d41d2ba736811e440d5))
+* **engine:** a slot's room is its resource, not a copied name ([#106](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/106)) ([cc84987](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/cc84987644f70c050f3645428fb9959de4d6eea6))
+* **engine:** no-overlap is enforced on materialized instances ([#93](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/93)) ([eec3d49](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/eec3d498d484a7ef93957f8c9fd3e00f53086d39))
+* **engine:** recurrence rules on slots ([#91](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/91)) ([68589e5](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/68589e50236e8902fa3e7fd18cdbfb3bf7797b7b))
+* **engine:** resource classes are configured per organization ([#110](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/110)) ([da43055](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/da430557a3d286ee9fa8433bca73744b4cb4cf02))
+* **import:** re-importing a timetable updates it in place ([#95](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/95)) ([f095821](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/f0958216134b35520fe2db543bdc494655d1af76))
+* **organizations:** scope data and unique keys to an organization ([#97](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/97)) ([9bcc3a3](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/9bcc3a312e2f74e26c947d9d2f214224487d845e))
+* **schedule:** a lead leading two things at once is a clash ([#108](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/108)) ([716154b](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/716154b6d525f91de1c03928961a86cfb93e8d3c))
+
 ## [0.16.0](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.15.0...v0.16.0) (2026-10-14)
 
 
