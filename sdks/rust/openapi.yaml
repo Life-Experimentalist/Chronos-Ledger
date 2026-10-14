@@ -469,7 +469,7 @@ components:
           minLength: 1
           maxLength: 100
           description: What this key is for, so it can be recognized in the list.
-          example: PulseWard HMS
+          example: Hospital information system
         user_id:
           type: string
           description: >

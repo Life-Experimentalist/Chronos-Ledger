@@ -1977,7 +1977,7 @@ export interface components {
         ApiKeyCreate: {
             /**
              * @description What this key is for, so it can be recognized in the list.
-             * @example PulseWard HMS
+             * @example Hospital information system
              */
             label: string;
             /**

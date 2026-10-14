@@ -505,7 +505,7 @@ meets the gate.
 
 ```json
 {
-  "label": "PulseWard HMS",
+  "label": "Hospital information system",
   "user_id": "SVC001",
   "scopes": ["schedule:read", "resources:read"],
   "expires_at": "2027-01-01T00:00:00Z"
@@ -520,7 +520,7 @@ anybody wants.
 {
   "id": 3,
   "key_prefix": "ck_8Kd2mQ7x",
-  "label": "PulseWard HMS",
+  "label": "Hospital information system",
   "user_id": "SVC001",
   "scopes": "resources:read,schedule:read",
   "expires_at": "2027-01-01T00:00:00Z",
