@@ -30,10 +30,10 @@ class ReservationCreate:
             `RESERVATION_EXTERNAL_REF_TAKEN`. Find the booking again with `GET
             /api/v1/resources/reservations?external_ref=`. Optional, and any number of bookings may leave it unset.
              Example: visit-42.
-        quantity (int | Unset): How many units of a POOLED resource to take. Above 1 on any other resource is a 422.
-            Part of what a retry is compared on only when it is sent, so a retry that leaves it out still matches a booking
-            made before the field existed.
-             Default: 1. Example: 2.
+        quantity (int | Unset): How many units of a POOLED resource to take, 1 when left out. Above 1 on any other
+            resource is a 422. Part of what a retry is compared on only when it is sent, so a retry that leaves it out still
+            matches a booking made before the field existed.
+             Example: 2.
     """
 
     date: datetime.date
@@ -41,7 +41,7 @@ class ReservationCreate:
     end: str
     purpose: str
     external_ref: None | str | Unset = UNSET
-    quantity: int | Unset = 1
+    quantity: int | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

@@ -23,7 +23,7 @@ class ResourceCreate:
             label (str | Unset): Defaults to the code, which is what an imported room gets. Example: Lecture Hall 3.
             unit_code (None | str | Unset):
             capacity (int | None | Unset): Required, and at least 1, when mode is POOLED.
-            mode (ResourceCreateMode | Unset): See ResourceResponse.mode. Default: ResourceCreateMode.EXCLUSIVE.
+            mode (ResourceCreateMode | Unset): See ResourceResponse.mode. EXCLUSIVE when left out.
             latitude (float | None | Unset): Set together with longitude, or not at all.
             longitude (float | None | Unset):
             altitude_target (float | None | Unset):
@@ -33,7 +33,7 @@ class ResourceCreate:
     label: str | Unset = UNSET
     unit_code: None | str | Unset = UNSET
     capacity: int | None | Unset = UNSET
-    mode: ResourceCreateMode | Unset = ResourceCreateMode.EXCLUSIVE
+    mode: ResourceCreateMode | Unset = UNSET
     latitude: float | None | Unset = UNSET
     longitude: float | None | Unset = UNSET
     altitude_target: float | None | Unset = UNSET

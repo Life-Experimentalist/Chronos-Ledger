@@ -1358,7 +1358,7 @@ type ReservationCreate struct {
 	ExternalRef *string `json:"external_ref,omitempty"`
 	Purpose     string  `json:"purpose"`
 
-	// Quantity How many units of a POOLED resource to take. Above 1 on any other resource is a 422. Part of what a retry is compared on only when it is sent, so a retry that leaves it out still matches a booking made before the field existed.
+	// Quantity How many units of a POOLED resource to take, 1 when left out. Above 1 on any other resource is a 422. Part of what a retry is compared on only when it is sent, so a retry that leaves it out still matches a booking made before the field existed.
 	Quantity *int   `json:"quantity,omitempty"`
 	Start    string `json:"start"`
 }
@@ -1425,12 +1425,12 @@ type ResourceCreate struct {
 	Latitude  *float32 `json:"latitude,omitempty"`
 	Longitude *float32 `json:"longitude,omitempty"`
 
-	// Mode See ResourceResponse.mode.
+	// Mode See ResourceResponse.mode. EXCLUSIVE when left out.
 	Mode     *ResourceCreateMode `json:"mode,omitempty"`
 	UnitCode *string             `json:"unit_code,omitempty"`
 }
 
-// ResourceCreateMode See ResourceResponse.mode.
+// ResourceCreateMode See ResourceResponse.mode. EXCLUSIVE when left out.
 type ResourceCreateMode string
 
 // ResourceResponse defines model for ResourceResponse.

@@ -2205,11 +2205,10 @@ export interface components {
             /** @description Required, and at least 1, when mode is POOLED. */
             capacity?: number | null;
             /**
-             * @description See ResourceResponse.mode.
-             * @default EXCLUSIVE
+             * @description See ResourceResponse.mode. EXCLUSIVE when left out.
              * @enum {string}
              */
-            mode: "EXCLUSIVE" | "POOLED" | "SHARED";
+            mode?: "EXCLUSIVE" | "POOLED" | "SHARED";
             /** @description Set together with longitude, or not at all. */
             latitude?: number | null;
             longitude?: number | null;
@@ -2376,11 +2375,10 @@ export interface components {
              */
             external_ref?: string | null;
             /**
-             * @description How many units of a POOLED resource to take. Above 1 on any other resource is a 422. Part of what a retry is compared on only when it is sent, so a retry that leaves it out still matches a booking made before the field existed.
-             * @default 1
+             * @description How many units of a POOLED resource to take, 1 when left out. Above 1 on any other resource is a 422. Part of what a retry is compared on only when it is sent, so a retry that leaves it out still matches a booking made before the field existed.
              * @example 2
              */
-            quantity: number;
+            quantity?: number;
         };
         /** @description What the caller may change about a reservation it already holds: its reference, for now. The window is what the conflict check and the idempotency fingerprint are built on, so moving it is a cancel and a new booking. Any other field is refused with a 422 rather than ignored. */
         ReservationUpdate: {
