@@ -21,7 +21,7 @@ class ConflictReport:
         from_ (datetime.date):
         to (datetime.date):
         conflicts (list[Conflict]): Every clash that reaches into the range, each pair named once. Ordered by kind, then
-            resource_id or member_id, then the moment the shared window starts. Times are naive wall clock in the
+            resource_id, member_id or lead_id, then the moment the shared window starts. Times are naive wall clock in the
             organization's own timezone.
     """
 

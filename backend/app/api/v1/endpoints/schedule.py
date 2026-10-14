@@ -1265,8 +1265,9 @@ def get_conflict_report(
 ):
     """Every clash already in the schedule between two dates inclusive.
 
-    Two rows holding one resource at once, and one member enrolled in two
-    activities that run at once. It reads and reports; nothing is refused
+    Two rows holding one resource at once, one member enrolled in two
+    activities that run at once, and one lead leading two activities at
+    once. It reads and reports; nothing is refused
     and nothing is changed. app.services.conflicts says what counts.
 
     Admins only: the member side names who is enrolled where, which a member
