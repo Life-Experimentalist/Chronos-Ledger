@@ -79,6 +79,14 @@ from .master_slot_response import MasterSlotResponse
 from .master_slot_update import MasterSlotUpdate
 from .not_removed_slot import NotRemovedSlot
 from .open_items import OpenItems
+from .organization_response import OrganizationResponse
+from .organization_response_default_requirement_enforcement import (
+    OrganizationResponseDefaultRequirementEnforcement,
+)
+from .organization_update import OrganizationUpdate
+from .organization_update_default_requirement_enforcement import (
+    OrganizationUpdateDefaultRequirementEnforcement,
+)
 from .orphan_enrollment import OrphanEnrollment
 from .orphan_slot import OrphanSlot
 from .password_reset_response import PasswordResetResponse
@@ -91,9 +99,18 @@ from .readiness_redis import ReadinessRedis
 from .readiness_status import ReadinessStatus
 from .refresh_request import RefreshRequest
 from .removed_slot import RemovedSlot
+from .requirement_create import RequirementCreate
+from .requirement_create_enforcement import RequirementCreateEnforcement
+from .requirement_create_target_kind import RequirementCreateTargetKind
+from .requirement_response import RequirementResponse
+from .requirement_response_enforcement import RequirementResponseEnforcement
+from .requirement_response_owner_kind import RequirementResponseOwnerKind
+from .requirement_response_target_kind import RequirementResponseTargetKind
 from .reservation_conflict import ReservationConflict
 from .reservation_conflict_detail import ReservationConflictDetail
 from .reservation_create import ReservationCreate
+from .reservation_create_assignments_type_0 import ReservationCreateAssignmentsType0
+from .reservation_created import ReservationCreated
 from .reservation_ref_taken import ReservationRefTaken
 from .reservation_ref_taken_detail import ReservationRefTakenDetail
 from .reservation_response import ReservationResponse
@@ -122,10 +139,15 @@ from .schedule_delete_enrollment_response_200 import ScheduleDeleteEnrollmentRes
 from .schedule_open_cycle_response_200 import ScheduleOpenCycleResponse200
 from .schedule_update_ledger_entry_response_200 import ScheduleUpdateLedgerEntryResponse200
 from .slot_deletion_result import SlotDeletionResult
+from .slot_requirement_gap import SlotRequirementGap
 from .slot_update_result import SlotUpdateResult
 from .staff_availability_response import StaffAvailabilityResponse
 from .staff_location_response import StaffLocationResponse
 from .token_response import TokenResponse
+from .unmet_requirement import UnmetRequirement
+from .unmet_requirement_enforcement import UnmetRequirementEnforcement
+from .unmet_requirement_owner_kind import UnmetRequirementOwnerKind
+from .unmet_requirement_target_kind import UnmetRequirementTargetKind
 from .user_create import UserCreate
 from .user_response import UserResponse
 from .user_status_update import UserStatusUpdate
@@ -224,6 +246,10 @@ __all__ = (
     "MasterSlotUpdate",
     "NotRemovedSlot",
     "OpenItems",
+    "OrganizationResponse",
+    "OrganizationResponseDefaultRequirementEnforcement",
+    "OrganizationUpdate",
+    "OrganizationUpdateDefaultRequirementEnforcement",
     "OrphanEnrollment",
     "OrphanSlot",
     "PasswordResetResponse",
@@ -236,9 +262,18 @@ __all__ = (
     "ReadinessStatus",
     "RefreshRequest",
     "RemovedSlot",
+    "RequirementCreate",
+    "RequirementCreateEnforcement",
+    "RequirementCreateTargetKind",
+    "RequirementResponse",
+    "RequirementResponseEnforcement",
+    "RequirementResponseOwnerKind",
+    "RequirementResponseTargetKind",
     "ReservationConflict",
     "ReservationConflictDetail",
     "ReservationCreate",
+    "ReservationCreateAssignmentsType0",
+    "ReservationCreated",
     "ReservationRefTaken",
     "ReservationRefTakenDetail",
     "ReservationResponse",
@@ -267,10 +302,15 @@ __all__ = (
     "ScheduleOpenCycleResponse200",
     "ScheduleUpdateLedgerEntryResponse200",
     "SlotDeletionResult",
+    "SlotRequirementGap",
     "SlotUpdateResult",
     "StaffAvailabilityResponse",
     "StaffLocationResponse",
     "TokenResponse",
+    "UnmetRequirement",
+    "UnmetRequirementEnforcement",
+    "UnmetRequirementOwnerKind",
+    "UnmetRequirementTargetKind",
     "UserCreate",
     "UserResponse",
     "UsersListAvailableStaffResponse200Item",

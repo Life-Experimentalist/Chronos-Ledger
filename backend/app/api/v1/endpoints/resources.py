@@ -15,15 +15,25 @@ from app.core.errors import ChronosError, ErrorCode
 from app.core.idempotency import KEY_REUSED
 from app.core.pagination import Page
 from app.core.security import get_current_user, require_roles
-from app.core.time import org_today, window_span
-from app.models.db import Reservation, ReservationStatus, Resource, ResourceMode, ResourceType
+from app.core.time import org_today
+from app.models.db import (
+    RequirementOwner,
+    Reservation,
+    ReservationStatus,
+    Resource,
+    ResourceMode,
+    ResourceType,
+)
 from app.schemas.resources import (
     POOL_NEEDS_CAPACITY,
     AvailabilityResponse,
     BookingsWouldNotFit,
     CapacityExceeded,
+    RequirementCreate,
+    RequirementResponse,
     ReservationConflict,
     ReservationCreate,
+    ReservationCreated,
     ReservationRefTaken,
     ReservationResponse,
     ReservationUpdate,
@@ -39,9 +49,19 @@ from app.services.availability import (
     full_intervals,
     held_reservations,
     held_span,
+    last_date,
     occupied,
-    pool_peak,
+    pool_state,
     pool_stretches,
+    window_conflicts,
+)
+from app.services.requirements import (
+    add_requirement,
+    check_assignments,
+    delete_requirement,
+    free_for,
+    list_requirements,
+    resolve,
 )
 
 router = APIRouter()
@@ -173,6 +193,69 @@ def create_resource(
     return resource
 
 
+def _resource_or_404(db: Session, resource_id: int) -> Resource:
+    resource = db.query(Resource).filter(Resource.id == resource_id).first()
+    if not resource:
+        raise ChronosError(status_code=404, detail="Resource not found", code=ErrorCode.NOT_FOUND)
+    return resource
+
+
+@router.get(
+    "/{resource_id}/requirements",
+    operation_id="resources.listRequirements",
+    response_model=list[RequirementResponse],
+)
+def list_resource_requirements(
+    resource_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)
+):
+    """What booking this resource also holds, in id order."""
+    _resource_or_404(db, resource_id)
+    return list_requirements(db, RequirementOwner.RESOURCE, resource_id)
+
+
+@router.post(
+    "/{resource_id}/requirements",
+    operation_id="resources.createRequirement",
+    response_model=RequirementResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_resource_requirement(
+    resource_id: int,
+    payload: RequirementCreate,
+    db: Session = Depends(get_db),
+    _=Depends(require_roles("ORG_ADMIN")),
+):
+    """Say that booking this resource also needs another, or any of a kind.
+
+    Whoever books the resource then holds the target too, in the same
+    transaction, for the same window widened by before_minutes and
+    after_minutes. enforcement left out follows the organization's
+    default_requirement_enforcement.
+
+    422 for a target that is not a resource of this organization, a quantity
+    above 1 on a named target that is not POOLED, and a cycle of named
+    resources (a needing b needing a). 409 for a requirement the resource
+    already has.
+    """
+    _resource_or_404(db, resource_id)
+    return add_requirement(db, RequirementOwner.RESOURCE, resource_id, payload)
+
+
+@router.delete(
+    "/{resource_id}/requirements/{requirement_id}",
+    operation_id="resources.deleteRequirement",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_resource_requirement(
+    resource_id: int,
+    requirement_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_roles("ORG_ADMIN")),
+):
+    """Drop a requirement. Holds already taken under it stay until cancelled."""
+    delete_requirement(db, RequirementOwner.RESOURCE, resource_id, requirement_id)
+
+
 @router.get(
     "/{resource_id}/availability",
     operation_id="resources.getAvailability",
@@ -182,6 +265,9 @@ def resource_availability(
     resource_id: int,
     from_: datetime.date = Query(alias="from"),
     to: datetime.date = Query(),
+    with_requirements: bool = False,
+    start: datetime.time | None = None,
+    end: datetime.time | None = None,
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
@@ -223,10 +309,24 @@ def resource_availability(
     class takes the whole pool, and the holds are busy only where they add
     up to the capacity: those intervals name no single row and are cut to the
     range. On a shared one no hold is ever busy.
+
+    with_requirements=true also answers whether the resource and everything
+    it requires could be held for one window, with nothing held. The window
+    is `from` with start and end, which are then required, because a kind
+    of resource has no busy intervals to show: whether "any anaesthetist" is
+    free is only a question about a window. requirements_met is true when the
+    resource itself is free for it and every requirement could be met, and
+    unmet lists the requirements that could not, ADVISORY ones included.
     """
     resource = db.query(Resource).filter(Resource.id == resource_id).first()
     if not resource:
         raise ChronosError(status_code=404, detail="Resource not found", code=ErrorCode.NOT_FOUND)
+    if with_requirements and (start is None or end is None or from_ != to or start == end):
+        raise ChronosError(
+            status_code=422,
+            detail="with_requirements needs from equal to to, and a start and an end that differ",
+            code=ErrorCode.INVALID_VALUE,
+        )
     if from_ > to:
         raise ChronosError(status_code=422, detail=RANGE_BACKWARDS, code=ErrorCode.INVALID_VALUE)
     if (to - from_).days + 1 > MAX_RANGE_DAYS:
@@ -245,13 +345,19 @@ def resource_availability(
         busy.sort(
             key=lambda entry: (entry["date"], entry["start"], entry["end_date"], entry["end"])
         )
-    return {
+    answer = {
         "resource_id": resource.id,
         "code": resource.code,
         "from": from_,
         "to": to,
         "busy": busy,
     }
+    if with_requirements:
+        window = (from_, start, end)
+        unmet = resolve(db, [(RequirementOwner.RESOURCE, resource.id)], window, {resource.id}).unmet
+        answer["requirements_met"] = not unmet and free_for(db, resource, window)
+        answer["unmet"] = unmet
+    return answer
 
 
 @router.patch(
@@ -417,6 +523,13 @@ def _fingerprint(resource_id: int, payload: ReservationCreate) -> str:
         parts.append(payload.external_ref)
     if "quantity" in payload.model_fields_set:
         parts.append(f"quantity={payload.quantity}")
+    if payload.assignments:
+        # In the order sent, because the order is the order they are used in.
+        chosen = ";".join(
+            f"{kind.value}:{','.join(map(str, ids))}"
+            for kind, ids in sorted(payload.assignments.items())
+        )
+        parts.append(f"assignments={chosen}")
     asked = "|".join(parts)
     return hashlib.sha256(asked.encode("utf-8")).hexdigest()
 
@@ -443,25 +556,11 @@ def _conflicts_for(
     holds=False asks about the timetable alone, for a pooled resource, where
     the other holds are a sum and are counted by _pool_check instead.
     """
-    last = _last_date(payload)
-    return clashing(
-        occupied(
-            booked_slots(db, resource_id),
-            held_reservations(db, resource_id, payload.date, last) if holds else [],
-            booked_days(db, resource_id, payload.date, last),
-            payload.date,
-            last,
-        ),
-        payload.date,
-        payload.start,
-        payload.end,
-    )
+    return window_conflicts(db, resource_id, payload.date, payload.start, payload.end, holds=holds)
 
 
 def _last_date(payload: ReservationCreate) -> datetime.date:
-    if payload.end < payload.start:
-        return payload.date + datetime.timedelta(days=1)
-    return payload.date
+    return last_date(payload.date, payload.start, payload.end)
 
 
 def _pool_check(db: Session, resource: Resource, payload: ReservationCreate) -> None:
@@ -475,13 +574,7 @@ def _pool_check(db: Session, resource: Resource, payload: ReservationCreate) -> 
     writer wait its turn.
     """
     last = _last_date(payload)
-    window = window_span(payload.date, payload.start, payload.end)
-    holds = [
-        held
-        for held in held_reservations(db, resource.id, payload.date, last)
-        if _meet(held_span(held), window)
-    ]
-    taken = pool_peak(holds, window)
+    taken, holds = pool_state(db, resource.id, payload.date, payload.start, payload.end)
     if taken + payload.quantity > resource.capacity:
         raise ChronosError(
             status_code=status.HTTP_409_CONFLICT,
@@ -541,13 +634,37 @@ def reservation_view(reservation: Reservation, resource: Resource) -> dict:
         "external_ref": reservation.external_ref,
         "created_at": reservation.created_at,
         "cancelled_at": reservation.cancelled_at,
+        "parent_reservation_id": reservation.parent_reservation_id,
+    }
+
+
+def created_view(
+    db: Session, reservation: Reservation, resource: Resource, children=None, unmet=None
+) -> dict:
+    """The create response: the booking, what was held alongside it, and the gaps.
+
+    children is read from the table when it is not handed in, which is the
+    case for a replay. A gap is not stored, so a replay's unmet is empty.
+    """
+    if children is None:
+        children = (
+            db.query(Reservation)
+            .options(joinedload(Reservation.resource))
+            .filter(Reservation.parent_reservation_id == reservation.id)
+            .order_by(Reservation.id)
+            .all()
+        )
+    return {
+        **reservation_view(reservation, resource),
+        "children": [reservation_view(child, child.resource) for child in children],
+        "unmet": unmet or [],
     }
 
 
 @router.post(
     "/{resource_id}/reservations",
     operation_id="resources.createReservation",
-    response_model=ReservationResponse,
+    response_model=ReservationCreated,
     status_code=status.HTTP_201_CREATED,
     # The taken reference first, the same order as docs/openapi.yaml. The
     # generated clients try each shape in turn, and the spec requires nothing
@@ -634,7 +751,7 @@ def create_reservation(
         # cancelled or not: a retry is asking what happened, not asking for
         # a second room.
         response.status_code = status.HTTP_200_OK
-        return reservation_view(seen, resource)
+        return created_view(db, seen, resource)
 
     if payload.external_ref is not None:
         taken = _by_ref(db, current_user.id, payload.external_ref)
@@ -644,6 +761,7 @@ def create_reservation(
     mode = resource.mode
     if payload.quantity > 1 and mode is not ResourceMode.POOLED:
         raise ChronosError(status_code=422, detail=ONE_OF_IT, code=ErrorCode.INVALID_VALUE)
+    assignments = check_assignments(db, payload.assignments)
     if mode is not ResourceMode.SHARED:
         conflicts = _conflicts_for(db, resource_id, payload, holds=mode is ResourceMode.EXCLUSIVE)
         if conflicts:
@@ -666,15 +784,8 @@ def create_reservation(
         status=ReservationStatus.HELD,
     )
     db.add(reservation)
-    try:
-        # Flushed here rather than at the commit because the marker needs the
-        # id. What the constraint refuses it refuses at the flush, and an
-        # IntegrityError from a flush is the same one, so the branching below
-        # reads exc.orig exactly as it did.
-        db.flush()
-        change_feed.record(db, change_feed.RESERVATION, reservation.id, change_feed.CREATED)
-        db.commit()
-    except IntegrityError as exc:
+
+    def lost(exc: IntegrityError):
         db.rollback()
         if OVERLAP_CONSTRAINT in str(exc.orig):
             # Somebody else took the window between the check above and this
@@ -697,10 +808,55 @@ def create_reservation(
                 status_code=422, detail=KEY_REUSED, code=ErrorCode.IDEMPOTENCY_KEY_REUSED
             ) from None
         response.status_code = status.HTTP_200_OK
-        return reservation_view(won, resource)
+        return created_view(db, won, resource)
+
+    try:
+        # Flushed here rather than at the commit because the marker needs the
+        # id. What the constraint refuses it refuses at the flush, and an
+        # IntegrityError from a flush is the same one, so the branching above
+        # reads exc.orig exactly as it did.
+        db.flush()
+        change_feed.record(db, change_feed.RESERVATION, reservation.id, change_feed.CREATED)
+    except IntegrityError as exc:
+        return lost(exc)
+
+    # What the resource requires, held under this booking in this transaction.
+    # Any refusal rolls the booking back with it, so nothing is half held.
+    try:
+        held = resolve(
+            db,
+            [(RequirementOwner.RESOURCE, resource_id)],
+            (payload.date, payload.start, payload.end),
+            {resource_id},
+            parent=reservation,
+            requester_id=current_user.id,
+            assignments=assignments,
+        )
+    except ChronosError:
+        db.rollback()
+        raise
+    except IntegrityError as exc:
+        db.rollback()
+        if OVERLAP_CONSTRAINT not in str(exc.orig):
+            raise
+        # The pick or the named resource was free at the check and taken by
+        # the time of the insert. No second try: the caller retries.
+        raise ChronosError(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "a required resource was taken while it was being held",
+                "conflicts": [],
+            },
+            code=ErrorCode.REQUIREMENT_UNSATISFIED,
+        ) from None
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        return lost(exc)
 
     db.refresh(reservation)
-    return reservation_view(reservation, resource)
+    return created_view(db, reservation, resource, held.children, held.unmet)
 
 
 def _by_key(db: Session, requester_id: str, idempotency_key: str) -> Reservation | None:
@@ -843,6 +999,18 @@ def cancel_reservation(
         reservation.status = ReservationStatus.CANCELLED
         reservation.cancelled_at = clock.now()
         change_feed.record(db, change_feed.RESERVATION, reservation.id, change_feed.UPDATED)
+        # What was held for it goes with it, in the same transaction.
+        for child in (
+            db.query(Reservation)
+            .filter(
+                Reservation.parent_reservation_id == reservation.id,
+                Reservation.status == ReservationStatus.HELD,
+            )
+            .order_by(Reservation.id)
+        ):
+            child.status = ReservationStatus.CANCELLED
+            child.cancelled_at = reservation.cancelled_at
+            change_feed.record(db, change_feed.RESERVATION, child.id, change_feed.UPDATED)
         db.commit()
         db.refresh(reservation)
     return reservation_view(reservation, reservation.resource)

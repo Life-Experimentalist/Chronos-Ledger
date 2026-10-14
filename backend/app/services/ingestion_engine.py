@@ -28,6 +28,7 @@ from app.services.availability import (
     slots_against_slot,
 )
 from app.services.master_slot import delete_slot, propagate_slot_corrections
+from app.services.requirements import unmet_for_slot
 from app.services.resource import get_or_create_room
 
 logger = logging.getLogger(__name__)
@@ -542,6 +543,15 @@ class ChronosIngestionEngine:
             )
             # Read before the commit, which expires every row it holds.
             kept_days = _kept_days(kept)
+            # Reported, never refused: the timetable holds nothing for a
+            # requirement, so a gap is something to know about.
+            requirements_unmet = [
+                {"slot_id": slot.id, **gap}
+                for slot in self.db.query(StructuralMasterSlot)
+                .filter(StructuralMasterSlot.id.in_(sorted(seen_slots)))
+                .order_by(StructuralMasterSlot.id)
+                for gap in unmet_for_slot(self.db, slot)
+            ]
 
             self.db.commit()
             return {
@@ -554,6 +564,7 @@ class ChronosIngestionEngine:
                 "kept_days": kept_days,
                 "removed": removed,
                 "not_removed": not_removed,
+                "requirements_unmet": requirements_unmet,
             }
 
         except ValueError as e:

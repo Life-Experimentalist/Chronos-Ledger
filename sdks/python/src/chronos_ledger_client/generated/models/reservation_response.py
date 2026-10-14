@@ -34,6 +34,9 @@ class ReservationResponse:
             cancelled booking keeps its reference.
         created_at (datetime.datetime | Unset):
         cancelled_at (datetime.datetime | None | Unset):
+        parent_reservation_id (int | None | Unset): The booking this hold was taken for, when a requirement of the
+            resource made it. Null on a booking somebody asked for. Cancelling the parent cancels the holds that name it
+            here.
     """
 
     id: int | Unset = UNSET
@@ -50,6 +53,7 @@ class ReservationResponse:
     external_ref: None | str | Unset = UNSET
     created_at: datetime.datetime | Unset = UNSET
     cancelled_at: datetime.datetime | None | Unset = UNSET
+    parent_reservation_id: int | None | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -101,6 +105,12 @@ class ReservationResponse:
         else:
             cancelled_at = self.cancelled_at
 
+        parent_reservation_id: int | None | Unset
+        if isinstance(self.parent_reservation_id, Unset):
+            parent_reservation_id = UNSET
+        else:
+            parent_reservation_id = self.parent_reservation_id
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({})
@@ -132,6 +142,8 @@ class ReservationResponse:
             field_dict["created_at"] = created_at
         if cancelled_at is not UNSET:
             field_dict["cancelled_at"] = cancelled_at
+        if parent_reservation_id is not UNSET:
+            field_dict["parent_reservation_id"] = parent_reservation_id
 
         return field_dict
 
@@ -210,6 +222,15 @@ class ReservationResponse:
 
         cancelled_at = _parse_cancelled_at(d.pop("cancelled_at", UNSET))
 
+        def _parse_parent_reservation_id(data: object) -> int | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(int | None | Unset, data)
+
+        parent_reservation_id = _parse_parent_reservation_id(d.pop("parent_reservation_id", UNSET))
+
         reservation_response = cls(
             id=id,
             resource_id=resource_id,
@@ -225,6 +246,7 @@ class ReservationResponse:
             external_ref=external_ref,
             created_at=created_at,
             cancelled_at=cancelled_at,
+            parent_reservation_id=parent_reservation_id,
         )
 
         reservation_response.additional_properties = d

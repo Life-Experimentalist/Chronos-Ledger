@@ -205,6 +205,7 @@ def test_a_patch_leaves_a_marked_day_alone(client, db, seed_users):
         "ledger_rows_updated": 0,
         "ledger_rows_kept": 1,
         "ledger_rows_removed": 0,
+        "requirements_unmet": [],
     }
 
     db.expire_all()

@@ -416,6 +416,7 @@ def test_the_import_reply_is_what_it_was(client, db, seed_users):
         "kept_days",
         "removed",
         "not_removed",
+        "requirements_unmet",
     }
 
 
