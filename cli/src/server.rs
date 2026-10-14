@@ -17,8 +17,8 @@ use crate::project::{self, BackupInfo, DB_NAME, DB_USER, Health, Project};
 use crate::release::{self, compare_versions};
 
 /// The compose file and env template of the release this CLI was built from.
-const COMPOSE: &str = include_str!("../../docker-compose.prod.yml");
-const ENV_EXAMPLE: &str = include_str!("../../.env.example");
+const COMPOSE: &str = include_str!("../assets/docker-compose.prod.yml");
+const ENV_EXAMPLE: &str = include_str!("../assets/env.example");
 
 const READY_TIMEOUT: Duration = Duration::from_secs(300);
 
@@ -553,8 +553,17 @@ fn check_copies(r: &mut Report) {
                     .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
                     .unwrap_or_default();
                 let how = match channel {
-                    Channel::Installer | Channel::Homebrew | Channel::Scoop => {
+                    Channel::Installer
+                    | Channel::Homebrew
+                    | Channel::Scoop
+                    | Channel::Npm
+                    | Channel::Cargo
+                    | Channel::Uv
+                    | Channel::Pipx => {
                         format!("remove with: {} self uninstall", copy.display())
+                    }
+                    Channel::Temporary(_) => {
+                        "a cache copy; it goes when the cache is cleared".into()
                     }
                     Channel::Foreign(name) => format!("remove with {name}"),
                     Channel::Unknown => "delete the file if you put it there".into(),

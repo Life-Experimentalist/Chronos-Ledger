@@ -80,6 +80,24 @@ docker pull vkrishna04/chronos-ledger-backend
 docker pull vkrishna04/chronos-ledger-web
 ```
 
+### Or install the `chronos` CLI
+
+The CLI writes the configuration, starts the stack, upgrades it with a backup
+first and diagnoses an install ([docs/cli.md](docs/cli.md)). Pick one channel:
+
+```bash
+curl -fsSL https://chronos.vkrishna04.me/install.sh | sh   # Linux, macOS
+brew install life-experimentalist/tap/chronos
+
+# From 0.18.0, also on the package registries
+npm i -g chronosledger            # or: npx chronosledger@latest
+uv tool install chronosledger     # or: uvx chronosledger@latest
+pipx install chronosledger
+cargo install --locked chronosledger   # or: cargo binstall chronosledger
+```
+
+`npx` and `uvx` reuse a cached copy, so add `@latest` to get the newest release.
+
 ---
 
 ## Architecture
@@ -382,6 +400,7 @@ the first login is the only thing it can do: use Admin Portal → Profile
 | [`docs/quickstart.md`](docs/quickstart.md)     | Call the REST API from any language: auth, keys, paging, idempotency |
 | [`docs/roadmap.md`](docs/roadmap.md)           | Planned releases 0.13 to 0.16 with scope and acceptance checks       |
 | [`docs/distribution.md`](docs/distribution.md) | Planned installer, channels, drift handling and signing              |
+| [`docs/publishing.md`](docs/publishing.md)     | One-time setup for publishing to npm, PyPI and crates.io               |
 | [`docs/sdks.md`](docs/sdks.md)                 | TypeScript, Python, Go and Rust client libraries (registries from 0.18.0) |
 | [`docs/federated-identity.md`](docs/federated-identity.md) | Planned sign-in from a registered outside issuer, threat model first |
 | [`docs/clock.md`](docs/clock.md)               | The one clock the backend reads, the host clock a simulation drives, seeded ids |

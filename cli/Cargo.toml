@@ -7,8 +7,15 @@ edition = "2024"
 description = "Install, upgrade, back up and diagnose a Chronos Ledger server"
 license = "Apache-2.0"
 repository = "https://github.com/Life-Experimentalist/Chronos-Ledger"
+homepage = "https://chronos.vkrishna04.me"
+documentation = "https://chronos.vkrishna04.me/cli"
+readme = "README.md"
+keywords = ["scheduling", "attendance", "docker-compose", "cli", "self-hosted"]
+categories = ["command-line-utilities"]
 rust-version = "1.88"
-publish = false
+# Only what `cargo install` needs: the source and the lockfile it is told to
+# honour with --locked. The tests are inline, so nothing else belongs here.
+include = ["src/**", "assets/**", "Cargo.toml", "Cargo.lock", "README.md"]
 
 [package.metadata.binstall]
 # cargo-binstall fetches the bare binaries that release.yml (cli-build) attaches

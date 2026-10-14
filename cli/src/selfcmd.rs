@@ -3,9 +3,11 @@
 
 //! `chronos self update` and `chronos self uninstall`.
 //!
-//! Only the manager that installed a copy changes it. Homebrew and Scoop copies
-//! go through `brew` and `scoop`, so their records stay true. Files are replaced
-//! or deleted directly only for the install-script copy. Anything else is
+//! Only the manager that installed a copy changes it. Homebrew, Scoop, npm,
+//! Cargo, uv and pipx copies go through their own manager, so its records stay
+//! true. Files are replaced or deleted directly only for the install-script
+//! copy. A copy that `npx`, `uvx` or `pipx run` fetched into a cache is not
+//! installed anywhere, so there is nothing to update or remove. Anything else is
 //! reported with who owns it and left exactly as it is.
 
 use std::fs;
@@ -56,10 +58,19 @@ pub fn update() -> Result<()> {
     let exe = running_exe()?;
     let channel = Channel::detect(&exe);
     match channel {
-        Channel::Homebrew | Channel::Scoop => run_manager(channel.upgrade_argv().unwrap()),
+        Channel::Homebrew
+        | Channel::Scoop
+        | Channel::Npm
+        | Channel::Cargo
+        | Channel::Uv
+        | Channel::Pipx => run_manager(channel.upgrade_argv().unwrap()),
         Channel::Installer => update_installer_copy(&exe),
+        Channel::Temporary(_) => {
+            explain_temporary(&exe, channel, "update");
+            Ok(())
+        }
         Channel::Foreign(name) => bail!(
-            "{} was installed by {name}, which this project does not publish to. Update or remove it with {name}, then install through a supported channel (docs/cli.md).",
+            "{} comes from {name}, which chronos does not manage. Update or remove it there, then install through a supported channel (docs/cli.md).",
             exe.display()
         ),
         Channel::Unknown => bail!(
@@ -67,6 +78,18 @@ pub fn update() -> Result<()> {
             exe.display()
         ),
     }
+}
+
+/// A cache copy is fetched fresh by the runner, so nothing is changed here.
+fn explain_temporary(exe: &Path, channel: Channel, verb: &str) {
+    println!(
+        "{} is a temporary copy fetched by {}, so there is nothing to {verb}. It is downloaded again when the cache is cleared. To run the newest release, use: {}",
+        exe.display(),
+        channel.name(),
+        channel
+            .fresh_command()
+            .unwrap_or("the runner's latest form"),
+    );
 }
 
 fn update_installer_copy(exe: &Path) -> Result<()> {
@@ -128,7 +151,12 @@ pub fn uninstall(yes: bool) -> Result<()> {
     let exe = running_exe()?;
     let channel = Channel::detect(&exe);
     match channel {
-        Channel::Homebrew | Channel::Scoop => {
+        Channel::Homebrew
+        | Channel::Scoop
+        | Channel::Npm
+        | Channel::Cargo
+        | Channel::Uv
+        | Channel::Pipx => {
             if !crate::confirm(&format!("Remove chronos with {}?", channel.name()), yes) {
                 return Ok(());
             }
@@ -146,8 +174,12 @@ pub fn uninstall(yes: bool) -> Result<()> {
             }
             uninstall_installer_copy(&exe)?;
         }
+        Channel::Temporary(_) => {
+            explain_temporary(&exe, channel, "remove");
+            return Ok(());
+        }
         Channel::Foreign(name) => bail!(
-            "{} was installed by {name}. Remove it with {name}; chronos does not delete files another manager tracks.",
+            "{} comes from {name}. Remove it there; chronos does not delete files another tool tracks.",
             exe.display()
         ),
         Channel::Unknown => bail!(

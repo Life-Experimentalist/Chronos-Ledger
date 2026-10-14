@@ -6,8 +6,15 @@ edition = "2021"
 description = "Typed client for the Chronos Ledger REST API"
 license = "Apache-2.0"
 repository = "https://github.com/Life-Experimentalist/Chronos-Ledger"
+homepage = "https://chronos.vkrishna04.me"
+documentation = "https://docs.rs/chronosledger-client"
+readme = "README.md"
+keywords = ["chronos-ledger", "scheduling", "attendance", "api-client", "openapi"]
+categories = ["api-bindings"]
 rust-version = "1.88"
-publish = false
+# build.rs generates the client from openapi.yaml on every build, so both files
+# have to ship or the published crate cannot compile.
+include = ["src/**", "build.rs", "openapi.yaml", "Cargo.toml", "Cargo.lock", "README.md"]
 
 [dependencies]
 # What the generated client needs.

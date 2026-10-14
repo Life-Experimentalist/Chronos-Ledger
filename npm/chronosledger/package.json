@@ -1,0 +1,42 @@
+{
+  "name": "chronosledger",
+  "version": "0.0.0",
+  "description": "Install, upgrade, back up and diagnose a Chronos Ledger server. The chronos command line tool.",
+  "bin": {
+    "chronos": "bin/chronos.js",
+    "chronosledger": "bin/chronos.js"
+  },
+  "files": [
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "optionalDependencies": {
+    "chronosledger-darwin-arm64": "0.0.0",
+    "chronosledger-darwin-x64": "0.0.0",
+    "chronosledger-linux-arm64": "0.0.0",
+    "chronosledger-linux-x64": "0.0.0",
+    "chronosledger-windows-arm64": "0.0.0",
+    "chronosledger-windows-x64": "0.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "chronos-ledger",
+    "scheduling",
+    "attendance",
+    "docker-compose",
+    "cli",
+    "self-hosted"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://chronos.vkrishna04.me",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Life-Experimentalist/Chronos-Ledger.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Life-Experimentalist/Chronos-Ledger/issues"
+  }
+}

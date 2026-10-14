@@ -298,3 +298,24 @@ jobs:
 
       - name: Upload to release
         run: gh release upload "$TAG" dist/* --clobber
+
+  # ── Step 6: Start the registry publish ───────────────────────────────────
+  # publish.yml is its own workflow because the trusted publishers on npm, PyPI
+  # and crates.io are registered against that file name. It only does anything
+  # for a registry whose repository variable is "true" (NPM_PUBLISH,
+  # PYPI_PUBLISH, CRATES_PUBLISH); see docs/publishing.md. A workflow started
+  # with the repository token is allowed to start another through
+  # workflow_dispatch.
+  start-publish:
+    name: Start the registry publish
+    needs: [release-please, cli-publish]
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - run: gh workflow run publish.yml -f tag="$TAG"

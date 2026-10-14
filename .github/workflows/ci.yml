@@ -369,6 +369,106 @@ jobs:
       - run: uv run ruff check . --output-format=github
       - run: uv run pytest -q
 
+  # ── Registry packaging: publish.yml's build steps, on fake binaries ───────
+  # Nothing is uploaded and no secret is read. A manifest, a script or an include
+  # list that would break the first real publish breaks this instead.
+  publish-dry-run:
+    name: Publish, dry run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: |
+            cli
+            sdks/rust
+
+      # The CLI embeds these two files, and a published crate can only hold files
+      # under cli/, so the repository root keeps the originals.
+      - name: The copies embedded in the CLI match the repository root
+        run: |
+          cmp docker-compose.prod.yml cli/assets/docker-compose.prod.yml
+          cmp .env.example cli/assets/env.example
+
+      - name: Make six fake release assets
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/assets"
+          for a in linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64.exe windows-arm64.exe; do
+            f="chronos-v9.9.9-$a"
+            printf '#!/bin/sh\necho "chronos 9.9.9"\n' > "$RUNNER_TEMP/assets/$f"
+            (cd "$RUNNER_TEMP/assets" && sha256sum "$f" > "$f.sha256")
+          done
+          ls -l "$RUNNER_TEMP/assets"
+
+      - name: npm, prepare and pack every package
+        run: |
+          set -eu
+          sh scripts/npm-prepare.sh v9.9.9 "$RUNNER_TEMP/assets" "$RUNNER_TEMP/npm-out"
+          for dir in "$RUNNER_TEMP"/npm-out/*/; do
+            echo "== $dir"
+            npm pack --dry-run "$dir"
+          done
+          # The dispatcher must pin every platform package to its own version.
+          test "$(grep -c '"9.9.9"' "$RUNNER_TEMP/npm-out/chronosledger/package.json")" -eq 7
+          # Windows packages are named windows-* and say win32 in os.
+          grep -q '"os": \["win32"\]' "$RUNNER_TEMP/npm-out/chronosledger-windows-x64/package.json"
+          test ! -e "$RUNNER_TEMP/npm-out/chronosledger-win32-x64"
+          # The shim resolves the same names the prepare script writes.
+          for pkg in "$RUNNER_TEMP"/npm-out/chronosledger-*/; do
+            grep -q "$(basename "$pkg")" npm/chronosledger/bin/chronos.js
+          done
+          node --check npm/chronosledger/bin/chronos.js
+
+      - name: PyPI, build and check the wheels
+        run: |
+          set -eu
+          python3 scripts/build_wheels.py v9.9.9 "$RUNNER_TEMP/assets" "$RUNNER_TEMP/wheels"
+          pipx run twine check --strict "$RUNNER_TEMP"/wheels/*.whl
+          python3 - "$RUNNER_TEMP/wheels" <<'EOF'
+          import pathlib, sys, zipfile
+
+          wheels = sorted(pathlib.Path(sys.argv[1]).glob("*.whl"))
+          assert len(wheels) == 6, f"expected 6 wheels, found {len(wheels)}"
+          for whl in wheels:
+              exe = ".exe" if "win_" in whl.name else ""
+              with zipfile.ZipFile(whl) as zf:
+                  for cmd in ("chronos", "chronosledger"):
+                      info = zf.getinfo(f"chronosledger-9.9.9.data/scripts/{cmd}{exe}")
+                      assert info.external_attr >> 16 & 0o111 == 0o111, f"{whl.name}: {cmd} is not executable"
+              print("ok", whl.name)
+          EOF
+
+      - name: crates.io, package the CLI
+        working-directory: cli
+        run: |
+          set -eu
+          cargo package --locked --list | tee "$RUNNER_TEMP/cli-files.txt"
+          for f in Cargo.toml Cargo.lock README.md src/main.rs assets/env.example assets/docker-compose.prod.yml; do
+            grep -qx "$f" "$RUNNER_TEMP/cli-files.txt" || { echo "::error::$f is missing from the chronosledger package"; exit 1; }
+          done
+          # Builds the unpacked crate on its own, which is what cargo install does.
+          cargo package --locked
+
+      - name: crates.io, package the Rust SDK
+        working-directory: sdks/rust
+        run: |
+          set -eu
+          cargo package --locked --list | tee "$RUNNER_TEMP/sdk-files.txt"
+          for f in Cargo.toml Cargo.lock README.md build.rs openapi.yaml src/lib.rs; do
+            grep -qx "$f" "$RUNNER_TEMP/sdk-files.txt" || { echo "::error::$f is missing from the chronosledger-client package"; exit 1; }
+          done
+          cargo package --locked
+
   # ── Publish: only reachable once every gate above is green ────────────────
   publish:
     name: Publish images to GHCR and Docker Hub
@@ -402,6 +502,7 @@ jobs:
       packages: write
       id-token: write
       attestations: write
+      actions: write
     uses: ./.github/workflows/release.yml
     secrets:
       RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}

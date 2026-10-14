@@ -1,0 +1,249 @@
+
+# Copyright 2026 Chronos Ledger Contributors (Apache 2.0)
+#
+# Production Docker Compose, pulls pre-built images from GHCR.
+# No local build required; swap in any released version instantly.
+#
+# Usage:
+#   # Latest nightly build from main branch
+#   docker compose -f docker-compose.prod.yml up -d
+#
+#   # Pin to a specific release
+#   VERSION=v1.2.0 docker compose -f docker-compose.prod.yml up -d
+#
+# Required env vars (set in .env or export before running):
+#   JWT_SECRET_SIGNING_KEY , openssl rand -hex 32
+#   DB_PASSWORD            , strong random password
+#   VAPID_PUBLIC_KEY       , npx web-push generate-vapid-keys
+#   VAPID_PRIVATE_KEY      , (same command)
+#   VAPID_CONTACT_EMAIL    , admin reachable email
+#   GHCR_OWNER             , your GitHub org/username, lowercase (default: life-experimentalist)
+#   VERSION                , image tag to deploy  (default: latest)
+
+x-restart: &restart
+  restart: unless-stopped
+
+x-chronos-net: &chronos-net
+  networks:
+    - chronos_net
+
+# Nothing here pins a container_name on purpose. A fixed name is global to the
+# Docker daemon, so pinning one stops this stack starting on a host that is
+# already running the dev stack, and it blocks the horizontal scaling that
+# docs/deployment.md describes. Address a container through compose instead:
+#   docker compose -f docker-compose.prod.yml ps chronos-app
+#   docker compose -f docker-compose.prod.yml logs chronos-proxy
+
+services:
+  # ── Web (nginx + pre-built Next.js static export) ─────────────────────────
+  chronos-proxy:
+    <<: [*restart, *chronos-net]
+    image: ghcr.io/${GHCR_OWNER:-life-experimentalist}/chronos-ledger-web:${VERSION:-latest}
+    ports:
+      # Host side only. The container still listens on 80 and 443; these say
+      # where they surface. Another compose file that wants the host's own 80
+      # and 443 (an outer proxy fronting several stacks) can move Chronos aside
+      # with EDGE_HTTP_PORT and EDGE_HTTPS_PORT instead of editing this file.
+      # The defaults are the ports that were hardcoded here before.
+      - "${EDGE_HTTP_PORT:-80}:80"
+      - "${EDGE_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      chronos-app:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── FastAPI backend ────────────────────────────────────────────────────────
+  chronos-app:
+    <<: [*restart, *chronos-net]
+    image: ghcr.io/${GHCR_OWNER:-life-experimentalist}/chronos-ledger-backend:${VERSION:-latest}
+    environment:
+      DATABASE_URL: postgresql://chronos_admin:${DB_PASSWORD:?DB_PASSWORD is required}@chronos-db:5432/chronos_ledger
+      REDIS_URL: redis://chronos-cache:6379/0
+      JWT_SECRET_SIGNING_KEY: ${JWT_SECRET_SIGNING_KEY:?JWT_SECRET_SIGNING_KEY is required}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-30}
+      # The first password for the seeded administrator account, applied at
+      # boot while that account is still unused. Empty leaves it
+      # unreachable, which is deliberate: there is no default to find in
+      # this repository.
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
+      PASSWORD_MIN_LENGTH: ${PASSWORD_MIN_LENGTH:-12}
+      # A budget per caller on sign-in, the visitor kiosk and the calendar
+      # feed, counted in Redis. Any count at 0 turns that one off, and
+      # RATE_LIMIT_ENABLED=false turns off all three.
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      RATE_LIMIT_LOGIN_PER_IP: ${RATE_LIMIT_LOGIN_PER_IP:-10}
+      RATE_LIMIT_LOGIN_PER_EMAIL: ${RATE_LIMIT_LOGIN_PER_EMAIL:-5}
+      RATE_LIMIT_GUEST_CHECKIN: ${RATE_LIMIT_GUEST_CHECKIN:-300}
+      RATE_LIMIT_CALENDAR_FEED: ${RATE_LIMIT_CALENDAR_FEED:-60}
+      # Largest CSV upload in MB. nginx refuses anything over 25 MB first.
+      CSV_UPLOAD_MAX_MB: ${CSV_UPLOAD_MAX_MB:-25}
+      # How coarse a member's location fix may be, as a multiple of the
+      # fence radius. 0 turns the check off.
+      GEOFENCE_ACCURACY_FACTOR: ${GEOFENCE_ACCURACY_FACTOR:-2}
+      # Days ahead the ledger is kept written, 1 to 366.
+      LEDGER_HORIZON_DAYS: ${LEDGER_HORIZON_DAYS:-28}
+      # Days a visitor check-in is kept before a daily job deletes it. 0
+      # keeps them forever.
+      GUEST_RETENTION_DAYS: ${GUEST_RETENTION_DAYS:-0}
+      GUEST_ADMIN_CAN_DECIDE: ${GUEST_ADMIN_CAN_DECIDE:-false}
+      # Minutes a visit code keeps opening the visitor's own status
+      # lookup. 0 leaves it working for as long as the check-in is kept.
+      GUEST_VISIT_CODE_TTL_MINUTES: ${GUEST_VISIT_CODE_TTL_MINUTES:-0}
+      # Minutes an approved visit lasts, from the decision. Past it the
+      # visit shows as an overstay and the desk is told once; nothing is
+      # revoked. 0 leaves an approved visit open-ended. The second is the
+      # most one extension may add, and 0 there refuses every extension.
+      GUEST_VISIT_LENGTH_MINUTES: ${GUEST_VISIT_LENGTH_MINUTES:-0}
+      GUEST_VISIT_EXTENSION_MAX_MINUTES: ${GUEST_VISIT_EXTENSION_MAX_MINUTES:-240}
+      # Whether a change to a room or a booking is written down for an
+      # outside system to poll for. Off: nothing deletes those rows, and an
+      # instance with no integrator has nobody to read them.
+      CHANGE_FEED_ENABLED: ${CHANGE_FEED_ENABLED:-false}
+      # Outgoing webhooks, sent from the change feed. https only and no
+      # private addresses unless these say otherwise (docs/webhooks.md).
+      WEBHOOK_DELIVERY_INTERVAL_SECONDS: ${WEBHOOK_DELIVERY_INTERVAL_SECONDS:-5}
+      WEBHOOK_ALLOW_HTTP_HOSTS: ${WEBHOOK_ALLOW_HTTP_HOSTS:-}
+      WEBHOOK_ALLOW_PRIVATE_TARGETS: ${WEBHOOK_ALLOW_PRIVATE_TARGETS:-false}
+      # Whether a registered outside issuer may vouch for a person. Off, and
+      # off answers 404 rather than 403; nothing verifies until an operator
+      # registers an issuer and a signing key.
+      FEDERATED_IDENTITY_ENABLED: ${FEDERATED_IDENTITY_ENABLED:-false}
+      # The longest life accepted in one of those notes, in seconds. The note
+      # says how long it should work and this is the second opinion.
+      FEDERATED_TOKEN_MAX_LIFETIME_SECONDS: ${FEDERATED_TOKEN_MAX_LIFETIME_SECONDS:-120}
+      # How far the two clocks may disagree, in seconds. Widening it widens
+      # the window a stolen note can be replayed in by the same amount.
+      FEDERATED_CLOCK_SKEW_SECONDS: ${FEDERATED_CLOCK_SKEW_SECONDS:-60}
+      # Which upstream addresses uvicorn believes X-Forwarded-For from. This
+      # service publishes no ports, so nginx is the only way in. Without it
+      # every request looks like it came from the proxy and the sign-in
+      # limit counts the whole organization as one caller. Safe because
+      # nginx overwrites that header rather than appending to it, so a
+      # caller cannot put its own address on the front of it.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
+      APP_ENV: production
+      # /docs, /redoc and /openapi.json. Blank follows APP_ENV, which is
+      # pinned to production here, so they are off unless you set true.
+      DOCS_ENABLED: ${DOCS_ENABLED:-}
+      # Decides what "today" means. A container runs UTC, so an
+      # organization that is not in UTC needs this or the dashboard is a
+      # whole offset out. IANA name, not an offset.
+      ORG_TIMEZONE: ${ORG_TIMEZONE:-UTC}
+      # What the interface calls the engine's six nouns, one variable each.
+      # Blank means the engine's own neutral word. Labels only, never the
+      # schema and never the API. Served to the client by GET /api/v1/config.
+      # There are no presets: see docs/vocabulary.md.
+      LABEL_STAFF: ${LABEL_STAFF:-}
+      LABEL_MEMBER: ${LABEL_MEMBER:-}
+      LABEL_ACTIVITY: ${LABEL_ACTIVITY:-}
+      LABEL_UNIT: ${LABEL_UNIT:-}
+      LABEL_LEAD: ${LABEL_LEAD:-}
+      LABEL_CYCLE: ${LABEL_CYCLE:-}
+      ORG_DOMAIN_MASK: ${ORG_DOMAIN_MASK:-org.internal}
+      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-http://localhost}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_CONTACT_EMAIL: ${VAPID_CONTACT_EMAIL:-admin@org.internal}
+      # Opt in, and only to a counter you run yourself. Both have to be
+      # set: an empty endpoint leaves it off.
+      TELEMETRY_ENABLED: ${TELEMETRY_ENABLED:-false}
+      TELEMETRY_ENDPOINT: ${TELEMETRY_ENDPOINT:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      chronos-db:
+        condition: service_healthy
+      chronos-cache:
+        condition: service_started
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  chronos-db:
+    <<: [*restart, *chronos-net]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: chronos_admin
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: chronos_ledger
+    volumes:
+      - chronos_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chronos_admin -d chronos_ledger"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  chronos-cache:
+    <<: [*restart, *chronos-net]
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - chronos_cache_store:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # ── Cloudflare Tunnel (optional, profile "tunnel") ─────────────────────────
+  # Off until the profile is on (COMPOSE_PROFILES=tunnel in .env, or --profile
+  # tunnel). For a host program on another machine that has to reach Chronos
+  # with no inbound port open here: cloudflared dials out to Cloudflare, and
+  # requests for the tunnel's hostname come back down that connection to
+  # chronos-proxy, so this service publishes nothing. The token is a credential
+  # and comes only from .env. docs/deployment.md, "Cloudflare Tunnel".
+  # docker-compose.tunnel.yml takes the proxy's host ports away for a machine
+  # whose only way in is the tunnel.
+  chronos-tunnel:
+    <<: [*restart, *chronos-net]
+    image: cloudflare/cloudflared:2026.10.0
+    profiles:
+      - tunnel
+    command: tunnel --no-autoupdate run
+    environment:
+      # cloudflared reads the token under this name, which keeps it off the
+      # command line. Not :? like the secrets above: compose interpolates
+      # the whole file before it looks at profiles, so a required marker
+      # here would stop every deploy, tunnel or not. An empty token makes
+      # cloudflared exit and say so.
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      chronos-proxy:
+        condition: service_started
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+volumes:
+  chronos_data:
+    driver: local
+  chronos_cache_store:
+    driver: local
+
+networks:
+  chronos_net:
+    driver: bridge

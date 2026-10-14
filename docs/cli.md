@@ -19,7 +19,16 @@ Pick one channel. Installing through two leaves two copies on PATH, and
 | Windows | `irm https://chronos.vkrishna04.me/install.ps1 \| iex` |
 | Homebrew | `brew install life-experimentalist/tap/chronos` |
 | Scoop | `scoop bucket add le https://github.com/Life-Experimentalist/scoop-bucket` then `scoop install chronos` |
+| npm | `npm i -g chronosledger`, or `npx chronosledger@latest` to run it once |
+| uv | `uv tool install chronosledger`, or `uvx chronosledger@latest` to run it once |
+| pipx | `pipx install chronosledger` |
+| Cargo | `cargo install --locked chronosledger`, or `cargo binstall chronosledger` for the prebuilt binary |
 | Manual | Download `chronos-vX.Y.Z-<os>-<arch>` from the release page and check it against its `.sha256` file |
+
+The npm, uv, pipx and Cargo rows work from 0.18.0. The npm and PyPI packages
+carry the same release binary the other channels download; nothing is built or
+run when they install. Those channels cache old copies, so ask for the newest
+one explicitly (`@latest`, `uv tool upgrade`, `--force`).
 
 The install scripts put the binary in `~/.chronos/bin` (Windows:
 `%LOCALAPPDATA%\chronos\bin`), or in `$CHRONOS_INSTALL_DIR/bin` when that is
@@ -81,6 +90,11 @@ binary lives and hand over to whatever put it there:
 | install script | downloads, verifies and replaces the binary | removes the binary, `install.json` and the PATH change the script recorded |
 | Homebrew | `brew upgrade chronos` | `brew uninstall chronos` |
 | Scoop | `scoop update chronos` | `scoop uninstall chronos` |
+| npm | `npm install -g chronosledger@latest` | `npm uninstall -g chronosledger` |
+| Cargo | `cargo install --locked chronosledger` | `cargo uninstall chronosledger` |
+| uv tool | `uv tool upgrade chronosledger` | `uv tool uninstall chronosledger` |
+| pipx | `pipx upgrade chronosledger` | `pipx uninstall chronosledger` |
+| `npx` or `uvx` cache | nothing; the copy is temporary, so it prints how to run the newest release (`npx chronosledger@latest` or `uvx chronosledger@latest`) | nothing; the copy is gone when the cache is cleared |
 | anything else | nothing; says which tool owns the copy | nothing; says which tool owns the copy |
 
 To switch channels, uninstall with the old one, then install with the new one.
