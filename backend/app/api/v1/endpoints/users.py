@@ -126,13 +126,22 @@ def create_user(
             code=ErrorCode.INSUFFICIENT_ROLE,
         )
     ensure_unit_scope(current_user, payload.unit_code)
-    if db.query(User).filter(User.id == payload.id).first():
+    # A user id and an email address are each unique in the whole deployment,
+    # not per organization: a token names a user by id alone, and signing in
+    # finds the account by its address alone. So both are checked everywhere.
+    if (
+        db.query(User)
+        .filter(User.id == payload.id)
+        .execution_options(all_organizations=True)
+        .first()
+    ):
         raise ChronosError(
             status_code=409, detail="User ID already exists", code=ErrorCode.ALREADY_EXISTS
         )
     if (
         db.query(User)
         .filter(func.lower(User.email_address) == normalize_email(payload.email_address))
+        .execution_options(all_organizations=True)
         .first()
     ):
         raise ChronosError(
@@ -231,6 +240,7 @@ def update_user(
                 func.lower(User.email_address) == normalize_email(payload.email_address),
                 User.id != user.id,
             )
+            .execution_options(all_organizations=True)
             .first()
         )
         if taken:

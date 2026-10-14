@@ -32,6 +32,7 @@ from sqlalchemy.orm import relationship, validates
 from app.core import clock
 from app.core.database import Base
 from app.core.emails import normalize_email
+from app.core.organization import OrganizationScoped
 
 # The two exclusion constraints below compare an integer with = inside a gist
 # index, which PostgreSQL can only do with btree_gist loaded. Created ahead of
@@ -169,7 +170,22 @@ class ReservationStatus(enum.StrEnum):
     CANCELLED = "CANCELLED"
 
 
-class PlanningCycle(Base):
+class Organization(Base):
+    """One organization's corner of the deployment. Every scoped row names one.
+
+    The seeded one is DEFAULT_ORGANIZATION_ID (app/core/schema.py); another
+    comes from `chronos-engine organization create`. There is no route that
+    makes, renames or removes one.
+    """
+
+    __tablename__ = "organizations"
+
+    id = Column(String(50), primary_key=True)
+    name = Column(String(120), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=clock.now)
+
+
+class PlanningCycle(OrganizationScoped, Base):
     __tablename__ = "planning_cycles"
 
     id = Column(Integer, primary_key=True)
@@ -183,7 +199,7 @@ class PlanningCycle(Base):
     activities = relationship("Activity", back_populates="cycle", cascade="all, delete-orphan")
 
 
-class User(Base):
+class User(OrganizationScoped, Base):
     __tablename__ = "users"
 
     id = Column(String(50), primary_key=True)
@@ -230,7 +246,7 @@ class User(Base):
     )
 
 
-class Activity(Base):
+class Activity(OrganizationScoped, Base):
     __tablename__ = "activities"
     __table_args__ = (UniqueConstraint("activity_code", "cycle_id", name="uq_activity_cycle"),)
 
@@ -253,7 +269,7 @@ class Activity(Base):
     )
 
 
-class ActivityEnrollment(Base):
+class ActivityEnrollment(OrganizationScoped, Base):
     __tablename__ = "activity_enrollments"
     __table_args__ = (
         UniqueConstraint("activity_id", "member_id", name="unique_member_registration"),
@@ -267,7 +283,7 @@ class ActivityEnrollment(Base):
     member = relationship("User", back_populates="activity_enrollments")
 
 
-class Resource(Base):
+class Resource(OrganizationScoped, Base):
     """A thing a reservation consumes: a room today, a person or a machine later.
 
     Rooms used to be a bare string repeated on every slot and every generated
@@ -275,10 +291,11 @@ class Resource(Base):
     a rename had to be found and replaced everywhere, and two rows naming the
     same room were the same room only by spelling.
 
-    code is unique, and one row per distinct string is exactly what the
-    backfill produces. It is deliberately not scoped by unit: two units both
-    calling a room "101" is a real fact about the data that the data cannot
-    resolve, so the import treats them as one room rather than inventing a
+    code is unique within an organization, and one row per distinct string
+    is exactly what the backfill produces. Two organizations each have their
+    own "101". It is deliberately not scoped by unit: two units both calling
+    a room "101" is a real fact about the data that the data cannot resolve,
+    so the import treats them as one room rather than inventing a
     distinction it cannot verify.
     """
 
@@ -291,10 +308,11 @@ class Resource(Base):
             "mode <> 'POOLED' OR (capacity IS NOT NULL AND capacity >= 1)",
             name="ck_resources_pool_capacity",
         ),
+        UniqueConstraint("organization_id", "code", name="uq_resources_organization_code"),
     )
 
     id = Column(Integer, primary_key=True)
-    code = Column(String(30), nullable=False, unique=True, index=True)
+    code = Column(String(30), nullable=False, index=True)
     label = Column(String(120), nullable=False)
     resource_type = Column(
         Enum(ResourceType, name="resource_type"),
@@ -321,7 +339,7 @@ class Resource(Base):
     active = Column(Boolean, default=True, server_default=text("true"), nullable=False)
 
 
-class StructuralMasterSlot(Base):
+class StructuralMasterSlot(OrganizationScoped, Base):
     __tablename__ = "structural_master_slots"
     __table_args__ = (CheckConstraint("day_of_week_index BETWEEN 1 AND 7"),)
 
@@ -350,7 +368,7 @@ class StructuralMasterSlot(Base):
     daily_ledger_entries = relationship("DailyLedger", back_populates="master_slot")
 
 
-class DailyLedger(Base):
+class DailyLedger(OrganizationScoped, Base):
     __tablename__ = "daily_ledger"
     # One day per slot per date.
     __table_args__ = (
@@ -425,7 +443,7 @@ class DailyLedger(Base):
     )
 
 
-class Reservation(Base):
+class Reservation(OrganizationScoped, Base):
     """A hold an outside system places on a resource, for one dated window.
 
     Its own table rather than a slot or a ledger row, because it is neither.
@@ -549,7 +567,7 @@ class Reservation(Base):
     resource = relationship("Resource")
 
 
-class ReverseRsvpLog(Base):
+class ReverseRsvpLog(OrganizationScoped, Base):
     __tablename__ = "reverse_rsvp_logs"
 
     id = Column(Integer, primary_key=True)
@@ -573,7 +591,7 @@ class ReverseRsvpLog(Base):
     authorizing_user = relationship("User", foreign_keys=[authorized_by_user_id])
 
 
-class VerificationLedger(Base):
+class VerificationLedger(OrganizationScoped, Base):
     __tablename__ = "verification_ledger"
     __table_args__ = (
         UniqueConstraint(
@@ -595,7 +613,7 @@ class VerificationLedger(Base):
     authorizing_agent = relationship("User", foreign_keys=[authorizing_agent_id])
 
 
-class LedgerAnnotation(Base):
+class LedgerAnnotation(OrganizationScoped, Base):
     __tablename__ = "ledger_annotations"
 
     id = Column(Integer, primary_key=True)
@@ -611,7 +629,7 @@ class LedgerAnnotation(Base):
     creator = relationship("User", foreign_keys=[creator_id])
 
 
-class GuestGateRegistry(Base):
+class GuestGateRegistry(OrganizationScoped, Base):
     __tablename__ = "guest_gate_registry"
 
     id = Column(Integer, primary_key=True)
@@ -684,7 +702,7 @@ class RefreshToken(Base):
 WILDCARD_SCOPE = "*"
 
 
-class ApiKey(Base):
+class ApiKey(OrganizationScoped, Base):
     """A long-lived machine credential for external integrations, bound to a
     normal user row (a service account). Only the SHA-256 hash is stored; the
     raw key is shown once at creation. Every request made with the key acts
@@ -716,16 +734,20 @@ class ApiKey(Base):
     created_at = Column(DateTime(timezone=True), default=clock.now)
 
 
-class AuditRecord(Base):
+class AuditRecord(OrganizationScoped, Base):
     """One write made through the API: who, with which key, what, and how it ended.
 
-    No foreign keys on purpose. A record has to outlive the account and the
-    key that made it, and a user deleted with ON DELETE CASCADE would take
-    their history with them. Bodies are never kept: a login carries a
-    password and an upload carries a whole file.
+    No foreign keys to users or keys on purpose. A record has to outlive the
+    account and the key that made it, and a user deleted with ON DELETE
+    CASCADE would take their history with them. Bodies are never kept: a
+    login carries a password and an upload carries a whole file.
+
+    The organization is the caller's, and empty when there was no caller (a
+    failed sign-in). No organization's admin sees an empty one.
     """
 
     __tablename__ = "audit_records"
+    organization_optional = True
 
     id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     at = Column(DateTime(timezone=True), nullable=False, index=True)
@@ -765,7 +787,7 @@ class IdempotencyRecord(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=clock.now, index=True)
 
 
-class ChangeMarker(Base):
+class ChangeMarker(OrganizationScoped, Base):
     """A note that one row changed, kept so an outside system can find out.
 
     An integrator holding its own copy of the rooms and the bookings has no
@@ -781,7 +803,7 @@ class ChangeMarker(Base):
     therefore harmless, which is what lets the marker be written without a
     lock.
 
-    No foreign keys, as with AuditRecord. A marker outlives what it points
+    No foreign keys to the row, as with AuditRecord. A marker outlives what it points
     at, and a cascade would quietly take the news of a deletion away with the
     row it was about.
     """
@@ -805,7 +827,7 @@ class ChangeMarker(Base):
     at = Column(DateTime(timezone=True), nullable=False, default=clock.now)
 
 
-class FederatedIssuer(Base):
+class FederatedIssuer(OrganizationScoped, Base):
     """An outside identity system this instance will accept a note from.
 
     A registration and not an environment variable, because rotating a key and
@@ -837,7 +859,7 @@ class FederatedIssuer(Base):
     )
 
 
-class FederatedIssuerKey(Base):
+class FederatedIssuerKey(OrganizationScoped, Base):
     """One Ed25519 public key an issuer signs with, valid for a stated window.
 
     A set rather than a single key so a rotation has an overlap: the new key is
@@ -871,7 +893,7 @@ class FederatedIssuerKey(Base):
     __table_args__ = (UniqueConstraint("issuer_id", "kid", name="uq_federated_key_kid"),)
 
 
-class FederatedRoleMap(Base):
+class FederatedRoleMap(OrganizationScoped, Base):
     """What a group an issuer asserts means here.
 
     The map belongs to the operator. A note names a subject and may name
@@ -909,7 +931,7 @@ class FederatedRoleMap(Base):
     )
 
 
-class FederatedIdentity(Base):
+class FederatedIdentity(OrganizationScoped, Base):
     """The link between a subject at an issuer and an account here.
 
     This table is the record of federation, and the only thing consulted to
@@ -942,7 +964,7 @@ class FederatedIdentity(Base):
     __table_args__ = (UniqueConstraint("issuer_id", "subject", name="uq_federated_identity"),)
 
 
-class WebhookSubscription(Base):
+class WebhookSubscription(OrganizationScoped, Base):
     """A URL that is told about changes as they happen, instead of polling for them.
 
     Fed from change_markers and nothing else, so it says what the change feed
@@ -978,7 +1000,7 @@ class WebhookSubscription(Base):
     updated_at = Column(DateTime(timezone=True), default=clock.now, onupdate=clock.now)
 
 
-class WebhookDelivery(Base):
+class WebhookDelivery(OrganizationScoped, Base):
     """One event for one subscription, and whether it has arrived.
 
     payload is the exact body, built when the marker was fanned out, so every

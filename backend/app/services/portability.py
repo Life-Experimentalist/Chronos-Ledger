@@ -129,8 +129,21 @@ class ArchiveError(Exception):
 # Writing.
 
 
-def export_archive(connection: Connection, target: BinaryIO, *, include_secrets: bool = False):
-    """Write the whole organization to target as a zip. Returns the manifest.
+def export_archive(
+    connection: Connection,
+    target: BinaryIO,
+    *,
+    include_secrets: bool = False,
+    organization_id: str | None = None,
+):
+    """Write the deployment, or one organization of it, to target as a zip. Returns the manifest.
+
+    organization_id, when given, keeps only that organization's rows: its
+    own row in organizations, and the rows of every other exported table
+    whose organization_id matches. GET /admin/export passes the caller's
+    organization; the CLI export passes nothing and writes every
+    organization. Audit records with no organization (a failed sign-in) are
+    in no organization's archive.
 
     target has to be seekable (a real file): zipfile then writes each
     member's sizes into its header instead of a data descriptor after it,
@@ -154,6 +167,9 @@ def export_archive(connection: Connection, target: BinaryIO, *, include_secrets:
             columns = [c for c in table.columns if c.name not in skip]
             order = [_bytewise(c, postgres) for c in table.primary_key.columns]
             query = select(*columns).order_by(*order).execution_options(yield_per=FETCH_SIZE)
+            if organization_id is not None:
+                owner = table.c.id if table.name == "organizations" else table.c.organization_id
+                query = query.where(owner == organization_id)
             result = connection.execute(query)
             count = 0
             with archive.open(_member(f"{table.name}.jsonl"), "w", force_zip64=True) as out:

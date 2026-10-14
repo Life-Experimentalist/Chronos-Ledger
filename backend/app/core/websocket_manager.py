@@ -90,7 +90,7 @@ class OrganizationConnectionManager:
         await self._broadcast_here(event_type, data_payload)
         await self._publish({"to": None, "event": event_type, "payload": data_payload})
 
-    async def online_count(self) -> int:
+    async def online_count(self, among: set[str] | None = None) -> int:
         """How many people have a socket open, on every instance.
 
         A person connected to two instances is counted once. The other
@@ -98,11 +98,15 @@ class OrganizationConnectionManager:
         PRESENCE_REFRESH_SECONDS old; this instance's come from its dict rather
         than its own key, which can be as old. Without the relay, this
         instance counts its own.
+
+        among, when given, counts only those user ids: /ws/stats passes the
+        caller's organization, so one organization never learns how busy
+        another is.
         """
         here = set(self.active_sockets)
         client = self._client
         if client is None:
-            return len(here)
+            return len(here if among is None else here & among)
         own = self._presence_key()
         try:
             keys = [
@@ -111,8 +115,9 @@ class OrganizationConnectionManager:
             elsewhere = await client.sunion(keys) if keys else set()
         except (redis.RedisError, OSError) as unreachable:
             log.warning("websocket count is this instance's alone: %s", unreachable)
-            return len(here)
-        return len(here | elsewhere)
+            elsewhere = set()
+        everyone = here | elsewhere
+        return len(everyone if among is None else everyone & among)
 
     def is_online(self, user_id: str) -> bool:
         """Whether this user has a socket open on this instance.

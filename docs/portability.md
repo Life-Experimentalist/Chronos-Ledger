@@ -27,7 +27,17 @@ to a temporary file and sends it, so a large organization waits for the whole
 export before the download starts. Every export is written to the audit log
 with the account, the key and the status, although it is a read.
 
-From the command line, against a stopped or running engine:
+The route exports the caller's organization only: its row in `organizations`
+and the rows of every other table whose `organization_id` is that
+organization's. Audit records with no organization (a failed sign-in, which
+has no caller) are in no organization's archive. An archive of an
+organization other than `default` does not hold the seeded administrator, so
+loaded into a new database it gives nobody a password; its own accounts sign
+in only if the archive carries their password hashes, which only the command
+line can export.
+
+From the command line, against a stopped or running engine, every
+organization in the database:
 
 ```bash
 chronos-engine export --data-dir ./chronos-data --to ./chronos.zip

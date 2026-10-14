@@ -59,6 +59,7 @@ class UserResponse(BaseModel):
     current_occupancy_index: AccessReadiness
     reporting_line_manager: str | None
     deactivated_at: datetime | None
+    organization_id: str
 
     model_config = {"from_attributes": True}
 

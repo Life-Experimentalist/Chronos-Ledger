@@ -700,8 +700,8 @@ def test_an_import_without_secrets_pauses_webhooks_with_a_new_secret(source, eng
 
 def test_a_database_with_rows_is_refused(source, engines):
     target = engines("target")
-    ensure_schema(target)  # what a server's first start leaves: the seeded administrator
-    with pytest.raises(ArchiveError, match="not empty: users"):
+    ensure_schema(target)  # a first start leaves the default organization and its administrator
+    with pytest.raises(ArchiveError, match="not empty: organizations, users"):
         import_archive(target, io.BytesIO(export_bytes(source)), admin_password=IMPORT_PASSWORD)
     assert row_count(target, "users") == 1
 
@@ -855,7 +855,7 @@ def test_a_failed_export_is_audited_and_leaves_no_file(client, db, seed_users, m
         made.append(path)
         return handle, path
 
-    def fail(connection, target, include_secrets):
+    def fail(connection, target, include_secrets, organization_id):
         raise RuntimeError("export failed")
 
     monkeypatch.setattr(admin.tempfile, "mkstemp", noting_mkstemp)

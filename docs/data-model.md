@@ -15,8 +15,15 @@ before it made.
 
 ```mermaid
 erDiagram
+    Organization {
+        string id PK "e.g. default"
+        string name
+        datetime created_at
+    }
+
     User {
         string id PK "e.g. FAC001, STU20210001"
+        string organization_id FK "→ Organization.id"
         string full_name
         string email_address UK
         string credential_secure_hash
@@ -48,7 +55,8 @@ erDiagram
 
     Resource {
         int id PK
-        string code UK "the room name, unique"
+        string organization_id FK "→ Organization.id"
+        string code "the room name, unique within the organization"
         string label
         string resource_type "ROOM | PERSON"
         string unit_code "nullable"
@@ -222,6 +230,8 @@ erDiagram
     User ||--o| Resource : "is bookable as"
     User ||--o{ ActivityEnrollment : "member enrolls"
     User ||--o{ DailyLedger : "teaches (active)"
+    Organization ||--o{ User : "has"
+    Organization ||--o{ Resource : "has"
     User ||--o{ DailyLedger : "substitutes"
     DailyLedger ||--o{ VerificationLedger : "records attendance"
     DailyLedger ||--o{ LedgerAnnotation : "annotated by"
@@ -242,6 +252,24 @@ erDiagram
 
 ## Table Notes
 
+### `Organization`
+The tenant every other row belongs to, in `organizations`. Every table below carries an `organization_id` (a foreign key here, not null, indexed) except four: `refresh_tokens`, `idempotency_records` and `webhook_attempts`, which hang off a row that already has one or off the caller who sent them, and `organizations` itself. The diagram draws the column on `User` and `Resource` only, to stay readable.
+
+The organization is never chosen by the caller. A request resolves its user first, unscoped, then `core/organization.py::use_organization` pins the session to that user's organization, and from there the `_only_this_organization` listener adds `organization_id = <the caller's>` to every ORM select, update and delete on a table that has the column, and `_file_new_rows` files every new row there. A row from another organization therefore reads as missing, and the routes answer `404` for it as for any other missing row. Jobs that run outside a request (the nightly ledger, webhook fan-out and sending, the retention sweeps) use an unpinned session, see every organization, and copy the organization from the row they start from onto the rows they make. A new row in an unpinned session that names no organization goes to the default one.
+
+`ensure_schema` seeds one organization, `default`, and the seeded administrator belongs to it, so a deployment that never makes a second one behaves as before. Embedded mode always runs in the default organization. A second organization is made with `chronos-engine organization create`, which adds the organization and its first `ORG_ADMIN` (`services/organizations.py::create_organization`); there is no route for it.
+
+`audit_records.organization_id` alone may be null: a failed sign-in has no caller and so no organization. Such a row is in no organization, so no administrator's `GET /audit/` shows it and no HTTP export holds it; it stays in the database and in a `chronos-engine export`.
+
+Which keys are unique within an organization and which across the deployment:
+
+- Across the deployment: `users.id` and `uq_users_email_address_lower`, because signing in names a user before any organization is known; `federated_issuers.issuer`, because a note's `iss` has to find one registration before the organization is known; and the stored secrets (`calendar_feed_token`, refresh `token_hash`, API key `key_hash`, visit code hash, webhook `event_id`), which are random values looked up before there is a caller.
+- Within an organization: `uq_resources_organization_code` on (`organization_id`, `code`).
+- Within a parent row that is already in one organization, and so within that organization without naming it: an activity code within its cycle, one day per slot and date, one attendance mark per member and day, one enrollment per member and activity, a reservation's requester key and reference, a federated key's `kid`, a role map's group and an identity's subject within their issuer, and one webhook delivery per subscription and marker.
+- Per caller: `IdempotencyRecord`'s (`caller`, `key`).
+
+The exclusion constraints on slots, days and reservations compare `resource_id`, which is unique across the deployment, so two organizations' rooms never meet in them.
+
 ### `User`
 Central identity record. Role-based access is enforced at the API layer (`core/security.py`), not as a DB constraint. The `reporting_line_manager` self-join is used to route absence requests to the correct supervisor.
 
@@ -260,7 +288,7 @@ An activity within a cycle. A single activity can appear in multiple cycles as i
 ### `Resource`
 A thing a reservation consumes. Every room is one row, created on first sight by whichever path names it: `services/resource.py::get_or_create_room` is the only writer, so the importer, `POST /schedule/slots` and the demo seed all resolve to the same row rather than to three spellings of one room.
 
-`code` is unique and deliberately not scoped by unit. Two units both calling a room "101" is a fact about the data that the data cannot resolve, so they are one room rather than a distinction the system invented.
+`code` is unique within an organization (`uq_resources_organization_code`) and deliberately not scoped by unit. Two units of one organization both calling a room "101" is a fact about the data that the data cannot resolve, so they are one room rather than a distinction the system invented. Two organizations each calling a room "101" are two rooms, since neither can see the other's.
 
 `user_id` marks a resource that is a person, so that staff availability and room availability do not become two mechanisms that drift apart. `latitude`, `longitude` and `altitude_target` are the room's own geofence, as opposed to the per-day override on a `DailyLedger` row.
 

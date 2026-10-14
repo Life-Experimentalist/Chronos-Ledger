@@ -11,6 +11,7 @@ from datetime import UTC
 
 import pytest
 
+from app.core.organization import DEFAULT_ORGANIZATION_ID
 from app.core.security import hash_api_key
 from app.models.db import ApiKey, AuditRecord
 from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, login
@@ -107,7 +108,13 @@ def history(db, seed_users):
     for actor, at in rows:
         db.add(
             AuditRecord(
-                at=at, actor_id=actor, method="POST", path="/api/v1/seeded", status_code=200
+                at=at,
+                actor_id=actor,
+                method="POST",
+                path="/api/v1/seeded",
+                status_code=200,
+                # A request's record is filed in its caller's organization.
+                organization_id=DEFAULT_ORGANIZATION_ID,
             )
         )
     db.commit()

@@ -18,9 +18,10 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.config import get_settings
 from app.core.database import Base, get_db, get_session_opener
+from app.core.organization import DEFAULT_ORGANIZATION_ID
 from app.core.security import hash_api_key, hash_password
 from app.main import app
-from app.models.db import ApiKey, InstitutionalRole, User
+from app.models.db import ApiKey, InstitutionalRole, Organization, User
 
 # One shared in-memory database for the whole process; each test gets a
 # freshly rebuilt schema via the `db` fixture below.
@@ -107,6 +108,9 @@ def db():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
+    # The organization every row here is filed under, as ensure_schema seeds it.
+    session.add(Organization(id=DEFAULT_ORGANIZATION_ID, name="Default organization"))
+    session.commit()
     try:
         yield session
     finally:

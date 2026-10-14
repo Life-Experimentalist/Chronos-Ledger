@@ -137,6 +137,32 @@ the export is given `--include-secrets`, and importing an archive without
 them needs `INITIAL_ADMIN_PASSWORD`. [portability.md](portability.md) describes the
 archive and what to do after an import without secrets.
 
+`chronos-engine export` writes every organization in the database. The
+`GET /api/v1/admin/export` route writes the caller's organization only.
+
+## A second organization
+
+Everything starts in one organization, `default`, which holds the seeded
+administrator. To let another organization share the deployment, with its own
+people, rooms and schedules that neither side can see across:
+
+```bash
+chronos-engine organization create --data-dir ./chronos-data   --id second --name "Second" --admin-id ADMIN002 --admin-email admin@second.example
+```
+
+The command asks for the new administrator's password, or reads the first
+line of standard input when it is piped, and never takes it as an argument.
+The password has to meet the same rules as any other, and the administrator
+changes it at the first sign-in, as the seeded one does. `--id` is at most 50
+characters. The administrator's id and email address must not be in use in
+any organization, since both are unique across the deployment. The command
+takes `--data-dir`, `--database-url` and `--schema` as `serve` does and works
+while the engine is running.
+
+There is no route that makes, renames or removes an organization: an
+administrator of one organization cannot make another. How organizations
+divide the data is in [api.md](api.md#organizations).
+
 ## Do not put the data directory in a synced folder
 
 OneDrive, Dropbox, Google Drive and iCloud rewrite files underneath a program

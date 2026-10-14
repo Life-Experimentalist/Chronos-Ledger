@@ -288,6 +288,33 @@ graph TD
 
 Higher roles inherit the permissions of all roles below them. Role is embedded in the JWT payload and validated server-side on every request.
 
+### Organizations
+
+Every user belongs to one organization, and everything a request reads or
+writes is that organization's: its users, resources, schedules, reservations,
+attendance, guests, audit trail, change feed, webhooks and calendar feeds. The
+organization comes from the signed-in caller (the user behind the token or the
+API key), never from the path, the query or a header, so the URLs are the same
+for every organization. A role is a role within the caller's organization: an
+`ORG_ADMIN` administers one organization, not the deployment.
+
+A row that belongs to another organization is not there as far as the caller
+can tell. Reading it, changing it or booking it answers `404` `NOT_FOUND`, the
+same as an id that was never used, never `403`, so a caller cannot learn which
+ids another organization holds.
+
+Two keys stay unique across the whole deployment: a user's id and a user's
+email address, because signing in names a user before any organization is
+known. Creating a user whose id or address is taken in another organization is
+refused the same way as one taken in your own. A resource `code` is unique
+only within an organization, so two organizations can each have a room `101`.
+
+A deployment starts with one organization, `default`, which holds the seeded
+administrator and everything made before there was a second one. Another
+organization is made by whoever runs the deployment, with
+`chronos-engine organization create` ([standalone](standalone.md)); there is
+no route for it.
+
 ---
 
 ### POST /auth/login
@@ -418,7 +445,8 @@ password is signed out as soon as its access token expires.
 
 ### GET /auth/me
 
-Returns the current user's `UserResponse` (see Users section).
+Returns the current user's `UserResponse` (see Users section), including the
+`organization_id` of the organization the caller belongs to.
 
 ---
 
@@ -1006,8 +1034,9 @@ the import attaches its slots to this one. `label` defaults to the code.
 of at least 1, and without one is `422`.
 
 The answer is `201` with the room in the shape `GET /resources/` returns. A code
-already taken, whether by a room created here or one an import made, is `409`
-(`a resource with that code already exists`). That is also what a retry gets
+already taken in the caller's organization, whether by a room created here or
+one an import made, is `409` (`a resource with that code already exists`). The
+same code in another organization is a different room and does not clash. That is also what a retry gets
 when its first attempt went through and the response was lost, so a caller that
 meets `409` reads the room back with `GET /resources/?code=` and carries on, or
 sends an `Idempotency-Key` ([Idempotency](#idempotency)) and gets the first
@@ -2297,10 +2326,12 @@ most one day per date, and the database refuses a second
 
 ### GET /admin/export `[ORG_ADMIN]`
 
-The organization's data as one zip archive, sent as an attachment named
-`chronos-ledger-export.zip`. An API key needs `admin:read`. The archive holds
-`manifest.json` and one JSON Lines file per table; its layout, what it leaves
-out and how to load it are in [portability.md](portability.md).
+The caller's organization's data as one zip archive, sent as an attachment
+named `chronos-ledger-export.zip`. An API key needs `admin:read`. The archive
+holds `manifest.json` and one JSON Lines file per table; its layout, what it
+leaves out and how to load it are in [portability.md](portability.md). Other
+organizations' rows are not in it; `chronos-engine export`, run against the
+database, writes every organization.
 
 Password hashes, API key hashes, calendar feed tokens and visit code hashes
 are always left out. An archive with them comes only from `chronos-engine
@@ -2560,9 +2591,9 @@ travels server to client.
 
 ### GET /ws/stats `[ORG_ADMIN]`
 
-How many people have a socket open right now, on every instance:
-`{"online_connections": 4}`. A person counts once however many instances they
-are connected to. The other instances' figures can be up to 15 seconds old,
+How many people in the caller's organization have a socket open right now, on
+every instance: `{"online_connections": 4}`. A person counts once however many
+instances they are connected to. The other instances' figures can be up to 15 seconds old,
 and an instance that cannot reach Redis counts only its own sockets. Super
 admin only, because it is an organization-wide headcount and there is no
 unit-sized share of it to hand a unit admin.

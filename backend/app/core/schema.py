@@ -29,11 +29,12 @@ from sqlalchemy.orm import Session
 
 from app.core.bootstrap import SEEDED_ADMIN_ID
 from app.core.database import Base
+from app.core.organization import DEFAULT_ORGANIZATION_ID
 
 # What /health reports in place of a migration revision. A string a maintainer
 # bumps when the models change, so two instances can be told apart by what
 # their database looks like without either reading its catalog.
-SCHEMA_VERSION = "3"
+SCHEMA_VERSION = "4"
 
 # Two replicas starting together would both find the tables missing and both
 # try to make them. On PostgreSQL the first one to start holds this advisory
@@ -62,6 +63,7 @@ def ensure_schema(engine: Engine) -> str:
         _refuse_pre_015_database(connection)
         had_users = inspect(connection).has_table("users")
         Base.metadata.create_all(connection)
+        _seed_default_organization(connection)
         _seed_administrator(connection)
     return "current" if had_users else "created"
 
@@ -90,8 +92,22 @@ def _refuse_pre_015_database(connection) -> None:
     )
 
 
+def _seed_default_organization(connection) -> None:
+    """The organization a new deployment's data lives in. Nothing if it is there."""
+    from app.models.db import Organization
+
+    session = Session(bind=connection)
+    found = select(Organization.id).where(Organization.id == DEFAULT_ORGANIZATION_ID)
+    if session.execute(found).first():
+        return
+    session.add(Organization(id=DEFAULT_ORGANIZATION_ID, name="Default organization"))
+    session.flush()
+
+
 def _seed_administrator(connection) -> None:
     """One ORG_ADMIN, so a new instance has a way in. Nothing if it is there.
+
+    It belongs to the default organization.
 
     Its password is random and unknown: INITIAL_ADMIN_PASSWORD opens the
     account on the first start (app/core/bootstrap.py).
@@ -110,6 +126,7 @@ def _seed_administrator(connection) -> None:
             credential_secure_hash=hash_password(secrets.token_urlsafe(32)),
             role_type=InstitutionalRole.ORG_ADMIN,
             initial_login_state=True,
+            organization_id=DEFAULT_ORGANIZATION_ID,
         )
     )
     session.flush()
