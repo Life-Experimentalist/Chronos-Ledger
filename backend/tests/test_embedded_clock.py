@@ -152,6 +152,7 @@ def test_the_clock_does_not_go_backwards(embedded):
     earlier = {"to": "2026-09-07T07:59:59+05:30"}
     res = embedded.post("/api/v1/clock/advance", json=earlier, headers=actor(SYSTEM_ACTOR_ID))
     assert res.status_code == 422, res.text
+    assert res.json()["code"] == "INVALID_VALUE"
     assert "backwards" in res.json()["detail"]
     assert clock.now() == datetime.fromisoformat(START).astimezone(UTC)
 

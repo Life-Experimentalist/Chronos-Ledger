@@ -49,7 +49,9 @@ const chronos = createChronosClient({
 });
 ```
 
-Requests that hit a `401` at the same moment share one refresh. Passing both
+Requests that hit a `401` at the same moment share one refresh. If the refresh
+itself fails (the server refuses it, the connection drops or the answer is not a
+token pair), the original `401` is thrown as `ChronosError`. Passing both
 `apiKey` and `tokens` throws.
 
 ## Reservations
@@ -90,11 +92,16 @@ call and sends again on each retry, so a retried write has one effect. A write
 is never sent without a key, which is why writes can be retried at all. `GET`,
 `HEAD` and `OPTIONS` carry none.
 
+The one `multipart/form-data` request, the CSV import, is sent once and never
+retried, and it is not sent again after a token refresh. A failure comes back as
+it is.
+
 The wait before retry `n` (counting from 0) is a random number between 0 and
 `min(maxDelayMs, baseDelayMs * 2 ** n)`. When the response has a `Retry-After`
-header, in seconds or as an HTTP date, the client waits that long instead. A
-wait that would run past the deadline is not started: the last response is
-thrown instead.
+header, in seconds or as an HTTP date, the client waits that long instead; a
+negative or unreadable value is ignored. A wait that would run past the
+deadline is not started: the last response is thrown
+instead.
 
 ```ts
 const chronos = createChronosClient({

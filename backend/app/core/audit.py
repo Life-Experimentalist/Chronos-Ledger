@@ -1,6 +1,6 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
-"""Recording every write made through the API.
+"""Recording every write made through the API, and the reads listed in AUDITED_READS.
 
 A plain ASGI middleware rather than a dependency, so a route cannot be added
 without being covered, and a request refused before any route runs (a bad
@@ -24,6 +24,12 @@ logger = logging.getLogger(__name__)
 
 READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 AUDITED_PREFIX = "/api/v1/"
+# Reads recorded anyway, by the path of the route. The conflict report names
+# which member is enrolled in which activity across the whole schedule. The row
+# is the same as a write's, so it holds the path and not the query string: the
+# from and to range is not kept. Keeping it would take a column, and the record
+# is there to say who looked and when.
+AUDITED_READS = frozenset({"/api/v1/schedule/conflicts"})
 
 
 class AuditMiddleware:
@@ -31,11 +37,7 @@ class AuditMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if (
-            scope["type"] != "http"
-            or scope["method"] in READ_METHODS
-            or not scope["path"].startswith(AUDITED_PREFIX)
-        ):
+        if scope["type"] != "http" or not _is_audited(scope["method"], scope["path"]):
             await self.app(scope, receive, send)
             return
 
@@ -57,6 +59,14 @@ class AuditMiddleware:
                 state.get("api_key_id"),
                 status.get("code", 500),
             )
+
+
+def _is_audited(method, path):
+    if not path.startswith(AUDITED_PREFIX):
+        return False
+    if method in READ_METHODS:
+        return method == "GET" and path in AUDITED_READS
+    return True
 
 
 def record(request, status_code):

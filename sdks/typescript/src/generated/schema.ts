@@ -585,7 +585,7 @@ export interface paths {
         head?: never;
         /**
          * Update a resource
-         * @description Fill in what a CSV could not know: capacity, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there.
+         * @description Fill in what a CSV could not know: capacity, mode, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there. A change of mode or capacity is checked against the bookings still to come and refused with 409 if any would no longer fit.
          */
         patch: operations["resources.update"];
         trace?: never;
@@ -604,6 +604,8 @@ export interface paths {
          *     A generated day counts whatever its cycle now says: closing a cycle leaves behind the days already past and any ahead that carry attendance or a note, deleting a slot leaves behind the days attendance was marked on, and the database refuses a second booking on top of either. Where a day and the slot it came from both cover a date you get the day, once, because the day is the row that holds the hour and keeps its window when the slot is corrected later. Dates the generator has not reached yet come from the slot. An inactive resource still answers: retiring a room does not clear its calendar.
          *
          *     A busy interval's date can be the day before `from`. A booking that runs past midnight is dated the day it opened on and occupies the morning after, so a caller asking about Tuesday is told about a hold dated Monday that ends at six. Read each interval by its own date and end_date and not by the range that returned it: grouping by date alone files that hold under a day nobody asked about, and discarding anything outside the range shows a ward as free while it is staffed.
+         *
+         *     The resource's mode changes which reservations count. On a POOLED resource one booking does not make it busy: each stretch in which the bookings together hold the whole pool is reported instead, as an interval with every id null. On a SHARED resource reservations are never reported.
          */
         get: operations["resources.getAvailability"];
         put?: never;
@@ -634,6 +636,8 @@ export interface paths {
          *     A weekly slot reads its two times by the same rule, so an overnight booking is checked against night shifts on the timetable as well as against day ones.
          *
          *     An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
+         *
+         *     The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
          */
         post: operations["resources.createReservation"];
         delete?: never;
@@ -1449,7 +1453,7 @@ export interface paths {
         };
         /**
          * Writes made through the API, newest first
-         * @description Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
+         * @description Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, and one per GET of the conflict report (`schedule.listConflicts`), including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
          */
         get: operations["audit.list"];
         put?: never;
@@ -1981,7 +1985,7 @@ export interface components {
         ApiKeyCreate: {
             /**
              * @description What this key is for, so it can be recognized in the list.
-             * @example PulseWard HMS
+             * @example Hospital information system
              */
             label: string;
             /**
@@ -2179,7 +2183,13 @@ export interface components {
             /** @enum {string} */
             resource_type?: "ROOM" | "PERSON";
             unit_code?: string | null;
+            /** @description How many people a room holds, or on a POOLED resource how many units the pool has. */
             capacity?: number | null;
+            /**
+             * @description How a reservation takes the resource. EXCLUSIVE, the default, is one booking at a time. POOLED is capacity interchangeable units, of which a booking takes its quantity, refused with `RESOURCE_CAPACITY_EXCEEDED` when the bookings already there leave too few at some moment of the window. SHARED records who is there and refuses nobody. The mode governs reservations only: the timetable on any resource is one class at a time, and a class on a pooled resource takes the whole pool.
+             * @enum {string}
+             */
+            mode?: "EXCLUSIVE" | "POOLED" | "SHARED";
             /** @description Set when this resource is a person. */
             user_id?: string | null;
             latitude?: number | null;
@@ -2200,7 +2210,13 @@ export interface components {
              */
             label?: string;
             unit_code?: string | null;
+            /** @description Required, and at least 1, when mode is POOLED. */
             capacity?: number | null;
+            /**
+             * @description See ResourceResponse.mode. EXCLUSIVE when left out.
+             * @enum {string}
+             */
+            mode?: "EXCLUSIVE" | "POOLED" | "SHARED";
             /** @description Set together with longitude, or not at all. */
             latitude?: number | null;
             longitude?: number | null;
@@ -2209,7 +2225,13 @@ export interface components {
         /** @description Every field is optional and a field left out is left alone. code, resource_type and user_id are absent on purpose: code is the importer's match key, and a room that becomes a person is a different resource, not an edit. */
         ResourceUpdate: {
             label?: string;
+            /** @description A POOLED resource keeps a capacity of at least 1. A cut the bookings still to come would no longer fit is a 409 with `RESOURCE_BOOKINGS_WOULD_NOT_FIT`. */
             capacity?: number | null;
+            /**
+             * @description See ResourceResponse.mode. Cannot be null. A change the bookings still to come would no longer fit is a 409 with `RESOURCE_BOOKINGS_WOULD_NOT_FIT` naming them; one that fits is written onto them.
+             * @enum {string}
+             */
+            mode?: "EXCLUSIVE" | "POOLED" | "SHARED";
             /** @description Set or cleared together with longitude. Setting the pair is what switches geofencing on for sessions held here. */
             latitude?: number | null;
             longitude?: number | null;
@@ -2291,7 +2313,11 @@ export interface components {
             /** @description Null for a slot or a day that names no resource. */
             resource_id: number | null;
         };
-        /** @description Two rows that hold the same resource, or the same member, at the same moment. kind is `resource_overlap`, with resource_id set and member_id null, or `member_overlap`, with member_id set and resource_id null. Like ConflictItem.type, kind is a string so that later kinds can be added; a reader should skip a kind it does not know. date, start, end_date and end are the part of the two windows they share. items is a list rather than a pair so that a later kind can name more than two rows. */
+        /**
+         * @description Two rows that hold the same resource, or the same member, at the same moment. kind is `resource_overlap`, with resource_id set and member_id null, or `member_overlap`, with member_id set and resource_id null. Like ConflictItem.type, kind is a string so that later kinds can be added; a reader should skip a kind it does not know. date, start, end_date and end are the part of the two windows they share. items is a list rather than a pair so that a later kind can name more than two rows.
+         *
+         *     `resource_overbooked` is a POOLED resource whose reservations together hold more than its capacity. date to end is the whole stretch in which they do, items is every reservation open in it, and capacity and taken say by how much: taken is the most held at any moment of the stretch. capacity and taken are null on the other kinds. Two reservations on a pooled resource are never a `resource_overlap`, and reservations on a SHARED resource are never reported at all.
+         */
         Conflict: {
             /** @example resource_overlap */
             kind: string;
@@ -2318,6 +2344,10 @@ export interface components {
              */
             end: string;
             items: components["schemas"]["ConflictItem"][];
+            /** @description The pool's capacity, on `resource_overbooked` only. */
+            capacity?: number | null;
+            /** @description The most units held at once, on `resource_overbooked` only. */
+            taken?: number | null;
         };
         ConflictReport: {
             /** Format: date */
@@ -2352,6 +2382,11 @@ export interface components {
              * @example visit-42
              */
             external_ref?: string | null;
+            /**
+             * @description How many units of a POOLED resource to take, 1 when left out. Above 1 on any other resource is a 422. Part of what a retry is compared on only when it is sent, so a retry that leaves it out still matches a booking made before the field existed.
+             * @example 2
+             */
+            quantity?: number;
         };
         /** @description What the caller may change about a reservation it already holds: its reference, for now. The window is what the conflict check and the idempotency fingerprint are built on, so moving it is a cancel and a new booking. Any other field is refused with a 422 rather than ignored. */
         ReservationUpdate: {
@@ -2378,6 +2413,8 @@ export interface components {
             /** @description Null once the account that booked it has been deleted. A hold outlives the service account that placed it. */
             requested_by_id?: string | null;
             idempotency_key?: string;
+            /** @description Units taken. Always 1 off a POOLED resource. */
+            quantity?: number;
             /** @description The caller's own identifier for the booking, or null if it was given none. A cancelled booking keeps its reference. */
             external_ref?: string | null;
             /** Format: date-time */
@@ -2402,6 +2439,30 @@ export interface components {
                 message: string;
                 /** @example 17 */
                 reservation_id: number;
+            };
+        };
+        /** @description The body of a 409 with `RESOURCE_CAPACITY_EXCEEDED`: a POOLED resource has not got quantity units free for the whole window. conflicts are the bookings that hold it, as in ReservationConflict. taken is the most they hold at any one moment of the window, so capacity minus taken is the most this window could still have. */
+        CapacityExceeded: {
+            code: components["schemas"]["ErrorCode"];
+            detail: {
+                /** @example the resource does not have that many units left for that window */
+                message: string;
+                conflicts: components["schemas"]["BusyInterval"][];
+                /** @example 12 */
+                capacity: number;
+                /** @example 12 */
+                taken: number;
+                /** @example 1 */
+                requested: number;
+            };
+        };
+        /** @description The body of a 409 with `RESOURCE_BOOKINGS_WOULD_NOT_FIT`: a change of mode or capacity that bookings still to come (from yesterday on) would no longer fit. reservations names them, so the caller can cancel or move them and try again. */
+        BookingsWouldNotFit: {
+            code: components["schemas"]["ErrorCode"];
+            detail: {
+                /** @example bookings still to come would not fit the resource after that change */
+                message: string;
+                reservations: components["schemas"]["ReservationResponse"][];
             };
         };
         /**
@@ -2926,7 +2987,7 @@ export interface components {
          * @example NOT_FOUND
          * @enum {string}
          */
-        ErrorCode: "BAD_REQUEST" | "NOT_AUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "STATE_CONFLICT" | "PAYLOAD_TOO_LARGE" | "INVALID_VALUE" | "RATE_LIMITED" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE" | "VALIDATION_FAILED" | "INVALID_CREDENTIALS" | "TOKEN_INVALID" | "API_KEY_INVALID" | "API_KEY_EXPIRED" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_DEACTIVATED" | "REFRESH_TOKEN_INVALID" | "REFRESH_TOKEN_EXPIRED" | "REFRESH_TOKEN_USED" | "REFRESH_TOKEN_REUSED" | "FEDERATED_TOKEN_INVALID" | "FEDERATED_EMAIL_MISSING" | "FEDERATED_ADMIN_REFUSED" | "FEDERATION_UNAVAILABLE" | "CURRENT_PASSWORD_INCORRECT" | "PASSWORD_UNCHANGED" | "PASSWORD_CHANGE_REQUIRED" | "INSUFFICIENT_ROLE" | "SCOPE_MISSING" | "OUTSIDE_UNIT" | "RESOURCE_CONFLICT" | "ALREADY_EXISTS" | "EMAIL_TAKEN" | "USER_DEACTIVATED" | "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_KEY_IN_PROGRESS" | "RESERVATION_EXTERNAL_REF_TAKEN" | "LOCATION_REQUIRED" | "LOCATION_TOO_COARSE" | "OUTSIDE_GEOFENCE" | "MANAGER_NOT_SET" | "IMPORT_REJECTED" | "CHANGE_FEED_DISABLED" | "SERVER_BUSY" | "WEBHOOK_URL_REFUSED" | "WEBHOOK_SECRET_LIMIT";
+        ErrorCode: "BAD_REQUEST" | "NOT_AUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "STATE_CONFLICT" | "PAYLOAD_TOO_LARGE" | "INVALID_VALUE" | "RATE_LIMITED" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE" | "VALIDATION_FAILED" | "INVALID_CREDENTIALS" | "TOKEN_INVALID" | "API_KEY_INVALID" | "API_KEY_EXPIRED" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_DEACTIVATED" | "REFRESH_TOKEN_INVALID" | "REFRESH_TOKEN_EXPIRED" | "REFRESH_TOKEN_USED" | "REFRESH_TOKEN_REUSED" | "FEDERATED_TOKEN_INVALID" | "FEDERATED_EMAIL_MISSING" | "FEDERATED_ADMIN_REFUSED" | "FEDERATION_UNAVAILABLE" | "CURRENT_PASSWORD_INCORRECT" | "PASSWORD_UNCHANGED" | "PASSWORD_CHANGE_REQUIRED" | "INSUFFICIENT_ROLE" | "SCOPE_MISSING" | "OUTSIDE_UNIT" | "RESOURCE_CONFLICT" | "ALREADY_EXISTS" | "EMAIL_TAKEN" | "USER_DEACTIVATED" | "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_KEY_IN_PROGRESS" | "RESERVATION_EXTERNAL_REF_TAKEN" | "RESOURCE_CAPACITY_EXCEEDED" | "RESOURCE_BOOKINGS_WOULD_NOT_FIT" | "LOCATION_REQUIRED" | "LOCATION_TOO_COARSE" | "OUTSIDE_GEOFENCE" | "MANAGER_NOT_SET" | "IMPORT_REJECTED" | "CHANGE_FEED_DISABLED" | "SERVER_BUSY" | "DATABASE_UNAVAILABLE" | "WEBHOOK_URL_REFUSED" | "WEBHOOK_SECRET_LIMIT";
     };
     responses: {
         /** @description Missing or invalid JWT. */
@@ -4323,7 +4384,16 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description latitude and longitude were not set or cleared together, or a coordinate was out of range. A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`. */
+            /** @description Bookings still to come would not fit the new mode or capacity (`RESOURCE_BOOKINGS_WOULD_NOT_FIT`). They are listed. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookingsWouldNotFit"];
+                };
+            };
+            /** @description latitude and longitude were not set or cleared together, a coordinate was out of range, mode was null, or a POOLED resource would be left without a capacity of at least 1. A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4411,16 +4481,16 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The caller already has a reservation with that external_ref (`RESERVATION_EXTERNAL_REF_TAKEN`, ReservationRefTaken), or something already holds part of that window (`RESOURCE_CONFLICT`, ReservationConflict). Branch on `code`. ReservationRefTaken is listed first because its detail has required fields and the other's does not, so a client trying each shape in turn tells them apart. */
+            /** @description The caller already has a reservation with that external_ref (`RESERVATION_EXTERNAL_REF_TAKEN`, ReservationRefTaken), a pool has too few units free (`RESOURCE_CAPACITY_EXCEEDED`, CapacityExceeded), or something already holds part of that window (`RESOURCE_CONFLICT`, ReservationConflict). Branch on `code`. ReservationConflict is listed last because its detail has no required fields, so a client trying each shape in turn tells them apart. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReservationRefTaken"] | components["schemas"]["ReservationConflict"];
+                    "application/json": components["schemas"]["ReservationRefTaken"] | components["schemas"]["CapacityExceeded"] | components["schemas"]["ReservationConflict"];
                 };
             };
-            /** @description end was not after start, or the Idempotency-Key had already been used for a different request (`IDEMPOTENCY_KEY_REUSED`). */
+            /** @description end was not after start, quantity was above 1 on a resource that is not POOLED, or the Idempotency-Key had already been used for a different request (`IDEMPOTENCY_KEY_REUSED`). */
             422: {
                 headers: {
                     [name: string]: unknown;

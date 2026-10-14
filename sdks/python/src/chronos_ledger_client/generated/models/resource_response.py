@@ -6,6 +6,7 @@ from typing import Any, TypeVar, cast
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
+from ..models.resource_response_mode import ResourceResponseMode
 from ..models.resource_response_resource_type import ResourceResponseResourceType
 from ..types import UNSET, Unset
 
@@ -21,7 +22,13 @@ class ResourceResponse:
         label (str | Unset):  Example: Lecture Hall 3.
         resource_type (ResourceResponseResourceType | Unset):
         unit_code (None | str | Unset):
-        capacity (int | None | Unset):
+        capacity (int | None | Unset): How many people a room holds, or on a POOLED resource how many units the pool
+            has.
+        mode (ResourceResponseMode | Unset): How a reservation takes the resource. EXCLUSIVE, the default, is one
+            booking at a time. POOLED is capacity interchangeable units, of which a booking takes its quantity, refused with
+            `RESOURCE_CAPACITY_EXCEEDED` when the bookings already there leave too few at some moment of the window. SHARED
+            records who is there and refuses nobody. The mode governs reservations only: the timetable on any resource is
+            one class at a time, and a class on a pooled resource takes the whole pool.
         user_id (None | str | Unset): Set when this resource is a person.
         latitude (float | None | Unset):
         longitude (float | None | Unset):
@@ -35,6 +42,7 @@ class ResourceResponse:
     resource_type: ResourceResponseResourceType | Unset = UNSET
     unit_code: None | str | Unset = UNSET
     capacity: int | None | Unset = UNSET
+    mode: ResourceResponseMode | Unset = UNSET
     user_id: None | str | Unset = UNSET
     latitude: float | None | Unset = UNSET
     longitude: float | None | Unset = UNSET
@@ -64,6 +72,10 @@ class ResourceResponse:
             capacity = UNSET
         else:
             capacity = self.capacity
+
+        mode: str | Unset = UNSET
+        if not isinstance(self.mode, Unset):
+            mode = self.mode.value
 
         user_id: None | str | Unset
         if isinstance(self.user_id, Unset):
@@ -106,6 +118,8 @@ class ResourceResponse:
             field_dict["unit_code"] = unit_code
         if capacity is not UNSET:
             field_dict["capacity"] = capacity
+        if mode is not UNSET:
+            field_dict["mode"] = mode
         if user_id is not UNSET:
             field_dict["user_id"] = user_id
         if latitude is not UNSET:
@@ -153,6 +167,13 @@ class ResourceResponse:
 
         capacity = _parse_capacity(d.pop("capacity", UNSET))
 
+        _mode = d.pop("mode", UNSET)
+        mode: ResourceResponseMode | Unset
+        if isinstance(_mode, Unset):
+            mode = UNSET
+        else:
+            mode = ResourceResponseMode(_mode)
+
         def _parse_user_id(data: object) -> None | str | Unset:
             if data is None:
                 return data
@@ -198,6 +219,7 @@ class ResourceResponse:
             resource_type=resource_type,
             unit_code=unit_code,
             capacity=capacity,
+            mode=mode,
             user_id=user_id,
             latitude=latitude,
             longitude=longitude,

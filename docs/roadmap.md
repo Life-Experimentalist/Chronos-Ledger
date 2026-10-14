@@ -32,8 +32,8 @@ database, and the changelog for each tag is the contract they upgrade against.
 | 0.13 | Platform: contract check, hardening, `chronos` CLI and channels, first SDKs, ledger range queries, audit log | No |
 | 0.14 | Roles renamed, guest desk (visit expiry, configurable approver, change feed), federated identity | Yes |
 | 0.15 | Standalone engine (`chronos-engine`, no Docker or Redis, on PostgreSQL or a SQLite file), embedded flavour with the host clock, Alembic removed (the models own the schema, `SCHEMA_VERSION`), PostgreSQL-first `--database-url`, optional Cloudflare tunnel compose profile, psycopg 3 and SQLAlchemy 2.1 | Yes |
-| 0.16 | Integration contract (error codes, idempotency on every write, export and import, SDK retries, failure modes written down), webhooks, activities CRUD, reservation external reference; engine part 1: resource modes, conflict report, rolling horizon; Go and Rust SDKs, Helm | Additive |
-| 0.17 | Engine, part 2: recurrence rules, editable timetable, exclusion on instances; per-organization uniqueness | Yes |
+| 0.16 | Integration contract (error codes, idempotency on every write, export and import, SDK retries, failure modes written down), webhooks, activities CRUD, reservation external reference; engine part 1: resource modes, conflict report, rolling horizon; Go and Rust SDKs, Helm | Additive API; needs a fresh database |
+| 0.17 | Engine, part 2: recurrence rules, editable timetable, exclusion on instances; per-organization uniqueness | Yes; needs a fresh database |
 
 PostgreSQL is the database Chronos is designed for. SQLite exists so the
 engine can be tried and tested with no setup; a behaviour that works only on
@@ -235,6 +235,16 @@ This release lets a resource be consumed in three ways.
   the resource. Shared is never refused.
 - **Done when:** booking 13 of 12 ventilators is refused with a conflict body;
   two shared bookings at once both succeed; every existing test passes unchanged.
+- **Status:** shipped, except the requirements half. `mode`, `capacity` and
+  `quantity` are in, a pool full is `409 RESOURCE_CAPACITY_EXCEEDED`, a mode
+  or capacity change the bookings ahead would not fit is
+  `409 RESOURCE_BOOKINGS_WOULD_NOT_FIT`, and availability and the conflict
+  report understand the modes (`tests/test_resource_modes.py`,
+  `tests/test_resource_modes_pg.py`). The mode governs reservations only; the
+  timetable stays one class at a time on every resource. Deferred to 0.17:
+  the `resource_requirement` table, and turning `target_room_identifier` into
+  a foreign key, since the CSV import and the slot responses still work by the
+  room's name.
 
 ### E-2. Conflict report
 
@@ -242,6 +252,9 @@ This release lets a resource be consumed in three ways.
   and returns overlaps for every mode, plus members enrolled in two activities
   at the same time. It reports and never refuses.
 - **Done when:** a seeded clash of each kind appears exactly once in the report.
+- **Status:** shipped in 0.16 (`tests/test_conflict_report.py`). Open to
+  `ORG_ADMIN` and `UNIT_ADMIN`. A range is at most 92 days. Leads are not
+  counted on the member side: only enrollments are.
 
 ### E-3. Rolling materialization horizon
 
@@ -249,6 +262,8 @@ This release lets a resource be consumed in three ways.
   days materialized instead of only tomorrow. A newly imported cycle is filled
   immediately rather than at 23:00.
 - **Done when:** after import, the calendar feed shows the next four weeks; running the job twice creates no duplicates.
+- **Status:** shipped in 0.16 (`tests/test_rolling_horizon.py`).
+  `LEDGER_HORIZON_DAYS` takes 1 to 366.
 
 ### E-8. Leave ranges (shipped in 0.14)
 
@@ -283,6 +298,10 @@ on request.
 C-4, uniqueness scoped to an organization, is breaking too and ships in this
 release; it is described with the integration contract below.
 
+Until 1.0 a release that changes the models does not upgrade the database the
+one before it made: it bumps `SCHEMA_VERSION` and needs a fresh database, as
+0.16 does. From 1.0 on, the integration contract applies.
+
 ### E-5. Recurrence rules
 
 - **Scope:** a slot carries an RFC 5545 `rrule` and a `dtstart` in the
@@ -298,7 +317,8 @@ release; it is described with the integration contract below.
 ### E-6. Editable timetable
 
 - **Scope:** CSV re-import updates matching slots in place instead of skipping
-  them, removes slots that are gone, and drops enrollments that are gone.
+  them. Removing slots and enrollments that are gone from the file is an
+  option, off by default.
   Regeneration touches only future ledger rows with no attendance, substitution
   or verification data, and reports the rows it left alone.
 - **Done when:** changing a room in the CSV and re-importing changes the room
@@ -410,7 +430,9 @@ codes. C-4 is breaking and ships with 0.17.
   is safe. Anything found that behaves worse than the page says is fixed in
   the same release.
 - **Done when:** each case on the page has a test or a CI job that produces
-  it.
+  it. Shipped in 0.16.0: [failure-modes.md](failure-modes.md), and a database
+  that drops or refuses the connection is now `503 DATABASE_UNAVAILABLE`
+  instead of a `500`.
 
 ---
 

@@ -16,7 +16,7 @@ T = TypeVar("T", bound="ApiKeyCreate")
 class ApiKeyCreate:
     """
     Attributes:
-        label (str): What this key is for, so it can be recognized in the list. Example: PulseWard HMS.
+        label (str): What this key is for, so it can be recognized in the list. Example: Hospital information system.
         user_id (str): The user this key acts as. The key can never do more than that user can, whatever its scopes say.
              Example: SVC001.
         scopes (list[str] | None | Unset): Areas this key may reach. Omit the field for an unrestricted key; an empty

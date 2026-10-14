@@ -178,7 +178,7 @@ in Chronos. A booking that runs past midnight has an end before its start.
     "users": ["calendar_feed_token", "credential_secure_hash"],
     "webhook_subscriptions": ["previous_secret", "secret"]
   },
-  "schema_version": "3",
+  "schema_version": "4",
   "secrets_included": false,
   "tables": [
     { "file": "audit_records.jsonl", "name": "audit_records", "rows": 4812 }
@@ -231,9 +231,9 @@ activities, so it travels with them.
 
 ### audit_records
 
-The audit log ([api.md](api.md#audit)): one row per write request. It points
-at no other table, so its `actor_id` and `api_key_id` may name accounts and
-keys that no longer exist.
+The audit log ([api.md](api.md#audit)): one row per write request, plus one
+per read of the conflict report. It points at no other table, so its
+`actor_id` and `api_key_id` may name accounts and keys that no longer exist.
 
 ### change_markers
 
