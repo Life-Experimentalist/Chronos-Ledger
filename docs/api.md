@@ -1043,6 +1043,12 @@ administrator adds carries no behaviour of its own. It is a label that
 resources are filed under and requirements can ask for, and a resource of any
 class books by its `mode` like every other.
 
+The codes are identifiers, not meanings. `ROOM` is simply the class an import
+files a slot's place under, and `PERSON` has no behaviour at all, so an
+organization can name them for whatever it books: `ROOM` as "Bed", "Bay" or
+"Court", `PERSON` as "Machine" or "Vehicle", while the code stays the same
+for the API.
+
 ### GET /resource-classes/
 
 Optional filter: `active`. Readable by anyone signed in, ordered by code, and
