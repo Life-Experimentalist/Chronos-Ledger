@@ -22,7 +22,7 @@ from app.models.db import (
     StructuralMasterSlot,
     User,
 )
-from tests.conftest import STAFF_PASSWORD, login
+from tests.conftest import STAFF_PASSWORD, login, weekly
 
 TODAY = org_today()
 
@@ -76,7 +76,7 @@ def _seed_schedule(
     slot_id = None
     if with_slot:
         slot = StructuralMasterSlot(
-            day_of_week_index=TODAY.isoweekday(),
+            **weekly(TODAY.isoweekday()),
             time_window_start=start,
             time_window_end=end,
             activity_id=offering.id,

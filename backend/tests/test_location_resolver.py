@@ -33,6 +33,7 @@ from app.models.db import (
 )
 from app.services import location_resolver
 from app.services.location_resolver import determine_staff_current_states
+from tests.conftest import weekly
 
 MONDAY = datetime.date(2026, 3, 2)
 TUESDAY = MONDAY + datetime.timedelta(days=1)
@@ -93,7 +94,7 @@ def _slot(
         db.flush()
     start, end = window
     slot = StructuralMasterSlot(
-        day_of_week_index=weekday,
+        **weekly(weekday),
         time_window_start=start,
         time_window_end=end,
         activity_id=activity.id,

@@ -1773,10 +1773,49 @@ when the member is not enrolled.
 ### POST /schedule/slots `[ADMIN]`
 ### PATCH /schedule/slots/{id} `[ADMIN]`
 
-Create a weekly slot, or move an existing one. A new slot fills the days ahead
+Create a slot, or move an existing one. A new slot fills the days ahead
 as soon as it is added, the same way an import does, rather than waiting for
 the nightly job. Neither is allowed on a retired activity or slot (`409`
 `STATE_CONFLICT`).
+
+```json
+{
+  "rrule": "FREQ=WEEKLY;BYDAY=MO,WE",
+  "dtstart": "2026-01-05",
+  "time_window_start": "09:00:00",
+  "time_window_end": "10:00:00",
+  "activity_id": 12,
+  "target_room_identifier": "LH-201"
+}
+```
+
+The dates a slot runs on come from `rrule`, the value of one RFC 5545 RRULE
+property (`RRULE:` in front is accepted and dropped), counted from `dtstart`.
+Both are in the organization's calendar (`ORG_TIMEZONE`), and the slot's own
+start and end are read on each date the rule gives, so a 09:00 class stays at
+09:00 on both sides of a daylight saving change. The expansion is
+`backend/app/core/recurrence.py::occurrences`.
+
+`dtstart` is optional. Absent, it is the start of the activity's cycle. It is
+moved forward to the rule's first date on or after it, and that is the value
+stored and returned, so a stored `dtstart` is always one of the slot's dates.
+A rule with no date left from there (an `UNTIL` already past) is `422`
+`INVALID_VALUE`. On a `PATCH`, a new `rrule` sent without a `dtstart` starts
+again from the start of the cycle.
+
+Refused with `422`: a `FREQ` other than `DAILY`, `WEEKLY`, `MONTHLY` or
+`YEARLY`; `BYHOUR`, `BYMINUTE` or `BYSECOND`, since a slot runs at most once
+a date; an `UNTIL` ending in `Z`, since slot times are wall clock; anything
+that is not a single rule (a `DTSTART` line, an `EXDATE`, a line break); and
+a stored rule longer than 255 characters.
+
+`GET /schedule/slots` returns `rrule` and `dtstart` on each slot. It still
+returns `day_of_week_index`, the ISO weekday of the slot's first date, through
+0.17; it is deprecated and will be removed. The request bodies no longer take
+it.
+
+The room checks below compare the weekday of the slot's first date. A rule on
+more than one weekday is checked on that first weekday only.
 
 Both are refused with `409` where the room is already taken for part of that
 window, by a booking, by another class already on the timetable, or by a day
@@ -1854,7 +1893,7 @@ run. The new slot's own cycle limits it the same way: a booking or a generated
 day on a date that cycle never reaches is not a clash.
 
 A `PATCH` is only checked when it would actually move the class. Changing the
-lead on a slot, or anything else that leaves the room, weekday and window
+lead on a slot, or anything else that leaves the room, rule and window
 alone, is allowed even where a hold or another class is sitting on that slot
 already: such an overlap predates this rule or was written straight into the
 database, and refusing would leave the lead unfixable short of cancelling
@@ -2196,7 +2235,9 @@ Upload a `multipart/form-data` CSV file. Required columns:
 Every column needs a value on every row, and a blank cell is refused with
 `422`, naming the column. Values are taken as the text they were typed as,
 less any spaces around them, so an id like `007` keeps its zeros.
-`day_of_week_index` has to be a whole number from 1 to 7.
+`day_of_week_index` has to be a whole number from 1 to 7. A row's weekday is
+stored on its slot as the rule `FREQ=WEEKLY;BYDAY=..` (Monday is `MO`),
+starting on the first such date in the cycle.
 
 The file can be at most `CSV_UPLOAD_MAX_MB` (25 MB unless the instance sets
 it). A bigger one is refused with `413` before anything is imported. Behind
@@ -2204,7 +2245,7 @@ the bundled nginx, a request over 25 MB is refused by nginx itself, also
 with `413` but with an HTML body.
 
 Import is idempotent, and a re-upload is how a timetable is corrected in
-bulk. A slot matching an existing one on activity, weekday and start time
+bulk. A slot matching an existing one on activity, weekly rule and start time
 has its end time, lead and room brought into line, and the days already
 generated from it follow. The exception is a day somebody has already
 marked or annotated: those are counted in `ledger_rows_kept` and left
@@ -2268,7 +2309,7 @@ enrollments the cycle holds that the file does not mention come back in
   "ledger_rows_kept": 1,
   "not_in_file": {
     "slots": [
-      { "id": 87, "activity_code": "PH101", "day_of_week_index": 3, "time_window_start": "11:00:00", "room": "LH-305" }
+      { "id": 87, "activity_code": "PH101", "rrule": "FREQ=WEEKLY;BYDAY=WE", "dtstart": "2026-01-07", "day_of_week_index": 3, "time_window_start": "11:00:00", "room": "LH-305" }
     ],
     "enrollments": [
       { "member_id": "STU20210044", "activity_code": "PH101" }

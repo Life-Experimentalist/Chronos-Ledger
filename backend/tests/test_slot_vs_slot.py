@@ -20,7 +20,7 @@ eventually fall into the past and the tests would pass for the wrong reason.
 import datetime
 
 from app.models.db import Activity, PlanningCycle, StructuralMasterSlot
-from tests.conftest import ADMIN_PASSWORD, login
+from tests.conftest import ADMIN_PASSWORD, login, weekly
 from tests.test_import_corrections import TOMORROW, _csv, _row
 from tests.test_ingestion import _make_cycle, _upload
 from tests.test_slot_vs_hold import DAY_AFTER, _activity, _new_slot, _room
@@ -49,7 +49,7 @@ def _sibling(db, cycle_id, code="CS102"):
 def _slot_in_db(db, activity_id, room_id, day, start, end):
     """A slot written straight in, so the test's subject is the second one."""
     slot = StructuralMasterSlot(
-        day_of_week_index=day,
+        **weekly(day),
         time_window_start=start,
         time_window_end=end,
         activity_id=activity_id,

@@ -15,6 +15,7 @@ import datetime
 
 import pytest
 
+from app.core.recurrence import weekly_rule
 from app.core.time import org_today
 from app.cron.ledger_generator import generate_daily_ledger_entries
 from app.models.db import (
@@ -225,7 +226,7 @@ def test_a_moved_weekday_withdraws_the_days_on_the_old_one(client, db, seed_user
     r = client.patch(
         f"/api/v1/schedule/slots/{slot.id}",
         headers=headers,
-        json={"day_of_week_index": new_day},
+        json={"rrule": weekly_rule(new_day)},
     )
     assert r.status_code == 200, r.text
     assert r.json()["ledger_rows_removed"] == 1
@@ -244,7 +245,7 @@ def test_a_moved_weekday_is_refused_while_a_marked_day_stands(client, db, seed_u
     r = client.patch(
         f"/api/v1/schedule/slots/{slot.id}",
         headers=headers,
-        json={"day_of_week_index": _another_weekday()},
+        json={"rrule": weekly_rule(_another_weekday())},
     )
     assert r.status_code == 409
     assert str(TOMORROW) in r.json()["detail"]
@@ -271,7 +272,7 @@ def test_a_note_on_a_future_day_counts_as_much_as_attendance(client, db, seed_us
     r = client.patch(
         f"/api/v1/schedule/slots/{slot.id}",
         headers=headers,
-        json={"day_of_week_index": _another_weekday()},
+        json={"rrule": weekly_rule(_another_weekday())},
     )
     assert r.status_code == 409
 
@@ -286,7 +287,7 @@ def test_patching_a_slot_that_is_not_there_is_a_404(client, db, seed_users):
 
 
 @pytest.mark.parametrize(
-    "field", ["day_of_week_index", "time_window_start", "time_window_end", "target_room_identifier"]
+    "field", ["rrule", "dtstart", "time_window_start", "time_window_end", "target_room_identifier"]
 )
 def test_a_slot_cannot_be_patched_out_of_a_field_it_needs(client, db, seed_users, field):
     """Only the lead may be taken off a slot. It cannot run without a

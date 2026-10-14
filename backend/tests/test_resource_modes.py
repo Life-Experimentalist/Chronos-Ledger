@@ -28,7 +28,7 @@ from app.models.db import (
 )
 from app.schemas.resources import ReservationCreate
 from app.services.availability import held_against_slot
-from tests.conftest import ADMIN_PASSWORD, login
+from tests.conftest import ADMIN_PASSWORD, login, weekly
 
 # A week out, so every hold here is one still to come and the PATCH rules,
 # which only look forward, see all of them.
@@ -78,7 +78,7 @@ def _slot(db, resource, start, end):
     db.add(activity)
     db.flush()
     slot = StructuralMasterSlot(
-        day_of_week_index=DAY.isoweekday(),
+        **weekly(DAY.isoweekday()),
         time_window_start=datetime.time.fromisoformat(start),
         time_window_end=datetime.time.fromisoformat(end),
         activity_id=activity.id,

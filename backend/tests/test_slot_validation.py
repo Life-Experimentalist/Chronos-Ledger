@@ -18,6 +18,7 @@ in the schema, in the endpoint that patches a slot, and in the importer.
 import datetime
 import io
 
+from app.core.recurrence import weekly_rule
 from app.core.time import org_today
 from app.models.db import Activity, PlanningCycle, StructuralMasterSlot
 from tests.conftest import ADMIN_PASSWORD, login
@@ -51,7 +52,7 @@ def _seed_offering(db):
 
 def _slot_payload(offering, **overrides):
     payload = {
-        "day_of_week_index": 2,
+        "rrule": weekly_rule(2),
         "time_window_start": "09:00:00",
         "time_window_end": "10:00:00",
         "activity_id": offering.id,
@@ -119,16 +120,24 @@ def test_zero_length_window_is_rejected_with_422(client, db, seed_users):
     assert r.status_code == 422, r.text
 
 
-def test_out_of_range_weekday_is_422_not_500(client, db, seed_users):
+def test_a_rule_that_is_not_a_slot_rule_is_422_not_500(client, db, seed_users):
     _, offering = _seed_offering(db)
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
-    for bad_day in (0, 8):
+    for bad_rule in (
+        "",
+        "every monday",
+        "FREQ=WEEKLY;BYDAY=XX",
+        "FREQ=HOURLY",
+        "FREQ=DAILY;BYHOUR=9,14",
+        "FREQ=WEEKLY;UNTIL=20260501T000000Z",
+        "DTSTART:20260105\nRRULE:FREQ=WEEKLY",
+    ):
         r = client.post(
             "/api/v1/schedule/slots",
             headers=headers,
-            json=_slot_payload(offering, day_of_week_index=bad_day),
+            json=_slot_payload(offering, rrule=bad_rule),
         )
-        assert r.status_code == 422, r.text
+        assert r.status_code == 422, (bad_rule, r.text)
 
 
 def test_csv_with_a_night_shift_ingests_it(client, db, seed_users):

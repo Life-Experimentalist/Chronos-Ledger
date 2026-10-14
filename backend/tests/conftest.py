@@ -1,6 +1,7 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
+import datetime
 import json
 import os
 import queue
@@ -16,12 +17,24 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core import recurrence
 from app.core.config import get_settings
 from app.core.database import Base, get_db, get_session_opener
 from app.core.organization import DEFAULT_ORGANIZATION_ID
 from app.core.security import hash_api_key, hash_password
 from app.main import app
 from app.models.db import ApiKey, InstitutionalRole, Organization, User
+
+# Earlier than any cycle a test builds. Every expansion is clipped to the
+# slot's own cycle, so a slot anchored here runs on its weekday on every date
+# of its cycle, which is what a weekday slot did before slots had rules.
+SLOTS_FROM = datetime.date(2020, 1, 1)
+
+
+def weekly(weekday: int) -> dict:
+    """rrule and dtstart for a slot written straight in on one weekday (1 is Monday)."""
+    return recurrence.weekly(weekday, SLOTS_FROM)
+
 
 # One shared in-memory database for the whole process; each test gets a
 # freshly rebuilt schema via the `db` fixture below.

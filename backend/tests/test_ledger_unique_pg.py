@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from app.core.schema import ensure_schema
 from app.cron.ledger_generator import generate_daily_ledger_entries
 from app.models.db import Activity, DailyLedger, PlanningCycle, StructuralMasterSlot
+from tests.conftest import weekly
 
 DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
@@ -78,7 +79,7 @@ def _slot(db, code):
     db.add(activity)
     db.flush()
     slot = StructuralMasterSlot(
-        day_of_week_index=DAY.isoweekday(),
+        **weekly(DAY.isoweekday()),
         time_window_start=datetime.time(9),
         time_window_end=datetime.time(10),
         activity_id=activity.id,

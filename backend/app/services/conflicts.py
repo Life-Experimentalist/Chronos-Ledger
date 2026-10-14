@@ -53,6 +53,7 @@ from collections.abc import Iterable, Iterator
 
 from sqlalchemy.orm import Session, joinedload
 
+from app.core import recurrence
 from app.core.time import window_span
 from app.models.db import (
     Activity,
@@ -235,12 +236,15 @@ def find_conflicts(db: Session, from_date: datetime.date, to_date: datetime.date
     # A day stands in for the slot that produced it on that date, the same
     # rule occupied() keeps for availability.
     settled = {(day.target_date, day.master_slot_id) for day in days if day.master_slot_id}
-    by_weekday: dict[int, list[StructuralMasterSlot]] = defaultdict(list)
-    for slot in slots:
-        by_weekday[slot.day_of_week_index].append(slot)
+    runs_on = {
+        slot.id: set(recurrence.occurrences(slot.rrule, slot.dtstart, first_date, to_date))
+        for slot in slots
+    }
     on = first_date
     while on <= to_date:
-        for slot in by_weekday.get(on.isoweekday(), ()):
+        for slot in slots:
+            if on not in runs_on[slot.id]:
+                continue
             cycle = slot.activity.cycle
             if not cycle.date_bounds_start <= on <= cycle.date_bounds_end:
                 continue

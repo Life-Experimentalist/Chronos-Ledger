@@ -10,6 +10,7 @@ the second way produces the same days as the first.
 import datetime
 
 from app.core import clock
+from app.core.recurrence import weekly_rule
 from app.core.security import hash_password
 from app.core.time import org_today
 from app.cron.ledger_generator import materialize_horizon
@@ -25,7 +26,7 @@ from app.models.db import (
     VerificationLedger,
     VerificationMetric,
 )
-from tests.conftest import ADMIN_PASSWORD, STAFF_PASSWORD, login
+from tests.conftest import ADMIN_PASSWORD, STAFF_PASSWORD, login, weekly
 from tests.test_ingestion import HEADER, _upload
 
 # These tests are about the days a create writes (see conftest).
@@ -86,7 +87,7 @@ def _create_slot(client, headers, activity_id, weekday, start, end, room, lead="
     return client.post(
         "/api/v1/schedule/slots",
         json={
-            "day_of_week_index": weekday,
+            "rrule": weekly_rule(weekday),
             "time_window_start": start,
             "time_window_end": end,
             "activity_id": activity_id,
@@ -216,7 +217,7 @@ def test_a_unit_admin_writes_only_inside_their_unit(client, db, seed_users):
     db.add(other)
     db.flush()
     other_slot = StructuralMasterSlot(
-        day_of_week_index=2,
+        **weekly(2),
         time_window_start=datetime.time(9, 0),
         time_window_end=datetime.time(10, 0),
         activity_id=other.id,

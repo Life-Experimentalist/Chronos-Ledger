@@ -17,6 +17,7 @@ targets, so a member can mark attendance from any machine during a demo.
 
 import datetime
 
+from app.core import recurrence
 from app.core.database import SessionLocal
 from app.core.security import generate_api_key, hash_api_key, hash_password
 from app.core.time import org_today
@@ -145,7 +146,7 @@ def seed() -> None:
                 for day_index in range(1, 8):
                     db.add(
                         StructuralMasterSlot(
-                            day_of_week_index=day_index,
+                            **recurrence.weekly(day_index, cycle.date_bounds_start),
                             time_window_start=datetime.time.fromisoformat(start),
                             time_window_end=datetime.time.fromisoformat(end),
                             activity_id=activity.id,

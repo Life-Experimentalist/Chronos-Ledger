@@ -13,9 +13,8 @@ could report an hour free that booking then refused, or worse, booking could
 accept an hour availability had already given away.
 
 Expansion is kept in one function that touches neither the database nor
-FastAPI, because it is the piece that changes next. A weekly repeat is the
-only pattern the schema can express today; when a slot learns an RRULE, that
-function is what gets replaced and everything around it stays as it is.
+FastAPI. A slot's dates come from its RFC 5545 rule through
+app/core/recurrence.py, the same expansion the nightly generator uses.
 
 Times here are naive wall clock in the organisation's own timezone, which is
 what the slot and the reservation both store. They carry no offset and no Z,
@@ -27,6 +26,7 @@ import datetime
 
 from sqlalchemy.orm import Session, joinedload
 
+from app.core import recurrence
 from app.core.time import org_today, window_span
 from app.models.db import (
     Activity,
@@ -458,7 +458,7 @@ def occupied(
     from_date: datetime.date,
     to_date: datetime.date,
 ) -> list[dict]:
-    """Expand weekly slots, generated days and dated bookings into intervals.
+    """Expand slots, generated days and dated bookings into intervals.
 
     Returns the busy intervals rather than the free ones. Free time is the
     complement of this against whatever hours the caller considers open, and
@@ -499,10 +499,6 @@ def occupied(
     range_to = datetime.datetime.combine(to_date + datetime.timedelta(days=1), datetime.time.min)
     asked = (range_from, range_to)
 
-    by_weekday: dict[int, list] = {}
-    for slot in slots:
-        by_weekday.setdefault(slot.day_of_week_index, []).append(slot)
-
     # Both halves of the key, never the slot alone. A slot recurs weekly and
     # the generator has usually reached one of its dates, so suppressing on
     # the slot would hide the fifty-one dates it has not reached yet and the
@@ -512,12 +508,13 @@ def occupied(
     }
 
     busy = []
-    day = from_date - datetime.timedelta(days=1)
-    while day <= to_date:
-        for slot in by_weekday.get(day.isoweekday(), ()):
+    for slot in slots:
+        activity = slot.activity
+        for day in recurrence.occurrences(
+            slot.rrule, slot.dtstart, from_date - datetime.timedelta(days=1), to_date
+        ):
             if (day, slot.id) in settled:
                 continue
-            activity = slot.activity
             if activity is not None and not _within(activity.cycle, day):
                 continue
             _, ends = window_span(day, slot.time_window_start, slot.time_window_end)
@@ -533,7 +530,6 @@ def occupied(
             }
             if _overlaps(_bounds(entry), asked):
                 busy.append(entry)
-        day += datetime.timedelta(days=1)
 
     for row in days:
         entry = _day_interval(row)

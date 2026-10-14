@@ -16,6 +16,7 @@ into the past and every test here would start passing for the wrong reason.
 
 import datetime
 
+from app.core.recurrence import weekly_rule
 from app.core.time import org_today
 from app.cron.ledger_generator import generate_daily_ledger_entries
 from app.models.db import (
@@ -105,7 +106,7 @@ def _new_slot(client, headers, activity_id, room="LH-201", day=None, start="09:0
         "/api/v1/schedule/slots",
         headers=headers,
         json={
-            "day_of_week_index": TOMORROW.isoweekday() if day is None else day,
+            "rrule": weekly_rule(TOMORROW.isoweekday() if day is None else day),
             "time_window_start": start,
             "time_window_end": end,
             "activity_id": activity_id,
@@ -322,7 +323,7 @@ def test_a_refused_move_leaves_the_slot_and_the_days_it_made_alone(client, db, s
     r = client.patch(
         f"/api/v1/schedule/slots/{slot_id}",
         headers=headers,
-        json={"day_of_week_index": NEXT_WEEK.isoweekday()},
+        json={"rrule": weekly_rule(NEXT_WEEK.isoweekday())},
     )
     assert r.status_code == 409, r.text
 

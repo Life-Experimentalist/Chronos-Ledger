@@ -9,6 +9,7 @@ is per session. tests/test_organizations_pg.py is the same check on
 PostgreSQL.
 """
 
+import datetime
 import io
 import json
 import os
@@ -26,18 +27,24 @@ from app.core.database import get_db, get_session_opener, sqlite_engine
 from app.core.organization import DEFAULT_ORGANIZATION_ID, use_organization
 from app.core.schema import ensure_schema
 from app.core.security import hash_password
+from app.cron.ledger_generator import generate_daily_ledger_entries, materialize_horizon
 from app.main import app
 from app.models.db import (
+    Activity,
     ChangeMarker,
+    DailyLedger,
     InstitutionalRole,
     Organization,
+    PlanningCycle,
     Resource,
+    StructuralMasterSlot,
     User,
     WebhookDelivery,
     WebhookSubscription,
 )
 from app.services.organizations import create_organization
 from app.services.webhooks import fan_out
+from tests.conftest import weekly
 
 PASSWORD = "OrgPassword123!"
 SECOND = "second"
@@ -297,6 +304,53 @@ def test_a_session_filters_whatever_it_queries(engine):
         assert db.scalars(select(ChangeMarker.organization_id)).all() == [SECOND]
         everyone = select(Resource).execution_options(all_organizations=True)
         assert len(db.scalars(everyone).all()) == 2
+
+
+def test_a_rule_based_slot_stamps_its_days_with_its_own_organization(engine):
+    """The nightly jobs have no caller, so each day takes its slot's organization."""
+    monday = datetime.date(2026, 9, 7)
+    with Session(engine) as db:
+        for organization in (DEFAULT_ORGANIZATION_ID, SECOND):
+            cycle = PlanningCycle(
+                cycle_label="Odd 2026",
+                date_bounds_start=datetime.date(2026, 8, 1),
+                date_bounds_end=datetime.date(2026, 12, 20),
+                operational_status=True,
+                organization_id=organization,
+            )
+            db.add(cycle)
+            db.flush()
+            offering = Activity(
+                activity_code="CS101",
+                activity_title="Intro",
+                unit_code="CSE",
+                cycle_id=cycle.id,
+                organization_id=organization,
+            )
+            db.add(offering)
+            db.flush()
+            db.add(
+                StructuralMasterSlot(
+                    **weekly(1),
+                    time_window_start=datetime.time(9, 0),
+                    time_window_end=datetime.time(10, 0),
+                    activity_id=offering.id,
+                    target_room_identifier="LH-101",
+                    organization_id=organization,
+                )
+            )
+        db.commit()
+    with Session(engine) as db:
+        assert generate_daily_ledger_entries(monday, db) == 2
+        assert materialize_horizon(db) > 0
+        db.commit()
+    for organization in (DEFAULT_ORGANIZATION_ID, SECOND):
+        with Session(engine) as db:
+            use_organization(db, organization)
+            days = db.scalars(select(DailyLedger)).all()
+            assert days
+            assert {day.organization_id for day in days} == {organization}
+            assert monday in {day.target_date for day in days}
 
 
 def test_creating_an_organization_refuses_anything_already_taken(engine):

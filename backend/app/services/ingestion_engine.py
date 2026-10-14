@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core import recurrence
 from app.core.emails import normalize_email
 from app.core.organization import current_organization
 from app.core.security import generate_password, hash_password
@@ -204,16 +205,17 @@ class ChronosIngestionEngine:
                     ActivityEnrollment.activity_id, ActivityEnrollment.member_id
                 ).filter(ActivityEnrollment.activity_id.in_(ids))
             }
-            slots: dict[tuple[int, int, datetime.time], StructuralMasterSlot] = {}
+            # Keyed by rule rather than weekday: a row's weekday is the weekly
+            # rule on that day, and a slot given some other rule through the
+            # API is not one a file row can name.
+            slots: dict[tuple[int, str, datetime.time], StructuralMasterSlot] = {}
             for ids in _chunked(activity_ids):
                 for slot in (
                     self.db.query(StructuralMasterSlot)
                     .filter(StructuralMasterSlot.activity_id.in_(ids))
                     .order_by(StructuralMasterSlot.id)
                 ):
-                    slots.setdefault(
-                        (slot.activity_id, slot.day_of_week_index, slot.time_window_start), slot
-                    )
+                    slots.setdefault((slot.activity_id, slot.rrule, slot.time_window_start), slot)
             rooms: dict[str, Resource] = {}
 
             for index, row in rows:
@@ -332,6 +334,7 @@ class ChronosIngestionEngine:
 
                 # 4. Upsert master slot (deduplicate by activity + day + start time)
                 day = _parse_day(row["day_of_week_index"])
+                rule = recurrence.weekly_rule(day)
                 t_start = _parse_time(row["time_window_start"])
                 t_end = _parse_time(row["time_window_end"])
                 if t_end == t_start:
@@ -341,7 +344,7 @@ class ChronosIngestionEngine:
                         "at all or a whole day and the row does not say which"
                     )
 
-                slot = slots.get((offering.id, day, t_start))
+                slot = slots.get((offering.id, rule, t_start))
                 if slot is not None and slot.retired_at is not None:
                     raise ValueError(
                         f"activity '{row['activity_code']}': the slot on day {day} at "
@@ -445,7 +448,7 @@ class ChronosIngestionEngine:
                     )
                 if not slot:
                     slot = StructuralMasterSlot(
-                        day_of_week_index=day,
+                        **recurrence.weekly(day, cycle.date_bounds_start),
                         time_window_start=t_start,
                         time_window_end=t_end,
                         activity_id=offering.id,
@@ -454,7 +457,7 @@ class ChronosIngestionEngine:
                         target_room_identifier=room.code,
                     )
                     self.db.add(slot)
-                    slots[(offering.id, day, t_start)] = slot
+                    slots[(offering.id, rule, t_start)] = slot
                 elif (
                     slot.time_window_end != t_end
                     or slot.primary_lead_id != str(row["lead_id"])
@@ -566,6 +569,9 @@ class ChronosIngestionEngine:
             {
                 "id": slot.id,
                 "activity_code": codes[slot.activity_id],
+                "rrule": slot.rrule,
+                "dtstart": slot.dtstart.isoformat(),
+                # Deprecated: derived from the rule, returned through 0.17.
                 "day_of_week_index": slot.day_of_week_index,
                 "time_window_start": str(slot.time_window_start),
                 "room": slot.resource.code if slot.resource else slot.target_room_identifier,

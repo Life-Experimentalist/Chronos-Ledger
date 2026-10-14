@@ -22,6 +22,7 @@ from app.models.db import (
     StructuralMasterSlot,
 )
 from app.services.reverse_rsvp import commit_absence_override
+from tests.conftest import weekly
 
 # 2026-09-07 is a Monday: isoweekday() == 1.
 MONDAY = datetime.date(2026, 9, 7)
@@ -47,7 +48,7 @@ def _materialized_day(db, seed_users):
     db.flush()
     db.add(
         StructuralMasterSlot(
-            day_of_week_index=1,
+            **weekly(1),
             time_window_start=datetime.time(9, 0),
             time_window_end=datetime.time(10, 0),
             activity_id=offering.id,
