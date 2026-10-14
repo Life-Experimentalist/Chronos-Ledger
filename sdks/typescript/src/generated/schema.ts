@@ -1453,7 +1453,7 @@ export interface paths {
         };
         /**
          * Writes made through the API, newest first
-         * @description Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
+         * @description Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, and one per GET of the conflict report (`schedule.listConflicts`), including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
          */
         get: operations["audit.list"];
         put?: never;
