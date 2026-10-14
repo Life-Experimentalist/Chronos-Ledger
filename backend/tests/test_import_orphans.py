@@ -100,7 +100,7 @@ def test_the_report_names_a_slot_well_enough_to_act_on(client, db, seed_users):
     db.expire_all()
     reported = body["not_in_file"]["slots"][0]
     assert reported["activity_code"] == "PH101"
-    assert reported["day_of_week_index"] == DAY
+    assert "day_of_week_index" not in reported
     assert reported["time_window_start"] == "11:00:00"
     assert reported["room"] == "LH-305"
     # The id is what a follow-up DELETE /schedule/slots/{id} needs.

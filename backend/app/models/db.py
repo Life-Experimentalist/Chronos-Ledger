@@ -31,7 +31,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ExcludeConstraint
 from sqlalchemy.orm import relationship, validates
 
-from app.core import clock, recurrence
+from app.core import clock
 from app.core.database import Base
 from app.core.emails import normalize_email
 from app.core.organization import OrganizationScoped
@@ -467,19 +467,6 @@ class StructuralMasterSlot(OrganizationScoped, Base):
     # still only plans are removed by the delete endpoint; days that became
     # records are left behind with master_slot_id nulled.
     daily_ledger_entries = relationship("DailyLedger", back_populates="master_slot")
-
-    @property
-    def day_of_week_index(self) -> int | None:
-        """The weekday the rule first lands on, 1 for Monday to 7 for Sunday.
-
-        What a slot stored before it had a rule, kept for API clients through
-        0.17 and deprecated. For a rule on more than one weekday it is the
-        first one only.
-        """
-        if self.rrule is None or self.dtstart is None:
-            return None
-        first = recurrence.first_occurrence(self.rrule, self.dtstart)
-        return (first or self.dtstart).isoweekday()
 
     @property
     def target_room_identifier(self) -> str | None:

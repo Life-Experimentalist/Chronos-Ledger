@@ -2117,11 +2117,6 @@ export interface components {
             rrule: string;
             /** Format: date */
             dtstart: string;
-            /**
-             * @deprecated
-             * @description The ISO weekday of the slot's first date. Use rrule and dtstart. Sent through 0.17 and then removed.
-             */
-            day_of_week_index: number;
             /** Format: time */
             time_window_start: string;
             room?: string | null;
@@ -2963,11 +2958,6 @@ export interface components {
              * @description The first date the rule gives. Always one of its dates.
              */
             dtstart?: string;
-            /**
-             * @deprecated
-             * @description The ISO weekday of the slot's first date, worked out from rrule and dtstart. Sent through 0.17 and then removed. A rule on several weekdays has more than one, and this names only the first.
-             */
-            day_of_week_index?: number;
             /** Format: time */
             time_window_start?: string;
             /** Format: time */

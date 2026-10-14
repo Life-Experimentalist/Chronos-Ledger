@@ -484,7 +484,7 @@ def test_cells_are_taken_as_typed(client, db, seed_users):
     slot = (
         db.query(StructuralMasterSlot).filter(StructuralMasterSlot.activity_id == offering.id).one()
     )
-    assert slot.day_of_week_index == 2
+    assert slot.dtstart.isoweekday() == 2
 
 
 @pytest.mark.parametrize("day", ["Mon", "0", "8", "2.5"])

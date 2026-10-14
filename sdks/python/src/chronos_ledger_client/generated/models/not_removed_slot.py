@@ -21,8 +21,6 @@ class NotRemovedSlot:
         activity_code (str):
         rrule (str):  Example: FREQ=WEEKLY;BYDAY=MO.
         dtstart (datetime.date):
-        day_of_week_index (int): The ISO weekday of the slot's first date. Use rrule and dtstart. Sent through 0.17 and
-            then removed.
         time_window_start (str):
         reason (str): Why it was left, naming the dates of the days ahead that carry attendance or a note. Act on it
             with `POST /schedule/slots/{id}/retire`, which keeps those days.
@@ -33,7 +31,6 @@ class NotRemovedSlot:
     activity_code: str
     rrule: str
     dtstart: datetime.date
-    day_of_week_index: int
     time_window_start: str
     reason: str
     room: None | str | Unset = UNSET
@@ -47,8 +44,6 @@ class NotRemovedSlot:
         rrule = self.rrule
 
         dtstart = self.dtstart.isoformat()
-
-        day_of_week_index = self.day_of_week_index
 
         time_window_start = self.time_window_start
 
@@ -68,7 +63,6 @@ class NotRemovedSlot:
                 "activity_code": activity_code,
                 "rrule": rrule,
                 "dtstart": dtstart,
-                "day_of_week_index": day_of_week_index,
                 "time_window_start": time_window_start,
                 "reason": reason,
             }
@@ -89,8 +83,6 @@ class NotRemovedSlot:
 
         dtstart = datetime.date.fromisoformat(d.pop("dtstart"))
 
-        day_of_week_index = d.pop("day_of_week_index")
-
         time_window_start = d.pop("time_window_start")
 
         reason = d.pop("reason")
@@ -109,7 +101,6 @@ class NotRemovedSlot:
             activity_code=activity_code,
             rrule=rrule,
             dtstart=dtstart,
-            day_of_week_index=day_of_week_index,
             time_window_start=time_window_start,
             reason=reason,
             room=room,

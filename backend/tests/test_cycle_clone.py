@@ -59,14 +59,14 @@ def test_the_slots_come_across_pointed_at_the_copied_activities(client, db, seed
     )
     assert copied.id != slot.id
     assert (
-        copied.day_of_week_index,
+        copied.dtstart.isoweekday(),
         copied.time_window_start,
         copied.time_window_end,
         copied.primary_lead_id,
         copied.resource_id,
         copied.target_room_identifier,
     ) == (
-        slot.day_of_week_index,
+        slot.dtstart.isoweekday(),
         slot.time_window_start,
         slot.time_window_end,
         slot.primary_lead_id,
@@ -89,7 +89,7 @@ def test_a_clone_into_later_dates_opens_and_runs(client, db, seed_users):
     assert r.status_code == 200, r.text
 
     starts = org_today() + datetime.timedelta(days=200)
-    first = starts + datetime.timedelta(days=(slot.day_of_week_index - starts.isoweekday()) % 7)
+    first = starts + datetime.timedelta(days=(slot.dtstart.isoweekday() - starts.isoweekday()) % 7)
     assert generate_daily_ledger_entries(first, db) == 1
     day = db.query(DailyLedger).filter(DailyLedger.target_date == first).one()
     assert day.activity.cycle_id == new_id

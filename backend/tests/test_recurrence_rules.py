@@ -168,7 +168,6 @@ def test_a_csv_weekday_is_stored_as_a_weekly_rule(client, db, seed_users):
     assert slot.rrule == "FREQ=WEEKLY;BYDAY=WE"
     assert slot.dtstart.isoweekday() == 3
     assert cycle.date_bounds_start <= slot.dtstart < cycle.date_bounds_start + 7 * DAY
-    assert slot.day_of_week_index == 3
 
 
 # -- Rules a weekday could not say --------------------------------------------
@@ -241,8 +240,8 @@ def test_a_rule_without_dtstart_starts_on_its_first_date_in_the_cycle(client, db
     first_monday = recurrence.first_occurrence("FREQ=WEEKLY;BYDAY=MO", cycle.date_bounds_start)
     assert slot["rrule"] == "FREQ=WEEKLY;BYDAY=MO"
     assert slot["dtstart"] == first_monday.isoformat()
-    # Still sent through 0.17, worked out from the rule.
-    assert slot["day_of_week_index"] == 1
+    # The deprecated weekday field is gone; rrule and dtstart carry it.
+    assert "day_of_week_index" not in slot
 
 
 def test_a_dtstart_off_the_rule_moves_forward_to_the_rule(client, db, seed_users):
@@ -323,9 +322,3 @@ def test_a_rule_is_stored_in_one_spelling(given, stored):
 def test_a_rule_a_slot_cannot_have_is_refused(bad):
     with pytest.raises(ValueError):
         recurrence.normalize(bad)
-
-
-def test_a_slot_with_several_weekdays_reports_the_first_it_runs_on():
-    # dtstart is a Wednesday, so the first date is that Wednesday, not Monday.
-    slot = StructuralMasterSlot(rrule="FREQ=WEEKLY;BYDAY=MO,WE", dtstart=datetime.date(2026, 1, 7))
-    assert slot.day_of_week_index == 3

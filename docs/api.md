@@ -2125,10 +2125,9 @@ Both return `requirements_unmet` (the `POST` next to the slot's `id`, the
 room that its next run cannot have, see
 [Requirements](#get-resourcesidrequirements). The slot is saved either way.
 
-`GET /schedule/slots` returns `rrule` and `dtstart` on each slot. It still
-returns `day_of_week_index`, the ISO weekday of the slot's first date, through
-0.17; it is deprecated and will be removed. The request bodies no longer take
-it.
+`GET /schedule/slots` returns `rrule` and `dtstart` on each slot. Slots no
+longer carry `day_of_week_index`; the request bodies do not take it either.
+Read the weekday off `rrule` and `dtstart`.
 
 The room checks below compare dates, not weekdays. The slot's rule is
 expanded into the dates it will actually run on, inside its cycle and from
@@ -2640,7 +2639,7 @@ does not mention come back in `not_in_file` for somebody to decide about, and
   ],
   "not_in_file": {
     "slots": [
-      { "id": 87, "activity_code": "PH101", "rrule": "FREQ=WEEKLY;BYDAY=WE", "dtstart": "2026-01-07", "day_of_week_index": 3, "time_window_start": "11:00:00", "room": "LH-305" }
+      { "id": 87, "activity_code": "PH101", "rrule": "FREQ=WEEKLY;BYDAY=WE", "dtstart": "2026-01-07", "time_window_start": "11:00:00", "room": "LH-305" }
     ],
     "enrollments": [
       { "member_id": "STU20210044", "activity_code": "PH101" }

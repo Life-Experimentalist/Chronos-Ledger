@@ -328,7 +328,7 @@ def test_a_refused_move_leaves_the_slot_and_the_days_it_made_alone(client, db, s
 
     db.expire_all()
     slot = db.query(StructuralMasterSlot).one()
-    assert slot.day_of_week_index == TOMORROW.isoweekday()
+    assert slot.dtstart.isoweekday() == TOMORROW.isoweekday()
     assert db.query(DailyLedger).count() == 1
 
 
