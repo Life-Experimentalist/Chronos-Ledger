@@ -123,6 +123,7 @@ class ChronosTransport(httpx.BaseTransport):
         base_url: str,
         user_agent: str,
         api_key: str | None = None,
+        acting_for: str | None = None,
         tokens: Tokens | None = None,
         on_tokens: Callable[[Tokens], None] | None = None,
         retry: RetryPolicy | None = None,
@@ -134,6 +135,7 @@ class ChronosTransport(httpx.BaseTransport):
         self._base_url = base_url
         self._user_agent = user_agent
         self._api_key = api_key
+        self._acting_for = acting_for
         self._tokens = tokens
         self._on_tokens = on_tokens
         self._retry = retry
@@ -149,6 +151,8 @@ class ChronosTransport(httpx.BaseTransport):
         request.headers["User-Agent"] = self._user_agent
         if self._api_key:
             request.headers["X-API-Key"] = self._api_key
+            if self._acting_for and "X-Chronos-Actor" not in request.headers:
+                request.headers["X-Chronos-Actor"] = self._acting_for
         elif self._tokens:
             request.headers["Authorization"] = f"Bearer {self._tokens.access_token}"
 

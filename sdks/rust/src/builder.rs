@@ -22,6 +22,7 @@ use crate::{
 pub struct ClientBuilder {
     base_url: String,
     api_key: Option<String>,
+    acting_for: Option<String>,
     tokens: Option<Tokens>,
     on_tokens: Option<TokenSink>,
     http: Option<reqwest::Client>,
@@ -38,6 +39,7 @@ impl ClientBuilder {
         ClientBuilder {
             base_url: base_url.into(),
             api_key: None,
+            acting_for: None,
             tokens: None,
             on_tokens: None,
             http: None,
@@ -50,6 +52,14 @@ impl ClientBuilder {
     /// Authenticates with a scoped API key, sent as `X-API-Key`.
     pub fn api_key(mut self, key: impl Into<String>) -> Self {
         self.api_key = Some(key.into());
+        self
+    }
+
+    /// Sends `user_id` as `X-Chronos-Actor` on every request, so an API key
+    /// holding the `impersonate` scope speaks for that person. Needs
+    /// [`api_key`](Self::api_key). A request that sets the header itself keeps its own.
+    pub fn acting_for(mut self, user_id: impl Into<String>) -> Self {
+        self.acting_for = Some(user_id.into());
         self
     }
 
@@ -111,6 +121,15 @@ impl ClientBuilder {
                 "pass an API key or tokens, not both".to_string(),
             ));
         }
+        if self.acting_for.is_some() && self.api_key.is_none() {
+            return Err(Error::Config("acting_for needs an API key".to_string()));
+        }
+        let acting_for = match self.acting_for {
+            Some(user_id) => Some(HeaderValue::from_str(&user_id).map_err(|_| {
+                Error::Config("the acting_for user id is not a valid header".to_string())
+            })?),
+            None => None,
+        };
         let api_key = match self.api_key {
             Some(key) => {
                 let mut value = HeaderValue::from_str(&key)
@@ -130,6 +149,7 @@ impl ClientBuilder {
         };
         let state = State(Arc::new(Shared {
             api_key,
+            acting_for,
             tokens: Mutex::new(self.tokens),
             on_tokens: self.on_tokens,
             retry: RetryPolicy {

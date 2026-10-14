@@ -92,6 +92,7 @@ pub(crate) type TokenSink = Arc<dyn Fn(&Tokens) + Send + Sync>;
 
 pub(crate) struct Shared {
     pub(crate) api_key: Option<HeaderValue>,
+    pub(crate) acting_for: Option<HeaderValue>,
     pub(crate) tokens: Mutex<Option<Tokens>>,
     pub(crate) on_tokens: Option<TokenSink>,
     pub(crate) retry: RetryPolicy,
@@ -215,6 +216,11 @@ impl State {
     async fn authorize(&self, headers: &mut HeaderMap) -> Option<String> {
         if let Some(key) = &self.0.api_key {
             headers.insert("x-api-key", key.clone());
+            if let Some(actor) = &self.0.acting_for {
+                if !headers.contains_key("x-chronos-actor") {
+                    headers.insert("x-chronos-actor", actor.clone());
+                }
+            }
             return None;
         }
         let guard = self.0.tokens.lock().await;

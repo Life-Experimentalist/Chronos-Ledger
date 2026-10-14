@@ -36,6 +36,41 @@ test("an API key goes out as X-API-Key with the user agent", async () => {
   assert.equal(seen[0]!.headers.get("Authorization"), null);
 });
 
+test("actingFor goes out as X-Chronos-Actor beside the key", async () => {
+  const { seen, fetch } = server(() => json(200, []));
+  const chronos = createChronosClient({ baseUrl: "https://c.test", apiKey: "k1", actingFor: "STU001", fetch });
+  await chronos.GET("/api/v1/resources/");
+  assert.equal(seen[0]!.headers.get("X-API-Key"), "k1");
+  assert.equal(seen[0]!.headers.get("X-Chronos-Actor"), "STU001");
+});
+
+test("without actingFor no actor header is sent", async () => {
+  const { seen, fetch } = server(() => json(200, []));
+  const chronos = createChronosClient({ baseUrl: "https://c.test", apiKey: "k1", fetch });
+  await chronos.GET("/api/v1/resources/");
+  assert.equal(seen[0]!.headers.get("X-Chronos-Actor"), null);
+});
+
+test("a header set on the request wins over actingFor", async () => {
+  const { seen, fetch } = server(() => json(200, []));
+  const chronos = createChronosClient({ baseUrl: "https://c.test", apiKey: "k1", actingFor: "STU001", fetch });
+  await chronos.GET("/api/v1/resources/", { headers: { "X-Chronos-Actor": "FAC001" } });
+  assert.equal(seen[0]!.headers.get("X-Chronos-Actor"), "FAC001");
+});
+
+test("actingFor needs an API key", () => {
+  assert.throws(() => createChronosClient({ baseUrl: "https://c.test", actingFor: "STU001" }), /actingFor needs apiKey/);
+  assert.throws(
+    () =>
+      createChronosClient({
+        baseUrl: "https://c.test",
+        tokens: { accessToken: "a", refreshToken: "r" },
+        actingFor: "STU001",
+      }),
+    /actingFor needs apiKey/,
+  );
+});
+
 test("a 401 refreshes once, stores the new pair and repeats the call", async () => {
   const { seen, fetch } = server(async (request) => {
     if (request.url.endsWith("/auth/refresh")) {

@@ -2035,7 +2035,7 @@ export interface components {
              */
             user_id: string;
             /**
-             * @description Areas this key may reach. Omit the field for an unrestricted key; an empty array is refused, since a key that can reach nothing is not a key anybody wants. Stored sorted and deduplicated.
+             * @description Areas this key may reach. Omit the field for an unrestricted key; an empty array is refused, since a key that can reach nothing is not a key anybody wants. Stored sorted and deduplicated. The scope `impersonate` lets the key act for a named person in its organization (header `X-Chronos-Actor`); it is granted only by naming it, and `*` does not include it.
              * @example [
              *       "schedule:read",
              *       "resources:read"
@@ -2059,7 +2059,7 @@ export interface components {
             label?: string;
             user_id?: string;
             /**
-             * @description Comma separated, or `*` for a key that was never narrowed.
+             * @description Comma separated, or `*` for a key that was never narrowed. May include `impersonate`, which `*` does not stand for.
              * @example resources:read,schedule:read
              */
             scopes?: string;
@@ -2711,6 +2711,8 @@ export interface components {
             actor_id?: string | null;
             /** @description The key used, or null for a signed-in person. */
             api_key_id?: number | null;
+            /** @description The id sent in `X-Chronos-Actor`, exactly as asked for and cut to 50 characters, or null when the request did not send the header. Set on a refused attempt too, whether or not that id exists, so `actor_id` is who sent the request and this is who it named. */
+            acting_for_user_id?: string | null;
             method?: string;
             path?: string;
             status_code?: number;
@@ -3028,7 +3030,7 @@ export interface components {
          * @example NOT_FOUND
          * @enum {string}
          */
-        ErrorCode: "BAD_REQUEST" | "NOT_AUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "STATE_CONFLICT" | "PAYLOAD_TOO_LARGE" | "INVALID_VALUE" | "RATE_LIMITED" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE" | "VALIDATION_FAILED" | "INVALID_CREDENTIALS" | "TOKEN_INVALID" | "API_KEY_INVALID" | "API_KEY_EXPIRED" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_DEACTIVATED" | "REFRESH_TOKEN_INVALID" | "REFRESH_TOKEN_EXPIRED" | "REFRESH_TOKEN_USED" | "REFRESH_TOKEN_REUSED" | "FEDERATED_TOKEN_INVALID" | "FEDERATED_EMAIL_MISSING" | "FEDERATED_ADMIN_REFUSED" | "FEDERATION_UNAVAILABLE" | "CURRENT_PASSWORD_INCORRECT" | "PASSWORD_UNCHANGED" | "PASSWORD_CHANGE_REQUIRED" | "INSUFFICIENT_ROLE" | "SCOPE_MISSING" | "OUTSIDE_UNIT" | "RESOURCE_CONFLICT" | "ALREADY_EXISTS" | "EMAIL_TAKEN" | "USER_DEACTIVATED" | "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_KEY_IN_PROGRESS" | "RESERVATION_EXTERNAL_REF_TAKEN" | "RESOURCE_CAPACITY_EXCEEDED" | "RESOURCE_BOOKINGS_WOULD_NOT_FIT" | "LOCATION_REQUIRED" | "LOCATION_TOO_COARSE" | "OUTSIDE_GEOFENCE" | "MANAGER_NOT_SET" | "IMPORT_REJECTED" | "CHANGE_FEED_DISABLED" | "SERVER_BUSY" | "DATABASE_UNAVAILABLE" | "WEBHOOK_URL_REFUSED" | "WEBHOOK_SECRET_LIMIT";
+        ErrorCode: "BAD_REQUEST" | "NOT_AUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "STATE_CONFLICT" | "PAYLOAD_TOO_LARGE" | "INVALID_VALUE" | "RATE_LIMITED" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE" | "VALIDATION_FAILED" | "INVALID_CREDENTIALS" | "TOKEN_INVALID" | "API_KEY_INVALID" | "API_KEY_EXPIRED" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_DEACTIVATED" | "REFRESH_TOKEN_INVALID" | "REFRESH_TOKEN_EXPIRED" | "REFRESH_TOKEN_USED" | "REFRESH_TOKEN_REUSED" | "FEDERATED_TOKEN_INVALID" | "FEDERATED_EMAIL_MISSING" | "FEDERATED_ADMIN_REFUSED" | "FEDERATION_UNAVAILABLE" | "CURRENT_PASSWORD_INCORRECT" | "PASSWORD_UNCHANGED" | "PASSWORD_CHANGE_REQUIRED" | "INSUFFICIENT_ROLE" | "SCOPE_MISSING" | "OUTSIDE_UNIT" | "IMPERSONATION_NOT_ALLOWED" | "IMPERSONATION_REFUSED" | "RESOURCE_CONFLICT" | "ALREADY_EXISTS" | "EMAIL_TAKEN" | "USER_DEACTIVATED" | "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_KEY_IN_PROGRESS" | "RESERVATION_EXTERNAL_REF_TAKEN" | "RESOURCE_CAPACITY_EXCEEDED" | "RESOURCE_BOOKINGS_WOULD_NOT_FIT" | "LOCATION_REQUIRED" | "LOCATION_TOO_COARSE" | "OUTSIDE_GEOFENCE" | "MANAGER_NOT_SET" | "IMPORT_REJECTED" | "CHANGE_FEED_DISABLED" | "SERVER_BUSY" | "DATABASE_UNAVAILABLE" | "WEBHOOK_URL_REFUSED" | "WEBHOOK_SECRET_LIMIT";
     };
     responses: {
         /** @description Missing or invalid JWT. */
@@ -3093,8 +3095,10 @@ export interface components {
         Limit: number;
         /** @description Skip this many rows first. Rows come in id order. */
         Offset: number;
-        /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+        /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
         IdempotencyKey: string;
+        /** @description The id of the person this request is for. Only an API key holding the `impersonate` scope may send it, and only for an active user in the key's own organization; anything else is `403` with `IMPERSONATION_NOT_ALLOWED` or `IMPERSONATION_REFUSED`. Not sent, the key acts as the account it is bound to. */
+        ActingFor: string;
     };
     requestBodies: never;
     headers: {
@@ -3410,7 +3414,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -3523,7 +3527,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -3605,7 +3609,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -3643,7 +3647,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -3673,7 +3677,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -3782,7 +3786,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -3831,7 +3835,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -3871,7 +3875,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -3899,7 +3903,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -3958,7 +3962,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -4009,7 +4013,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -4038,7 +4042,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -4106,7 +4110,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -4157,7 +4161,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -4213,7 +4217,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -4262,7 +4266,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -4320,7 +4324,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -4398,7 +4402,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -4546,7 +4550,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -4577,7 +4581,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -4658,7 +4662,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -4730,7 +4734,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -4772,7 +4776,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -4840,7 +4844,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -4898,7 +4902,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -4978,7 +4982,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -5036,7 +5040,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -5066,7 +5070,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -5124,7 +5128,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -5246,7 +5250,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -5373,7 +5377,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -5403,7 +5407,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -5438,7 +5442,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -5478,7 +5482,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -5521,7 +5525,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -5574,7 +5578,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -5650,7 +5654,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -5709,7 +5713,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -5752,7 +5756,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -5951,7 +5955,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -5996,7 +6000,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -6128,7 +6132,7 @@ export interface operations {
                 target_date?: string;
             };
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path?: never;
@@ -6344,7 +6348,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -6371,7 +6375,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -6447,7 +6451,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -6474,7 +6478,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {
@@ -6534,7 +6538,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. */
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
                 "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
             };
             path: {

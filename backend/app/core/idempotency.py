@@ -82,6 +82,7 @@ from app.core.errors import ChronosError, ErrorCode
 logger = logging.getLogger(__name__)
 
 KEY_HEADER = b"idempotency-key"
+ACTING_FOR_HEADER = b"x-chronos-actor"
 REPLAYED_HEADER = "Idempotency-Replayed"
 KEY_LIMIT = 255
 KEY_REUSED = "that Idempotency-Key was used for a different request"
@@ -141,8 +142,14 @@ class Replay(Exception):
         self.body = body
 
 
-def request_hash(method: str, path: str, query_string: bytes, body: bytes) -> str:
-    """sha256 of the method, path, sorted query string and canonical body.
+def request_hash(
+    method: str, path: str, query_string: bytes, body: bytes, acting_for: str = ""
+) -> str:
+    """sha256 of the method, path, sorted query string, canonical body and acting-for id.
+
+    The id is X-Chronos-Actor, when a key sent it: the same key and body sent
+    for a different person is a different request, and replaying the first
+    person's response to the second would hand one person's data to another.
 
     A JSON body is hashed in a canonical form, so key order and spacing do
     not make a retry look like a different request. Anything else is hashed
@@ -156,7 +163,7 @@ def request_hash(method: str, path: str, query_string: bytes, body: bytes) -> st
     except ValueError:
         canonical = body
     digest = hashlib.sha256()
-    for part in (method.encode(), path.encode(), query.encode(), canonical):
+    for part in (method.encode(), path.encode(), query.encode(), canonical, acting_for.encode()):
         digest.update(part)
         digest.update(b"\n")
     return digest.hexdigest()
@@ -316,8 +323,12 @@ class IdempotencyMiddleware:
         body, receive = await _buffered(receive)
         if body is None:
             return
+        acting_for = (_header(scope, ACTING_FOR_HEADER) or "").strip()
         pending = Pending(
-            key, request_hash(scope["method"], scope["path"], scope.get("query_string", b""), body)
+            key,
+            request_hash(
+                scope["method"], scope["path"], scope.get("query_string", b""), body, acting_for
+            ),
         )
         scope.setdefault("state", {})["idempotency"] = pending
 

@@ -437,6 +437,36 @@ async fn a_generated_call_retries_and_sends_the_key() {
 }
 
 #[tokio::test]
+async fn acting_for_is_sent_beside_the_key() {
+    let stub = Stub::start(vec![respond(200, "{}"), respond(200, "{}")]).await;
+    let client = ClientBuilder::new(&stub.url)
+        .api_key("test-key")
+        .acting_for("STU001")
+        .build()
+        .expect("client");
+    let plain = ClientBuilder::new(&stub.url)
+        .api_key("test-key")
+        .build()
+        .expect("client");
+
+    assert!(client.auth_get_me().send().await.is_ok());
+    assert!(plain.auth_get_me().send().await.is_ok());
+
+    let seen = stub.requests();
+    assert_eq!(seen[0].headers["x-api-key"], "test-key");
+    assert_eq!(seen[0].headers["x-chronos-actor"], "STU001");
+    assert!(!seen[1].headers.contains_key("x-chronos-actor"));
+}
+
+#[test]
+fn acting_for_needs_an_api_key() {
+    assert!(ClientBuilder::new("https://c.test")
+        .acting_for("STU001")
+        .build()
+        .is_err());
+}
+
+#[tokio::test]
 async fn a_generated_call_reports_the_server_error() {
     let stub = Stub::start(vec![respond(
         422,

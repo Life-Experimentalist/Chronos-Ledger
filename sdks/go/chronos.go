@@ -34,15 +34,16 @@ type Client struct {
 }
 
 type config struct {
-	apiKey   string
-	tokens   *Tokens
-	onTokens func(Tokens)
-	http     generated.HttpRequestDoer
-	retry    RetryPolicy
-	sleep    func(ctx context.Context, d time.Duration) error
-	now      func() time.Time
-	jitter   func(ceiling time.Duration) time.Duration
-	makeKeys bool
+	apiKey    string
+	actingFor string
+	tokens    *Tokens
+	onTokens  func(Tokens)
+	http      generated.HttpRequestDoer
+	retry     RetryPolicy
+	sleep     func(ctx context.Context, d time.Duration) error
+	now       func() time.Time
+	jitter    func(ceiling time.Duration) time.Duration
+	makeKeys  bool
 }
 
 // Option changes how New builds a client.
@@ -51,6 +52,13 @@ type Option func(*config)
 // WithAPIKey authenticates with a scoped API key, sent as X-API-Key.
 func WithAPIKey(key string) Option {
 	return func(c *config) { c.apiKey = key }
+}
+
+// WithActingFor sends userID as X-Chronos-Actor on every request, so an API
+// key holding the impersonate scope speaks for that person. It needs
+// WithAPIKey. A request that sets the header itself keeps its own.
+func WithActingFor(userID string) Option {
+	return func(c *config) { c.actingFor = userID }
 }
 
 // WithTokens authenticates with the pair from POST /api/v1/auth/login. On a 401
@@ -101,6 +109,9 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 	if cfg.apiKey != "" && cfg.tokens != nil {
 		return nil, errors.New("chronos: pass an API key or tokens, not both")
 	}
+	if cfg.actingFor != "" && cfg.apiKey == "" {
+		return nil, errors.New("chronos: acting for a user needs an API key")
+	}
 	if cfg.http == nil {
 		cfg.http = &http.Client{Timeout: 30 * time.Second}
 	}
@@ -112,6 +123,7 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 		baseURL:   baseURL,
 		userAgent: "chronos-go/" + Version,
 		apiKey:    cfg.apiKey,
+		actingFor: cfg.actingFor,
 		onTokens:  cfg.onTokens,
 		retry:     cfg.retry,
 		tokens:    cfg.tokens,

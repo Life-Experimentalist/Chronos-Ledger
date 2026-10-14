@@ -73,7 +73,21 @@ components:
         `GET /schedule/slots` and is refused `POST /schedule/slots` with a 403
         naming `schedule:write`. The single scope `*` is every area, which is
         what a key issued before scopes existed holds and what a key created
-        without naming any gets.
+        without naming any gets. The one scope outside that grammar is
+        `impersonate`, which `*` does not include: see below.
+
+        A key holding `impersonate` may send `X-Chronos-Actor: <user id>` and
+        the request then runs as that person, so their role and unit scoping
+        apply, and the key's own scopes still apply on top. It only narrows:
+        what the request may do is what both the key and the named person may
+        do. The named person has to exist, be active and be in the key's
+        organization; unknown and other-organization ids get the same answer.
+        A Bearer token, or a key without the scope, that sends the header is
+        refused with 403 `IMPERSONATION_NOT_ALLOWED` and a named person who
+        cannot be acted for with 403 `IMPERSONATION_REFUSED`. The header is
+        never ignored. Rate limits and idempotency keys stay with the API key,
+        and the audit log records both the key's account and the person
+        named. See `ActingFor`.
 
         `expires_at` is checked on the request, not by a sweep, so a key stops
         working the moment it runs out and answers 401 `API key expired`. A
@@ -603,11 +617,14 @@ components:
           minItems: 1
           items:
             type: string
-            pattern: "^(\\*|[a-z][a-z-]*:(read|write))$"
+            pattern: "^(\\*|impersonate|[a-z][a-z-]*:(read|write))$"
           description: >
             Areas this key may reach. Omit the field for an unrestricted key;
             an empty array is refused, since a key that can reach nothing is
-            not a key anybody wants. Stored sorted and deduplicated.
+            not a key anybody wants. Stored sorted and deduplicated. The
+            scope `impersonate` lets the key act for a named person in its
+            organization (header `X-Chronos-Actor`); it is granted only by
+            naming it, and `*` does not include it.
           example: [schedule:read, resources:read]
         expires_at:
           type: string
@@ -633,7 +650,9 @@ components:
           type: string
         scopes:
           type: string
-          description: Comma separated, or `*` for a key that was never narrowed.
+          description: >
+            Comma separated, or `*` for a key that was never narrowed. May
+            include `impersonate`, which `*` does not stand for.
           example: resources:read,schedule:read
         expires_at:
           type: string
@@ -1859,6 +1878,13 @@ components:
         api_key_id:
           type: [integer, "null"]
           description: The key used, or null for a signed-in person.
+        acting_for_user_id:
+          type: [string, "null"]
+          description: >
+            The id sent in `X-Chronos-Actor`, exactly as asked for and cut to
+            50 characters, or null when the request did not send the header.
+            Set on a refused attempt too, whether or not that id exists, so
+            `actor_id` is who sent the request and this is who it named.
         method:
           type: string
         path:
@@ -2502,6 +2528,8 @@ components:
         - INSUFFICIENT_ROLE
         - SCOPE_MISSING
         - OUTSIDE_UNIT
+        - IMPERSONATION_NOT_ALLOWED
+        - IMPERSONATION_REFUSED
         - RESOURCE_CONFLICT
         - ALREADY_EXISTS
         - EMAIL_TAKEN
@@ -2610,11 +2638,28 @@ components:
         different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry
         while the first request is still running is `409` with
         `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to
-        255 printable ASCII characters is `422` with `INVALID_VALUE`.
+        255 printable ASCII characters is `422` with `INVALID_VALUE`. A
+        different `X-Chronos-Actor` counts as a different request.
       schema:
         type: string
         minLength: 1
         maxLength: 255
+    # Described under the ApiKeyAuth security scheme; any route that takes an
+    # API key takes it.
+    ActingFor:
+      name: X-Chronos-Actor
+      in: header
+      required: false
+      description: >
+        The id of the person this request is for. Only an API key holding the
+        `impersonate` scope may send it, and only for an active user in the
+        key's own organization; anything else is `403` with
+        `IMPERSONATION_NOT_ALLOWED` or `IMPERSONATION_REFUSED`. Not sent, the
+        key acts as the account it is bound to.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 50
 
   headers:
     XTotalCount:

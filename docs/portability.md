@@ -243,7 +243,9 @@ activities, so it travels with them.
 
 The audit log ([api.md](api.md#audit)): one row per write request, plus one
 per read of the conflict report. It points at no other table, so its
-`actor_id` and `api_key_id` may name accounts and keys that no longer exist.
+`actor_id` and `api_key_id` may name accounts and keys that no longer exist,
+and `acting_for_user_id`, the id an API key sent in `X-Chronos-Actor`, may name
+no account at all, since a refused attempt records what it was given.
 
 ### change_markers
 
