@@ -77,7 +77,8 @@ def sync_detailed(
     """Today's ledger entries for the authenticated user
 
      Staff receive entries where they are the active or substitute lead. Members receive entries for
-    their registered activities. Admins receive all entries.
+    their registered activities. An ORG_ADMIN receives all entries; a UNIT_ADMIN receives the entries of
+    the activities in their own unit.
 
     Args:
         limit (int | Unset):
@@ -112,7 +113,8 @@ def sync(
     """Today's ledger entries for the authenticated user
 
      Staff receive entries where they are the active or substitute lead. Members receive entries for
-    their registered activities. Admins receive all entries.
+    their registered activities. An ORG_ADMIN receives all entries; a UNIT_ADMIN receives the entries of
+    the activities in their own unit.
 
     Args:
         limit (int | Unset):
@@ -142,7 +144,8 @@ async def asyncio_detailed(
     """Today's ledger entries for the authenticated user
 
      Staff receive entries where they are the active or substitute lead. Members receive entries for
-    their registered activities. Admins receive all entries.
+    their registered activities. An ORG_ADMIN receives all entries; a UNIT_ADMIN receives the entries of
+    the activities in their own unit.
 
     Args:
         limit (int | Unset):
@@ -175,7 +178,8 @@ async def asyncio(
     """Today's ledger entries for the authenticated user
 
      Staff receive entries where they are the active or substitute lead. Members receive entries for
-    their registered activities. Admins receive all entries.
+    their registered activities. An ORG_ADMIN receives all entries; a UNIT_ADMIN receives the entries of
+    the activities in their own unit.
 
     Args:
         limit (int | Unset):

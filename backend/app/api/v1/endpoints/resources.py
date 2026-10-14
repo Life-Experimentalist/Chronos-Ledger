@@ -14,7 +14,7 @@ from app.core.database import get_db
 from app.core.errors import ChronosError, ErrorCode
 from app.core.idempotency import KEY_REUSED
 from app.core.pagination import Page
-from app.core.security import get_current_user, require_roles
+from app.core.security import ensure_resource_scope, get_current_user, require_roles
 from app.core.time import org_today, window_span
 from app.models.db import Reservation, ReservationStatus, Resource, ResourceMode, ResourceType
 from app.schemas.resources import (
@@ -613,6 +613,10 @@ def create_reservation(
     window, and refused with 409 RESOURCE_CAPACITY_EXCEEDED when they do
     not. Shared refuses nothing; the hold records who is there. A quantity
     above 1 on a resource that is not pooled is 422.
+
+    A UNIT_ADMIN may hold a resource of its own unit and one with no unit,
+    which the whole organization shares. A resource of another unit is 403
+    OUTSIDE_UNIT.
     """
     # Still here, and now for one job: holding a booking off against a class,
     # which is in another table and so is out of reach of the constraint.
@@ -622,6 +626,8 @@ def create_reservation(
     resource = db.query(Resource).filter(Resource.id == resource_id).with_for_update().first()
     if not resource:
         raise ChronosError(status_code=404, detail="Resource not found", code=ErrorCode.NOT_FOUND)
+    # A unit admin holds their own unit's resources and the shared ones.
+    ensure_resource_scope(current_user, resource)
 
     fingerprint = _fingerprint(resource_id, payload)
     seen = _by_key(db, current_user.id, idempotency_key)

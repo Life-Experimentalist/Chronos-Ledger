@@ -7,6 +7,7 @@ import logging
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.encoders import jsonable_encoder
+from sqlalchemy import false, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -15,7 +16,12 @@ from app.core.database import get_db
 from app.core.errors import ChronosError, ErrorCode
 from app.core.pagination import Page
 from app.core.redis_client import get_redis
-from app.core.security import ensure_unit_scope, get_current_user, require_roles
+from app.core.security import (
+    ensure_resource_scope,
+    ensure_unit_scope,
+    get_current_user,
+    require_roles,
+)
 from app.core.time import org_today
 from app.cron.ledger_generator import materialize_horizon
 from app.models.db import (
@@ -23,6 +29,7 @@ from app.models.db import (
     ActivityEnrollment,
     DailyLedger,
     PlanningCycle,
+    Resource,
     StructuralMasterSlot,
     User,
 )
@@ -803,6 +810,7 @@ def create_master_slot(
         _refuse_unless_active(db, payload.primary_lead_id, "Lead")
     dtstart = _anchor(payload.rrule, payload.dtstart or offering.cycle.date_bounds_start)
     room = get_or_create_room(payload.target_room_identifier, db)
+    ensure_resource_scope(current_user, room)
     _refuse_if_held(
         db,
         offering.cycle,
@@ -910,6 +918,7 @@ def update_master_slot(
     moving_to = None
     if "target_room_identifier" in fields:
         moving_to = get_or_create_room(fields.pop("target_room_identifier"), db)
+        ensure_resource_scope(current_user, moving_to)
     resource_id = moving_to.id if moving_to else slot.resource_id
     if (resource_id, rule, dtstart, start, end) != (
         slot.resource_id,
@@ -1035,7 +1044,8 @@ def _visible_ledger(db: Session, current_user: User, q):
     """q narrowed to the rows this user may see.
 
     Staff see the days they lead or cover, members the activities they are
-    enrolled in, and everyone else every row. Shared by today's ledger and the
+    enrolled in, a unit admin the days of their own unit's activities, and
+    an organization admin every row. Shared by today's ledger and the
     range, so the two can never disagree about who sees what.
     """
     if current_user.role_type.value == "STAFF":
@@ -1043,6 +1053,17 @@ def _visible_ledger(db: Session, current_user: User, q):
             (DailyLedger.active_lead_id == current_user.id)
             | (DailyLedger.substitute_lead_id == current_user.id)
         )
+    elif current_user.role_type.value == "UNIT_ADMIN":
+        # Only the days of their own unit's activities. A unit admin with no
+        # unit has none: compared with None the column would read IS NULL.
+        if current_user.unit_code is None:
+            q = q.filter(false())
+        else:
+            q = q.filter(
+                DailyLedger.activity_id.in_(
+                    select(Activity.id).where(Activity.unit_code == current_user.unit_code)
+                )
+            )
     elif current_user.role_type.value == "MEMBER":
         from app.models.db import ActivityEnrollment
 
@@ -1124,12 +1145,56 @@ def get_ledger_range(
     return [_ledger_row(e) for e in page.rows(q, *keys)]
 
 
+def _conflicts_in_unit(db: Session, conflicts: list[dict], unit_code: str | None) -> list[dict]:
+    """The conflicts with at least one item that belongs to this unit.
+
+    An item belongs to the unit when its activity's unit_code matches. An
+    item with no activity, which is a reservation, belongs to it when its
+    resource's unit_code does. A resource with no unit belongs to none, so a
+    clash between two bookings of a shared room is nobody's but an
+    organization admin's. A conflict that stays is returned whole, with
+    every item, so the clash can be understood.
+    """
+    if unit_code is None:
+        return []
+    items = [item for conflict in conflicts for item in conflict["items"]]
+    activity_ids = {item["activity_id"] for item in items if item["activity_id"] is not None}
+    resource_ids = {item["resource_id"] for item in items if item["activity_id"] is None}
+    own_activities = (
+        {
+            row[0]
+            for row in db.query(Activity.id).filter(
+                Activity.id.in_(activity_ids), Activity.unit_code == unit_code
+            )
+        }
+        if activity_ids
+        else set()
+    )
+    own_resources = (
+        {
+            row[0]
+            for row in db.query(Resource.id).filter(
+                Resource.id.in_(resource_ids), Resource.unit_code == unit_code
+            )
+        }
+        if resource_ids
+        else set()
+    )
+
+    def belongs(item: dict) -> bool:
+        if item["activity_id"] is not None:
+            return item["activity_id"] in own_activities
+        return item["resource_id"] in own_resources
+
+    return [c for c in conflicts if any(belongs(item) for item in c["items"])]
+
+
 @router.get("/conflicts", operation_id="schedule.listConflicts", response_model=ConflictReport)
 def get_conflict_report(
     from_: datetime.date = Query(alias="from"),
     to: datetime.date = Query(),
     db: Session = Depends(get_db),
-    _=Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
 ):
     """Every clash already in the schedule between two dates inclusive.
 
@@ -1137,10 +1202,12 @@ def get_conflict_report(
     activities that run at once. It reads and reports; nothing is refused
     and nothing is changed. app.services.conflicts says what counts.
 
-    Admins only, because these are the callers _visible_ledger shows every
-    row to. The report is only true when it is read over the whole schedule,
-    and the member side names who is enrolled where, which a member or a
-    member of staff is not shown for anybody but themselves.
+    Admins only: the member side names who is enrolled where, which a member
+    or a member of staff is not shown for anybody but themselves. An
+    ORG_ADMIN gets every clash. A UNIT_ADMIN gets the clashes in which at
+    least one item belongs to their unit, each one whole, so a clash between
+    their unit and another is returned with the other unit's item in it.
+    The report is read over the whole schedule either way, and then narrowed.
     """
     if from_ > to:
         raise ChronosError(
@@ -1150,7 +1217,10 @@ def get_conflict_report(
         raise ChronosError(
             status_code=422, detail=CONFLICT_RANGE_TOO_LONG, code=ErrorCode.INVALID_VALUE
         )
-    return {"from": from_, "to": to, "conflicts": find_conflicts(db, from_, to)}
+    conflicts = find_conflicts(db, from_, to)
+    if current_user.role_type.value == "UNIT_ADMIN":
+        conflicts = _conflicts_in_unit(db, conflicts, current_user.unit_code)
+    return {"from": from_, "to": to, "conflicts": conflicts}
 
 
 @router.patch("/ledger/{ledger_id}", operation_id="schedule.updateLedgerEntry")
