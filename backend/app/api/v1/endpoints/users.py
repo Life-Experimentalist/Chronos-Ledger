@@ -103,6 +103,8 @@ def list_users(
         q = q.filter(User.unit_code == unit)
     # A unit admin only ever sees their own unit, whatever they ask for.
     if current_user.role_type == InstitutionalRole.UNIT_ADMIN:
+        if current_user.unit_code is None:
+            return []
         q = q.filter(User.unit_code == current_user.unit_code)
     return page.rows(q, User.id)
 
