@@ -109,7 +109,7 @@ def _kept_days(rows) -> list[dict[str, Any]]:
                 "activity_code": row.activity.activity_code,
                 "master_slot_id": row.master_slot_id,
                 "time_window_start": str(row.time_window_start),
-                "room": row.resource.code if row.resource else row.target_room_identifier,
+                "room": row.target_room_identifier,
             }
             for row in rows
         ),
@@ -488,7 +488,6 @@ class ChronosIngestionEngine:
                         activity_id=offering.id,
                         primary_lead_id=str(row["lead_id"]),
                         resource_id=room.id,
-                        target_room_identifier=room.code,
                     )
                     self.db.add(slot)
                     slots[(offering.id, rule, t_start)] = slot
@@ -512,7 +511,6 @@ class ChronosIngestionEngine:
                     slot.time_window_end = t_end
                     slot.primary_lead_id = str(row["lead_id"])
                     slot.resource_id = room.id
-                    slot.target_room_identifier = room.code
                     corrected[slot.id] = slot
 
                 records_processed += 1
@@ -684,7 +682,7 @@ class ChronosIngestionEngine:
                 # Deprecated: derived from the rule, returned through 0.17.
                 "day_of_week_index": slot.day_of_week_index,
                 "time_window_start": str(slot.time_window_start),
-                "room": slot.resource.code if slot.resource else slot.target_room_identifier,
+                "room": slot.target_room_identifier,
             }
             for slot in self.db.query(StructuralMasterSlot)
             .filter(

@@ -26,6 +26,7 @@ from app.models.db import (
     VerificationLedger,
     VerificationMetric,
 )
+from app.services.resource import get_or_create_room
 from tests.conftest import ADMIN_PASSWORD, STAFF_PASSWORD, login, weekly
 from tests.test_ingestion import HEADER, _upload
 
@@ -221,7 +222,7 @@ def test_a_unit_admin_writes_only_inside_their_unit(client, db, seed_users):
         time_window_start=datetime.time(9, 0),
         time_window_end=datetime.time(10, 0),
         activity_id=other.id,
-        target_room_identifier="EC-1",
+        resource_id=get_or_create_room("EC-1", db).id,
     )
     db.add(other_slot)
     db.commit()
@@ -282,7 +283,7 @@ def _activity_with_days(client, db, headers):
         master_slot_id=slot_id,
         activity_id=activity_id,
         active_lead_id="FAC001",
-        target_room_identifier="LH-1",
+        resource_id=get_or_create_room("LH-1", db).id,
     )
     db.add(past)
     db.commit()

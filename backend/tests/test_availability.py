@@ -57,7 +57,6 @@ def _slot(db, room, cycle, code="CS101", day=1, start="09:00", end="10:00"):
         time_window_end=datetime.time.fromisoformat(end),
         activity_id=activity.id,
         resource_id=room.id,
-        target_room_identifier=room.code,
     )
     db.add(slot)
     db.commit()

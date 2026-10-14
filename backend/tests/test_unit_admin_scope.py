@@ -20,6 +20,7 @@ from app.models.db import (
     PlanningCycle,
     User,
 )
+from app.services.resource import get_or_create_room
 from tests.conftest import ADMIN_PASSWORD, login
 
 TODAY = org_today()
@@ -72,7 +73,7 @@ def _seed_unit_world(db):
         ledger = DailyLedger(
             target_date=TODAY,
             activity_id=offering.id,
-            target_room_identifier="LH-900",
+            resource_id=get_or_create_room("LH-900", db).id,
         )
         db.add(ledger)
         db.flush()

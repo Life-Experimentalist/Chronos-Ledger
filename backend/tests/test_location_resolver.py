@@ -33,6 +33,7 @@ from app.models.db import (
 )
 from app.services import location_resolver
 from app.services.location_resolver import determine_staff_current_states
+from app.services.resource import get_or_create_room
 from tests.conftest import weekly
 
 MONDAY = datetime.date(2026, 3, 2)
@@ -99,7 +100,7 @@ def _slot(
         time_window_end=end,
         activity_id=activity.id,
         primary_lead_id=lead,
-        target_room_identifier=room,
+        resource_id=get_or_create_room(room, db).id,
     )
     db.add(slot)
     db.commit()
@@ -124,7 +125,7 @@ def _ledger(
             activity_id=slot.activity_id,
             active_lead_id=slot.primary_lead_id,
             substitute_lead_id=cover,
-            target_room_identifier=room,
+            resource_id=get_or_create_room(room, db).id,
             operational_state=state,
         )
     )

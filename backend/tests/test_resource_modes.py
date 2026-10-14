@@ -83,7 +83,6 @@ def _slot(db, resource, start, end):
         time_window_end=datetime.time.fromisoformat(end),
         activity_id=activity.id,
         resource_id=resource.id,
-        target_room_identifier=resource.code,
     )
     db.add(slot)
     db.commit()

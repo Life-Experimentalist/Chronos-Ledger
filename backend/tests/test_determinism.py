@@ -31,6 +31,7 @@ from app.models.db import (
     StructuralMasterSlot,
     User,
 )
+from app.services.resource import get_or_create_room
 from tests.conftest import _HASHES, TestingSessionLocal, engine, weekly
 
 START = "2026-09-07T08:00:00+05:30"
@@ -104,7 +105,7 @@ def _fresh_database():
             time_window_end=datetime.time(10, 0),
             activity_id=offering.id,
             primary_lead_id="ADM001",
-            target_room_identifier="LH-101",
+            resource_id=get_or_create_room("LH-101", db).id,
         )
     )
     db.commit()

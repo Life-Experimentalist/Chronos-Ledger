@@ -354,16 +354,15 @@ class StructuralMasterSlot(OrganizationScoped, Base):
     activity_id = Column(Integer, ForeignKey("activities.id", ondelete="CASCADE"), nullable=False)
     primary_lead_id = Column(String(50), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     resource_id = Column(Integer, ForeignKey("resources.id"), nullable=True, index=True)
-    # Kept in step with the resource by every write path, and read by the
-    # frontend and the calendar feed, until they move to resource_id.
-    target_room_identifier = Column(String(30), nullable=True)
     # Set by POST /schedule/slots/{id}/retire or by retiring the activity. A
     # retired slot produces no new days and holds no room.
     retired_at = Column(DateTime(timezone=True), nullable=True)
 
     activity = relationship("Activity", back_populates="master_slots")
     primary_lead = relationship("User", foreign_keys=[primary_lead_id])
-    resource = relationship("Resource", foreign_keys=[resource_id])
+    # selectin because the room's name is read off every slot a list returns,
+    # and a lazy load per row would be one query per slot.
+    resource = relationship("Resource", foreign_keys=[resource_id], lazy="selectin")
     # No delete cascade on purpose. Deleting a slot used to delete every day
     # it had ever produced, attendance and all, so removing a cancelled class
     # from the timetable erased the record that it had ever run. Days that are
@@ -383,6 +382,16 @@ class StructuralMasterSlot(OrganizationScoped, Base):
             return None
         first = recurrence.first_occurrence(self.rrule, self.dtstart)
         return (first or self.dtstart).isoweekday()
+
+    @property
+    def target_room_identifier(self) -> str | None:
+        """The code of the slot's resource, which is what API clients call the room.
+
+        Derived rather than stored: a copy of the name on the slot had to be
+        kept in step by hand, and renaming a resource left every slot saying
+        the old one.
+        """
+        return self.resource.code if self.resource else None
 
 
 class DailyLedger(OrganizationScoped, Base):
@@ -430,7 +439,6 @@ class DailyLedger(OrganizationScoped, Base):
     active_lead_id = Column(String(50), ForeignKey("users.id"), nullable=True)
     substitute_lead_id = Column(String(50), ForeignKey("users.id"), nullable=True)
     resource_id = Column(Integer, ForeignKey("resources.id"), nullable=True, index=True)
-    target_room_identifier = Column(String(30), nullable=True)
     delivery_format = Column(
         Enum(ExecutionMode, name="execution_mode"),
         default=ExecutionMode.PHYSICAL,
@@ -448,7 +456,9 @@ class DailyLedger(OrganizationScoped, Base):
     )
 
     master_slot = relationship("StructuralMasterSlot", back_populates="daily_ledger_entries")
-    resource = relationship("Resource", foreign_keys=[resource_id])
+    # selectin for the same reason as on the slot: every row of a list reads
+    # the room's name.
+    resource = relationship("Resource", foreign_keys=[resource_id], lazy="selectin")
     active_lead = relationship("User", foreign_keys=[active_lead_id])
     substitute_lead = relationship("User", foreign_keys=[substitute_lead_id])
     activity = relationship("Activity")
@@ -458,6 +468,11 @@ class DailyLedger(OrganizationScoped, Base):
     annotations = relationship(
         "LedgerAnnotation", back_populates="ledger_instance", cascade="all, delete-orphan"
     )
+
+    @property
+    def target_room_identifier(self) -> str | None:
+        """The code of the day's resource, derived like the slot's."""
+        return self.resource.code if self.resource else None
 
 
 class Reservation(OrganizationScoped, Base):

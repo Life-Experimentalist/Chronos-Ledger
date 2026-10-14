@@ -149,7 +149,6 @@ def _slot(db, activity_id: int, room_id: int, weekday: int, start: int, end: int
         time_window_end=_at(end),
         activity_id=activity_id,
         resource_id=room_id,
-        target_room_identifier="PG-WARD-1",
     )
     db.add(built)
     db.commit()

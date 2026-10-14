@@ -128,7 +128,6 @@ def _class_running_every_day(db) -> None:
                 activity_id=activity.id,
                 primary_lead_id="FAC001",
                 resource_id=room.id,
-                target_room_identifier=room.code,
             )
         )
     db.commit()

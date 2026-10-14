@@ -152,7 +152,6 @@ def seed() -> None:
                             activity_id=activity.id,
                             primary_lead_id=lead_id,
                             resource_id=demo_room.id,
-                            target_room_identifier=demo_room.code,
                         )
                     )
 

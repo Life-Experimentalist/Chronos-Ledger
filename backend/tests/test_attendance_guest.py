@@ -55,7 +55,6 @@ def _make_ledger(db, lead_id=None, with_geo=False, alt_target=920.0):
         target_date=TODAY,
         activity_id=offering.id,
         active_lead_id=lead_id,
-        target_room_identifier="LH-101",
     )
     if with_geo:
         ledger.latitude_target = 12.9716

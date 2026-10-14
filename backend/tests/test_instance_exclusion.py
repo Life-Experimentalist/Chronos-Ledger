@@ -38,7 +38,6 @@ def _slot_in_db(db, activity_id, room_id, rule, dtstart):
         activity_id=activity_id,
         primary_lead_id="FAC001",
         resource_id=room_id,
-        target_room_identifier="LH-201",
     )
     db.add(slot)
     db.commit()

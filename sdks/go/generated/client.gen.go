@@ -976,7 +976,7 @@ type DailyLedgerResponse struct {
 	SubstituteLeadId *string             `json:"substitute_lead_id,omitempty"`
 	TargetDate       *openapi_types.Date `json:"target_date,omitempty"`
 
-	// TargetRoomIdentifier The room's name, mirrored from the resource. Being retired.
+	// TargetRoomIdentifier The room's code, read from the resource. Prefer resource_id.
 	TargetRoomIdentifier *string `json:"target_room_identifier,omitempty"`
 
 	// TimeWindowEnd Earlier than time_window_start means the day finishes on the date after target_date. A reader that ignores that computes minus sixteen hours for a night shift running 22:00 to 06:00.
@@ -1295,7 +1295,7 @@ type MasterSlotResponse struct {
 	RetiredAt *time.Time `json:"retired_at,omitempty"`
 	Rrule     *string    `json:"rrule,omitempty"`
 
-	// TargetRoomIdentifier The room's name, mirrored from the resource. Being retired.
+	// TargetRoomIdentifier The room's code, read from the resource. Prefer resource_id.
 	TargetRoomIdentifier *string `json:"target_room_identifier,omitempty"`
 	TimeWindowEnd        *string `json:"time_window_end,omitempty"`
 	TimeWindowStart      *string `json:"time_window_start,omitempty"`

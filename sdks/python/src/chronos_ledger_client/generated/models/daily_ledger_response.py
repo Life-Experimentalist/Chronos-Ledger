@@ -24,7 +24,7 @@ class DailyLedgerResponse:
         active_lead_id (None | str | Unset):
         substitute_lead_id (None | str | Unset):
         resource_id (int | None | Unset): The room this is booked in. Prefer this over target_room_identifier.
-        target_room_identifier (None | str | Unset): The room's name, mirrored from the resource. Being retired.
+        target_room_identifier (None | str | Unset): The room's code, read from the resource. Prefer resource_id.
         delivery_format (ExecutionMode | Unset): Class delivery format.
         virtual_connection_string (None | str | Unset):
         operational_state (DynamicState | Unset): Operational state of a daily ledger entry.

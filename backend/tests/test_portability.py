@@ -232,7 +232,6 @@ def seed(engine):
                     activity_id=1,
                     primary_lead_id="AS100",
                     resource_id=1,
-                    target_room_identifier="R101",
                 ),
                 StructuralMasterSlot(
                     id=2,
@@ -256,7 +255,6 @@ def seed(engine):
                     active_lead_id="AS100",
                     substitute_lead_id="ZM900",
                     resource_id=1,
-                    target_room_identifier="R101",
                     delivery_format=ExecutionMode.PHYSICAL,
                     latitude_target=Decimal("12.97159360"),
                     longitude_target=Decimal("77.59456270"),
