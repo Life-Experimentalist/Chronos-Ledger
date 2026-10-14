@@ -6,7 +6,9 @@ A plain ASGI middleware rather than a dependency, so a route cannot be added
 without being covered, and a request refused before any route runs (a bad
 token, a key outside its scope) is still recorded. The caller is whatever the
 security dependencies found: they put the account and the key on the
-request's state, which this reads once the response has gone out.
+request's state, which this reads once the response has gone out. A key that
+named a person to act for (X-Chronos-Actor) leaves that person's id there too,
+and the record holds both.
 
 The record is written after the response, in its own session, and a failure
 to write it is logged and nothing more. An audit table that is down should
@@ -37,7 +39,7 @@ class AuditMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or not _is_audited(scope["method"], scope["path"]):
+        if scope["type"] != "http" or not scope["path"].startswith(AUDITED_PREFIX):
             await self.app(scope, receive, send)
             return
 
@@ -52,14 +54,18 @@ class AuditMiddleware:
             await self.app(scope, receive, send_and_note_status)
         finally:
             state = scope.get("state") or {}
-            await run_in_threadpool(
-                _write,
-                scope,
-                state.get("actor_id"),
-                state.get("api_key_id"),
-                status.get("code", 500),
-                state.get("organization_id"),
-            )
+            # A read is not recorded, except when it was refused for naming a
+            # person to act for: that is an attempt worth a trace.
+            if _is_audited(scope["method"], scope["path"]) or state.get("audit_anyway"):
+                await run_in_threadpool(
+                    _write,
+                    scope,
+                    state.get("actor_id"),
+                    state.get("api_key_id"),
+                    status.get("code", 500),
+                    state.get("organization_id"),
+                    state.get("acting_for_user_id"),
+                )
 
 
 def _is_audited(method, path):
@@ -83,10 +89,11 @@ def record(request, status_code):
         getattr(state, "api_key_id", None),
         status_code,
         getattr(state, "organization_id", None),
+        getattr(state, "acting_for_user_id", None),
     )
 
 
-def _write(scope, actor_id, api_key_id, status_code, organization_id):
+def _write(scope, actor_id, api_key_id, status_code, organization_id, acting_for_user_id=None):
     from app.models.db import AuditRecord
 
     # The opener the tests substitute for the websocket is the one used here,
@@ -101,6 +108,7 @@ def _write(scope, actor_id, api_key_id, status_code, organization_id):
                     at=clock.now(),
                     actor_id=actor_id,
                     api_key_id=api_key_id,
+                    acting_for_user_id=acting_for_user_id,
                     method=scope["method"],
                     path=scope["path"][:500],
                     status_code=status_code,

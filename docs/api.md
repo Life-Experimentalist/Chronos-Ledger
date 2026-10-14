@@ -132,6 +132,8 @@ that holds it.
 | `INSUFFICIENT_ROLE` | The account's role is too low for this route, or for the account it is changing. |
 | `SCOPE_MISSING` | The API key lacks the scope this route needs. `detail` names it. |
 | `OUTSIDE_UNIT` | A unit administrator acting on someone in another unit. |
+| `IMPERSONATION_NOT_ALLOWED` | `X-Chronos-Actor` was sent by a caller that may not use it: a signed-in person, or an API key without the `impersonate` scope. |
+| `IMPERSONATION_REFUSED` | `X-Chronos-Actor` named nobody the key can act for: empty, unknown, deactivated or in another organization. |
 | `RESOURCE_CONFLICT` | A booking or schedule clashes with another. `detail.conflicts` lists what is in the way. |
 | `ALREADY_EXISTS` | A record with that identifier or code already exists. |
 | `EMAIL_TAKEN` | The email address belongs to another account. |
@@ -501,12 +503,68 @@ any scopes gets, and what every key issued before scopes existed was
 backfilled to, so nothing that worked before stopped working. `GET /api-keys/`
 shows the scopes of each key, which is how you find the unrestricted ones.
 
+`impersonate` is the one scope that is not an area, and `*` does not include
+it. A key holds it only if it is named when the key is created. See
+[Acting for a person](#acting-for-a-person).
+
 ### Expiry
 
 `expires_at` is checked on the request rather than by a sweep, so a key stops
 working the moment it runs out, answering `401` with `API key expired`. Omit
 the field for a key that never runs out. A time already in the past is refused
 at creation: a key that is dead on arrival is a mistake, not a request.
+
+### Acting for a person
+
+A hospital system, say, signs in as one service account and speaks for
+thousands of people. To say which person a request is for, a key holding the
+`impersonate` scope sends one more header:
+
+```
+X-API-Key: ck_8Kd2mQ7x...
+X-Chronos-Actor: STU001
+```
+
+The request then runs as STU001: `GET /auth/me` returns STU001, the role
+checks use STU001's role, and a unit administrator named this way is held to
+their own unit. It is the same header the [embedded flavour](embedded.md) uses
+for the same purpose. The difference is that the embedded flavour trusts its
+host and makes an account for an id it has not seen, while here the id has to
+name an account that already exists.
+
+It only narrows. The key's scopes still apply, so a request has to be allowed
+by both the key and the named person, and there is no ceiling on the role:
+a key acting for an `ORG_ADMIN` can do what that administrator can, within its
+scopes. Two examples, for a key holding `users:read` and `impersonate`:
+
+- Acting for a `MEMBER`, `GET /users/` is `403` with `INSUFFICIENT_ROLE`.
+- Acting for an `ORG_ADMIN`, `GET /users/` works but `POST /users/` is `403`
+  with `SCOPE_MISSING`.
+
+The header is never quietly ignored. Each of these is a `403`:
+
+| Code | When |
+|---|---|
+| `IMPERSONATION_NOT_ALLOWED` | The request is signed in with a token, its key does not hold `impersonate` (a `*` key does not), or it issues or changes a credential (below). |
+| `IMPERSONATION_REFUSED` | The id is empty, unknown, deactivated, or belongs to another organization. All of these get the same answer, so the header cannot be used to find out which ids exist. |
+
+Rate limits and idempotency keys stay with the API key, not with the person
+named, so naming other people does not mint other budgets. The same
+`Idempotency-Key` with a different `X-Chronos-Actor` is a different request,
+`422` with `IDEMPOTENCY_KEY_REUSED`, and never replays the first person's
+answer. The audit log records both identities; see
+[Audit](#audit).
+
+A key acting for someone cannot issue or change a credential or a trust,
+whatever its scopes: no writes under `/auth` (changing a password), `/api-keys`
+(issuing or revoking keys) or `/federation` (trusting an issuer), and no
+`POST /users/{id}/reset-password`. Each of those hands out something that
+outlives the request, and acting for an administrator a key could otherwise
+give itself more than the key and the person allow together. Reads in those
+areas, `GET /auth/me` among them, are allowed as usual.
+
+Because the key becomes the person for the request, scope it as tightly as
+the integration allows.
 
 ### Service accounts
 
@@ -2452,7 +2510,9 @@ Every request under `/api/v1` that can change something (any method other
 than `GET`, `HEAD` and `OPTIONS`) leaves one record once it has been answered,
 refused ones included: a `401`, a `403` for role or key scope, a `422`. A
 record holds the time, the account (`actor_id`), the API key if one was used
-(`api_key_id`), the method, the path and the status code. Request and
+(`api_key_id`), the person the key was acting for if it sent
+`X-Chronos-Actor` (`acting_for_user_id`), the method, the path and the status
+code. Request and
 response bodies are never stored, so a login is recorded without its password
 and an upload without its file. A password login's `actor_id` is null, since
 nobody is signed in yet when it arrives; `POST /auth/federated` is the
@@ -2464,6 +2524,13 @@ is, once it has run. [GET /schedule/conflicts](#get-scheduleconflictsfromto-org_
 is as well, and like a write it is recorded when it is refused: a `401`, a
 `403`, a `422` for a bad range. Its row holds the path and not the query
 string, so the dates asked for are not kept. Every other read leaves nothing.
+
+A request that sends `X-Chronos-Actor` and is refused for it is recorded too,
+reads included, because a refused attempt to speak for someone is worth
+knowing about. `actor_id` is the account that sent the request and
+`acting_for_user_id` is the id it asked for, as sent and cut to 50 characters,
+whether or not that id exists. A request that is allowed through leaves a
+record only if it is a write, like any other, and then holds both.
 
 Records point at no other table, so deleting an account or revoking a key
 leaves its history. If a record cannot be written the request still succeeds
@@ -2482,6 +2549,7 @@ and `to` (dates in the organization's timezone, both included; `to` before
     "at": "2026-01-06T08:31:02.114000+00:00",
     "actor_id": "SVC001",
     "api_key_id": 3,
+    "acting_for_user_id": "STU001",
     "method": "POST",
     "path": "/api/v1/resources/12/reservations",
     "status_code": 201

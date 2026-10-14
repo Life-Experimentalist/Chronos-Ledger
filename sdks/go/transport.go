@@ -76,6 +76,7 @@ type transport struct {
 	baseURL   string
 	userAgent string
 	apiKey    string
+	actingFor string
 	onTokens  func(Tokens)
 	retry     RetryPolicy
 
@@ -167,6 +168,9 @@ func (t *transport) send(req *http.Request, tokens *Tokens, again bool) (*http.R
 	r.Header.Set("User-Agent", t.userAgent)
 	if t.apiKey != "" {
 		r.Header.Set("X-API-Key", t.apiKey)
+		if t.actingFor != "" && r.Header.Get("X-Chronos-Actor") == "" {
+			r.Header.Set("X-Chronos-Actor", t.actingFor)
+		}
 	} else if tokens != nil {
 		r.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
 	}

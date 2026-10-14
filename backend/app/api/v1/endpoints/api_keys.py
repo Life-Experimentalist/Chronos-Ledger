@@ -12,12 +12,12 @@ from app.core import clock
 from app.core.database import get_db
 from app.core.errors import ChronosError, ErrorCode
 from app.core.security import generate_api_key, hash_api_key, require_roles
-from app.models.db import WILDCARD_SCOPE, ApiKey, User
+from app.models.db import IMPERSONATE_SCOPE, WILDCARD_SCOPE, ApiKey, User
 
 router = APIRouter()
 
 
-SCOPE_PATTERN = re.compile(r"^(\*|[a-z][a-z-]*:(read|write))$")
+SCOPE_PATTERN = re.compile(rf"^(\*|{IMPERSONATE_SCOPE}|[a-z][a-z-]*:(read|write))$")
 
 
 class ApiKeyCreate(BaseModel):
@@ -28,7 +28,9 @@ class ApiKeyCreate(BaseModel):
         description=(
             "Areas this key may reach, as '<area>:read' or '<area>:write', "
             "where the area is the path segment after /api/v1. Omitted means "
-            "'*': everything the bound user can do."
+            "'*': everything the bound user can do. 'impersonate' lets the key "
+            "send X-Chronos-Actor to act for one person; it is never implied "
+            "by '*' and has to be named."
         ),
     )
     expires_at: datetime | None = None
@@ -43,7 +45,8 @@ class ApiKeyCreate(BaseModel):
         for scope in value:
             if not SCOPE_PATTERN.match(scope):
                 raise ValueError(
-                    f"'{scope}' is not a scope: expected '<area>:read', '<area>:write' or '*'"
+                    f"'{scope}' is not a scope: expected '<area>:read', '<area>:write', "
+                    f"'{IMPERSONATE_SCOPE}' or '*'"
                 )
         return value
 

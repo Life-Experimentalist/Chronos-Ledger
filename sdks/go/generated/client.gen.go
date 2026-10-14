@@ -109,6 +109,8 @@ const (
 	FORBIDDEN                   ErrorCode = "FORBIDDEN"
 	IDEMPOTENCYKEYINPROGRESS    ErrorCode = "IDEMPOTENCY_KEY_IN_PROGRESS"
 	IDEMPOTENCYKEYREUSED        ErrorCode = "IDEMPOTENCY_KEY_REUSED"
+	IMPERSONATIONNOTALLOWED     ErrorCode = "IMPERSONATION_NOT_ALLOWED"
+	IMPERSONATIONREFUSED        ErrorCode = "IMPERSONATION_REFUSED"
 	IMPORTREJECTED              ErrorCode = "IMPORT_REJECTED"
 	INSUFFICIENTROLE            ErrorCode = "INSUFFICIENT_ROLE"
 	INTERNALERROR               ErrorCode = "INTERNAL_ERROR"
@@ -181,6 +183,10 @@ func (e ErrorCode) Valid() bool {
 	case IDEMPOTENCYKEYINPROGRESS:
 		return true
 	case IDEMPOTENCYKEYREUSED:
+		return true
+	case IMPERSONATIONNOTALLOWED:
+		return true
+	case IMPERSONATIONREFUSED:
 		return true
 	case IMPORTREJECTED:
 		return true
@@ -667,7 +673,7 @@ type ApiKeyCreate struct {
 	// Label What this key is for, so it can be recognized in the list.
 	Label string `json:"label"`
 
-	// Scopes Areas this key may reach. Omit the field for an unrestricted key; an empty array is refused, since a key that can reach nothing is not a key anybody wants. Stored sorted and deduplicated.
+	// Scopes Areas this key may reach. Omit the field for an unrestricted key; an empty array is refused, since a key that can reach nothing is not a key anybody wants. Stored sorted and deduplicated. The scope `impersonate` lets the key act for a named person in its organization (header `X-Chronos-Actor`); it is granted only by naming it, and `*` does not include it.
 	Scopes *[]string `json:"scopes,omitempty"`
 
 	// UserId The user this key acts as. The key can never do more than that user can, whatever its scopes say.
@@ -686,7 +692,7 @@ type ApiKeyCreated struct {
 	KeyPrefix *string `json:"key_prefix,omitempty"`
 	Label     *string `json:"label,omitempty"`
 
-	// Scopes Comma separated, or `*` for a key that was never narrowed.
+	// Scopes Comma separated, or `*` for a key that was never narrowed. May include `impersonate`, which `*` does not stand for.
 	Scopes *string `json:"scopes,omitempty"`
 	UserId *string `json:"user_id,omitempty"`
 }
@@ -701,7 +707,7 @@ type ApiKeyResponse struct {
 	KeyPrefix *string `json:"key_prefix,omitempty"`
 	Label     *string `json:"label,omitempty"`
 
-	// Scopes Comma separated, or `*` for a key that was never narrowed.
+	// Scopes Comma separated, or `*` for a key that was never narrowed. May include `impersonate`, which `*` does not stand for.
 	Scopes *string `json:"scopes,omitempty"`
 	UserId *string `json:"user_id,omitempty"`
 }
@@ -744,6 +750,9 @@ type AttendanceResponse struct {
 
 // AuditRecord defines model for AuditRecord.
 type AuditRecord struct {
+	// ActingForUserId The id sent in `X-Chronos-Actor`, exactly as asked for and cut to 50 characters, or null when the request did not send the header. Set on a refused attempt too, whether or not that id exists, so `actor_id` is who sent the request and this is who it named.
+	ActingForUserId *string `json:"acting_for_user_id,omitempty"`
+
 	// ActorId The account, or null when the request carried no valid credentials.
 	ActorId *string `json:"actor_id,omitempty"`
 
@@ -1907,37 +1916,37 @@ type UnprocessableEntity = ErrorResponse
 
 // ApiKeysRevokeParams defines parameters for ApiKeysRevoke.
 type ApiKeysRevokeParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // AttendanceSubmitAbsenceParams defines parameters for AttendanceSubmitAbsence.
 type AttendanceSubmitAbsenceParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // AttendanceDecideAbsenceParams defines parameters for AttendanceDecideAbsence.
 type AttendanceDecideAbsenceParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // AttendanceCreateAnnotationParams defines parameters for AttendanceCreateAnnotation.
 type AttendanceCreateAnnotationParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // AttendanceMarkBatchParams defines parameters for AttendanceMarkBatch.
 type AttendanceMarkBatchParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // AttendanceMarkParams defines parameters for AttendanceMark.
 type AttendanceMarkParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -1968,49 +1977,49 @@ type ChangesListParams struct {
 
 // FederationCreateIssuerParams defines parameters for FederationCreateIssuer.
 type FederationCreateIssuerParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // FederationDeleteIssuerParams defines parameters for FederationDeleteIssuer.
 type FederationDeleteIssuerParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // FederationUpdateIssuerParams defines parameters for FederationUpdateIssuer.
 type FederationUpdateIssuerParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // FederationAddKeyParams defines parameters for FederationAddKey.
 type FederationAddKeyParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // FederationDeleteKeyParams defines parameters for FederationDeleteKey.
 type FederationDeleteKeyParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // FederationRetireKeyParams defines parameters for FederationRetireKey.
 type FederationRetireKeyParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // FederationAddRoleMapEntryParams defines parameters for FederationAddRoleMapEntry.
 type FederationAddRoleMapEntryParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // FederationDeleteRoleMapEntryParams defines parameters for FederationDeleteRoleMapEntry.
 type FederationDeleteRoleMapEntryParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -2025,13 +2034,13 @@ type FederationListLinksParams struct {
 
 // FederationCreateLinkParams defines parameters for FederationCreateLink.
 type FederationCreateLinkParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // FederationDeleteLinkParams defines parameters for FederationDeleteLink.
 type FederationDeleteLinkParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -2049,13 +2058,13 @@ type GuestGetDirectoryParams struct {
 
 // GuestDecideParams defines parameters for GuestDecide.
 type GuestDecideParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // GuestExtendVisitParams defines parameters for GuestExtendVisit.
 type GuestExtendVisitParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -2064,7 +2073,7 @@ type IngestionGenerateLedgerParams struct {
 	// TargetDate Date to generate. Defaults to tomorrow.
 	TargetDate *openapi_types.Date `form:"target_date,omitempty" json:"target_date,omitempty"`
 
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -2100,7 +2109,7 @@ type ResourcesListParamsResourceType string
 
 // ResourcesCreateParams defines parameters for ResourcesCreate.
 type ResourcesCreateParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -2117,7 +2126,7 @@ type ResourcesListReservationsParams struct {
 
 // ResourcesUpdateParams defines parameters for ResourcesUpdate.
 type ResourcesUpdateParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -2140,13 +2149,13 @@ type ResourcesCreateReservation409JSONResponseBody struct {
 
 // ResourcesCancelReservationParams defines parameters for ResourcesCancelReservation.
 type ResourcesCancelReservationParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // ResourcesUpdateReservationParams defines parameters for ResourcesUpdateReservation.
 type ResourcesUpdateReservationParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -2164,13 +2173,13 @@ type ScheduleListActivitiesParams struct {
 
 // ScheduleCreateActivityParams defines parameters for ScheduleCreateActivity.
 type ScheduleCreateActivityParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // ScheduleUpdateActivityParams defines parameters for ScheduleUpdateActivity.
 type ScheduleUpdateActivityParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -2185,19 +2194,19 @@ type ScheduleListEnrollmentsParams struct {
 
 // ScheduleCreateEnrollmentParams defines parameters for ScheduleCreateEnrollment.
 type ScheduleCreateEnrollmentParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // ScheduleDeleteEnrollmentParams defines parameters for ScheduleDeleteEnrollment.
 type ScheduleDeleteEnrollmentParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // ScheduleRetireActivityParams defines parameters for ScheduleRetireActivity.
 type ScheduleRetireActivityParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -2218,25 +2227,25 @@ type ScheduleListCyclesParams struct {
 
 // ScheduleCreateCycleParams defines parameters for ScheduleCreateCycle.
 type ScheduleCreateCycleParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // ScheduleCloseCycleParams defines parameters for ScheduleCloseCycle.
 type ScheduleCloseCycleParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // ScheduleOpenCycleParams defines parameters for ScheduleOpenCycle.
 type ScheduleOpenCycleParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // ScheduleCloneCycleParams defines parameters for ScheduleCloneCycle.
 type ScheduleCloneCycleParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -2264,7 +2273,7 @@ type ScheduleGetTodayLedgerParams struct {
 
 // ScheduleUpdateLedgerEntryParams defines parameters for ScheduleUpdateLedgerEntry.
 type ScheduleUpdateLedgerEntryParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -2282,19 +2291,19 @@ type ScheduleListSlotsParams struct {
 
 // ScheduleCreateSlotParams defines parameters for ScheduleCreateSlot.
 type ScheduleCreateSlotParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // ScheduleDeleteSlotParams defines parameters for ScheduleDeleteSlot.
 type ScheduleDeleteSlotParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // ScheduleUpdateSlotParams defines parameters for ScheduleUpdateSlot.
 type ScheduleUpdateSlotParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -2305,7 +2314,7 @@ type ScheduleUpdateSlot409JSONResponseBody struct {
 
 // ScheduleRetireSlotParams defines parameters for ScheduleRetireSlot.
 type ScheduleRetireSlotParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -2338,7 +2347,7 @@ type UsersListParams struct {
 
 // UsersCreateParams defines parameters for UsersCreate.
 type UsersCreateParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -2356,37 +2365,37 @@ type UsersListAvailableStaffParams struct {
 
 // UsersUpdateParams defines parameters for UsersUpdate.
 type UsersUpdateParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // UsersDeactivateParams defines parameters for UsersDeactivate.
 type UsersDeactivateParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // UsersReactivateParams defines parameters for UsersReactivate.
 type UsersReactivateParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // UsersUpdateStatusParams defines parameters for UsersUpdateStatus.
 type UsersUpdateStatusParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // WebhooksDeleteParams defines parameters for WebhooksDelete.
 type WebhooksDeleteParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // WebhooksUpdateParams defines parameters for WebhooksUpdate.
 type WebhooksUpdateParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -2401,19 +2410,19 @@ type WebhooksListDeliveriesParams struct {
 
 // WebhooksRedeliverParams defines parameters for WebhooksRedeliver.
 type WebhooksRedeliverParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // WebhooksRemovePreviousSecretParams defines parameters for WebhooksRemovePreviousSecret.
 type WebhooksRemovePreviousSecretParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // WebhooksResumeParams defines parameters for WebhooksResume.
 type WebhooksResumeParams struct {
-	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`.
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 

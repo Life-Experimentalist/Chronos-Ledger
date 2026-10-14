@@ -718,6 +718,11 @@ class RefreshToken(Base):
 # may do. Every key issued before scopes existed is one of these.
 WILDCARD_SCOPE = "*"
 
+# A scope of a different kind: not an area but a permission. A key holding it
+# may name the person a request is for (X-Chronos-Actor). The wildcard does
+# not include it; it is granted by naming it.
+IMPERSONATE_SCOPE = "impersonate"
+
 
 class ApiKey(OrganizationScoped, Base):
     """A long-lived machine credential for external integrations, bound to a
@@ -753,7 +758,7 @@ class ApiKey(OrganizationScoped, Base):
 
 class AuditRecord(OrganizationScoped, Base):
     """One write made through the API, or one read of the conflict report: who, with
-    which key, what, and how it ended.
+    which key, for whom if the key was acting for someone, what, and how it ended.
 
     No foreign keys to users or keys on purpose. A record has to outlive the
     account and the key that made it, and a user deleted with ON DELETE
@@ -771,6 +776,11 @@ class AuditRecord(OrganizationScoped, Base):
     at = Column(DateTime(timezone=True), nullable=False, index=True)
     actor_id = Column(String(50), nullable=True, index=True)
     api_key_id = Column(Integer, nullable=True)
+    # The person a key was asked to act for (X-Chronos-Actor), when the
+    # request named one. actor_id stays the key's own account. A plain column
+    # like the two above: a refused attempt records the id it was given, which
+    # may belong to no account.
+    acting_for_user_id = Column(String(50), nullable=True)
     method = Column(String(10), nullable=False)
     path = Column(String(500), nullable=False)
     status_code = Column(Integer, nullable=False)

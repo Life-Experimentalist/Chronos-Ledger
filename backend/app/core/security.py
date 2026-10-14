@@ -19,7 +19,7 @@ from app.core.database import get_db
 from app.core.errors import ChronosError, ErrorCode
 from app.core.idempotency import claim
 from app.core.organization import use_organization
-from app.models.db import WILDCARD_SCOPE
+from app.models.db import IMPERSONATE_SCOPE, WILDCARD_SCOPE
 
 settings = get_settings()
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -150,12 +150,58 @@ def key_allows(scopes: str, needed: str | None) -> bool:
     return needed is not None and needed in held
 
 
+def key_may_impersonate(scopes: str) -> bool:
+    """Whether a key was given the impersonate scope by name.
+
+    Not key_allows: the wildcard means every area, and impersonating is a
+    permission rather than an area, so a key issued as "*" does not hold it.
+    """
+    return IMPERSONATE_SCOPE in {s.strip() for s in (scopes or "").split(",")}
+
+
+# users.id is 50 characters, and so is the longest id a header can name.
+ACTING_FOR_LIMIT = 50
+
+# Writes a key may not make while acting for someone, whatever its scopes: each
+# one issues or changes a credential or a trust, and what it hands out outlives
+# the request. Acting for an administrator, a key could otherwise mint itself a
+# wider key, set a password it then signs in with, or trust an issuer of its
+# own, and so reach more than the key and the person allow together.
+ACTING_FOR_REFUSED_SCOPES = frozenset({"auth:write", "api-keys:write", "federation:write"})
+
+
+def acting_for_refused(method: str, path: str) -> bool:
+    """Whether a request issues or changes a credential, so a key may not make it for someone."""
+    if required_scope(method, path) in ACTING_FOR_REFUSED_SCOPES:
+        return True
+    return method not in ("GET", "HEAD", "OPTIONS") and path.rstrip("/").endswith("/reset-password")
+
+
+def _refuse_impersonation(request: Request, status_code: int, detail: str, code: ErrorCode):
+    """Mark the request for the audit log, then refuse it.
+
+    The audit log records writes, and a read refused here would otherwise
+    leave nothing, so the middleware is told to keep this one.
+    """
+    request.state.audit_anyway = True
+    return ChronosError(status_code=status_code, detail=detail, code=code)
+
+
 def get_current_user_id(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     api_key: str | None = Header(default=None, alias="X-API-Key"),
+    acting_for: str | None = Header(default=None, alias="X-Chronos-Actor"),
     db: Session = Depends(get_db),
 ) -> str:
+    # The person a key is speaking for, when it says. The id is put on the
+    # request first and as sent, so that a refusal below is audited with what
+    # was asked for. Whether the header is allowed depends on the caller and
+    # is decided in each branch: it is never ignored.
+    if acting_for is not None:
+        acting_for = acting_for.strip()
+        request.state.acting_for_user_id = acting_for[:ACTING_FOR_LIMIT] or None
+
     if credentials is not None:
         payload = decode_token(credentials.credentials)
         if not payload or "sub" not in payload:
@@ -167,6 +213,25 @@ def get_current_user_id(
             )
         # Read by the audit log once the response has gone out.
         request.state.actor_id = payload["sub"]
+        if acting_for is not None:
+            # A person signed in as themselves has nobody to speak for. The
+            # organization is looked up so the refusal is filed where their
+            # administrator can see it.
+            from app.models.db import User
+
+            organization_id = (
+                db.query(User.organization_id)
+                .filter(User.id == payload["sub"])
+                .execution_options(all_organizations=True)
+                .scalar()
+            )
+            request.state.organization_id = organization_id
+            raise _refuse_impersonation(
+                request,
+                status.HTTP_403_FORBIDDEN,
+                "Only an API key with the impersonate scope can send X-Chronos-Actor",
+                ErrorCode.IMPERSONATION_NOT_ALLOWED,
+            )
         claim(request, db, caller_identity(request))
         return payload["sub"]
 
@@ -211,8 +276,58 @@ def get_current_user_id(
                 detail=f"API key is not scoped for {needed or 'this request'}",
                 code=ErrorCode.SCOPE_MISSING,
             )
+        if acting_for is None:
+            claim(request, db, caller_identity(request))
+            return row.user_id
+
+        # The key speaks for one person. Everything below narrows: the area
+        # scope above was already checked against the key, and from here the
+        # request is the named person's, so get_current_user and the role
+        # checks run as them. The key can never reach more than either allows.
+        # Filed under the key's organization, which the person must share.
+        request.state.organization_id = row.organization_id
+        if not key_may_impersonate(row.scopes):
+            raise _refuse_impersonation(
+                request,
+                status.HTTP_403_FORBIDDEN,
+                "This API key does not hold the impersonate scope",
+                ErrorCode.IMPERSONATION_NOT_ALLOWED,
+            )
+        if acting_for_refused(request.method, request.url.path):
+            raise _refuse_impersonation(
+                request,
+                status.HTTP_403_FORBIDDEN,
+                "A key acting for someone cannot issue or change credentials",
+                ErrorCode.IMPERSONATION_NOT_ALLOWED,
+            )
+        from app.models.db import User
+
+        person = (
+            db.query(User)
+            .filter(User.id == acting_for)
+            .execution_options(all_organizations=True)
+            .first()
+            if acting_for
+            else None
+        )
+        # One answer for an id that does not exist, one in another
+        # organization and one deactivated, so the header cannot be used to
+        # find out which ids exist elsewhere.
+        if (
+            person is None
+            or person.organization_id != row.organization_id
+            or person.deactivated_at is not None
+        ):
+            raise _refuse_impersonation(
+                request,
+                status.HTTP_403_FORBIDDEN,
+                "That user cannot be acted for",
+                ErrorCode.IMPERSONATION_REFUSED,
+            )
+        # actor_id, api_key_id and organization stay the key's; get_current_user
+        # binds the session to the person's organization, which is the same.
         claim(request, db, caller_identity(request))
-        return row.user_id
+        return person.id
 
     raise ChronosError(
         status_code=status.HTTP_401_UNAUTHORIZED,

@@ -23,8 +23,9 @@ class ApiKeyCreated:
         key_prefix (str | Unset): The first 12 characters, enough to tell two keys apart. Example: ck_8Kd2mQ7x.
         label (str | Unset):
         user_id (str | Unset):
-        scopes (str | Unset): Comma separated, or `*` for a key that was never narrowed. Example:
-            resources:read,schedule:read.
+        scopes (str | Unset): Comma separated, or `*` for a key that was never narrowed. May include `impersonate`,
+            which `*` does not stand for.
+             Example: resources:read,schedule:read.
         expires_at (datetime.datetime | None | Unset):
         created_at (datetime.datetime | None | Unset):
     """
