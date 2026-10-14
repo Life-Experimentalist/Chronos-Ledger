@@ -300,7 +300,8 @@ release; it is described with the integration contract below.
 
 Until 1.0 a release that changes the models does not upgrade the database the
 one before it made: it bumps `SCHEMA_VERSION` and needs a fresh database, as
-0.16 does. From 1.0 on, the integration contract applies.
+0.16 does. 0.17 moves it to 5 and needs a fresh database too. From 1.0 on, the
+integration contract applies.
 
 ### E-5. Recurrence rules
 
@@ -312,7 +313,7 @@ one before it made: it bumps `SCHEMA_VERSION` and needs a fresh database, as
   returned, derived, through 0.17, and removed after.
 - **Done when:** a weekly slot across a DST change materializes at the same
   local time on both sides; migrated slots materialize the same days as before.
-- **Status:** built in PR #91, held for 0.17.
+- **Status:** built in #91 for 0.17.
 
 ### E-6. Editable timetable
 
