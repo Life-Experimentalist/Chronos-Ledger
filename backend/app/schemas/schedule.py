@@ -258,8 +258,10 @@ class ConflictItem(BaseModel):
 
     type is "slot" (a weekly slot on one date, id is the slot), "ledger_day"
     (a generated day, id is the ledger row) or "reservation" (a held booking,
-    id is the reservation). A string rather than an enum so that a new kind
-    of row can be added without breaking a client that does not know it.
+    id is the reservation). A member_overlap or lead_overlap names only
+    slots and days, since a reservation belongs to no activity. A string
+    rather than an enum so that a new kind of row can be added without
+    breaking a client that does not know it.
     """
 
     type: str
@@ -273,12 +275,14 @@ class ConflictItem(BaseModel):
 
 
 class Conflict(BaseModel):
-    """Two rows that hold the same resource, or the same member, at once.
+    """Two rows that hold the same resource, member or lead at once.
 
-    kind is "resource_overlap", with resource_id set, or "member_overlap",
-    with member_id set. date, start, end_date and end are the part of the two
-    windows they share. items is a list rather than a pair so that a later
-    kind can name more than two rows.
+    kind is "resource_overlap", with resource_id set, "member_overlap", with
+    member_id set, or "lead_overlap", with lead_id set: one person leading two
+    different activities at once, where the lead of a generated day is its
+    substitute when it has one. date, start, end_date and end are the part of
+    the two windows they share. items is a list rather than a pair so that a
+    later kind can name more than two rows.
 
     "resource_overbooked" is that later kind: the reservations on a pooled
     resource holding more than its capacity at once, every one of them open
@@ -303,6 +307,7 @@ class Conflict(BaseModel):
     taken: int | None = None
     requirement_id: int | None = None
     message: str | None = None
+    lead_id: str | None = None
 
 
 class ConflictReport(BaseModel):

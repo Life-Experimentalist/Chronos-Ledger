@@ -261,8 +261,9 @@ This release lets a resource be consumed in three ways.
   at the same time. It reports and never refuses.
 - **Done when:** a seeded clash of each kind appears exactly once in the report.
 - **Status:** shipped in 0.16 (`tests/test_conflict_report.py`). Open to
-  `ORG_ADMIN` and `UNIT_ADMIN`. A range is at most 92 days. Leads are not
-  counted on the member side: only enrollments are.
+  `ORG_ADMIN` and `UNIT_ADMIN`. A range is at most 92 days. Member clashes
+  count enrollments only. A lead leading two activities at once is a separate
+  `lead_overlap`, with `lead_id` set (a substitute replaces the lead on a day).
 
 ### E-3. Rolling materialization horizon
 

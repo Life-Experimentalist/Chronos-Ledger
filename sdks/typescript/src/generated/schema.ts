@@ -1013,7 +1013,7 @@ export interface paths {
         };
         /**
          * Clashes already in the schedule between two dates
-         * @description Reports two rows holding one resource at once, and one member enrolled in two activities that run at once. It reads and reports; nothing is refused or changed. Both dates are included. `to` before `from`, or a range longer than 92 days, is refused with 422 and code INVALID_VALUE. ORG_ADMIN and UNIT_ADMIN only.
+         * @description Reports two rows holding one resource at once, one member enrolled in two activities that run at once, and one lead leading two activities at once. It reads and reports; nothing is refused or changed. Both dates are included. `to` before `from`, or a range longer than 92 days, is refused with 422 and code INVALID_VALUE. ORG_ADMIN and UNIT_ADMIN only.
          */
         get: operations["schedule.listConflicts"];
         put?: never;
@@ -2475,7 +2475,7 @@ export interface components {
             resource_id: number | null;
         };
         /**
-         * @description Two rows that hold the same resource, or the same member, at the same moment. kind is `resource_overlap`, with resource_id set and member_id null, or `member_overlap`, with member_id set and resource_id null. Like ConflictItem.type, kind is a string so that later kinds can be added; a reader should skip a kind it does not know. date, start, end_date and end are the part of the two windows they share. items is a list rather than a pair so that a later kind can name more than two rows.
+         * @description Two rows that hold the same resource, member or lead at the same moment. kind is `resource_overlap`, with resource_id set, `member_overlap`, with member_id set, or `lead_overlap`, with lead_id set: one person leading two different activities at once. The lead of a generated day is its substitute when it has one, so a substituted day does not clash for the lead it was taken from. Each of resource_id, member_id and lead_id is null on the kinds that do not use it. Like ConflictItem.type, kind is a string so that later kinds can be added; a reader should skip a kind it does not know. date, start, end_date and end are the part of the two windows they share. items is a list rather than a pair so that a later kind can name more than two rows.
          *
          *     `resource_overbooked` is a POOLED resource whose reservations together hold more than its capacity. date to end is the whole stretch in which they do, items is every reservation open in it, and capacity and taken say by how much: taken is the most held at any moment of the stretch. capacity and taken are null on the other kinds. Two reservations on a pooled resource are never a `resource_overlap`, and reservations on a SHARED resource are never reported at all.
          *
@@ -2515,13 +2515,15 @@ export interface components {
             requirement_id?: number | null;
             /** @description What is missing, on `requirement_unmet` only. */
             message?: string | null;
+            /** @description The person leading both activities, on `lead_overlap` only. */
+            lead_id?: string | null;
         };
         ConflictReport: {
             /** Format: date */
             from: string;
             /** Format: date */
             to: string;
-            /** @description Every clash that reaches into the range, each pair named once. Ordered by kind, then resource_id or member_id, then the moment the shared window starts. Times are naive wall clock in the organization's own timezone. */
+            /** @description Every clash that reaches into the range, each pair named once. Ordered by kind, then resource_id, member_id or lead_id, then the moment the shared window starts. Times are naive wall clock in the organization's own timezone. */
             conflicts: components["schemas"]["Conflict"][];
         };
         ReservationCreate: {
