@@ -1681,6 +1681,7 @@ GET /api/v1/schedule/conflicts?from=2026-01-05&to=2026-01-11
       "kind": "resource_overlap",
       "resource_id": 12,
       "member_id": null,
+      "lead_id": null,
       "date": "2026-01-06",
       "start": "09:30:00",
       "end_date": "2026-01-06",
@@ -1696,11 +1697,12 @@ GET /api/v1/schedule/conflicts?from=2026-01-05&to=2026-01-11
 }
 ```
 
-There are two kinds. A `resource_overlap` is two rows holding one resource at
+There are three kinds. A `resource_overlap` is two rows holding one resource at
 the same moment. A `member_overlap` is one member enrolled in two different
-activities that run at the same moment, on any resource or on none. `date`,
-`start`, `end_date` and `end` on a conflict are the part of the two windows
-they share; each item carries its own full window. `kind` and the item `type`
+activities that run at the same moment, on any resource or on none. A
+`lead_overlap` is one person leading two different activities at the same
+moment, with `lead_id` set. `date`, `start`, `end_date` and `end` on a
+conflict are the part of the two windows they share; each item carries its own full window. `kind` and the item `type`
 are strings, and a reader should skip a value it does not know, because more
 kinds are expected.
 
@@ -1732,22 +1734,30 @@ busy, by the same rules, so the two never disagree:
 
 A generated day and the slot that produced it, on the same date, are one
 class: only the day counts. Two windows of one activity are never a member
-clash, since that is one activity. Only members whose accounts are active are
-checked. Leads are not counted on the member side; this report is about
-enrollments.
+clash, since that is one activity, nor are they a lead clash. Only members
+and leads whose accounts are active are checked.
+
+The lead of a weekly slot is its `primary_lead_id`. The lead of a generated
+day is its `substitute_lead_id` when that is set, and otherwise the
+`active_lead_id` it was generated with, so a day that has a substitute does not
+clash for the lead it was taken from, and the substitute is checked instead.
+The member side counts enrollments only. Someone enrolled in one activity and
+leading another at the same moment is reported as a `member_overlap` and a
+`lead_overlap` by their own rules, not as a kind of their own.
 
 Windows are half open, so one ending at 10:00 and one starting at 10:00 do
 not clash. A window dated the day before `from` that runs past midnight into
 the range is included, and its `date` is the day it opened on. A weekly clash
 is listed once for each date it happens in the range. Each pair is named once,
-and the list is ordered by kind, then `resource_id` or `member_id`, then when
-the shared window starts.
+and the list is ordered by kind, then `resource_id`, `member_id` or `lead_id`,
+then when the shared window starts.
 
 Both dates are required. `to` before `from` is `422` with `"from must not be
 after to"`, and a range longer than 92 days is `422` with `"the range must
 not exceed 92 days"`; both carry code `INVALID_VALUE`. The cap is lower than
 availability's because this expands every resource and every member at once.
-Admins only, because the member side names who is enrolled where.
+Admins only, because the member and lead sides name who is enrolled and who
+leads where.
 
 ### PATCH /schedule/ledger/{ledger_id} `[ORG_ADMIN, UNIT_ADMIN]`
 

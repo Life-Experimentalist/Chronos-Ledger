@@ -84,10 +84,10 @@ def sync_detailed(
 ) -> Response[ConflictReport | ErrorResponse]:
     """Clashes already in the schedule between two dates
 
-     Reports two rows holding one resource at once, and one member enrolled in two activities that run at
-    once. It reads and reports; nothing is refused or changed. Both dates are included. `to` before
-    `from`, or a range longer than 92 days, is refused with 422 and code INVALID_VALUE. ORG_ADMIN and
-    UNIT_ADMIN only.
+     Reports two rows holding one resource at once, one member enrolled in two activities that run at
+    once, and one lead leading two activities at once. It reads and reports; nothing is refused or
+    changed. Both dates are included. `to` before `from`, or a range longer than 92 days, is refused
+    with 422 and code INVALID_VALUE. ORG_ADMIN and UNIT_ADMIN only.
 
     Args:
         from_ (datetime.date):
@@ -121,10 +121,10 @@ def sync(
 ) -> ConflictReport | ErrorResponse | None:
     """Clashes already in the schedule between two dates
 
-     Reports two rows holding one resource at once, and one member enrolled in two activities that run at
-    once. It reads and reports; nothing is refused or changed. Both dates are included. `to` before
-    `from`, or a range longer than 92 days, is refused with 422 and code INVALID_VALUE. ORG_ADMIN and
-    UNIT_ADMIN only.
+     Reports two rows holding one resource at once, one member enrolled in two activities that run at
+    once, and one lead leading two activities at once. It reads and reports; nothing is refused or
+    changed. Both dates are included. `to` before `from`, or a range longer than 92 days, is refused
+    with 422 and code INVALID_VALUE. ORG_ADMIN and UNIT_ADMIN only.
 
     Args:
         from_ (datetime.date):
@@ -153,10 +153,10 @@ async def asyncio_detailed(
 ) -> Response[ConflictReport | ErrorResponse]:
     """Clashes already in the schedule between two dates
 
-     Reports two rows holding one resource at once, and one member enrolled in two activities that run at
-    once. It reads and reports; nothing is refused or changed. Both dates are included. `to` before
-    `from`, or a range longer than 92 days, is refused with 422 and code INVALID_VALUE. ORG_ADMIN and
-    UNIT_ADMIN only.
+     Reports two rows holding one resource at once, one member enrolled in two activities that run at
+    once, and one lead leading two activities at once. It reads and reports; nothing is refused or
+    changed. Both dates are included. `to` before `from`, or a range longer than 92 days, is refused
+    with 422 and code INVALID_VALUE. ORG_ADMIN and UNIT_ADMIN only.
 
     Args:
         from_ (datetime.date):
@@ -188,10 +188,10 @@ async def asyncio(
 ) -> ConflictReport | ErrorResponse | None:
     """Clashes already in the schedule between two dates
 
-     Reports two rows holding one resource at once, and one member enrolled in two activities that run at
-    once. It reads and reports; nothing is refused or changed. Both dates are included. `to` before
-    `from`, or a range longer than 92 days, is refused with 422 and code INVALID_VALUE. ORG_ADMIN and
-    UNIT_ADMIN only.
+     Reports two rows holding one resource at once, one member enrolled in two activities that run at
+    once, and one lead leading two activities at once. It reads and reports; nothing is refused or
+    changed. Both dates are included. `to` before `from`, or a range longer than 92 days, is refused
+    with 422 and code INVALID_VALUE. ORG_ADMIN and UNIT_ADMIN only.
 
     Args:
         from_ (datetime.date):

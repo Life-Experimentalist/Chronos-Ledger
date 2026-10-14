@@ -55,20 +55,21 @@ def _activity(db, code):
     return activity
 
 
-def _slot(db, activity, room, start, end):
+def _slot(db, activity, room, start, end, lead_id=None):
     slot = StructuralMasterSlot(
         **weekly(TOMORROW.isoweekday()),
         time_window_start=start,
         time_window_end=end,
         activity_id=activity.id,
         resource_id=room.id,
+        primary_lead_id=lead_id,
     )
     db.add(slot)
     db.commit()
     return slot
 
 
-def _day(db, activity, room, start, end, slot=None):
+def _day(db, activity, room, start, end, slot=None, lead_id=None, substitute_id=None):
     day = DailyLedger(
         target_date=TOMORROW,
         time_window_start=start,
@@ -76,6 +77,8 @@ def _day(db, activity, room, start, end, slot=None):
         master_slot_id=slot.id if slot else None,
         activity_id=activity.id,
         resource_id=room.id,
+        active_lead_id=lead_id,
+        substitute_lead_id=substitute_id,
     )
     db.add(day)
     db.commit()
@@ -190,6 +193,111 @@ def test_a_member_in_two_activities_at_once_clashes_once(client, db, seed_users)
     assert clash["resource_id"] is None
 
 
+def test_a_lead_leading_two_activities_at_once_clashes_once(client, db, seed_users):
+    first = _slot(db, _activity(db, "LE101"), _room(db, "LH-120"), _t(9), _t(10), "FAC001")
+    second = _slot(db, _activity(db, "LE102"), _room(db, "LH-121"), _t(9, 30), _t(10, 30), "FAC001")
+
+    conflicts = _report(client, _admin(client))
+
+    assert _pairs(conflicts, "lead_overlap") == [{("slot", first.id), ("slot", second.id)}]
+    (clash,) = conflicts
+    assert clash["lead_id"] == "FAC001"
+    assert clash["member_id"] is None
+    assert clash["resource_id"] is None
+    assert (clash["start"], clash["end"]) == ("09:30:00", "10:00:00")
+
+
+def test_an_unsubstituted_day_leads_with_the_lead_it_was_generated_with(client, db, seed_users):
+    day = _day(db, _activity(db, "LE118"), _room(db, "LH-138"), _t(9), _t(10), lead_id="FAC001")
+    slot = _slot(db, _activity(db, "LE119"), _room(db, "LH-139"), _t(9, 30), _t(10, 30), "FAC001")
+
+    conflicts = _report(client, _admin(client))
+
+    assert _pairs(conflicts, "lead_overlap") == [{("ledger_day", day.id), ("slot", slot.id)}]
+
+
+def test_a_substituted_day_does_not_clash_for_the_lead_it_was_taken_from(client, db, seed_users):
+    # FAC001 would clash with the slot, but the day is covered by ADM001.
+    _slot(db, _activity(db, "LE103"), _room(db, "LH-122"), _t(9), _t(10), "FAC001")
+    _day(
+        db,
+        _activity(db, "LE104"),
+        _room(db, "LH-123"),
+        _t(9, 30),
+        _t(10, 30),
+        lead_id="FAC001",
+        substitute_id="ADM001",
+    )
+
+    assert _report(client, _admin(client)) == []
+
+
+def test_a_substitute_who_is_double_booked_clashes(client, db, seed_users):
+    slot = _slot(db, _activity(db, "LE105"), _room(db, "LH-124"), _t(9), _t(10), "ADM001")
+    day = _day(
+        db,
+        _activity(db, "LE106"),
+        _room(db, "LH-125"),
+        _t(9, 30),
+        _t(10, 30),
+        lead_id="FAC001",
+        substitute_id="ADM001",
+    )
+
+    conflicts = _report(client, _admin(client))
+
+    assert _pairs(conflicts, "lead_overlap") == [{("slot", slot.id), ("ledger_day", day.id)}]
+    (clash,) = conflicts
+    assert clash["lead_id"] == "ADM001"
+
+
+def test_a_day_stands_in_for_its_slot_on_the_lead_side(client, db, seed_users):
+    # The slot's lead is FAC001 but the day was covered, so on this date the
+    # slot's own window leads nothing for FAC001 and cannot clash with
+    # another activity FAC001 leads.
+    activity = _activity(db, "LE107")
+    room = _room(db, "LH-126")
+    slot = _slot(db, activity, room, _t(9), _t(10), "FAC001")
+    _day(
+        db,
+        activity,
+        room,
+        _t(9),
+        _t(10),
+        slot=slot,
+        lead_id="FAC001",
+        substitute_id="ADM001",
+    )
+    _slot(db, _activity(db, "LE108"), _room(db, "LH-127"), _t(9, 30), _t(10, 30), "FAC001")
+
+    assert _report(client, _admin(client)) == []
+
+
+def test_a_person_who_leads_and_is_enrolled_gets_each_kind_by_its_own_rule(client, db, seed_users):
+    maths = _activity(db, "LE109")
+    physics = _activity(db, "LE110")
+    chemistry = _activity(db, "LE111")
+    led_first = _slot(db, maths, _room(db, "LH-128"), _t(9), _t(10), "FAC001")
+    led_second = _slot(db, physics, _room(db, "LH-129"), _t(9, 30), _t(10, 30), "FAC001")
+    attended = _slot(db, chemistry, _room(db, "LH-130"), _t(10), _t(10, 45))
+    db.add_all(
+        [
+            ActivityEnrollment(activity_id=physics.id, member_id="FAC001"),
+            ActivityEnrollment(activity_id=chemistry.id, member_id="FAC001"),
+        ]
+    )
+    db.commit()
+
+    conflicts = _report(client, _admin(client))
+
+    # Leading maths and physics overlap. Being enrolled in physics and
+    # chemistry overlaps too. Leading physics while enrolled in chemistry is
+    # not a kind of its own: each side finds only what its own rule finds.
+    assert sorted(c["kind"] for c in conflicts) == ["lead_overlap", "member_overlap"]
+    assert _pairs(conflicts, "lead_overlap") == [{("slot", led_first.id), ("slot", led_second.id)}]
+    assert _pairs(conflicts, "member_overlap") == [{("slot", led_second.id), ("slot", attended.id)}]
+
+
 # ── What is not a clash ──────────────────────────────────────────────────────
 
 
@@ -207,6 +315,21 @@ def test_back_to_back_windows_do_not_clash(client, db, seed_users):
         ]
     )
     db.commit()
+
+    assert _report(client, _admin(client)) == []
+
+
+def test_back_to_back_windows_do_not_clash_for_a_lead(client, db, seed_users):
+    _slot(db, _activity(db, "LE112"), _room(db, "LH-131"), _t(9), _t(10), "FAC001")
+    _slot(db, _activity(db, "LE113"), _room(db, "LH-132"), _t(10), _t(11), "FAC001")
+
+    assert _report(client, _admin(client)) == []
+
+
+def test_two_windows_of_one_activity_do_not_clash_for_a_lead(client, db, seed_users):
+    activity = _activity(db, "LE114")
+    _slot(db, activity, _room(db, "LH-133"), _t(9), _t(10), "FAC001")
+    _slot(db, activity, _room(db, "LH-134"), _t(9, 30), _t(10, 30), "FAC001")
 
     assert _report(client, _admin(client)) == []
 

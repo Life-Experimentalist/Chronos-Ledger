@@ -10,7 +10,7 @@ edited by hand, and anything written straight into the database all get
 past them. This module finds those and reports them. It never refuses and
 never changes a row.
 
-Two kinds of clash are looked for.
+Three kinds of clash are looked for.
 
 A resource clash is two things holding one resource at one moment. What
 holds a resource is exactly what GET /resources/{id}/availability reports as
@@ -26,8 +26,18 @@ on any resource or on none, by the same rules as above. Two windows of one
 activity are not a member clash: that is one activity, and if the two share a
 room the resource side already names them.
 
-Each clash is found by sorting the intervals of one resource, or of one
-member, by start and sweeping them once while keeping the intervals still
+A lead clash is one person leading two activities that run at the same
+moment. The lead of a weekly slot is its primary_lead_id. The lead of a
+generated day is its substitute_lead_id when that is set, and otherwise the
+active_lead_id the day was generated with, so a day that has been covered
+does not clash for the lead it was taken from, and the cover does. The
+windows are the same ones a member clash uses, and two windows of one
+activity are not a lead clash either. A person who is enrolled in one
+activity and leads another at the same moment is reported by the rule each
+side meets, member_overlap and lead_overlap, and not as a kind of their own.
+
+Each clash is found by sorting the intervals of one resource, of one
+member, or of one lead, by start and sweeping them once while keeping the intervals still
 open at that point. That costs a sort per group plus one step per clash
 found, rather than comparing every interval with every other. A pair is
 emitted when the later of the two arrives, which is why no pair is ever
@@ -46,7 +56,7 @@ not clash in pairs at all: what is reported is a resource_overbooked, a
 stretch in which the reservations together hold more than the capacity,
 naming every one of them that is open in it.
 
-A requirement_unmet is the third kind and a different sort of thing: not two
+A requirement_unmet is the fourth kind and a different sort of thing: not two
 rows in each other's way but one row that needs something it cannot have. It
 is found for a weekly slot or a generated day whose activity or resource has
 requirements (app.services.requirements), by the dry run the booking route
@@ -86,6 +96,7 @@ RESOURCE_OVERLAP = "resource_overlap"
 RESOURCE_OVERBOOKED = "resource_overbooked"
 MEMBER_OVERLAP = "member_overlap"
 REQUIREMENT_UNMET = "requirement_unmet"
+LEAD_OVERLAP = "lead_overlap"
 
 SLOT = "slot"
 LEDGER_DAY = "ledger_day"
@@ -149,6 +160,7 @@ def _report(kind: str, starts, ends, items: list[dict], **subject) -> dict:
         "kind": kind,
         "resource_id": subject.get("resource_id"),
         "member_id": subject.get("member_id"),
+        "lead_id": subject.get("lead_id"),
         "date": starts.date(),
         "start": starts.time(),
         "end_date": ends.date(),
@@ -194,13 +206,14 @@ def _report_key(conflict: dict) -> tuple:
         conflict["kind"],
         -1 if resource_id is None else resource_id,
         conflict["member_id"] or "",
+        conflict["lead_id"] or "",
         conflict["_starts"],
         tuple((item["type"], item["id"], item["date"]) for item in conflict["items"]),
     )
 
 
 def find_conflicts(db: Session, from_date: datetime.date, to_date: datetime.date) -> list[dict]:
-    """Every resource clash and member clash that reaches into the range.
+    """Every resource, member and lead clash that reaches into the range.
 
     Both dates are included. An interval counts when the hours it covers
     reach into the range, so a window dated the day before `from_date` that
@@ -243,6 +256,9 @@ def find_conflicts(db: Session, from_date: datetime.date, to_date: datetime.date
     )
 
     entries: list[Entry] = []
+    # Who leads each slot or day entry, keyed by (type, id). Only the lead
+    # side reads it.
+    leading: dict[tuple[str, int], str] = {}
 
     # A day stands in for the slot that produced it on that date, the same
     # rule occupied() keeps for availability.
@@ -272,6 +288,8 @@ def find_conflicts(db: Session, from_date: datetime.date, to_date: datetime.date
                     slot.resource_id,
                 )
             )
+            if slot.primary_lead_id:
+                leading[(SLOT, slot.id)] = slot.primary_lead_id
         on += datetime.timedelta(days=1)
 
     for day in days:
@@ -286,6 +304,8 @@ def find_conflicts(db: Session, from_date: datetime.date, to_date: datetime.date
                 day.resource_id,
             )
         )
+        if day.substitute_lead_id or day.active_lead_id:
+            leading[(LEDGER_DAY, day.id)] = day.substitute_lead_id or day.active_lead_id
     for held in holds:
         entries.append(
             _entry(
@@ -372,6 +392,25 @@ def find_conflicts(db: Session, from_date: datetime.date, to_date: datetime.date
                         message=gap["message"],
                     )
                 )
+    by_lead: dict[str, list[Entry]] = defaultdict(list)
+    for entry in entries:
+        lead_id = leading.get((entry[2]["type"], entry[2]["id"]))
+        if lead_id is not None:
+            by_lead[lead_id].append(entry)
+    if by_lead:
+        active = {
+            row.id
+            for row in db.query(User.id).filter(
+                User.id.in_(list(by_lead)), User.deactivated_at.is_(None)
+            )
+        }
+        for lead_id, running in by_lead.items():
+            if lead_id not in active:
+                continue
+            for first, second in _sweep(running):
+                if first[2]["activity_id"] == second[2]["activity_id"]:
+                    continue
+                conflicts.append(_conflict(LEAD_OVERLAP, first, second, lead_id=lead_id))
 
     conflicts.sort(key=_report_key)
     for conflict in conflicts:

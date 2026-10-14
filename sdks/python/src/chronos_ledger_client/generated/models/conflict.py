@@ -18,11 +18,13 @@ T = TypeVar("T", bound="Conflict")
 
 @_attrs_define
 class Conflict:
-    """Two rows that hold the same resource, or the same member, at the same moment. kind is `resource_overlap`, with
-    resource_id set and member_id null, or `member_overlap`, with member_id set and resource_id null. Like
-    ConflictItem.type, kind is a string so that later kinds can be added; a reader should skip a kind it does not know.
-    date, start, end_date and end are the part of the two windows they share. items is a list rather than a pair so that
-    a later kind can name more than two rows.
+    """Two rows that hold the same resource, member or lead at the same moment. kind is `resource_overlap`, with
+    resource_id set, `member_overlap`, with member_id set, or `lead_overlap`, with lead_id set: one person leading two
+    different activities at once. The lead of a generated day is its substitute when it has one, so a substituted day
+    does not clash for the lead it was taken from. Each of resource_id, member_id and lead_id is null on the kinds that
+    do not use it. Like ConflictItem.type, kind is a string so that later kinds can be added; a reader should skip a
+    kind it does not know. date, start, end_date and end are the part of the two windows they share. items is a list
+    rather than a pair so that a later kind can name more than two rows.
 
     `resource_overbooked` is a POOLED resource whose reservations together hold more than its capacity. date to end is
     the whole stretch in which they do, items is every reservation open in it, and capacity and taken say by how much:
@@ -47,6 +49,7 @@ class Conflict:
             taken (int | None | Unset): The most units held at once, on `resource_overbooked` only.
             requirement_id (int | None | Unset): The requirement that is not met, on `requirement_unmet` only.
             message (None | str | Unset): What is missing, on `requirement_unmet` only.
+            lead_id (None | str | Unset): The person leading both activities, on `lead_overlap` only.
     """
 
     kind: str
@@ -61,6 +64,7 @@ class Conflict:
     taken: int | None | Unset = UNSET
     requirement_id: int | None | Unset = UNSET
     message: None | str | Unset = UNSET
+    lead_id: None | str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -109,6 +113,12 @@ class Conflict:
         else:
             message = self.message
 
+        lead_id: None | str | Unset
+        if isinstance(self.lead_id, Unset):
+            lead_id = UNSET
+        else:
+            lead_id = self.lead_id
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -131,6 +141,8 @@ class Conflict:
             field_dict["requirement_id"] = requirement_id
         if message is not UNSET:
             field_dict["message"] = message
+        if lead_id is not UNSET:
+            field_dict["lead_id"] = lead_id
 
         return field_dict
 
@@ -206,6 +218,15 @@ class Conflict:
 
         message = _parse_message(d.pop("message", UNSET))
 
+        def _parse_lead_id(data: object) -> None | str | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(None | str | Unset, data)
+
+        lead_id = _parse_lead_id(d.pop("lead_id", UNSET))
+
         conflict = cls(
             kind=kind,
             resource_id=resource_id,
@@ -219,6 +240,7 @@ class Conflict:
             taken=taken,
             requirement_id=requirement_id,
             message=message,
+            lead_id=lead_id,
         )
 
         conflict.additional_properties = d
