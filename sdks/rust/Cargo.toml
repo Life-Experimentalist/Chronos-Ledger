@@ -1,7 +1,7 @@
 [package]
 name = "chronosledger-client"
 # release-please writes this line (release-please-config.json).
-version = "0.17.0"
+version = "0.18.0"
 edition = "2021"
 description = "Typed client for the Chronos Ledger REST API"
 license = "Apache-2.0"
