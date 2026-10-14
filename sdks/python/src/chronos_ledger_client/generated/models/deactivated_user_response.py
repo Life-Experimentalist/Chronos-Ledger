@@ -33,6 +33,8 @@ class DeactivatedUserResponse:
         current_occupancy_index (AccessReadiness | Unset): Staff availability / occupancy index visible to members.
         reporting_line_manager (None | str | Unset):
         deactivated_at (datetime.datetime | None | Unset): When the account was deactivated, or null while it is active.
+        organization_id (str | Unset): The organization the account belongs to. Everything the account reads and writes
+            is in this organization.
     """
 
     open_items: OpenItems
@@ -45,6 +47,7 @@ class DeactivatedUserResponse:
     current_occupancy_index: AccessReadiness | Unset = UNSET
     reporting_line_manager: None | str | Unset = UNSET
     deactivated_at: datetime.datetime | None | Unset = UNSET
+    organization_id: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -90,6 +93,8 @@ class DeactivatedUserResponse:
         else:
             deactivated_at = self.deactivated_at
 
+        organization_id = self.organization_id
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -115,6 +120,8 @@ class DeactivatedUserResponse:
             field_dict["reporting_line_manager"] = reporting_line_manager
         if deactivated_at is not UNSET:
             field_dict["deactivated_at"] = deactivated_at
+        if organization_id is not UNSET:
+            field_dict["organization_id"] = organization_id
 
         return field_dict
 
@@ -189,6 +196,8 @@ class DeactivatedUserResponse:
 
         deactivated_at = _parse_deactivated_at(d.pop("deactivated_at", UNSET))
 
+        organization_id = d.pop("organization_id", UNSET)
+
         deactivated_user_response = cls(
             open_items=open_items,
             id=id,
@@ -200,6 +209,7 @@ class DeactivatedUserResponse:
             current_occupancy_index=current_occupancy_index,
             reporting_line_manager=reporting_line_manager,
             deactivated_at=deactivated_at,
+            organization_id=organization_id,
         )
 
         deactivated_user_response.additional_properties = d

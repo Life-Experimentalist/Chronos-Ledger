@@ -23,8 +23,9 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core import clock, idempotency
 from app.core.database import Base, get_db, get_session_opener, sqlite_engine
+from app.core.organization import DEFAULT_ORGANIZATION_ID
 from app.main import app
-from app.models.db import IdempotencyRecord, InstitutionalRole, Resource, User
+from app.models.db import IdempotencyRecord, InstitutionalRole, Organization, Resource, User
 from tests.conftest import ADMIN_PASSWORD, login
 
 REPLAYED = "Idempotency-Replayed"
@@ -90,6 +91,8 @@ def file_client(tmp_path, seed_users):
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     with Session() as session:
+        session.add(Organization(id=DEFAULT_ORGANIZATION_ID, name="Default organization"))
+        session.flush()
         session.add(
             User(
                 id="ADM001",

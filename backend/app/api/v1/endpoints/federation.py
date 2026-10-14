@@ -120,11 +120,24 @@ def create_issuer(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("ORG_ADMIN")),
 ):
-    taken = db.query(FederatedIssuer).filter(FederatedIssuer.issuer == payload.issuer).first()
+    # An issuer name is unique in the whole deployment: the exchange has no
+    # signed-in caller, and the name is how it finds the organization.
+    taken = (
+        db.query(FederatedIssuer)
+        .filter(FederatedIssuer.issuer == payload.issuer)
+        .execution_options(all_organizations=True)
+        .first()
+    )
     if taken is not None:
+        # Another organization's issuer id is not this caller's to learn.
+        where = (
+            f" as issuer {taken.id}"
+            if taken.organization_id == current_user.organization_id
+            else ""
+        )
         raise ChronosError(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"'{payload.issuer}' is already registered as issuer {taken.id}",
+            detail=f"'{payload.issuer}' is already registered{where}",
             code=ErrorCode.ALREADY_EXISTS,
         )
     row = FederatedIssuer(

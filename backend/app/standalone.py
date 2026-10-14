@@ -15,6 +15,7 @@ starts here can move to the container later without changing a call.
     chronos-engine backup --data-dir ./chronos-data --to backup.db
     chronos-engine export --data-dir ./chronos-data --to chronos.zip
     chronos-engine import --data-dir ./new-data --from chronos.zip
+    chronos-engine organization create --id second --name "Second" --admin-id ADMIN002 --admin-email admin@second.example
 
 docs/standalone.md has what this profile gives up for being one process,
 and docs/portability.md the archive export and import read and write.
@@ -427,7 +428,7 @@ def portable_engine(args):
 
 
 def export(args) -> int:
-    """Write the organization's data to a new zip archive (docs/portability.md)."""
+    """Write every organization's data to a new zip archive (docs/portability.md)."""
     data_dir = Path(args.data_dir).resolve()
     if args.database_url is None and not (data_dir / DATABASE_FILE).exists():
         print(f"No database at {data_dir / DATABASE_FILE}", file=sys.stderr)
@@ -492,6 +493,52 @@ def import_(args) -> int:
             "The archive had no secrets: passwords, API keys and calendar feed links "
             "have to be set again (docs/portability.md)."
         )
+    return 0
+
+
+def read_admin_password(stdin) -> str:
+    """The new administrator's password: typed at a prompt, or the first line of a pipe.
+
+    Never an argument, which would leave it in the shell's history and the
+    process list.
+    """
+    if stdin.isatty():
+        import getpass
+
+        return getpass.getpass("Password for the organization's administrator: ")
+    return stdin.readline().rstrip("\r\n")
+
+
+def create_organization(args) -> int:
+    """Add an organization and its first administrator (app/services/organizations.py)."""
+    data_dir = Path(args.data_dir).resolve()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    # Nothing here signs a token, so no signing.key is left behind for it.
+    os.environ.setdefault("JWT_SECRET_SIGNING_KEY", secrets.token_hex(32))
+    configure_environment(data_dir, args.database_url)
+
+    from sqlalchemy.orm import Session
+
+    from app.core.schema import ensure_schema
+    from app.services.organizations import create_organization as add
+
+    password = read_admin_password(sys.stdin)
+    engine = portable_engine(args)
+    try:
+        ensure_schema(engine)
+        with Session(engine) as db:
+            try:
+                add(db, args.id, args.name, args.admin_id, args.admin_email, password)
+            except ValueError as problem:
+                print(f"chronos-engine organization create: {problem}", file=sys.stderr)
+                return 1
+            db.commit()
+    finally:
+        engine.dispose()
+    print(
+        f"Created organization {args.id} with administrator {args.admin_id}, "
+        "who changes the password at first sign-in"
+    )
     return 0
 
 
@@ -566,7 +613,8 @@ def build_parser() -> argparse.ArgumentParser:
     copy.set_defaults(handler=backup)
 
     out = commands.add_parser(
-        "export", help="write the organization's data to a zip archive (docs/portability.md)"
+        "export",
+        help="write every organization's data to a zip archive (docs/portability.md)",
     )
     out.add_argument("--data-dir", default="chronos-data")
     out.add_argument("--database-url", help="a PostgreSQL URL; without one, the SQLite file")
@@ -591,6 +639,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     load.add_argument("--from", dest="from_", required=True, help="the archive to load")
     load.set_defaults(handler=import_)
+
+    organization = commands.add_parser(
+        "organization", help="manage the organizations in this deployment"
+    )
+    organization_commands = organization.add_subparsers(dest="action", required=True)
+    make = organization_commands.add_parser(
+        "create",
+        help="add an organization and its first administrator; the password is read from stdin",
+    )
+    make.add_argument("--data-dir", default="chronos-data")
+    make.add_argument("--database-url", help="a PostgreSQL URL; without one, the SQLite file")
+    make.add_argument(
+        "--schema", help="the PostgreSQL schema the tables live in, if not the default"
+    )
+    make.add_argument("--id", required=True, help="the organization's id, up to 50 characters")
+    make.add_argument("--name", required=True, help="the organization's name")
+    make.add_argument("--admin-id", required=True, help="the user id of its first administrator")
+    make.add_argument(
+        "--admin-email", required=True, help="the email address that administrator signs in with"
+    )
+    make.set_defaults(handler=create_organization)
     return parser
 
 

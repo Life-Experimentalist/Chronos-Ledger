@@ -629,8 +629,9 @@ def test_a_taken_address_in_a_different_case_is_still_taken(federation, db, on_f
     """
     db.execute(
         text(
-            "INSERT INTO users (id, full_name, email_address, credential_secure_hash, role_type)"
-            " VALUES ('ADM901', 'The Administrator', :email, :hash, 'ORG_ADMIN')"
+            "INSERT INTO users"
+            " (id, full_name, email_address, credential_secure_hash, role_type, organization_id)"
+            " VALUES ('ADM901', 'The Administrator', :email, :hash, 'ORG_ADMIN', 'default')"
         ),
         {"email": on_file, "hash": hash_password("SomethingReal123!")},
     )

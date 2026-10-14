@@ -255,6 +255,7 @@ def federated(request: Request, payload: FederatedTokenRequest, db: Session = De
     # sign-in sets nothing here and its records name nobody, which is a gap
     # there rather than a convention to follow.
     request.state.actor_id = user.id
+    request.state.organization_id = user.organization_id
     token = create_access_token(subject=user.id, extra={"role": user.role_type.value})
     return TokenResponse(
         access_token=token,
@@ -423,4 +424,5 @@ def get_me(current_user: User = Depends(get_current_user)):
         "unit_code": current_user.unit_code,
         "current_occupancy_index": current_user.current_occupancy_index.value,
         "initial_login_state": current_user.initial_login_state,
+        "organization_id": current_user.organization_id,
     }

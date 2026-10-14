@@ -23,6 +23,13 @@ info:
 
     **Roles**: `ORG_ADMIN` > `UNIT_ADMIN` > `STAFF` > `MEMBER`.
     Role requirements are noted on each endpoint.
+
+    **Organizations**: every account belongs to one organization, and a
+    caller reads and writes only that organization's data. The organization
+    comes from the caller, never from the path or a header. A row in another
+    organization answers `404 NOT_FOUND`, the same as a row that does not
+    exist. A user id and an email address are unique across the whole
+    deployment; a resource code is unique within an organization.
   contact:
     name: Chronos Ledger Contributors
     email: admin@org.internal
@@ -531,6 +538,11 @@ components:
           format: date-time
           nullable: true
           description: When the account was deactivated, or null while it is active.
+        organization_id:
+          type: string
+          description: >
+            The organization the account belongs to. Everything the account
+            reads and writes is in this organization.
 
     OpenItems:
       type: object
@@ -4042,7 +4054,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "409":
-          description: A resource with that code already exists.
+          description: A resource with that code already exists in the caller's organization.
           content:
             application/json:
               schema:
@@ -6371,7 +6383,8 @@ paths:
       description: >
         Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding
         `manifest.json` and one JSON Lines file per table, described in
-        docs/portability.md. Password hashes, API key hashes, calendar feed
+        docs/portability.md, with the caller's organization's rows only.
+        `chronos-engine export` writes every organization. Password hashes, API key hashes, calendar feed
         tokens and visit code hashes are always left out; an archive with them
         comes only from `chronos-engine export --include-secrets`. Refresh
         tokens and the signing key are never in it. Every export is written to
@@ -6972,9 +6985,9 @@ paths:
       tags: [WebSocket]
       summary: Count of people with an open websocket, on every instance
       description: >
-        Requires `ORG_ADMIN`. The count is organization-wide, and there is
-        nothing in it a unit admin could be shown only their own share of. A
-        person counts once however many instances they are connected to. The
+        Requires `ORG_ADMIN`. The count is of the caller's organization, and
+        there is nothing in it a unit admin could be shown only their own
+        share of. A person counts once however many instances they are connected to. The
         other instances' figures can be up to 15 seconds old, and an instance
         that cannot reach Redis counts only its own sockets.
       responses:

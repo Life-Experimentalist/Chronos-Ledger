@@ -30,9 +30,9 @@ EXPORT_FILENAME = "chronos-ledger-export.zip"
 def export(
     request: Request,
     db: Session = Depends(get_db),
-    _=Depends(require_roles("ORG_ADMIN")),
+    current_user=Depends(require_roles("ORG_ADMIN")),
 ):
-    """The organization's data as one zip archive, without secrets.
+    """The caller's organization's data as one zip archive, without secrets.
 
     An archive with secrets comes only from `chronos-engine export
     --include-secrets`, which needs the database itself. Over HTTP an admin key
@@ -43,6 +43,7 @@ def export(
     Every export is recorded in the audit log, although it is a read: it hands
     out the whole organization.
     """
+    organization_id = current_user.organization_id
     # Signing in read from this session. Ending that transaction means the
     # export's own starts clean, which on PostgreSQL is what lets it begin as
     # a snapshot (export_archive).
@@ -50,7 +51,9 @@ def export(
     handle, path = tempfile.mkstemp(suffix=".zip")
     try:
         with os.fdopen(handle, "w+b") as target:
-            export_archive(db.connection(), target, include_secrets=False)
+            export_archive(
+                db.connection(), target, include_secrets=False, organization_id=organization_id
+            )
     except BaseException:
         os.unlink(path)
         audit.record(request, 500)

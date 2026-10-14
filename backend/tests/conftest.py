@@ -20,9 +20,10 @@ from sqlalchemy.pool import StaticPool
 from app.core import recurrence
 from app.core.config import get_settings
 from app.core.database import Base, get_db, get_session_opener
+from app.core.organization import DEFAULT_ORGANIZATION_ID
 from app.core.security import hash_api_key, hash_password
 from app.main import app
-from app.models.db import ApiKey, InstitutionalRole, User
+from app.models.db import ApiKey, InstitutionalRole, Organization, User
 
 # Earlier than any cycle a test builds. Every expansion is clipped to the
 # slot's own cycle, so a slot anchored here runs on its weekday on every date
@@ -120,6 +121,9 @@ def db():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
+    # The organization every row here is filed under, as ensure_schema seeds it.
+    session.add(Organization(id=DEFAULT_ORGANIZATION_ID, name="Default organization"))
+    session.commit()
     try:
         yield session
     finally:

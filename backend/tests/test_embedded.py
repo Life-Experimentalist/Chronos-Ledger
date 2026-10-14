@@ -26,6 +26,7 @@ from app import standalone
 from app.core import clock, database, host_identity
 from app.core.database import get_db, get_session_opener, sqlite_engine
 from app.core.host_identity import SYSTEM_ACTOR_ID, seed_system_account
+from app.core.organization import DEFAULT_ORGANIZATION_ID
 from app.core.schema import SCHEMA_VERSION
 from app.embedded import CLOCK_OPERATIONS, STRIPPED_OPERATIONS, build_app
 from app.main import app as ordinary_app
@@ -203,7 +204,8 @@ def _already_made(db, actor_id, role=InstitutionalRole.MEMBER):
     """The other request's row, committed through its own session.
 
     A Core insert, so the row is not in this session's identity map and the
-    request below really does try to insert a second one.
+    request below really does try to insert a second one. Nothing fills in
+    the organization on a Core insert, so it is named here.
     """
     db.execute(
         insert(User).values(
@@ -213,6 +215,7 @@ def _already_made(db, actor_id, role=InstitutionalRole.MEMBER):
             credential_secure_hash="not a hash",
             role_type=role,
             initial_login_state=False,
+            organization_id=DEFAULT_ORGANIZATION_ID,
         )
     )
     db.commit()

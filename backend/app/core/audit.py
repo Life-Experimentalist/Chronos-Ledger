@@ -58,6 +58,7 @@ class AuditMiddleware:
                 state.get("actor_id"),
                 state.get("api_key_id"),
                 status.get("code", 500),
+                state.get("organization_id"),
             )
 
 
@@ -81,10 +82,11 @@ def record(request, status_code):
         getattr(state, "actor_id", None),
         getattr(state, "api_key_id", None),
         status_code,
+        getattr(state, "organization_id", None),
     )
 
 
-def _write(scope, actor_id, api_key_id, status_code):
+def _write(scope, actor_id, api_key_id, status_code, organization_id):
     from app.models.db import AuditRecord
 
     # The opener the tests substitute for the websocket is the one used here,
@@ -102,6 +104,7 @@ def _write(scope, actor_id, api_key_id, status_code):
                     method=scope["method"],
                     path=scope["path"][:500],
                     status_code=status_code,
+                    organization_id=organization_id,
                 )
             )
             db.commit()
