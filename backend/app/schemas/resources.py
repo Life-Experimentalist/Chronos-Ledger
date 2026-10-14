@@ -5,7 +5,7 @@ import datetime
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.models.db import ReservationStatus, ResourceType
+from app.models.db import ReservationStatus, ResourceMode, ResourceType
 
 
 class ResourceResponse(BaseModel):
@@ -15,6 +15,7 @@ class ResourceResponse(BaseModel):
     resource_type: ResourceType
     unit_code: str | None
     capacity: int | None
+    mode: ResourceMode
     user_id: str | None
     latitude: float | None
     longitude: float | None
@@ -24,6 +25,9 @@ class ResourceResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+POOL_NEEDS_CAPACITY = "a POOLED resource needs a capacity of at least 1"
+
+
 class ResourceCreate(BaseModel):
     """A room registered before any timetable names it.
 
@@ -31,6 +35,10 @@ class ResourceCreate(BaseModel):
     strips a room name, so this row and a later CSV mentioning the room are
     one room. label defaults to the code, which is what an imported room
     gets.
+
+    mode defaults to EXCLUSIVE, which is what every resource was before
+    modes existed. A POOLED resource needs a capacity of at least one,
+    because that is the size of the pool.
     """
 
     model_config = {"str_strip_whitespace": True}
@@ -39,6 +47,7 @@ class ResourceCreate(BaseModel):
     label: str | None = Field(default=None, min_length=1, max_length=120)
     unit_code: str | None = Field(default=None, max_length=50)
     capacity: int | None = Field(default=None, ge=0)
+    mode: ResourceMode = ResourceMode.EXCLUSIVE
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     altitude_target: float | None = None
@@ -49,6 +58,8 @@ class ResourceCreate(BaseModel):
         # point on the equator.
         if (self.latitude is None) != (self.longitude is None):
             raise ValueError("latitude and longitude must be set together")
+        if self.mode is ResourceMode.POOLED and not self.capacity:
+            raise ValueError(POOL_NEEDS_CAPACITY)
         return self
 
 
@@ -64,10 +75,17 @@ class ResourceUpdate(BaseModel):
     that becomes a person, or a person that becomes a room, is not an edit;
     it is a different resource, and the slots pointing at this one would
     follow it there.
+
+    mode and capacity can change, but not under bookings still to come that
+    would no longer fit: the route refuses that with a 409 naming them.
+    Whether a pooled resource ends up with a capacity is checked by the
+    route too, because it depends on what the row already has.
     """
 
     label: str | None = Field(default=None, min_length=1, max_length=120)
     capacity: int | None = Field(default=None, ge=0)
+    # Leaving it out keeps the mode; null is not a mode.
+    mode: ResourceMode | None = None
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     altitude_target: float | None = None
@@ -84,6 +102,8 @@ class ResourceUpdate(BaseModel):
             raise ValueError("latitude and longitude must be set or cleared together")
         if "latitude" in named and (self.latitude is None) != (self.longitude is None):
             raise ValueError("latitude and longitude must be set or cleared together")
+        if "mode" in named and self.mode is None:
+            raise ValueError("mode cannot be cleared, only changed")
         return self
 
 
@@ -137,6 +157,9 @@ class ReservationCreate(BaseModel):
     start: datetime.time
     end: datetime.time
     purpose: str = Field(min_length=1, max_length=200)
+    # How many units of a pooled resource to hold. Anything above 1 is
+    # refused on a resource that is not pooled, where there is one of it.
+    quantity: int = Field(default=1, ge=1)
     # The caller's own identifier for the booking, kept exactly as sent.
     # Unique per caller, so it finds this booking again through
     # GET /resources/reservations?external_ref=.
@@ -170,6 +193,7 @@ class ReservationResponse(BaseModel):
     start: datetime.time
     end: datetime.time
     purpose: str
+    quantity: int
     status: ReservationStatus
     requested_by_id: str | None
     idempotency_key: str
@@ -214,6 +238,40 @@ class ReservationConflict(BaseModel):
     """
 
     detail: ReservationConflictDetail
+
+
+class CapacityExceededDetail(BaseModel):
+    """A pooled resource without enough units left for the window.
+
+    conflicts are the bookings already holding units of the pool somewhere
+    in the window. taken is the most of the pool they hold at any one moment
+    of it, so capacity minus taken is the most this window could still have.
+    """
+
+    message: str
+    conflicts: list[BusyInterval]
+    capacity: int
+    taken: int
+    requested: int
+
+
+class CapacityExceeded(BaseModel):
+    """The body of a 409 with RESOURCE_CAPACITY_EXCEEDED."""
+
+    detail: CapacityExceededDetail
+
+
+class BookingsWouldNotFitDetail(BaseModel):
+    """The bookings still to come that a change of mode or capacity would break."""
+
+    message: str
+    reservations: list[ReservationResponse]
+
+
+class BookingsWouldNotFit(BaseModel):
+    """The body of a 409 with RESOURCE_BOOKINGS_WOULD_NOT_FIT."""
+
+    detail: BookingsWouldNotFitDetail
 
 
 class ReservationRefTakenDetail(BaseModel):

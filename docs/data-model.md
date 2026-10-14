@@ -52,7 +52,8 @@ erDiagram
         string label
         string resource_type "ROOM | PERSON"
         string unit_code "nullable"
-        int capacity "nullable"
+        int capacity "nullable, at least 1 when POOLED"
+        string mode "EXCLUSIVE | POOLED | SHARED"
         string user_id FK "→ User.id (nullable, set = this resource is a person)"
         float latitude "nullable"
         float longitude "nullable"
@@ -148,6 +149,8 @@ erDiagram
         string requested_by_id FK "→ User.id (nullable)"
         string idempotency_key "unique per requester"
         string request_fingerprint "sha256 of the request"
+        int quantity "units taken, 1 unless POOLED"
+        string mode "the resource's mode, copied"
         string status "ReservationStatus enum"
         datetime created_at
         datetime cancelled_at "nullable"
@@ -261,6 +264,8 @@ A thing a reservation consumes. Every room is one row, created on first sight by
 
 `user_id` marks a resource that is a person, so that staff availability and room availability do not become two mechanisms that drift apart. `latitude`, `longitude` and `altitude_target` are the room's own geofence, as opposed to the per-day override on a `DailyLedger` row.
 
+`mode` (`models/db.py::ResourceMode`) says how a reservation takes the resource: `EXCLUSIVE`, the default, one at a time; `POOLED`, `capacity` interchangeable units of which a reservation takes its `quantity`; `SHARED`, never contended. `ck_resources_pool_capacity` holds a pooled resource to a capacity of at least 1. The mode governs reservations only: slots and generated days are one at a time on every resource.
+
 ### `StructuralMasterSlot`
 The repeating weekly timetable entry. `day_of_week_index` follows Python's `date.isoweekday()` convention (1 = Monday, 7 = Sunday), enforced by a CHECK constraint. These are the *template* rows that `ledger_generator` reads each night.
 
@@ -291,7 +296,9 @@ Records each organization visitor interaction. `handshake_status` transitions fr
 Free-form notes attached to a ledger entry (e.g., "lab equipment failure", "class started late"). Used for post-session audits. No schema constraint on `classification_tag`, it's a freeform string at the application layer.
 
 ### `Reservation`
-A hold on a resource for one date and window. Two `HELD` rows on the same resource cannot overlap: `ex_reservations_no_overlap`, an exclusion constraint the model declares for PostgreSQL only (SQLite has none; there `BEGIN IMMEDIATE` and the route's own check stand in). Cancelling sets `status` to `CANCELLED` and `cancelled_at` and keeps the row. `idempotency_key` is unique per requester (`uq_reservations_requester_key`) across every resource, and `request_fingerprint` is a SHA-256 of what was asked for, so a retry with the same key and the same request gets the original row back and the same key with a different request is refused.
+A hold on a resource for one date and window. Two `HELD` rows on the same resource with `mode` `EXCLUSIVE` cannot overlap: `ex_reservations_no_overlap`, an exclusion constraint the model declares for PostgreSQL only (SQLite has none; there `BEGIN IMMEDIATE` and the route's own check stand in). Cancelling sets `status` to `CANCELLED` and `cancelled_at` and keeps the row. `idempotency_key` is unique per requester (`uq_reservations_requester_key`) across every resource, and `request_fingerprint` is a SHA-256 of what was asked for, so a retry with the same key and the same request gets the original row back and the same key with a different request is refused.
+
+`mode` is the resource's mode copied onto the row, because an exclusion constraint can read only its own row and has to know which holds it applies to. `PATCH /resources/{id}` rewrites it on the holds still standing from yesterday on whenever the resource's mode changes, so on PostgreSQL a mode change that would leave two exclusive holds overlapping is refused by the constraint as well as by the route. `quantity` (at least 1, `ck_reservations_quantity`) is how many units of a pooled resource the hold takes; a pool's sum is checked by the route under the resource's row lock (`api/v1/endpoints/resources.py::_pool_check`), since no constraint can sum across rows.
 
 ### `IdempotencyRecord`
 One row per `Idempotency-Key` a caller has sent with a write, in `idempotency_records`, unique on (`caller`, `key`). `caller` is `key:<api key id>` or `user:<user id>`, so a key belongs to the API key or the signed-in user that sent it. `request_hash` is a SHA-256 of the method, path, sorted query string and canonical JSON body. `status_code`, `response_headers` and `response_body` are the response that went out, null while the first request is still running. A daily job deletes the rows older than `IDEMPOTENCY_RETENTION_HOURS`. No foreign keys, hence its absence from the diagram above: it outlives the key or account that made it, and is deleted once the window has passed. What is kept and what is not is in [api.md](api.md#idempotency).

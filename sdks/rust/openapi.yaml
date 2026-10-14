@@ -788,6 +788,21 @@ components:
         capacity:
           type: integer
           nullable: true
+          description: >
+            How many people a room holds, or on a POOLED resource how many
+            units the pool has.
+        mode:
+          type: string
+          enum: [EXCLUSIVE, POOLED, SHARED]
+          description: >
+            How a reservation takes the resource. EXCLUSIVE, the default, is
+            one booking at a time. POOLED is capacity interchangeable units,
+            of which a booking takes its quantity, refused with
+            `RESOURCE_CAPACITY_EXCEEDED` when the bookings already there
+            leave too few at some moment of the window. SHARED records who
+            is there and refuses nobody. The mode governs reservations only:
+            the timetable on any resource is one class at a time, and a
+            class on a pooled resource takes the whole pool.
         user_id:
           type: string
           nullable: true
@@ -834,6 +849,11 @@ components:
           type: integer
           minimum: 0
           nullable: true
+          description: Required, and at least 1, when mode is POOLED.
+        mode:
+          type: string
+          enum: [EXCLUSIVE, POOLED, SHARED]
+          description: See ResourceResponse.mode. EXCLUSIVE when left out.
         latitude:
           type: number
           minimum: -90
@@ -865,6 +885,18 @@ components:
           type: integer
           minimum: 0
           nullable: true
+          description: >
+            A POOLED resource keeps a capacity of at least 1. A cut the
+            bookings still to come would no longer fit is a 409 with
+            `RESOURCE_BOOKINGS_WOULD_NOT_FIT`.
+        mode:
+          type: string
+          enum: [EXCLUSIVE, POOLED, SHARED]
+          description: >
+            See ResourceResponse.mode. Cannot be null. A change the bookings
+            still to come would no longer fit is a 409 with
+            `RESOURCE_BOOKINGS_WOULD_NOT_FIT` naming them; one that fits is
+            written onto them.
         latitude:
           type: number
           minimum: -90
@@ -1021,6 +1053,16 @@ components:
         know. date, start, end_date and end are the part of the two windows
         they share. items is a list rather than a pair so that a later kind
         can name more than two rows.
+
+
+        `resource_overbooked` is a POOLED resource whose reservations
+        together hold more than its capacity. date to end is the whole
+        stretch in which they do, items is every reservation open in it,
+        and capacity and taken say by how much: taken is the most held at
+        any moment of the stretch. capacity and taken are null on the other
+        kinds. Two reservations on a pooled resource are never a
+        `resource_overlap`, and reservations on a SHARED resource are never
+        reported at all.
       required: [kind, resource_id, member_id, date, start, end_date, end, items]
       properties:
         kind:
@@ -1052,6 +1094,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ConflictItem"
+        capacity:
+          type: integer
+          nullable: true
+          description: The pool's capacity, on `resource_overbooked` only.
+        taken:
+          type: integer
+          nullable: true
+          description: The most units held at once, on `resource_overbooked` only.
 
     ConflictReport:
       type: object
@@ -1116,6 +1166,15 @@ components:
             `GET /api/v1/resources/reservations?external_ref=`. Optional, and
             any number of bookings may leave it unset.
           example: visit-42
+        quantity:
+          type: integer
+          minimum: 1
+          description: >
+            How many units of a POOLED resource to take, 1 when left out.
+            Above 1 on any other resource is a 422. Part of what a retry is compared on
+            only when it is sent, so a retry that leaves it out still
+            matches a booking made before the field existed.
+          example: 2
 
     ReservationUpdate:
       type: object
@@ -1171,6 +1230,9 @@ components:
             outlives the service account that placed it.
         idempotency_key:
           type: string
+        quantity:
+          type: integer
+          description: Units taken. Always 1 off a POOLED resource.
         external_ref:
           type: string
           nullable: true
@@ -1228,6 +1290,62 @@ components:
             reservation_id:
               type: integer
               example: 17
+
+    CapacityExceeded:
+      type: object
+      description: >
+        The body of a 409 with `RESOURCE_CAPACITY_EXCEEDED`: a POOLED
+        resource has not got quantity units free for the whole window.
+        conflicts are the bookings that hold it, as in ReservationConflict.
+        taken is the most they hold at any one moment of the window, so
+        capacity minus taken is the most this window could still have.
+      required: [detail, code]
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        detail:
+          type: object
+          required: [message, conflicts, capacity, taken, requested]
+          properties:
+            message:
+              type: string
+              example: the resource does not have that many units left for that window
+            conflicts:
+              type: array
+              items:
+                $ref: "#/components/schemas/BusyInterval"
+            capacity:
+              type: integer
+              example: 12
+            taken:
+              type: integer
+              example: 12
+            requested:
+              type: integer
+              example: 1
+
+    BookingsWouldNotFit:
+      type: object
+      description: >
+        The body of a 409 with `RESOURCE_BOOKINGS_WOULD_NOT_FIT`: a change of
+        mode or capacity that bookings still to come (from yesterday on)
+        would no longer fit. reservations names them, so the caller can
+        cancel or move them and try again.
+      required: [detail, code]
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        detail:
+          type: object
+          required: [message, reservations]
+          properties:
+            message:
+              type: string
+              example: bookings still to come would not fit the resource after that change
+            reservations:
+              type: array
+              items:
+                $ref: "#/components/schemas/ReservationResponse"
 
     # ── Schedule ──────────────────────────────
     CycleActivationConflict:
@@ -2237,6 +2355,8 @@ components:
         - IDEMPOTENCY_KEY_REUSED
         - IDEMPOTENCY_KEY_IN_PROGRESS
         - RESERVATION_EXTERNAL_REF_TAKEN
+        - RESOURCE_CAPACITY_EXCEEDED
+        - RESOURCE_BOOKINGS_WOULD_NOT_FIT
         - LOCATION_REQUIRED
         - LOCATION_TOO_COARSE
         - OUTSIDE_GEOFENCE
@@ -3851,9 +3971,11 @@ paths:
       tags: [Resources]
       summary: Update a resource
       description: >
-        Fill in what a CSV could not know: capacity, and where the room
-        physically is. Setting latitude and longitude is what switches
-        geofencing on for every session held there.
+        Fill in what a CSV could not know: capacity, mode, and where the
+        room physically is. Setting latitude and longitude is what switches
+        geofencing on for every session held there. A change of mode or
+        capacity is checked against the bookings still to come and refused
+        with 409 if any would no longer fit.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -3878,10 +4000,19 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            Bookings still to come would not fit the new mode or capacity
+            (`RESOURCE_BOOKINGS_WOULD_NOT_FIT`). They are listed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingsWouldNotFit"
         "422":
           description: >
-            latitude and longitude were not set or cleared together, or a
-            coordinate was out of range.
+            latitude and longitude were not set or cleared together, a
+            coordinate was out of range, mode was null, or a POOLED resource
+            would be left without a capacity of at least 1.
             A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`.
           content:
             application/json:
@@ -3923,6 +4054,13 @@ paths:
         by date alone files that hold under a day nobody asked about, and
         discarding anything outside the range shows a ward as free while it
         is staffed.
+
+
+        The resource's mode changes which reservations count. On a POOLED
+        resource one booking does not make it busy: each stretch in which
+        the bookings together hold the whole pool is reported instead, as an
+        interval with every id null. On a SHARED resource reservations are
+        never reported.
       parameters:
         - name: resource_id
           in: path
@@ -4005,6 +4143,15 @@ paths:
         requests racing for one reference get one booking and the same 409
         for the loser. A cancelled reservation keeps its reference: clear or
         change it with PATCH before booking under it again.
+
+
+        The resource's mode decides what is in the way. EXCLUSIVE is all of
+        the above. POOLED refuses a window the timetable holds, because a
+        class takes the whole pool, and otherwise takes `quantity` units
+        when the bookings already there leave that many free at every
+        moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`.
+        SHARED refuses nothing. A quantity above 1 on a resource that is
+        not POOLED is a 422.
       parameters:
         - name: resource_id
           in: path
@@ -4056,22 +4203,25 @@ paths:
         "409":
           description: >
             The caller already has a reservation with that external_ref
-            (`RESERVATION_EXTERNAL_REF_TAKEN`, ReservationRefTaken), or
-            something already holds part of that window (`RESOURCE_CONFLICT`,
-            ReservationConflict). Branch on `code`. ReservationRefTaken is
-            listed first because its detail has required fields and the
-            other's does not, so a client trying each shape in turn tells
-            them apart.
+            (`RESERVATION_EXTERNAL_REF_TAKEN`, ReservationRefTaken), a
+            pool has too few units free (`RESOURCE_CAPACITY_EXCEEDED`,
+            CapacityExceeded), or something already holds part of that
+            window (`RESOURCE_CONFLICT`, ReservationConflict). Branch on
+            `code`. ReservationConflict is listed last because its detail
+            has no required fields, so a client trying each shape in turn
+            tells them apart.
           content:
             application/json:
               schema:
                 oneOf:
                   - $ref: "#/components/schemas/ReservationRefTaken"
+                  - $ref: "#/components/schemas/CapacityExceeded"
                   - $ref: "#/components/schemas/ReservationConflict"
         "422":
           description: >
-            end was not after start, or the Idempotency-Key had already been
-            used for a different request (`IDEMPOTENCY_KEY_REUSED`).
+            end was not after start, quantity was above 1 on a resource
+            that is not POOLED, or the Idempotency-Key had already been used
+            for a different request (`IDEMPOTENCY_KEY_REUSED`).
           content:
             application/json:
               schema:
