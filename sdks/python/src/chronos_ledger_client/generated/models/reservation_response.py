@@ -29,6 +29,7 @@ class ReservationResponse:
         requested_by_id (None | str | Unset): Null once the account that booked it has been deleted. A hold outlives the
             service account that placed it.
         idempotency_key (str | Unset):
+        quantity (int | Unset): Units taken. Always 1 off a POOLED resource.
         external_ref (None | str | Unset): The caller's own identifier for the booking, or null if it was given none. A
             cancelled booking keeps its reference.
         created_at (datetime.datetime | Unset):
@@ -45,6 +46,7 @@ class ReservationResponse:
     status: ReservationResponseStatus | Unset = UNSET
     requested_by_id: None | str | Unset = UNSET
     idempotency_key: str | Unset = UNSET
+    quantity: int | Unset = UNSET
     external_ref: None | str | Unset = UNSET
     created_at: datetime.datetime | Unset = UNSET
     cancelled_at: datetime.datetime | None | Unset = UNSET
@@ -78,6 +80,8 @@ class ReservationResponse:
             requested_by_id = self.requested_by_id
 
         idempotency_key = self.idempotency_key
+
+        quantity = self.quantity
 
         external_ref: None | str | Unset
         if isinstance(self.external_ref, Unset):
@@ -120,6 +124,8 @@ class ReservationResponse:
             field_dict["requested_by_id"] = requested_by_id
         if idempotency_key is not UNSET:
             field_dict["idempotency_key"] = idempotency_key
+        if quantity is not UNSET:
+            field_dict["quantity"] = quantity
         if external_ref is not UNSET:
             field_dict["external_ref"] = external_ref
         if created_at is not UNSET:
@@ -169,6 +175,8 @@ class ReservationResponse:
 
         idempotency_key = d.pop("idempotency_key", UNSET)
 
+        quantity = d.pop("quantity", UNSET)
+
         def _parse_external_ref(data: object) -> None | str | Unset:
             if data is None:
                 return data
@@ -213,6 +221,7 @@ class ReservationResponse:
             status=status,
             requested_by_id=requested_by_id,
             idempotency_key=idempotency_key,
+            quantity=quantity,
             external_ref=external_ref,
             created_at=created_at,
             cancelled_at=cancelled_at,

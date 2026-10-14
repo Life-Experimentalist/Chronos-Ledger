@@ -279,6 +279,11 @@ class Conflict(BaseModel):
     with member_id set. date, start, end_date and end are the part of the two
     windows they share. items is a list rather than a pair so that a later
     kind can name more than two rows.
+
+    "resource_overbooked" is that later kind: the reservations on a pooled
+    resource holding more than its capacity at once, every one of them open
+    in the stretch named, with the capacity and the most they hold at any
+    moment of it in taken. Both are null on the other kinds.
     """
 
     kind: str
@@ -289,6 +294,8 @@ class Conflict(BaseModel):
     end_date: date
     end: time
     items: list[ConflictItem]
+    capacity: int | None = None
+    taken: int | None = None
 
 
 class ConflictReport(BaseModel):

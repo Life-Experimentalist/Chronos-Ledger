@@ -282,6 +282,12 @@ application's check; the loser is told what beat it, not a bare database
 error. On SQLite the write lock lets one request through at a time, so the
 second sees the first in the check itself.
 
+That is an `EXCLUSIVE` resource. On a `POOLED` one the refusal comes once
+the pool is full, as `409 RESOURCE_CAPACITY_EXCEEDED` with `capacity`,
+`taken` and `requested` beside the conflicts. The row lock on the resource
+decides that race on both databases, since the constraint does not cover
+pools. A `SHARED` resource never refuses.
+
 **Retry.** Not the same request: the same request gets the same `409`. Pick
 another window or another resource.
 
@@ -292,6 +298,8 @@ Tests:
   (the loser of the race on PostgreSQL)
 - `test_reservations.py::test_two_holds_on_the_same_hour_is_409`
 - `test_reservations.py::test_the_conflict_says_what_it_ran_into`
+- `test_resource_modes_pg.py::test_forty_callers_at_once_get_exactly_twelve_of_twelve`
+  (the pool's race on PostgreSQL)
 
 ## 8. Rate limit
 

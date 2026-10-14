@@ -19,7 +19,11 @@ from .audit_record import AuditRecord
 from .auth_change_password_response_200 import AuthChangePasswordResponse200
 from .auth_logout_response_200 import AuthLogoutResponse200
 from .availability_response import AvailabilityResponse
+from .bookings_would_not_fit import BookingsWouldNotFit
+from .bookings_would_not_fit_detail import BookingsWouldNotFitDetail
 from .busy_interval import BusyInterval
+from .capacity_exceeded import CapacityExceeded
+from .capacity_exceeded_detail import CapacityExceededDetail
 from .change import Change
 from .change_feed import ChangeFeed
 from .change_password_request import ChangePasswordRequest
@@ -92,9 +96,12 @@ from .reservation_response import ReservationResponse
 from .reservation_response_status import ReservationResponseStatus
 from .reservation_update import ReservationUpdate
 from .resource_create import ResourceCreate
+from .resource_create_mode import ResourceCreateMode
 from .resource_response import ResourceResponse
+from .resource_response_mode import ResourceResponseMode
 from .resource_response_resource_type import ResourceResponseResourceType
 from .resource_update import ResourceUpdate
+from .resource_update_mode import ResourceUpdateMode
 from .resources_list_resource_type import ResourcesListResourceType
 from .retire_result import RetireResult
 from .reverse_rsvp_create import ReverseRsvpCreate
@@ -153,7 +160,11 @@ __all__ = (
     "AuthChangePasswordResponse200",
     "AuthLogoutResponse200",
     "AvailabilityResponse",
+    "BookingsWouldNotFit",
+    "BookingsWouldNotFitDetail",
     "BusyInterval",
+    "CapacityExceeded",
+    "CapacityExceededDetail",
     "Change",
     "ChangeFeed",
     "ChangePasswordRequest",
@@ -226,10 +237,13 @@ __all__ = (
     "ReservationResponseStatus",
     "ReservationUpdate",
     "ResourceCreate",
+    "ResourceCreateMode",
     "ResourceResponse",
+    "ResourceResponseMode",
     "ResourceResponseResourceType",
     "ResourcesListResourceType",
     "ResourceUpdate",
+    "ResourceUpdateMode",
     "RetireResult",
     "ReverseRsvpCreate",
     "ReverseRsvpResponse",

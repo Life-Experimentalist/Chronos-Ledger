@@ -106,8 +106,9 @@ def sync_detailed(
     """Writes made through the API, newest first
 
      Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a
-    method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and
-    `to` are dates in the organization's timezone, both included.
+    method other than GET, HEAD or OPTIONS, and one per GET of the conflict report
+    (`schedule.listConflicts`), including refused ones. Bodies are never stored. `from` and `to` are
+    dates in the organization's timezone, both included.
 
     Args:
         from_ (datetime.date | Unset):
@@ -151,8 +152,9 @@ def sync(
     """Writes made through the API, newest first
 
      Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a
-    method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and
-    `to` are dates in the organization's timezone, both included.
+    method other than GET, HEAD or OPTIONS, and one per GET of the conflict report
+    (`schedule.listConflicts`), including refused ones. Bodies are never stored. `from` and `to` are
+    dates in the organization's timezone, both included.
 
     Args:
         from_ (datetime.date | Unset):
@@ -191,8 +193,9 @@ async def asyncio_detailed(
     """Writes made through the API, newest first
 
      Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a
-    method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and
-    `to` are dates in the organization's timezone, both included.
+    method other than GET, HEAD or OPTIONS, and one per GET of the conflict report
+    (`schedule.listConflicts`), including refused ones. Bodies are never stored. `from` and `to` are
+    dates in the organization's timezone, both included.
 
     Args:
         from_ (datetime.date | Unset):
@@ -234,8 +237,9 @@ async def asyncio(
     """Writes made through the API, newest first
 
      Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a
-    method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and
-    `to` are dates in the organization's timezone, both included.
+    method other than GET, HEAD or OPTIONS, and one per GET of the conflict report
+    (`schedule.listConflicts`), including refused ones. Bodies are never stored. `from` and `to` are
+    dates in the organization's timezone, both included.
 
     Args:
         from_ (datetime.date | Unset):

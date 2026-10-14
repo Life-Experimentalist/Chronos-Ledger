@@ -34,6 +34,7 @@ from app.models.db import (
     PlanningCycle,
     Reservation,
     ReservationStatus,
+    ResourceMode,
     StructuralMasterSlot,
 )
 
@@ -176,6 +177,10 @@ def held_against_slot(
 
     cycle is the new slot's own. The slot only ever produces days inside its
     cycle's dates, so a hold on a date it will never run on is not sat on.
+
+    A hold on a shared resource is never sat on. It records that somebody is
+    there and contends with nothing, a class included, the same as a class
+    does not refuse it.
     """
     clashes = []
     for held in (
@@ -183,6 +188,7 @@ def held_against_slot(
         .filter(
             Reservation.resource_id == resource_id,
             Reservation.status == ReservationStatus.HELD,
+            Reservation.mode != ResourceMode.SHARED,
             Reservation.reserved_date >= org_today(),
         )
         .all()
@@ -568,6 +574,96 @@ def occupied(
             busy.append(entry)
 
     busy.sort(key=lambda entry: (entry["date"], entry["start"], entry["end_date"], entry["end"]))
+    return busy
+
+
+def held_span(held: Reservation) -> tuple[datetime.datetime, datetime.datetime]:
+    """The two instants a booking holds, for the pool arithmetic below."""
+    return window_span(held.reserved_date, held.time_window_start, held.time_window_end)
+
+
+def _levels(spans: list[tuple[datetime.datetime, datetime.datetime, int]]) -> list[tuple]:
+    """How many units are held from each instant the total changes, in order.
+
+    Half open like everything else: a booking ending at ten and one starting
+    at ten are summed at ten as the second alone, because the change at an
+    instant is applied whole before the total is read.
+    """
+    deltas: dict[datetime.datetime, int] = {}
+    for starts, ends, units in spans:
+        deltas[starts] = deltas.get(starts, 0) + units
+        deltas[ends] = deltas.get(ends, 0) - units
+    total = 0
+    levels = []
+    for instant in sorted(deltas):
+        total += deltas[instant]
+        levels.append((instant, total))
+    return levels
+
+
+def pool_peak(holds, window: tuple[datetime.datetime, datetime.datetime] | None = None) -> int:
+    """The most units of a pool the holds take at any one moment.
+
+    Inside window when one is given, so a booking that only touches the
+    window for an hour counts for that hour and not for the rest of its own.
+    """
+    spans = []
+    for held in holds:
+        starts, ends = held_span(held)
+        if window is not None:
+            starts, ends = max(starts, window[0]), min(ends, window[1])
+        if starts < ends:
+            spans.append((starts, ends, held.quantity))
+    return max((total for _, total in _levels(spans)), default=0)
+
+
+def pool_stretches(holds, at_least: int) -> list[tuple[datetime.datetime, datetime.datetime]]:
+    """The longest stretches in which the holds take at_least units or more.
+
+    Maximal, so two full hours back to back are one stretch and not two. The
+    sum is a sum: it says how much of the pool is taken, never by whom, so a
+    stretch is not one booking's window but the part where they add up.
+    """
+    stretches = []
+    opened = None
+    for instant, total in _levels([(*held_span(held), held.quantity) for held in holds]):
+        if total >= at_least and opened is None:
+            opened = instant
+        elif total < at_least and opened is not None:
+            stretches.append((opened, instant))
+            opened = None
+    return stretches
+
+
+def full_intervals(
+    holds, capacity: int, from_date: datetime.date, to_date: datetime.date
+) -> list[dict]:
+    """When a pooled resource has no units left, as busy intervals over a range.
+
+    A pooled resource is busy only when it is full, and full is a property of
+    several bookings at once, so these intervals name no single row: the
+    activity and reservation fields are all null. Each is cut to the range
+    asked about, because the bookings beyond it were not fetched and a
+    stretch reaching past it cannot be told where it really ends.
+    """
+    range_from = datetime.datetime.combine(from_date, datetime.time.min)
+    range_to = datetime.datetime.combine(to_date + datetime.timedelta(days=1), datetime.time.min)
+    busy = []
+    for starts, ends in pool_stretches(holds, capacity):
+        starts, ends = max(starts, range_from), min(ends, range_to)
+        if starts < ends:
+            busy.append(
+                {
+                    "date": starts.date(),
+                    "start": starts.time(),
+                    "end_date": ends.date(),
+                    "end": ends.time(),
+                    "activity_id": None,
+                    "activity_code": None,
+                    "master_slot_id": None,
+                    "reservation_id": None,
+                }
+            )
     return busy
 
 

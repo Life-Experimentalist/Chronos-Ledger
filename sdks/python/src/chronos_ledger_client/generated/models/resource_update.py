@@ -6,6 +6,7 @@ from typing import Any, TypeVar, cast
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
+from ..models.resource_update_mode import ResourceUpdateMode
 from ..types import UNSET, Unset
 
 T = TypeVar("T", bound="ResourceUpdate")
@@ -18,7 +19,11 @@ class ResourceUpdate:
 
         Attributes:
             label (str | Unset):
-            capacity (int | None | Unset):
+            capacity (int | None | Unset): A POOLED resource keeps a capacity of at least 1. A cut the bookings still to
+                come would no longer fit is a 409 with `RESOURCE_BOOKINGS_WOULD_NOT_FIT`.
+            mode (ResourceUpdateMode | Unset): See ResourceResponse.mode. Cannot be null. A change the bookings still to
+                come would no longer fit is a 409 with `RESOURCE_BOOKINGS_WOULD_NOT_FIT` naming them; one that fits is written
+                onto them.
             latitude (float | None | Unset): Set or cleared together with longitude. Setting the pair is what switches
                 geofencing on for sessions held here.
             longitude (float | None | Unset):
@@ -28,6 +33,7 @@ class ResourceUpdate:
 
     label: str | Unset = UNSET
     capacity: int | None | Unset = UNSET
+    mode: ResourceUpdateMode | Unset = UNSET
     latitude: float | None | Unset = UNSET
     longitude: float | None | Unset = UNSET
     altitude_target: float | None | Unset = UNSET
@@ -42,6 +48,10 @@ class ResourceUpdate:
             capacity = UNSET
         else:
             capacity = self.capacity
+
+        mode: str | Unset = UNSET
+        if not isinstance(self.mode, Unset):
+            mode = self.mode.value
 
         latitude: float | None | Unset
         if isinstance(self.latitude, Unset):
@@ -70,6 +80,8 @@ class ResourceUpdate:
             field_dict["label"] = label
         if capacity is not UNSET:
             field_dict["capacity"] = capacity
+        if mode is not UNSET:
+            field_dict["mode"] = mode
         if latitude is not UNSET:
             field_dict["latitude"] = latitude
         if longitude is not UNSET:
@@ -94,6 +106,13 @@ class ResourceUpdate:
             return cast(int | None | Unset, data)
 
         capacity = _parse_capacity(d.pop("capacity", UNSET))
+
+        _mode = d.pop("mode", UNSET)
+        mode: ResourceUpdateMode | Unset
+        if isinstance(_mode, Unset):
+            mode = UNSET
+        else:
+            mode = ResourceUpdateMode(_mode)
 
         def _parse_latitude(data: object) -> float | None | Unset:
             if data is None:
@@ -127,6 +146,7 @@ class ResourceUpdate:
         resource_update = cls(
             label=label,
             capacity=capacity,
+            mode=mode,
             latitude=latitude,
             longitude=longitude,
             altitude_target=altitude_target,

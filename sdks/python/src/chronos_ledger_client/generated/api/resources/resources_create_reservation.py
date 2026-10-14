@@ -6,6 +6,7 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...models.capacity_exceeded import CapacityExceeded
 from ...models.error_response import ErrorResponse
 from ...models.reservation_conflict import ReservationConflict
 from ...models.reservation_create import ReservationCreate
@@ -40,7 +41,9 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse | None:
+) -> (
+    CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse | None
+):
     if response.status_code == 200:
         response_200 = ReservationResponse.from_dict(response.json())
 
@@ -68,7 +71,7 @@ def _parse_response(
 
     if response.status_code == 409:
 
-        def _parse_response_409(data: object) -> ReservationConflict | ReservationRefTaken:
+        def _parse_response_409(data: object) -> CapacityExceeded | ReservationConflict | ReservationRefTaken:
             try:
                 if not isinstance(data, dict):
                     raise TypeError()
@@ -77,11 +80,19 @@ def _parse_response(
                 return response_409_type_0
             except (TypeError, ValueError, AttributeError, KeyError):
                 pass
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                response_409_type_1 = CapacityExceeded.from_dict(data)
+
+                return response_409_type_1
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
             if not isinstance(data, dict):
                 raise TypeError()
-            response_409_type_1 = ReservationConflict.from_dict(data)
+            response_409_type_2 = ReservationConflict.from_dict(data)
 
-            return response_409_type_1
+            return response_409_type_2
 
         response_409 = _parse_response_409(response.json())
 
@@ -100,7 +111,9 @@ def _parse_response(
 
 def _build_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse]:
+) -> Response[
+    CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse
+]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -115,7 +128,9 @@ def sync_detailed(
     client: AuthenticatedClient | Client,
     body: ReservationCreate,
     idempotency_key: str,
-) -> Response[ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse]:
+) -> Response[
+    CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse
+]:
     """Hold a resource for one dated window
 
      Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
@@ -142,6 +157,12 @@ def sync_detailed(
     reference get one booking and the same 409 for the loser. A cancelled reservation keeps its
     reference: clear or change it with PATCH before booking under it again.
 
+    The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a
+    window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity`
+    units when the bookings already there leave that many free at every moment of the window; otherwise
+    409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is
+    not POOLED is a 422.
+
     Args:
         resource_id (int):
         idempotency_key (str):
@@ -152,7 +173,7 @@ def sync_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse]
+        Response[CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse]
     """
 
     kwargs = _get_kwargs(
@@ -174,7 +195,9 @@ def sync(
     client: AuthenticatedClient | Client,
     body: ReservationCreate,
     idempotency_key: str,
-) -> ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse | None:
+) -> (
+    CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse | None
+):
     """Hold a resource for one dated window
 
      Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
@@ -201,6 +224,12 @@ def sync(
     reference get one booking and the same 409 for the loser. A cancelled reservation keeps its
     reference: clear or change it with PATCH before booking under it again.
 
+    The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a
+    window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity`
+    units when the bookings already there leave that many free at every moment of the window; otherwise
+    409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is
+    not POOLED is a 422.
+
     Args:
         resource_id (int):
         idempotency_key (str):
@@ -211,7 +240,7 @@ def sync(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse
+        CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse
     """
 
     return sync_detailed(
@@ -228,7 +257,9 @@ async def asyncio_detailed(
     client: AuthenticatedClient | Client,
     body: ReservationCreate,
     idempotency_key: str,
-) -> Response[ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse]:
+) -> Response[
+    CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse
+]:
     """Hold a resource for one dated window
 
      Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
@@ -255,6 +286,12 @@ async def asyncio_detailed(
     reference get one booking and the same 409 for the loser. A cancelled reservation keeps its
     reference: clear or change it with PATCH before booking under it again.
 
+    The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a
+    window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity`
+    units when the bookings already there leave that many free at every moment of the window; otherwise
+    409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is
+    not POOLED is a 422.
+
     Args:
         resource_id (int):
         idempotency_key (str):
@@ -265,7 +302,7 @@ async def asyncio_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse]
+        Response[CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse]
     """
 
     kwargs = _get_kwargs(
@@ -285,7 +322,9 @@ async def asyncio(
     client: AuthenticatedClient | Client,
     body: ReservationCreate,
     idempotency_key: str,
-) -> ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse | None:
+) -> (
+    CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse | None
+):
     """Hold a resource for one dated window
 
      Requires `ORG_ADMIN` or `UNIT_ADMIN`. The route an outside system uses to take a room. What it
@@ -312,6 +351,12 @@ async def asyncio(
     reference get one booking and the same 409 for the loser. A cancelled reservation keeps its
     reference: clear or change it with PATCH before booking under it again.
 
+    The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a
+    window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity`
+    units when the bookings already there leave that many free at every moment of the window; otherwise
+    409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is
+    not POOLED is a 422.
+
     Args:
         resource_id (int):
         idempotency_key (str):
@@ -322,7 +367,7 @@ async def asyncio(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        ErrorResponse | ReservationConflict | ReservationRefTaken | ReservationResponse
+        CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse
     """
 
     return (

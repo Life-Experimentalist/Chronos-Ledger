@@ -15,9 +15,13 @@ from app.core.errors import ChronosError, ErrorCode
 from app.core.idempotency import KEY_REUSED
 from app.core.pagination import Page
 from app.core.security import get_current_user, require_roles
-from app.models.db import Reservation, ReservationStatus, Resource, ResourceType
+from app.core.time import org_today, window_span
+from app.models.db import Reservation, ReservationStatus, Resource, ResourceMode, ResourceType
 from app.schemas.resources import (
+    POOL_NEEDS_CAPACITY,
     AvailabilityResponse,
+    BookingsWouldNotFit,
+    CapacityExceeded,
     ReservationConflict,
     ReservationCreate,
     ReservationRefTaken,
@@ -32,8 +36,12 @@ from app.services.availability import (
     booked_days,
     booked_slots,
     clashing,
+    full_intervals,
     held_reservations,
+    held_span,
     occupied,
+    pool_peak,
+    pool_stretches,
 )
 
 router = APIRouter()
@@ -45,6 +53,9 @@ NOT_YOUR_HOLD = "only the caller that took a hold may cancel it"
 NOT_YOUR_HOLD_TO_CHANGE = "only the caller that took a hold may change it"
 REF_TAKEN = "a reservation of yours already has that external_ref"
 CODE_TAKEN = "a resource with that code already exists"
+POOL_FULL = "the resource does not have that many units left for that window"
+ONE_OF_IT = "quantity above 1 needs a POOLED resource"
+WOULD_NOT_FIT = "bookings still to come would not fit the resource after that change"
 # The name of the exclusion constraint on reservations. Postgres puts it in
 # the error text, which is how an overlap is told apart from the unique keys
 # on the idempotency key and the external_ref: all arrive here as one
@@ -205,6 +216,13 @@ def resource_availability(
     by the range that returned it; a client that groups by date alone will
     file that hold under a day it did not ask about, and one that discards
     anything outside the range will show a ward as free while it is staffed.
+
+    The resource's mode decides what a booking counts for, and this answers
+    by the same rule the booking route refuses by. On an exclusive resource
+    every hold is busy. On a pooled one the timetable is busy, because a
+    class takes the whole pool, and the holds are busy only where they add
+    up to the capacity: those intervals name no single row and are cut to the
+    range. On a shared one no hold is ever busy.
     """
     resource = db.query(Resource).filter(Resource.id == resource_id).first()
     if not resource:
@@ -214,22 +232,34 @@ def resource_availability(
     if (to - from_).days + 1 > MAX_RANGE_DAYS:
         raise ChronosError(status_code=422, detail=RANGE_TOO_LONG, code=ErrorCode.INVALID_VALUE)
 
+    holds = held_reservations(db, resource_id, from_, to)
+    busy = occupied(
+        booked_slots(db, resource_id),
+        holds if resource.mode is ResourceMode.EXCLUSIVE else [],
+        booked_days(db, resource_id, from_, to),
+        from_,
+        to,
+    )
+    if resource.mode is ResourceMode.POOLED:
+        busy += full_intervals(holds, resource.capacity, from_, to)
+        busy.sort(
+            key=lambda entry: (entry["date"], entry["start"], entry["end_date"], entry["end"])
+        )
     return {
         "resource_id": resource.id,
         "code": resource.code,
         "from": from_,
         "to": to,
-        "busy": occupied(
-            booked_slots(db, resource_id),
-            held_reservations(db, resource_id, from_, to),
-            booked_days(db, resource_id, from_, to),
-            from_,
-            to,
-        ),
+        "busy": busy,
     }
 
 
-@router.patch("/{resource_id}", operation_id="resources.update", response_model=ResourceResponse)
+@router.patch(
+    "/{resource_id}",
+    operation_id="resources.update",
+    response_model=ResourceResponse,
+    responses={409: {"model": BookingsWouldNotFit}},
+)
 def update_resource(
     resource_id: int,
     payload: ResourceUpdate,
@@ -242,20 +272,126 @@ def update_resource(
     where they physically are is something a person knows, and until this
     existed there was no way to tell the system: geofencing was a feature
     with no route that could switch it on.
+
+    mode and capacity change what the bookings on the resource are held to,
+    so a change that bookings still to come would no longer fit is refused
+    with 409 and RESOURCE_BOOKINGS_WOULD_NOT_FIT, naming them. Cancel those
+    first. A change that fits is written onto those bookings too, because
+    each one carries its resource's mode for the database's sake
+    (app.models.db.Reservation).
     """
-    resource = db.query(Resource).filter(Resource.id == resource_id).first()
+    # Locked, as the booking route locks it, so no booking can land between
+    # the check below and the change.
+    resource = db.query(Resource).filter(Resource.id == resource_id).with_for_update().first()
     if not resource:
         raise ChronosError(status_code=404, detail="Resource not found", code=ErrorCode.NOT_FOUND)
 
     # exclude_unset, not exclude_none: clearing a coordinate is a thing an
     # admin does on purpose, and it has to be distinguishable from not
     # mentioning it.
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    fields = payload.model_dump(exclude_unset=True)
+    mode = fields.get("mode", resource.mode)
+    capacity = fields.get("capacity", resource.capacity)
+    if mode is ResourceMode.POOLED and not capacity:
+        raise ChronosError(
+            status_code=422, detail=POOL_NEEDS_CAPACITY, code=ErrorCode.INVALID_VALUE
+        )
+    if mode is not resource.mode or (mode is ResourceMode.POOLED and capacity != resource.capacity):
+        # From yesterday, so a night that opened yesterday and is still
+        # running counts.
+        since = org_today() - datetime.timedelta(days=1)
+        to_come = (
+            db.query(Reservation)
+            .filter(
+                Reservation.resource_id == resource_id,
+                Reservation.status == ReservationStatus.HELD,
+                Reservation.reserved_date >= since,
+            )
+            .order_by(Reservation.id)
+            .all()
+        )
+        misfits = _would_not_fit(db, resource_id, mode, capacity, to_come)
+        if misfits:
+            raise _bookings_would_not_fit(misfits, resource)
+        if mode is not resource.mode:
+            for held in to_come:
+                held.mode = mode
+
+    for field, value in fields.items():
         setattr(resource, field, value)
     change_feed.record(db, change_feed.RESOURCE, resource.id, change_feed.UPDATED)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        # The check above runs under the row lock, so this is the database
+        # disagreeing with it, not a race the lock missed. Answer it the way
+        # the check would have rather than as a 500.
+        db.rollback()
+        if OVERLAP_CONSTRAINT not in str(exc.orig):
+            raise
+        raise ChronosError(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": WOULD_NOT_FIT, "reservations": []},
+            code=ErrorCode.RESOURCE_BOOKINGS_WOULD_NOT_FIT,
+        ) from None
     db.refresh(resource)
     return resource
+
+
+def _would_not_fit(
+    db: Session, resource_id: int, mode: ResourceMode, capacity: int | None, holds: list
+) -> list[Reservation]:
+    """The holds that would break the rules of the mode they are moving to.
+
+    Shared holds anything. Exclusive holds one booking at a time, of one
+    unit. Pooled holds up to capacity units at a time. Leaving shared also
+    means meeting the timetable, which a shared hold never had to, so on
+    the way to either of the other two a hold sitting on a slot or a
+    generated day does not fit either.
+    """
+    if mode is ResourceMode.SHARED or not holds:
+        return []
+    spans = {held.id: held_span(held) for held in holds}
+    misfits = set()
+
+    first = min(held.reserved_date for held in holds)
+    last = max(span[1].date() for span in spans.values())
+    timetable = occupied(
+        booked_slots(db, resource_id), [], booked_days(db, resource_id, first, last), first, last
+    )
+    for held in holds:
+        if clashing(timetable, held.reserved_date, held.time_window_start, held.time_window_end):
+            misfits.add(held.id)
+
+    if mode is ResourceMode.EXCLUSIVE:
+        for held in holds:
+            if held.quantity > 1:
+                misfits.add(held.id)
+            for other in holds:
+                if other.id != held.id and _meet(spans[held.id], spans[other.id]):
+                    misfits.add(held.id)
+    else:
+        for stretch in pool_stretches(holds, capacity + 1):
+            misfits.update(held.id for held in holds if _meet(spans[held.id], stretch))
+    return [held for held in holds if held.id in misfits]
+
+
+def _meet(first: tuple, second: tuple) -> bool:
+    """Half open, as everywhere: ten o'clock ends and ten o'clock starts do not meet."""
+    return first[0] < second[1] and second[0] < first[1]
+
+
+def _bookings_would_not_fit(misfits: list[Reservation], resource: Resource) -> ChronosError:
+    return ChronosError(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=jsonable_encoder(
+            {
+                "message": WOULD_NOT_FIT,
+                "reservations": [reservation_view(held, resource) for held in misfits],
+            }
+        ),
+        code=ErrorCode.RESOURCE_BOOKINGS_WOULD_NOT_FIT,
+    )
 
 
 def _fingerprint(resource_id: int, payload: ReservationCreate) -> str:
@@ -267,6 +403,8 @@ def _fingerprint(resource_id: int, payload: ReservationCreate) -> str:
 
     external_ref is in it only when it was sent, so every fingerprint stored
     before the field existed still matches a retry of the same request.
+    quantity follows the same rule, and is labelled so that a quantity can
+    never be read as a reference.
     """
     parts = [
         str(resource_id),
@@ -277,11 +415,15 @@ def _fingerprint(resource_id: int, payload: ReservationCreate) -> str:
     ]
     if payload.external_ref is not None:
         parts.append(payload.external_ref)
+    if "quantity" in payload.model_fields_set:
+        parts.append(f"quantity={payload.quantity}")
     asked = "|".join(parts)
     return hashlib.sha256(asked.encode("utf-8")).hexdigest()
 
 
-def _conflicts_for(db: Session, resource_id: int, payload: ReservationCreate) -> list[dict]:
+def _conflicts_for(
+    db: Session, resource_id: int, payload: ReservationCreate, holds: bool = True
+) -> list[dict]:
     """What already holds any part of the asked-for window.
 
     Exactly the three queries GET availability runs, through the same
@@ -297,14 +439,15 @@ def _conflicts_for(db: Session, resource_id: int, payload: ReservationCreate) ->
     Expanding only the date it opened on would leave out everything sitting
     on the far side of midnight, and a booking from 22:00 to 06:00 would be
     accepted straight through the top of somebody else's morning.
+
+    holds=False asks about the timetable alone, for a pooled resource, where
+    the other holds are a sum and are counted by _pool_check instead.
     """
-    last = payload.date
-    if payload.end < payload.start:
-        last += datetime.timedelta(days=1)
+    last = _last_date(payload)
     return clashing(
         occupied(
             booked_slots(db, resource_id),
-            held_reservations(db, resource_id, payload.date, last),
+            held_reservations(db, resource_id, payload.date, last) if holds else [],
             booked_days(db, resource_id, payload.date, last),
             payload.date,
             last,
@@ -313,6 +456,46 @@ def _conflicts_for(db: Session, resource_id: int, payload: ReservationCreate) ->
         payload.start,
         payload.end,
     )
+
+
+def _last_date(payload: ReservationCreate) -> datetime.date:
+    if payload.end < payload.start:
+        return payload.date + datetime.timedelta(days=1)
+    return payload.date
+
+
+def _pool_check(db: Session, resource: Resource, payload: ReservationCreate) -> None:
+    """Refuse a pooled booking the pool has not got the units left for.
+
+    The most units already held at any one moment of the window, plus the
+    ones asked for, against the capacity. Run under the resource's row lock,
+    which on PostgreSQL is what makes the sum true at the moment of the
+    insert: a second booking of the same pool waits for this one to commit
+    and then counts it. On SQLite BEGIN IMMEDIATE has already made every
+    writer wait its turn.
+    """
+    last = _last_date(payload)
+    window = window_span(payload.date, payload.start, payload.end)
+    holds = [
+        held
+        for held in held_reservations(db, resource.id, payload.date, last)
+        if _meet(held_span(held), window)
+    ]
+    taken = pool_peak(holds, window)
+    if taken + payload.quantity > resource.capacity:
+        raise ChronosError(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=jsonable_encoder(
+                {
+                    "message": POOL_FULL,
+                    "conflicts": occupied([], holds, [], payload.date, last),
+                    "capacity": resource.capacity,
+                    "taken": taken,
+                    "requested": payload.quantity,
+                }
+            ),
+            code=ErrorCode.RESOURCE_CAPACITY_EXCEEDED,
+        )
 
 
 def _already_taken(conflicts: list[dict]) -> ChronosError:
@@ -351,6 +534,7 @@ def reservation_view(reservation: Reservation, resource: Resource) -> dict:
         "start": reservation.time_window_start,
         "end": reservation.time_window_end,
         "purpose": reservation.purpose,
+        "quantity": reservation.quantity,
         "status": reservation.status,
         "requested_by_id": reservation.requested_by_id,
         "idempotency_key": reservation.idempotency_key,
@@ -369,7 +553,9 @@ def reservation_view(reservation: Reservation, resource: Resource) -> dict:
     # generated clients try each shape in turn, and the spec requires nothing
     # in ReservationConflict's detail, so the other way round they would read
     # a taken reference as a window conflict.
-    responses={409: {"model": ReservationRefTaken | ReservationConflict}},
+    # CapacityExceeded before ReservationConflict for the same reason: its
+    # detail is the conflict body with three numbers more.
+    responses={409: {"model": ReservationRefTaken | CapacityExceeded | ReservationConflict}},
 )
 def create_reservation(
     resource_id: int,
@@ -419,6 +605,14 @@ def create_reservation(
     and before the window, so a caller that books the same thing again under
     a new key is told it already has it rather than that something is in
     the way.
+
+    The resource's mode decides what is in the way. Exclusive is all of the
+    above. Pooled refuses a window the timetable holds, because a class
+    takes the whole pool, and otherwise sums: quantity units are taken when
+    the bookings already there leave that many free at every moment of the
+    window, and refused with 409 RESOURCE_CAPACITY_EXCEEDED when they do
+    not. Shared refuses nothing; the hold records who is there. A quantity
+    above 1 on a resource that is not pooled is 422.
     """
     # Still here, and now for one job: holding a booking off against a class,
     # which is in another table and so is out of reach of the constraint.
@@ -447,9 +641,15 @@ def create_reservation(
         if taken is not None:
             raise _ref_taken(taken)
 
-    conflicts = _conflicts_for(db, resource_id, payload)
-    if conflicts:
-        raise _already_taken(conflicts)
+    mode = resource.mode
+    if payload.quantity > 1 and mode is not ResourceMode.POOLED:
+        raise ChronosError(status_code=422, detail=ONE_OF_IT, code=ErrorCode.INVALID_VALUE)
+    if mode is not ResourceMode.SHARED:
+        conflicts = _conflicts_for(db, resource_id, payload, holds=mode is ResourceMode.EXCLUSIVE)
+        if conflicts:
+            raise _already_taken(conflicts)
+    if mode is ResourceMode.POOLED:
+        _pool_check(db, resource, payload)
 
     reservation = Reservation(
         resource_id=resource_id,
@@ -461,6 +661,8 @@ def create_reservation(
         idempotency_key=idempotency_key,
         request_fingerprint=fingerprint,
         external_ref=payload.external_ref,
+        quantity=payload.quantity,
+        mode=mode,
         status=ReservationStatus.HELD,
     )
     db.add(reservation)
