@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from ..models.import_removed import ImportRemoved
     from ..models.kept_day import KeptDay
     from ..models.provisioned_credential import ProvisionedCredential
+    from ..models.slot_requirement_gap import SlotRequirementGap
 
 
 T = TypeVar("T", bound="CsvImportResult")
@@ -40,6 +41,8 @@ class CsvImportResult:
             and are not counted here.
         kept_days (list[KeptDay] | Unset): The days counted in ledger_rows_kept, earliest first, each with the room it
             still has. Present when status is SUCCESS.
+        requirements_unmet (list[SlotRequirementGap] | Unset): One entry per requirement of a slot in the file, or of
+            its activity or room, that the slot's next run cannot have. A report; the import is not refused for it.
         not_in_file (ImportOrphans | Unset): What the cycle holds that this file did not mention. A report, and an
             action only when the upload sets `remove_missing`: a file covering half a timetable cannot be told apart from a
             timetable that lost half its classes, so by default nothing here is removed and somebody decides.
@@ -60,6 +63,7 @@ class CsvImportResult:
     ledger_rows_updated: int | Unset = UNSET
     ledger_rows_kept: int | Unset = UNSET
     kept_days: list[KeptDay] | Unset = UNSET
+    requirements_unmet: list[SlotRequirementGap] | Unset = UNSET
     not_in_file: ImportOrphans | Unset = UNSET
     removed: ImportRemoved | Unset = UNSET
     not_removed: ImportNotRemoved | Unset = UNSET
@@ -90,6 +94,13 @@ class CsvImportResult:
             for kept_days_item_data in self.kept_days:
                 kept_days_item = kept_days_item_data.to_dict()
                 kept_days.append(kept_days_item)
+
+        requirements_unmet: list[dict[str, Any]] | Unset = UNSET
+        if not isinstance(self.requirements_unmet, Unset):
+            requirements_unmet = []
+            for requirements_unmet_item_data in self.requirements_unmet:
+                requirements_unmet_item = requirements_unmet_item_data.to_dict()
+                requirements_unmet.append(requirements_unmet_item)
 
         not_in_file: dict[str, Any] | Unset = UNSET
         if not isinstance(self.not_in_file, Unset):
@@ -124,6 +135,8 @@ class CsvImportResult:
             field_dict["ledger_rows_kept"] = ledger_rows_kept
         if kept_days is not UNSET:
             field_dict["kept_days"] = kept_days
+        if requirements_unmet is not UNSET:
+            field_dict["requirements_unmet"] = requirements_unmet
         if not_in_file is not UNSET:
             field_dict["not_in_file"] = not_in_file
         if removed is not UNSET:
@@ -142,6 +155,7 @@ class CsvImportResult:
         from ..models.import_removed import ImportRemoved  # noqa: PLC0415
         from ..models.kept_day import KeptDay  # noqa: PLC0415
         from ..models.provisioned_credential import ProvisionedCredential  # noqa: PLC0415
+        from ..models.slot_requirement_gap import SlotRequirementGap  # noqa: PLC0415
 
         d = dict(src_dict)
         status = CsvImportResultStatus(d.pop("status"))
@@ -174,6 +188,15 @@ class CsvImportResult:
 
                 kept_days.append(kept_days_item)
 
+        _requirements_unmet = d.pop("requirements_unmet", UNSET)
+        requirements_unmet: list[SlotRequirementGap] | Unset = UNSET
+        if _requirements_unmet is not UNSET:
+            requirements_unmet = []
+            for requirements_unmet_item_data in _requirements_unmet:
+                requirements_unmet_item = SlotRequirementGap.from_dict(requirements_unmet_item_data)
+
+                requirements_unmet.append(requirements_unmet_item)
+
         _not_in_file = d.pop("not_in_file", UNSET)
         not_in_file: ImportOrphans | Unset
         if isinstance(_not_in_file, Unset):
@@ -205,6 +228,7 @@ class CsvImportResult:
             ledger_rows_updated=ledger_rows_updated,
             ledger_rows_kept=ledger_rows_kept,
             kept_days=kept_days,
+            requirements_unmet=requirements_unmet,
             not_in_file=not_in_file,
             removed=removed,
             not_removed=not_removed,

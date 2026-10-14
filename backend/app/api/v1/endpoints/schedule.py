@@ -23,10 +23,11 @@ from app.models.db import (
     ActivityEnrollment,
     DailyLedger,
     PlanningCycle,
+    RequirementOwner,
     StructuralMasterSlot,
     User,
 )
-from app.schemas.resources import ReservationConflict
+from app.schemas.resources import RequirementCreate, RequirementResponse, ReservationConflict
 from app.schemas.schedule import (
     ActivityCreate,
     ActivityResponse,
@@ -55,6 +56,12 @@ from app.services.master_slot import (
     propagate_slot_corrections,
     rows_in_use,
     withdraw_planned_days,
+)
+from app.services.requirements import (
+    add_requirement,
+    delete_requirement,
+    list_requirements,
+    unmet_for_slot,
 )
 from app.services.resource import get_or_create_room
 
@@ -733,6 +740,61 @@ def delete_enrollment(
     return {"activity_id": activity.id, "member_id": member_id, "removed": True}
 
 
+@router.get(
+    "/activities/{activity_id}/requirements",
+    operation_id="schedule.listActivityRequirements",
+    response_model=list[RequirementResponse],
+)
+def list_activity_requirements(
+    activity_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
+):
+    """What this activity needs besides its slot's resource."""
+    activity = _get_activity(db, activity_id)
+    ensure_unit_scope(current_user, activity.unit_code)
+    return list_requirements(db, RequirementOwner.ACTIVITY, activity.id)
+
+
+@router.post(
+    "/activities/{activity_id}/requirements",
+    operation_id="schedule.createActivityRequirement",
+    response_model=RequirementResponse,
+    status_code=201,
+)
+def create_activity_requirement(
+    activity_id: int,
+    payload: RequirementCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
+):
+    """Say that this activity also needs a resource, or a resource of a kind.
+
+    The timetable only reports a requirement that is not met (the conflict
+    report, the import report, the generator's log); it holds nothing.
+    """
+    activity = _get_activity(db, activity_id)
+    ensure_unit_scope(current_user, activity.unit_code)
+    _refuse_if_retired(activity, "Activity")
+    return add_requirement(db, RequirementOwner.ACTIVITY, activity.id, payload)
+
+
+@router.delete(
+    "/activities/{activity_id}/requirements/{requirement_id}",
+    operation_id="schedule.deleteActivityRequirement",
+    status_code=204,
+)
+def delete_activity_requirement(
+    activity_id: int,
+    requirement_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("ORG_ADMIN", "UNIT_ADMIN")),
+):
+    activity = _get_activity(db, activity_id)
+    ensure_unit_scope(current_user, activity.unit_code)
+    delete_requirement(db, RequirementOwner.ACTIVITY, activity.id, requirement_id)
+
+
 # ── Master Slots ──────────────────────────────────────────────────────────────
 
 
@@ -839,7 +901,8 @@ def create_master_slot(
     db.commit()
     slot_id = slot.id
     _fill_horizon(db, offering.cycle_id)
-    return {"id": slot_id}
+    slot = db.query(StructuralMasterSlot).filter(StructuralMasterSlot.id == slot_id).one()
+    return {"id": slot_id, "requirements_unmet": unmet_for_slot(db, slot)}
 
 
 @router.patch(
@@ -954,7 +1017,11 @@ def update_master_slot(
         db.rollback()
         _refuse_if_a_day_is_there(db, None, resource_id, rule, dtstart, start, end, slot_id)
         raise
-    return {**result, "ledger_rows_removed": removed}
+    return {
+        **result,
+        "ledger_rows_removed": removed,
+        "requirements_unmet": unmet_for_slot(db, slot),
+    }
 
 
 @router.delete("/slots/{slot_id}", operation_id="schedule.deleteSlot")

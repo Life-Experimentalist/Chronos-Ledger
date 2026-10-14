@@ -284,6 +284,11 @@ class Conflict(BaseModel):
     resource holding more than its capacity at once, every one of them open
     in the stretch named, with the capacity and the most they hold at any
     moment of it in taken. Both are null on the other kinds.
+
+    "requirement_unmet" is a weekly slot or a generated day (its one item)
+    whose activity or resource requires something the window cannot have.
+    requirement_id names the requirement and message says what is missing;
+    both are null on the other kinds. resource_id is the row's own resource.
     """
 
     kind: str
@@ -296,6 +301,8 @@ class Conflict(BaseModel):
     items: list[ConflictItem]
     capacity: int | None = None
     taken: int | None = None
+    requirement_id: int | None = None
+    message: str | None = None
 
 
 class ConflictReport(BaseModel):

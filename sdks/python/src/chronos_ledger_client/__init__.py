@@ -18,7 +18,7 @@ import httpx
 from ._transport import DEFAULT_RETRY, ChronosError, ChronosTransport, RetryPolicy, Tokens
 from .generated import Client
 from .generated.api.resources import resources_create_reservation
-from .generated.models import ReservationCreate, ReservationResponse
+from .generated.models import ReservationCreate, ReservationCreated
 
 __version__ = "0.16.0"  # x-release-please-version
 
@@ -85,7 +85,7 @@ def create_reservation(
     resource_id: int,
     body: ReservationCreate,
     idempotency_key: str | None = None,
-) -> ReservationResponse:
+) -> ReservationCreated:
     """Hold a resource.
 
     The generated call needs an Idempotency-Key, so one is made here when none
@@ -98,7 +98,7 @@ def create_reservation(
         body=body,
         idempotency_key=idempotency_key or str(uuid.uuid4()),
     )
-    assert isinstance(result, ReservationResponse)
+    assert isinstance(result, ReservationCreated)
     return result
 
 

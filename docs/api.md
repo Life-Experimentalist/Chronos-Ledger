@@ -143,6 +143,7 @@ that holds it.
 | `RESERVATION_EXTERNAL_REF_TAKEN` | Another of the caller's reservations, cancelled or not, already has that `external_ref`. `detail.reservation_id` names it. |
 | `RESOURCE_CAPACITY_EXCEEDED` | A `POOLED` resource has too few units free for the whole window. `detail` carries `conflicts`, `capacity`, `taken` and `requested`. |
 | `RESOURCE_BOOKINGS_WOULD_NOT_FIT` | A change of a resource's `mode` or `capacity` that bookings still to come would no longer fit. `detail.reservations` lists them. |
+| `REQUIREMENT_UNSATISFIED` | A booking needs a `REQUIRED` requirement that could not be held. `detail` carries `message` and `conflicts`, as `RESOURCE_CONFLICT` does. Nothing was held. |
 | `LOCATION_REQUIRED` | The session is geofenced and no location was sent. |
 | `LOCATION_TOO_COARSE` | The location's accuracy is too poor to check against the geofence. |
 | `OUTSIDE_GEOFENCE` | The location is outside the session's geofence. |
@@ -1193,6 +1194,10 @@ never reported, since nothing is ever refused for them.
 nothing it changes shows up here. An inactive resource still answers:
 retiring a room does not clear its calendar.
 
+`with_requirements=true` with `start` and `end` also says whether the resource
+and what it requires could be held for one window, see
+[Requirements](#get-resourcesidrequirements).
+
 `from` after `to` is `422` (`from must not be after to`). A range longer than
 366 days inclusive is `422` (`the range must not exceed 366 days`), which
 leaves room for the next twelve months from any date, leap years included.
@@ -1255,6 +1260,12 @@ than one that fails outright.
   "external_ref": "visit-42"
 }
 ```
+
+`assignments` is optional too: it picks the resources for the requirements
+that name a kind, see [Requirements](#get-resourcesidrequirements). The
+response then also carries `children`, the holds the resource's requirements
+took, and `unmet`, the advisory ones that could not be held. Both are empty
+when the resource requires nothing.
 
 `external_ref` is optional: the caller's own name for the booking, 1 to 120
 characters, kept exactly as sent. With it, a caller can find, change and
@@ -1488,6 +1499,140 @@ under a system that still believes it has it. A `ORG_ADMIN` overrides: a hold
 taken by an account that has since been deleted has a null `requested_by_id`
 and nobody left to cancel it.
 
+Cancelling a booking also cancels the holds its requirements took, see
+[Requirements](#get-resourcesidrequirements).
+
+### GET /resources/{id}/requirements
+### POST /resources/{id}/requirements `[ORG_ADMIN]`
+### DELETE /resources/{id}/requirements/{requirement_id} `[ORG_ADMIN]`
+### GET /schedule/activities/{id}/requirements `[ORG_ADMIN, UNIT_ADMIN]`
+### POST /schedule/activities/{id}/requirements `[ORG_ADMIN, UNIT_ADMIN]`
+### DELETE /schedule/activities/{id}/requirements/{requirement_id} `[ORG_ADMIN, UNIT_ADMIN]`
+
+A requirement says that using one thing also needs another. The owner is a
+resource (the operating theatre always needs a cleaning crew) or an activity
+(this surgery list needs two nurses). The target is one named resource, or any
+resource of a kind, `ROOM` or `PERSON`. An activity is never a target, because
+only a resource can be held. The two owners have the same three routes, the
+activity ones under `/schedule/activities/{id}`; the activity ones follow the
+role and unit rules of the other activity routes, and the resource ones follow
+the other resource writes: `GET` for any signed-in user, `POST` and `DELETE`
+for `ORG_ADMIN`.
+
+```json
+// POST /api/v1/resources/12/requirements
+{
+  "target_kind": "PERSON",
+  "quantity": 2,
+  "before_minutes": 0,
+  "after_minutes": 0,
+  "enforcement": null
+}
+```
+
+Set exactly one of `target_resource_id` and `target_kind`, otherwise `422`.
+`quantity` is 1 by default. On a named target above 1 it is units of a pool, so
+the target has to be `POOLED` (`422` if it is not); on a kind it is how many
+distinct resources are needed. `before_minutes` and `after_minutes` widen the
+window the target is held for, for setup and turnover; both default to 0.
+`enforcement` is `REQUIRED`, `ADVISORY` or null. Null follows the
+organization's `default_requirement_enforcement`, read when a booking is made,
+so changing the default changes every requirement that does not say. The same
+owner requiring the same target twice is `409` `ALREADY_EXISTS`. Removing a
+requirement does not release holds already taken for it.
+
+A resource may not require itself, directly or through other named resources:
+saving the requirement that would close the loop is `422`. A loop that goes
+through a kind cannot be seen when the requirement is saved, since which
+resource a kind picks is only known at booking time; the walk leaves anything
+already held in the booking out of its picks, so it ends.
+
+**Booking.** `POST /resources/{id}/reservations` reads the resource's
+requirements and holds what they ask for in the same transaction, each as its
+own reservation with `parent_reservation_id` set to the booking. The `201`
+body is the booking with two more fields:
+
+```json
+{
+  "id": 31,
+  "resource_id": 12,
+  "parent_reservation_id": null,
+  "children": [
+    {"id": 32, "resource_id": 40, "parent_reservation_id": 31, "start": "08:45:00", "end": "10:30:00"}
+  ],
+  "unmet": []
+}
+```
+
+- A named target is held for the window widened by the requirement's padding,
+  by its own mode: an `EXCLUSIVE` one must be free, a `POOLED` one must have
+  `quantity` units left, a `SHARED` one is never refused.
+- A kind is filled from the request's optional `assignments`, which maps
+  `ROOM` or `PERSON` to resource ids used in order (`{"assignments":
+  {"PERSON": [41, 44]}}`). Where it says nothing, or runs out, the first free
+  active resources of the kind by code are used, so a retry picks the same
+  ones. An assigned resource that is not free is a gap and is not swapped for
+  another. An id that is not an active resource of that kind in the caller's
+  organization, or that no requirement asks for, is `422`.
+- Requirements of the held resources are followed in turn, to a depth of 4
+  (the booked resource's own requirements are depth 1). One deeper than that is
+  not resolved and counts as unmet, with the enforcement it would have had. A
+  resource already held in the booking is not held again, and an `EXCLUSIVE`
+  one required twice is therefore a gap the second time.
+- A `REQUIRED` requirement that cannot be met refuses the whole booking with
+  `409` `REQUIREMENT_UNSATISFIED`. The body has the same shape as
+  `RESOURCE_CONFLICT`: `detail.message` names the requirement and what is
+  missing, and `detail.conflicts` the intervals in the way. Nothing is held,
+  the booking included.
+- An `ADVISORY` requirement that cannot be met is left out and listed in
+  `unmet`, one entry per requirement: `requirement_id`, `owner_kind`,
+  `owner_id`, `target_resource_id`, `target_kind`, `quantity` (how many are
+  missing), `enforcement` (the resolved value), `message` and `conflicts`.
+  Gaps are not stored: a replay of the same request returns the children as
+  they stand with `unmet` empty.
+- A padded window has to stay inside the dates it covers. Padding that would
+  start before 00:00 of the booking's date, or end after the midnight that
+  closes its last day, is `422` `INVALID_VALUE`; a booking that itself runs
+  past midnight books fine when nothing is padded, or when the padding stays
+  inside the day it finishes on.
+- Two bookings racing for the last free target: on PostgreSQL a target's row
+  is locked while it is checked, and the exclusion constraint settles any race
+  the check misses. The loser is `409` `REQUIREMENT_UNSATISFIED` with nothing held and
+  is not retried by the engine.
+
+Cancelling the booking cancels the children that are still `HELD`, in the same
+transaction. Cancelling a child by itself is allowed and does not touch the
+booking. Every reservation response carries `parent_reservation_id`, null on a
+booking somebody asked for.
+
+**Availability.** `GET /resources/{id}/availability?from=D&to=D&with_requirements=true&start=09:00&end=10:00`
+also answers whether the resource and everything it requires could be held for
+that window, as `requirements_met` and `unmet`. It holds nothing. It needs
+`from` equal to `to` and a `start` and an `end` that differ, otherwise `422`,
+because a kind has no busy intervals to show: whether "any anaesthetist" is
+free is a question about a window. `requirements_met` is true when the resource
+itself is free and nothing it requires is missing, whatever the enforcement;
+`unmet` lists every gap, advisory ones included. Without the flag
+`requirements_met` is null and `unmet` is empty. It uses the same walk as the
+booking, so a window it calls free is a window the booking will hold.
+
+**The timetable.** An activity's requirements, and those of a slot's resource,
+are not held by the timetable. They are checked when a slot is saved, when a
+CSV is imported and when days are generated, and an unmet one is reported and
+never refused:
+
+- `GET /schedule/conflicts` has a `requirement_unmet` kind, one per slot or
+  generated day and requirement, with `requirement_id` and `message` set and
+  `items` holding that one row. Reservations are not checked.
+- `POST /schedule/slots` and `PATCH /schedule/slots/{id}` return
+  `requirements_unmet`: `requirement_id`, `date` and `message` for each
+  requirement the slot's next run cannot have. The next run is the first date
+  on or after today (or the cycle's start) that the rule gives, looking ahead at
+  most 366 days. An empty list is the common case.
+- The CSV import returns `requirements_unmet` in the same shape plus `slot_id`.
+- The ledger generator writes a `logger.warning` for each day it writes whose
+  requirement is unmet.
+
 ---
 
 ## Schedule
@@ -1566,6 +1711,14 @@ capacity: `items` is every reservation open in it, and `capacity` and `taken`
 (the most held at once) say by how much. Those two fields are null on every
 other kind. The timetable on a pooled resource still clashes as usual. On a
 `SHARED` resource reservations are never reported.
+
+A `requirement_unmet` is a different sort of thing: one row that needs
+something it cannot have. It names a weekly slot or a generated day, as its
+one item, whose activity or resource has a requirement the window cannot meet
+(see [Requirements](#get-resourcesidrequirements)), with `requirement_id` and
+`message` saying which and why. Those two fields are null on every other kind.
+It is a report: the timetable never holds the extra resources, and nothing is
+refused for it.
 
 What holds a resource is what `GET /resources/{id}/availability` reports as
 busy, by the same rules, so the two never disagree:
@@ -1866,6 +2019,11 @@ Refused with `422`: a `FREQ` other than `DAILY`, `WEEKLY`, `MONTHLY` or
 a date; an `UNTIL` ending in `Z`, since slot times are wall clock; anything
 that is not a single rule (a `DTSTART` line, an `EXDATE`, a line break); and
 a stored rule longer than 255 characters.
+
+Both return `requirements_unmet` (the `POST` next to the slot's `id`, the
+`PATCH` next to the ledger counts), the requirements of the slot's activity or
+room that its next run cannot have, see
+[Requirements](#get-resourcesidrequirements). The slot is saved either way.
 
 `GET /schedule/slots` returns `rrule` and `dtstart` on each slot. It still
 returns `day_of_week_index`, the ISO weekday of the slot's first date, through
@@ -2359,6 +2517,11 @@ Save that list. The server keeps only the bcrypt hash, so a lost password
 has to be reissued one member at a time through
 `POST /users/{user_id}/reset-password`.
 
+The response also carries `requirements_unmet`, one entry for each
+requirement of a slot in the file, or of its activity or room, that the slot's
+next run cannot have: `slot_id`, `requirement_id`, `date` and `message`. The
+import is not refused for it. See [Requirements](#get-resourcesidrequirements).
+
 **An import removes nothing unless `remove_missing` is set.** A file
 covering one unit cannot be told apart from a timetable that lost every other
 unit, so by default the slots and enrollments the cycle holds that the file
@@ -2478,6 +2641,18 @@ most one day per date, and the database refuses a second
 ---
 
 ## Admin
+
+### GET /admin/organization `[ORG_ADMIN]`
+### PATCH /admin/organization `[ORG_ADMIN]`
+
+The caller's organization and its settings: `{"id", "name",
+"default_requirement_enforcement"}`. An API key needs `admin:read` for the
+`GET` and `admin:write` for the `PATCH`. The one setting that can be changed
+is `default_requirement_enforcement`, `REQUIRED` (the default) or `ADVISORY`:
+what a [requirement](#get-resourcesidrequirements) with no enforcement of its
+own does. The body of the `PATCH` is that one field and nothing else; any other
+field is `422`. It applies from the next booking. There is no route to create,
+rename or remove an organization.
 
 ### GET /admin/export `[ORG_ADMIN]`
 

@@ -156,6 +156,8 @@ class ResourceMode(enum.StrEnum):
 
 # One Enum object for both tables, so PostgreSQL makes the type once.
 RESOURCE_MODE = Enum(ResourceMode, name="resource_mode")
+# The same for the kind, which resources and the requirements naming a kind share.
+RESOURCE_TYPE = Enum(ResourceType, name="resource_type")
 
 
 class ReservationStatus(enum.StrEnum):
@@ -168,6 +170,29 @@ class ReservationStatus(enum.StrEnum):
 
     HELD = "HELD"
     CANCELLED = "CANCELLED"
+
+
+class RequirementOwner(enum.StrEnum):
+    """What a requirement belongs to: a resource, or an activity on the timetable."""
+
+    RESOURCE = "RESOURCE"
+    ACTIVITY = "ACTIVITY"
+
+
+class RequirementEnforcement(enum.StrEnum):
+    """What happens when a requirement cannot be met.
+
+    REQUIRED refuses the booking. ADVISORY books without it and reports the
+    gap. A requirement with no enforcement of its own follows the
+    organization's default_requirement_enforcement.
+    """
+
+    REQUIRED = "REQUIRED"
+    ADVISORY = "ADVISORY"
+
+
+# One Enum object for the organization's default and the requirement's own.
+REQUIREMENT_ENFORCEMENT = Enum(RequirementEnforcement, name="requirement_enforcement")
 
 
 class Organization(Base):
@@ -183,6 +208,14 @@ class Organization(Base):
     id = Column(String(50), primary_key=True)
     name = Column(String(120), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=clock.now)
+    # What a requirement does when it does not say: refuse the booking or
+    # warn. See ResourceRequirement.
+    default_requirement_enforcement = Column(
+        REQUIREMENT_ENFORCEMENT,
+        nullable=False,
+        default=RequirementEnforcement.REQUIRED,
+        server_default="REQUIRED",
+    )
 
 
 class PlanningCycle(OrganizationScoped, Base):
@@ -315,7 +348,7 @@ class Resource(OrganizationScoped, Base):
     code = Column(String(30), nullable=False, index=True)
     label = Column(String(120), nullable=False)
     resource_type = Column(
-        Enum(ResourceType, name="resource_type"),
+        RESOURCE_TYPE,
         nullable=False,
         default=ResourceType.ROOM,
         server_default="ROOM",
@@ -595,8 +628,65 @@ class Reservation(OrganizationScoped, Base):
         default=clock.now,
     )
     cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    # The booking this hold was taken for, when it is something a resource
+    # requires (ResourceRequirement). Cancelling the parent cancels it.
+    parent_reservation_id = Column(
+        Integer, ForeignKey("reservations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     resource = relationship("Resource")
+
+
+class ResourceRequirement(OrganizationScoped, Base):
+    """Whoever uses the owner also needs the target.
+
+    The owner is a resource (a standing rule: OR-1 always needs a cleaning
+    crew) or an activity (this surgery list needs two nurses). owner_kind
+    says which table owner_id points into, so there is no foreign key on it;
+    the routes check the id against the right table when the row is saved.
+
+    The target is one named resource (target_resource_id), or any resource of
+    a kind (target_kind), never both and never neither. The kind is the
+    existing ResourceType, ROOM or PERSON, until resource classes exist. An
+    activity is never a target: only resources can be held.
+
+    quantity is how many units of a named POOLED target one child hold takes,
+    or how many distinct resources of the kind are needed. before_minutes and
+    after_minutes widen the window the target is held for, for setup and
+    turnover.
+
+    enforcement is null when the requirement follows
+    Organization.default_requirement_enforcement. The resolved value is
+    worked out at booking time and never stored here, so changing the
+    organization's default changes every requirement that has not said.
+    """
+
+    __tablename__ = "resource_requirements"
+    __table_args__ = (
+        CheckConstraint(
+            "(target_resource_id IS NOT NULL AND target_kind IS NULL)"
+            " OR (target_resource_id IS NULL AND target_kind IS NOT NULL)",
+            name="ck_resource_requirements_one_target",
+        ),
+        CheckConstraint("quantity >= 1", name="ck_resource_requirements_quantity"),
+        CheckConstraint(
+            "before_minutes >= 0 AND after_minutes >= 0", name="ck_resource_requirements_padding"
+        ),
+        Index("ix_resource_requirements_owner", "owner_kind", "owner_id"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    owner_kind = Column(Enum(RequirementOwner, name="requirement_owner"), nullable=False)
+    owner_id = Column(Integer, nullable=False)
+    target_resource_id = Column(
+        Integer, ForeignKey("resources.id", ondelete="CASCADE"), nullable=True
+    )
+    target_kind = Column(RESOURCE_TYPE, nullable=True)
+    quantity = Column(Integer, nullable=False, default=1, server_default="1")
+    before_minutes = Column(Integer, nullable=False, default=0, server_default="0")
+    after_minutes = Column(Integer, nullable=False, default=0, server_default="0")
+    enforcement = Column(REQUIREMENT_ENFORCEMENT, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=clock.now)
 
 
 class ReverseRsvpLog(OrganizationScoped, Base):

@@ -679,3 +679,66 @@ def clashing(
     """
     window = window_span(day, start, end)
     return [entry for entry in busy if _overlaps(_bounds(entry), window)]
+
+
+def last_date(day: datetime.date, start: datetime.time, end: datetime.time) -> datetime.date:
+    """The date a window opened on this day finishes on."""
+    if end < start:
+        return day + datetime.timedelta(days=1)
+    return day
+
+
+def window_conflicts(
+    db: Session,
+    resource_id: int,
+    day: datetime.date,
+    start: datetime.time,
+    end: datetime.time,
+    holds: bool = True,
+) -> list[dict]:
+    """What already holds any part of a window on a resource.
+
+    Exactly the three queries GET availability runs, through the same
+    expansion. A booking accepted for an hour availability calls busy is the
+    double booking the reservations route exists to prevent, so the two
+    cannot be allowed to answer differently.
+
+    A window that runs past midnight is asked about over two days, not one.
+    holds=False asks about the timetable alone, for a pooled resource, where
+    the other holds are a sum and are counted by pool_state instead.
+    """
+    last = last_date(day, start, end)
+    return clashing(
+        occupied(
+            booked_slots(db, resource_id),
+            held_reservations(db, resource_id, day, last) if holds else [],
+            booked_days(db, resource_id, day, last),
+            day,
+            last,
+        ),
+        day,
+        start,
+        end,
+    )
+
+
+def pool_state(
+    db: Session,
+    resource_id: int,
+    day: datetime.date,
+    start: datetime.time,
+    end: datetime.time,
+) -> tuple[int, list[Reservation]]:
+    """The holds of a pool inside a window, and the most units they take at once."""
+    window = window_span(day, start, end)
+    holds = [
+        held
+        for held in held_reservations(db, resource_id, day, last_date(day, start, end))
+        if _overlaps_span(held_span(held), window)
+    ]
+    return pool_peak(holds, window), holds
+
+
+def _overlaps_span(first: tuple, second: tuple) -> bool:
+    """Half open, as everywhere: ten o'clock ends and ten o'clock starts do not meet."""
+    return first[0] < second[1] and second[0] < first[1]

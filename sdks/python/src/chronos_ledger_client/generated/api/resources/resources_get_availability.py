@@ -9,7 +9,7 @@ from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.availability_response import AvailabilityResponse
 from ...models.error_response import ErrorResponse
-from ...types import UNSET, Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
@@ -17,6 +17,9 @@ def _get_kwargs(
     *,
     from_: datetime.date,
     to: datetime.date,
+    with_requirements: bool | Unset = False,
+    start: str | Unset = UNSET,
+    end: str | Unset = UNSET,
 ) -> dict[str, Any]:
 
     params: dict[str, Any] = {}
@@ -26,6 +29,12 @@ def _get_kwargs(
 
     json_to = to.isoformat()
     params["to"] = json_to
+
+    params["with_requirements"] = with_requirements
+
+    params["start"] = start
+
+    params["end"] = end
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
@@ -86,6 +95,9 @@ def sync_detailed(
     client: AuthenticatedClient | Client,
     from_: datetime.date,
     to: datetime.date,
+    with_requirements: bool | Unset = False,
+    start: str | Unset = UNSET,
+    end: str | Unset = UNSET,
 ) -> Response[AvailabilityResponse | ErrorResponse]:
     """When a resource is already taken
 
@@ -117,6 +129,9 @@ def sync_detailed(
         resource_id (int):
         from_ (datetime.date):
         to (datetime.date):
+        with_requirements (bool | Unset):  Default: False.
+        start (str | Unset):
+        end (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -130,6 +145,9 @@ def sync_detailed(
         resource_id=resource_id,
         from_=from_,
         to=to,
+        with_requirements=with_requirements,
+        start=start,
+        end=end,
     )
 
     response = client.get_httpx_client().request(
@@ -145,6 +163,9 @@ def sync(
     client: AuthenticatedClient | Client,
     from_: datetime.date,
     to: datetime.date,
+    with_requirements: bool | Unset = False,
+    start: str | Unset = UNSET,
+    end: str | Unset = UNSET,
 ) -> AvailabilityResponse | ErrorResponse | None:
     """When a resource is already taken
 
@@ -176,6 +197,9 @@ def sync(
         resource_id (int):
         from_ (datetime.date):
         to (datetime.date):
+        with_requirements (bool | Unset):  Default: False.
+        start (str | Unset):
+        end (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -190,6 +214,9 @@ def sync(
         client=client,
         from_=from_,
         to=to,
+        with_requirements=with_requirements,
+        start=start,
+        end=end,
     ).parsed
 
 
@@ -199,6 +226,9 @@ async def asyncio_detailed(
     client: AuthenticatedClient | Client,
     from_: datetime.date,
     to: datetime.date,
+    with_requirements: bool | Unset = False,
+    start: str | Unset = UNSET,
+    end: str | Unset = UNSET,
 ) -> Response[AvailabilityResponse | ErrorResponse]:
     """When a resource is already taken
 
@@ -230,6 +260,9 @@ async def asyncio_detailed(
         resource_id (int):
         from_ (datetime.date):
         to (datetime.date):
+        with_requirements (bool | Unset):  Default: False.
+        start (str | Unset):
+        end (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -243,6 +276,9 @@ async def asyncio_detailed(
         resource_id=resource_id,
         from_=from_,
         to=to,
+        with_requirements=with_requirements,
+        start=start,
+        end=end,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -256,6 +292,9 @@ async def asyncio(
     client: AuthenticatedClient | Client,
     from_: datetime.date,
     to: datetime.date,
+    with_requirements: bool | Unset = False,
+    start: str | Unset = UNSET,
+    end: str | Unset = UNSET,
 ) -> AvailabilityResponse | ErrorResponse | None:
     """When a resource is already taken
 
@@ -287,6 +326,9 @@ async def asyncio(
         resource_id (int):
         from_ (datetime.date):
         to (datetime.date):
+        with_requirements (bool | Unset):  Default: False.
+        start (str | Unset):
+        end (str | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -302,5 +344,8 @@ async def asyncio(
             client=client,
             from_=from_,
             to=to,
+            with_requirements=with_requirements,
+            start=start,
+            end=end,
         )
     ).parsed

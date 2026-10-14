@@ -38,6 +38,7 @@ export interface ChronosOptions {
 
 export type ReservationCreate = components["schemas"]["ReservationCreate"];
 export type ReservationResponse = components["schemas"]["ReservationResponse"];
+export type ReservationCreated = components["schemas"]["ReservationCreated"];
 
 export function createChronosClient(options: ChronosOptions) {
   if (options.apiKey && options.tokens) {
@@ -70,7 +71,7 @@ export function createChronosClient(options: ChronosOptions) {
       resourceId: number,
       body: ReservationCreate,
       idempotencyKey: string = crypto.randomUUID(),
-    ): Promise<ReservationResponse> {
+    ): Promise<ReservationCreated> {
       const { data } = await client.POST("/api/v1/resources/{resource_id}/reservations", {
         params: { path: { resource_id: resourceId }, header: { "Idempotency-Key": idempotencyKey } },
         body,
