@@ -169,7 +169,11 @@ def test_a_receiver_down_for_an_hour_gets_everything_after_in_order(
     assert not receiver.delivered()
 
     receiver.answer = 204
-    for _ in range(6 * 60):
+    # Long enough for the longest wait the schedule can hand out. A delivery
+    # whose jittered waits ran short can fail six times inside the hour, and
+    # its next wait is then anything up to ten hours.
+    longest_wait = int(max(webhooks.RETRY_DELAYS).total_seconds()) // 60
+    for _ in range(longest_wait + 60):
         if all(d.status == webhooks.SUCCEEDED for d in _deliveries(db)):
             break
         _step()
