@@ -68,18 +68,30 @@ and Windows x64 and arm64. Each binary is run once, then uploaded with a
 | Scoop | `scoop bucket add le https://github.com/Life-Experimentalist/scoop-bucket` then `scoop install chronos` | `chronos.json` attached to each release; the bucket copies it the same way | v0.13 |
 | Container images | `docker compose pull` | existing `cd.yml` | already shipping |
 | WinGet | `winget install LifeExperimentalist.Chronos` | `wingetcreate submit` | on request |
-| npm | `npx chronosledger` | per-platform packages, trusted publishing | on request |
-| PyPI | `uvx chronosledger` | wheels wrapping the binary, trusted publishing | on request |
-| crates.io | `cargo install chronosledger` | `cargo publish` | on request |
+| npm | `npm i -g chronosledger`, `npx chronosledger@latest` | `publish.yml`: a dispatcher plus six per-platform packages, trusted publishing | v0.18 |
+| PyPI | `uv tool install chronosledger`, `uvx chronosledger`, `pipx install chronosledger` | `publish.yml`: six wheels that carry the binary, trusted publishing | v0.18 |
+| crates.io | `cargo install chronosledger`, `cargo binstall chronosledger` | `publish.yml`: `cargo publish`, trusted publishing | v0.18 |
 | Helm chart | `helm install chronos ./charts/chronos-ledger` from a checkout | `charts/chronos-ledger`, checked by `helm.yml` | in the repository; not pushed to a chart registry |
 | deb / rpm, MSI | | | on request |
 
 The tap and the bucket pull from the latest release on their own schedule, so
 no token in this repository can write to another one.
 
-Package names for the on-request channels are proposals; check each registry
-before a first publish. Until a channel is supported, `chronos` treats a copy
-installed through it as foreign: it names the manager and changes nothing.
+The npm, PyPI and crates.io channels are published by `publish.yml`, which the
+`release` job in `ci.yml` starts after a release is out. All three stay off
+until the repository variables `NPM_PUBLISH`, `PYPI_PUBLISH` and
+`CRATES_PUBLISH` are set to `true`, and none of them uses a stored secret.
+[publishing.md](publishing.md) lists the one-time setup and how a release is
+checked. The SDKs go to the same registries under `chronosledger-client`, and
+the Go module is made available by tagging `sdks/go/vX.Y.Z`.
+
+Every registry package carries the same release binary the other channels
+download, checked against its `.sha256` file before it is wrapped. Nothing is
+compiled during a publish, and no package runs a script when it is installed.
+
+Until a channel is supported, `chronos` treats a copy installed through it as
+foreign: it names the manager and changes nothing. That is still the case for
+WinGet, deb / rpm and MSI.
 
 ## 3. Drift
 
@@ -97,8 +109,8 @@ The rules, taken from what went wrong in dev-prune:
 1. **The path decides the channel.** `chronos` works out which manager owns
    the running binary from where it lives: the install-script directory
    (`~/.chronos/bin`, or `%LOCALAPPDATA%\chronos\bin` on Windows), Homebrew,
-   Scoop, a known manager this project does not publish to (Cargo, npm, uv,
-   pipx, WinGet and others), or unknown. This check is the only source of
+   Scoop, npm, Cargo, uv, pipx, a temporary `npx` or `uvx` cache, a known
+   manager this project does not publish to (WinGet and others), or unknown. This check is the only source of
    truth, and every command uses the same one.
 2. **A receipt records what our installer did.** The install scripts write
    `install.json` in that directory: schema, version, channel, installed_at,
@@ -106,9 +118,12 @@ The rules, taken from what went wrong in dev-prune:
    uninstall removes exactly the PATH line or entry the script added.
    Reinstalling keeps the entry an earlier run recorded.
 3. **Only the owning manager changes a copy.** `self update` and
-   `self uninstall` run `brew` or `scoop` for their copies. Files are replaced
-   or deleted directly only for the install-script copy. Foreign and unknown
-   copies are never changed; the error names who owns them.
+   `self uninstall` run `brew`, `scoop`, `npm`, `cargo`, `uv` or `pipx` for
+   their copies. Files are replaced or deleted directly only for the
+   install-script copy. Foreign and unknown copies are never changed; the error
+   names who owns them. A copy that `npx` or `uvx` is running from a cache is
+   temporary: it is never changed either, and the message says how to install
+   it for real.
 4. **Install scripts never remove other copies.** If another copy is on PATH
    they say where and which tool removes it.
 5. **`chronos doctor` reports and never deletes.** It lists every copy on PATH
@@ -151,7 +166,7 @@ it will sign.
 |---|---|---|---|
 | Container images | GitHub build provenance attestations (Sigstore, keyless). Already in `cd.yml`. Add `cosign sign` keyless for registries and tooling that expect cosign signatures | free | Identity is the workflow, no key to leak |
 | Release binaries | `actions/attest-build-provenance`, verified with `gh attestation verify` | free | Same as dev-prune |
-| npm, PyPI, crates.io, when added | Trusted publishing with provenance | free | No long-lived tokens |
+| npm, PyPI, crates.io | Trusted publishing (OIDC); npm packages also carry provenance | free | No long-lived tokens |
 | Windows `chronos.exe` and any MSI | Certum Open Source Code Signing certificate, cloud key through SimplySign | about $50 for the certificate | Issued to an individual open source developer; no popularity requirement |
 | macOS prebuilt binaries | Apple Developer ID and notarization | $99 per year | Only needed if Gatekeeper warnings on direct downloads become a problem; Homebrew installs are not affected |
 | deb / rpm repository | A dedicated GPG key, public key published on the site | free | What apt and dnf check |
@@ -197,7 +212,8 @@ not.
 4. Done: release jobs for the CLI: build matrix, sidecars, attestations, formula and manifest.
 5. After the first CLI release: the tap and the bucket copy `chronos.rb` and `chronos.json` from it.
 6. Windows signing once the Certum certificate is issued.
-7. Other channels, one at a time, when asked for.
+7. v0.18: npm, PyPI and crates.io for the CLI and the SDKs, switched on by repository variables ([publishing.md](publishing.md)).
+8. Other channels, one at a time, when asked for.
 
 `setup.sh` and the scripts in `bin/` keep working through 0.13 and are retired
 once the CLI has been through one release.
