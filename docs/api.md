@@ -2253,9 +2253,10 @@ Import is idempotent, and a re-upload is how a timetable is corrected in
 bulk. A slot matching an existing one on activity, weekly rule and start time
 has its end time, lead and room brought into line, and the days already
 generated from it follow. The exception is a day somebody has already
-marked or annotated: those are counted in `ledger_rows_kept` and left
-disagreeing with the timetable on purpose, because they record what
-happened rather than what was planned. A member who already exists keeps
+marked or annotated: those are counted in `ledger_rows_kept`, listed in
+`kept_days` with the room each still has, and left disagreeing with the
+timetable on purpose, because they record what happened rather than what
+was planned. A member who already exists keeps
 their password, and somebody promoted to STAFF since the last import stays
 STAFF.
 
@@ -2300,10 +2301,11 @@ Save that list. The server keeps only the bcrypt hash, so a lost password
 has to be reissued one member at a time through
 `POST /users/{user_id}/reset-password`.
 
-**An import never removes anything.** A file covering one unit cannot be
-told apart from a timetable that lost every other unit, so slots and
-enrollments the cycle holds that the file does not mention come back in
-`not_in_file` for somebody to decide about:
+**An import removes nothing unless `remove_missing` is set.** A file
+covering one unit cannot be told apart from a timetable that lost every other
+unit, so by default the slots and enrollments the cycle holds that the file
+does not mention come back in `not_in_file` for somebody to decide about, and
+`removed` and `not_removed` come back empty:
 
 ```json
 {
@@ -2312,6 +2314,9 @@ enrollments the cycle holds that the file does not mention come back in
   "slots_corrected": 2,
   "ledger_rows_updated": 5,
   "ledger_rows_kept": 1,
+  "kept_days": [
+    { "id": 5120, "date": "2026-01-12", "activity_code": "MA201", "master_slot_id": 64, "time_window_start": "09:00:00", "room": "LH-201" }
+  ],
   "not_in_file": {
     "slots": [
       { "id": 87, "activity_code": "PH101", "rrule": "FREQ=WEEKLY;BYDAY=WE", "dtstart": "2026-01-07", "day_of_week_index": 3, "time_window_start": "11:00:00", "room": "LH-305" }
@@ -2319,13 +2324,55 @@ enrollments the cycle holds that the file does not mention come back in
     "enrollments": [
       { "member_id": "STU20210044", "activity_code": "PH101" }
     ]
-  }
+  },
+  "removed": { "slots": [], "enrollments": [] },
+  "not_removed": { "slots": [] }
 }
 ```
 
-The report is scoped to the units named in the file, so a CSE upload does
-not list every ECE class every time. Act on a reported slot with
-`DELETE /schedule/slots/{id}`, which keeps the days already past.
+The report is scoped to the cycle in the query and to the units named in the
+file, so a CSE upload does not list every ECE class every time. Act on a
+reported slot with `DELETE /schedule/slots/{id}`, which keeps the days
+already past.
+
+**Removing what the file no longer lists.**
+
+```
+POST /api/v1/ingestion/upload-csv?cycle_id=3&remove_missing=true
+```
+
+`remove_missing` is a boolean query parameter and defaults to false. Set, the
+upload also removes the slots and enrollments it reports in `not_in_file`,
+and only those. That is every slot and every enrollment of a non-retired
+activity in that cycle, in a unit the file names, that no row of the file
+matched. Another unit, another cycle and a retired activity are never touched.
+Note that "no row matched" includes a whole activity the file leaves out: a
+file for CSE that lists only MA201 removes the slots and enrollments of every
+other CSE activity in the cycle. Use it with a file that is the full list for
+the units it names.
+
+- A slot is removed the way `DELETE /schedule/slots/{id}` removes one. Its days
+  from today on are withdrawn, and its days already past stay with everything
+  recorded on them. If a day from today on carries attendance or a note, that
+  delete would refuse, so the import leaves the slot, keeps all its days, and
+  lists it in `not_removed.slots` with a `reason` naming the dates. The rest
+  of the import is not failed. `POST /schedule/slots/{id}/retire` is the call
+  that takes such a slot off the timetable and keeps those days.
+- An enrollment is removed the way
+  `DELETE /schedule/activities/{id}/enrollments/{member_id}` removes one: the
+  roster row goes and nothing else, so attendance already recorded for the
+  member stays. A slot left in `not_removed` does not keep its enrollments;
+  they are removed by their own rule.
+- `removed.slots` repeats each slot as `not_in_file` listed it, with
+  `ledger_rows_removed` (days withdrawn) and `ledger_rows_detached` (past days
+  kept). `removed.enrollments` lists the member and activity code.
+- `not_in_file` is the same with the option on as off, so it still lists what
+  was removed. Compare it with `removed` and `not_removed` to see what each
+  became.
+- Removal runs with the rest of the import in one transaction: a file that is
+  refused removes nothing. It runs after the rows are checked, so a row that
+  needs a room which a missing slot holds is refused as a clash. Upload once
+  without the option, or delete that slot yourself, then upload again.
 
 A class whose start time moved shows up here too. The slot match is on
 activity, weekday and start time, so a class moved from 09:00 to 14:00 does

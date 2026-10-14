@@ -5,6 +5,7 @@
 
 from sqlalchemy.orm import Session
 
+from app.core.errors import ChronosError, ErrorCode
 from app.core.time import org_today
 from app.models.db import (
     DailyLedger,
@@ -40,7 +41,9 @@ def rows_in_use(row_ids: list[int], db: Session) -> set[int]:
     return used
 
 
-def propagate_slot_corrections(slots: list[StructuralMasterSlot], db: Session) -> dict[str, int]:
+def propagate_slot_corrections(
+    slots: list[StructuralMasterSlot], db: Session, kept: list[DailyLedger] | None = None
+) -> dict[str, int]:
     """Copy each slot's lead and room onto the days it has already produced.
 
     A ledger row starts life as a plan and becomes a record the moment
@@ -63,6 +66,9 @@ def propagate_slot_corrections(slots: list[StructuralMasterSlot], db: Session) -
     The room comparison is on resource_id, not on the room's name: renaming
     a room is one row in resources and must not read as every day of every
     class having moved.
+
+    kept, when given, gets the rows left alone appended to it, for a caller
+    that has to say which days they were and not only how many.
     """
     if not slots:
         return {"ledger_rows_updated": 0, "ledger_rows_kept": 0}
@@ -84,6 +90,8 @@ def propagate_slot_corrections(slots: list[StructuralMasterSlot], db: Session) -
     updated = 0
     for row in rows:
         if row.id in in_use:
+            if kept is not None:
+                kept.append(row)
             continue
         slot = by_id[row.master_slot_id]
         if row.resource_id != slot.resource_id:
@@ -102,3 +110,60 @@ def propagate_slot_corrections(slots: list[StructuralMasterSlot], db: Session) -
         updated += 1
 
     return {"ledger_rows_updated": updated, "ledger_rows_kept": len(rows) - updated}
+
+
+def withdraw_planned_days(slot: StructuralMasterSlot, db: Session, why: str) -> int:
+    """Remove the days this slot has laid down that have not happened yet.
+
+    Today counts as not yet happened. A day nobody has marked is a plan and
+    withdrawing it costs nothing; a day somebody has marked is a record, and
+    rather than quietly keep it as a class that no longer exists anywhere in
+    the timetable, the whole request is refused and the dates are named.
+
+    The refusal comes before anything is deleted, so a caller that catches it
+    is left with the session as it found it.
+    """
+    planned = (
+        db.query(DailyLedger)
+        .filter(
+            DailyLedger.master_slot_id == slot.id,
+            DailyLedger.target_date >= org_today(),
+        )
+        .all()
+    )
+    blocked = rows_in_use([row.id for row in planned], db)
+    if blocked:
+        dates = sorted(str(row.target_date) for row in planned if row.id in blocked)
+        raise ChronosError(
+            status_code=409,
+            detail=(
+                f"This slot cannot be {why} while days it has produced carry "
+                f"attendance or notes: {', '.join(dates)}"
+            ),
+            code=ErrorCode.STATE_CONFLICT,
+        )
+    for row in planned:
+        db.delete(row)
+    return len(planned)
+
+
+def delete_slot(slot: StructuralMasterSlot, db: Session) -> tuple[int, int]:
+    """Take a slot off the timetable without taking its history with it.
+
+    Days from today onward are plans and are removed; days already past keep
+    everything recorded on them and are left with no slot to point at. Returns
+    how many days were removed and how many were left behind, and does not
+    commit. Refuses, as withdraw_planned_days does, while a day ahead carries
+    attendance or a note.
+    """
+    detached = (
+        db.query(DailyLedger)
+        .filter(
+            DailyLedger.master_slot_id == slot.id,
+            DailyLedger.target_date < org_today(),
+        )
+        .count()
+    )
+    removed = withdraw_planned_days(slot, db, "deleted")
+    db.delete(slot)
+    return removed, detached

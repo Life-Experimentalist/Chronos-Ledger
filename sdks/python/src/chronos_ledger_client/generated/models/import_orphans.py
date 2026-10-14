@@ -16,8 +16,9 @@ T = TypeVar("T", bound="ImportOrphans")
 
 @_attrs_define
 class ImportOrphans:
-    """What the cycle holds that this file did not mention. A report and never an action: a file covering half a timetable
-    cannot be told apart from a timetable that lost half its classes, so nothing here is removed and somebody decides.
+    """What the cycle holds that this file did not mention. A report, and an action only when the upload sets
+    `remove_missing`: a file covering half a timetable cannot be told apart from a timetable that lost half its classes,
+    so by default nothing here is removed and somebody decides.
 
     Scoped to the units named in the file, not to the whole cycle, so a file covering one unit does not report every
     class in every other unit each time it is uploaded.

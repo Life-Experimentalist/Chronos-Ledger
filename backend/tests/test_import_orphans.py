@@ -2,10 +2,11 @@
 # Licensed under the Apache License, Version 2.0
 """What an import says about the rows the file did not mention.
 
-The import creates and corrects, and it will not remove. A CSV covering half
-a timetable is indistinguishable from a timetable that lost half its classes,
+The import creates and corrects, and it will not remove unless asked to
+(remove_missing, tested in test_import_removal.py). A CSV covering half a
+timetable is indistinguishable from a timetable that lost half its classes,
 and acting on that guess would delete enrollments nobody asked to delete. So
-the response names what it did not see and stops there.
+by default the response names what it did not see and stops there.
 
 These tests pin both halves: the report finds the rows, and the rows are
 still in the database after it does.

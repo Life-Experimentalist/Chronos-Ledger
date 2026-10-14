@@ -888,19 +888,28 @@ type CsvImportResult struct {
 	// ErrorLog Present when status is FAILED.
 	ErrorLog *string `json:"error_log,omitempty"`
 
+	// KeptDays The days counted in ledger_rows_kept, earliest first, each with the room it still has. Present when status is SUCCESS.
+	KeptDays *[]KeptDay `json:"kept_days,omitempty"`
+
 	// LedgerRowsKept Days left alone because attendance or a note has been recorded against them. They now disagree with the timetable on purpose: they record what happened. Days already past are never touched and are not counted here.
 	LedgerRowsKept *int `json:"ledger_rows_kept,omitempty"`
 
 	// LedgerRowsUpdated Days already generated from a corrected slot that were still plans and now carry the new lead and room. A day whose room changed also has its geofence cleared, because the old one fenced members out of the room they have just been sent to.
 	LedgerRowsUpdated *int `json:"ledger_rows_updated,omitempty"`
 
-	// NotInFile What the cycle holds that this file did not mention. A report and never an action: a file covering half a timetable cannot be told apart from a timetable that lost half its classes, so nothing here is removed and somebody decides.
+	// NotInFile What the cycle holds that this file did not mention. A report, and an action only when the upload sets `remove_missing`: a file covering half a timetable cannot be told apart from a timetable that lost half its classes, so by default nothing here is removed and somebody decides.
 	//
 	// Scoped to the units named in the file, not to the whole cycle, so a file covering one unit does not report every class in every other unit each time it is uploaded.
 	NotInFile *ImportOrphans `json:"not_in_file,omitempty"`
 
+	// NotRemoved What an upload with `remove_missing` set listed for removal and left in place. Empty when the option is off.
+	NotRemoved *ImportNotRemoved `json:"not_removed,omitempty"`
+
 	// ProvisionedCredentials One entry per member this import created, empty when the file only touched members who already existed. The single copy of these passwords: save them or reset the members individually.
 	ProvisionedCredentials *[]ProvisionedCredential `json:"provisioned_credentials,omitempty"`
+
+	// Removed What an upload with `remove_missing` set removed, from among the rows in `not_in_file`. Both lists are empty when the option is off.
+	Removed *ImportRemoved `json:"removed,omitempty"`
 
 	// RowsIngested Present when status is SUCCESS.
 	RowsIngested *int `json:"rows_ingested,omitempty"`
@@ -1104,12 +1113,23 @@ type GuestVisitStatus struct {
 	VisitExpiresAt *time.Time `json:"visit_expires_at,omitempty"`
 }
 
-// ImportOrphans What the cycle holds that this file did not mention. A report and never an action: a file covering half a timetable cannot be told apart from a timetable that lost half its classes, so nothing here is removed and somebody decides.
+// ImportNotRemoved What an upload with `remove_missing` set listed for removal and left in place. Empty when the option is off.
+type ImportNotRemoved struct {
+	Slots []NotRemovedSlot `json:"slots"`
+}
+
+// ImportOrphans What the cycle holds that this file did not mention. A report, and an action only when the upload sets `remove_missing`: a file covering half a timetable cannot be told apart from a timetable that lost half its classes, so by default nothing here is removed and somebody decides.
 //
 // Scoped to the units named in the file, not to the whole cycle, so a file covering one unit does not report every class in every other unit each time it is uploaded.
 type ImportOrphans struct {
 	Enrollments []OrphanEnrollment `json:"enrollments"`
 	Slots       []OrphanSlot       `json:"slots"`
+}
+
+// ImportRemoved What an upload with `remove_missing` set removed, from among the rows in `not_in_file`. Both lists are empty when the option is off.
+type ImportRemoved struct {
+	Enrollments []OrphanEnrollment `json:"enrollments"`
+	Slots       []RemovedSlot      `json:"slots"`
 }
 
 // InstitutionalRole Role assigned to a system user.
@@ -1179,6 +1199,22 @@ type IssuerUpdate struct {
 	Audience    *string `json:"audience,omitempty"`
 	DisplayName *string `json:"display_name,omitempty"`
 	Enabled     *bool   `json:"enabled,omitempty"`
+}
+
+// KeptDay A day a re-import left as it was, because attendance or a note has been recorded against it. It keeps the room, lead and window it was held with.
+type KeptDay struct {
+	ActivityCode string             `json:"activity_code"`
+	Date         openapi_types.Date `json:"date"`
+
+	// Id The ledger entry, as GET /schedule/ledger returns it.
+	Id int `json:"id"`
+
+	// MasterSlotId The slot the file corrected.
+	MasterSlotId int `json:"master_slot_id"`
+
+	// Room The room the day still has, not the one the file names.
+	Room            string `json:"room"`
+	TimeWindowStart string `json:"time_window_start"`
 }
 
 // LinkCreate defines model for LinkCreate.
@@ -1269,6 +1305,25 @@ type MasterSlotUpdate struct {
 	TimeWindowStart      *string   `json:"time_window_start,omitempty"`
 }
 
+// NotRemovedSlot A slot the upload did not remove, as it was listed in `not_in_file`. It stays on the timetable with all its days.
+type NotRemovedSlot struct {
+	ActivityCode string `json:"activity_code"`
+
+	// DayOfWeekIndex The ISO weekday of the slot's first date. Use rrule and dtstart. Sent through 0.17 and then removed.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	DayOfWeekIndex int                `json:"day_of_week_index"`
+	Dtstart        openapi_types.Date `json:"dtstart"`
+
+	// Id What DELETE /schedule/slots/{slot_id} takes, if it should go.
+	Id int `json:"id"`
+
+	// Reason Why it was left, naming the dates of the days ahead that carry attendance or a note. Act on it with `POST /schedule/slots/{id}/retire`, which keeps those days.
+	Reason          string  `json:"reason"`
+	Room            *string `json:"room,omitempty"`
+	Rrule           string  `json:"rrule"`
+	TimeWindowStart string  `json:"time_window_start"`
+}
+
 // OpenItems What still names a deactivated account. Deactivating changes none of it and is never refused because of it; calling deactivate again counts afresh.
 type OpenItems struct {
 	// DirectReports Active accounts that name it as their manager.
@@ -1356,6 +1411,28 @@ type ReadinessStatus string
 // RefreshRequest defines model for RefreshRequest.
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
+}
+
+// RemovedSlot A slot the upload removed, as it was listed in `not_in_file`.
+type RemovedSlot struct {
+	ActivityCode string `json:"activity_code"`
+
+	// DayOfWeekIndex The ISO weekday of the slot's first date. Use rrule and dtstart. Sent through 0.17 and then removed.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	DayOfWeekIndex int                `json:"day_of_week_index"`
+	Dtstart        openapi_types.Date `json:"dtstart"`
+
+	// Id What DELETE /schedule/slots/{slot_id} takes, if it should go.
+	Id int `json:"id"`
+
+	// LedgerRowsDetached Days already past, kept with everything recorded on them and no longer pointing at a slot.
+	LedgerRowsDetached int `json:"ledger_rows_detached"`
+
+	// LedgerRowsRemoved Days from today on that the slot had produced, now withdrawn.
+	LedgerRowsRemoved int     `json:"ledger_rows_removed"`
+	Room              *string `json:"room,omitempty"`
+	Rrule             string  `json:"rrule"`
+	TimeWindowStart   string  `json:"time_window_start"`
 }
 
 // ReservationConflict The body of a 409. What the booking ran into, not merely that it ran into something, so a caller can pick its next hour without asking availability again and diffing the answers. Nested under detail like every other error here, so one error handler reads them all.
@@ -2000,6 +2077,9 @@ type IngestionUploadCsvMultipartBody struct {
 type IngestionUploadCsvParams struct {
 	// CycleId Target planning cycle ID.
 	CycleId int `form:"cycle_id" json:"cycle_id"`
+
+	// RemoveMissing Also remove the slots and enrollments the response lists in `not_in_file`. Off by default, and with it off the upload removes nothing and `removed` and `not_removed` come back empty.
+	RemoveMissing *bool `form:"remove_missing,omitempty" json:"remove_missing,omitempty"`
 }
 
 // ResourcesListParams defines parameters for ResourcesList.
@@ -3206,7 +3286,7 @@ type ClientInterface interface {
 	// Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`. A row's weekday becomes the rule FREQ=WEEKLY;BYDAY=.. on its slot, starting on the first such date in the cycle.
 	// Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent, re-uploading the same CSV is safe: an existing member keeps their password.
 	//
-	// Never removes. Slots and enrollments the cycle holds that the file does not mention come back in `not_in_file` for somebody to act on, which is what makes a partial upload safe.
+	// Removes nothing unless `remove_missing` is set. Slots and enrollments the file does not mention come back in `not_in_file` for somebody to act on, which is what makes a partial upload safe. With `remove_missing=true` the upload also removes exactly those, and reports what it removed in `removed` and what it could not remove in `not_removed`. They are the rows of this cycle, in the units the file names, that the file does not list; a unit the file does not name, or another cycle, is never touched. A slot goes the way `DELETE /schedule/slots/{id}` removes one: its days from today on are withdrawn and its past days stay. A slot with attendance or a note on a day ahead is left and listed in `not_removed` with the reason, and the rest of the import carries on. An enrollment goes the way `DELETE /schedule/activities/{id}/enrollments/{member_id}` removes one, and the attendance already recorded for the member stays. The removal is part of the import's transaction, and the rows are checked before the removal runs, so a row that needs a room a missing slot holds is refused: upload without the option first, or remove that slot yourself.
 	//
 	// A row that would put a class in a room already taken for that window, by a booking, by another class, or by a day already generated onto it, is refused with 422 and the whole file is rolled back, which is what every other bad row in an import does. Rows are checked against each other as well as against what is already stored, so one file cannot put two classes in one room at one hour. The check only looks where a row would actually move a class, so re-uploading a file that describes the timetable as it already stands is not refused by what is sitting on it.
 	//
@@ -5034,7 +5114,7 @@ func (c *Client) IngestionGenerateLedger(ctx context.Context, params *IngestionG
 // Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`. A row's weekday becomes the rule FREQ=WEEKLY;BYDAY=.. on its slot, starting on the first such date in the cycle.
 // Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent, re-uploading the same CSV is safe: an existing member keeps their password.
 //
-// Never removes. Slots and enrollments the cycle holds that the file does not mention come back in `not_in_file` for somebody to act on, which is what makes a partial upload safe.
+// Removes nothing unless `remove_missing` is set. Slots and enrollments the file does not mention come back in `not_in_file` for somebody to act on, which is what makes a partial upload safe. With `remove_missing=true` the upload also removes exactly those, and reports what it removed in `removed` and what it could not remove in `not_removed`. They are the rows of this cycle, in the units the file names, that the file does not list; a unit the file does not name, or another cycle, is never touched. A slot goes the way `DELETE /schedule/slots/{id}` removes one: its days from today on are withdrawn and its past days stay. A slot with attendance or a note on a day ahead is left and listed in `not_removed` with the reason, and the rest of the import carries on. An enrollment goes the way `DELETE /schedule/activities/{id}/enrollments/{member_id}` removes one, and the attendance already recorded for the member stays. The removal is part of the import's transaction, and the rows are checked before the removal runs, so a row that needs a room a missing slot holds is refused: upload without the option first, or remove that slot yourself.
 //
 // A row that would put a class in a room already taken for that window, by a booking, by another class, or by a day already generated onto it, is refused with 422 and the whole file is rolled back, which is what every other bad row in an import does. Rows are checked against each other as well as against what is already stored, so one file cannot put two classes in one room at one hour. The check only looks where a row would actually move a class, so re-uploading a file that describes the timetable as it already stands is not refused by what is sitting on it.
 //
@@ -8560,6 +8640,18 @@ func NewIngestionUploadCsvRequestWithBody(server string, params *IngestionUpload
 			for _, qp := range strings.Split(queryFrag, "&") {
 				rawQueryFragments = append(rawQueryFragments, qp)
 			}
+		}
+
+		if params.RemoveMissing != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "remove_missing", *params.RemoveMissing, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
 		}
 
 		if encoded := queryValues.Encode(); encoded != "" {
@@ -12357,7 +12449,7 @@ type ClientWithResponsesInterface interface {
 	// Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`. A row's weekday becomes the rule FREQ=WEEKLY;BYDAY=.. on its slot, starting on the first such date in the cycle.
 	// Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent, re-uploading the same CSV is safe: an existing member keeps their password.
 	//
-	// Never removes. Slots and enrollments the cycle holds that the file does not mention come back in `not_in_file` for somebody to act on, which is what makes a partial upload safe.
+	// Removes nothing unless `remove_missing` is set. Slots and enrollments the file does not mention come back in `not_in_file` for somebody to act on, which is what makes a partial upload safe. With `remove_missing=true` the upload also removes exactly those, and reports what it removed in `removed` and what it could not remove in `not_removed`. They are the rows of this cycle, in the units the file names, that the file does not list; a unit the file does not name, or another cycle, is never touched. A slot goes the way `DELETE /schedule/slots/{id}` removes one: its days from today on are withdrawn and its past days stay. A slot with attendance or a note on a day ahead is left and listed in `not_removed` with the reason, and the rest of the import carries on. An enrollment goes the way `DELETE /schedule/activities/{id}/enrollments/{member_id}` removes one, and the attendance already recorded for the member stays. The removal is part of the import's transaction, and the rows are checked before the removal runs, so a row that needs a room a missing slot holds is refused: upload without the option first, or remove that slot yourself.
 	//
 	// A row that would put a class in a room already taken for that window, by a booking, by another class, or by a day already generated onto it, is refused with 422 and the whole file is rolled back, which is what every other bad row in an import does. Rows are checked against each other as well as against what is already stored, so one file cannot put two classes in one room at one hour. The check only looks where a row would actually move a class, so re-uploading a file that describes the timetable as it already stands is not refused by what is sitting on it.
 	//
@@ -20735,7 +20827,7 @@ func (c *ClientWithResponses) IngestionGenerateLedgerWithResponse(ctx context.Co
 // Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`. A row's weekday becomes the rule FREQ=WEEKLY;BYDAY=.. on its slot, starting on the first such date in the cycle.
 // Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent, re-uploading the same CSV is safe: an existing member keeps their password.
 //
-// Never removes. Slots and enrollments the cycle holds that the file does not mention come back in `not_in_file` for somebody to act on, which is what makes a partial upload safe.
+// Removes nothing unless `remove_missing` is set. Slots and enrollments the file does not mention come back in `not_in_file` for somebody to act on, which is what makes a partial upload safe. With `remove_missing=true` the upload also removes exactly those, and reports what it removed in `removed` and what it could not remove in `not_removed`. They are the rows of this cycle, in the units the file names, that the file does not list; a unit the file does not name, or another cycle, is never touched. A slot goes the way `DELETE /schedule/slots/{id}` removes one: its days from today on are withdrawn and its past days stay. A slot with attendance or a note on a day ahead is left and listed in `not_removed` with the reason, and the rest of the import carries on. An enrollment goes the way `DELETE /schedule/activities/{id}/enrollments/{member_id}` removes one, and the attendance already recorded for the member stays. The removal is part of the import's transaction, and the rows are checked before the removal runs, so a row that needs a room a missing slot holds is refused: upload without the option first, or remove that slot yourself.
 //
 // A row that would put a class in a room already taken for that window, by a booking, by another class, or by a day already generated onto it, is refused with 422 and the whole file is rolled back, which is what every other bad row in an import does. Rows are checked against each other as well as against what is already stored, so one file cannot put two classes in one room at one hour. The check only looks where a row would actually move a class, so re-uploading a file that describes the timetable as it already stands is not refused by what is sitting on it.
 //

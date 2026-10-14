@@ -327,20 +327,59 @@ components:
             against them. They now disagree with the timetable on purpose:
             they record what happened. Days already past are never touched
             and are not counted here.
+        kept_days:
+          type: array
+          description: >
+            The days counted in ledger_rows_kept, earliest first, each with
+            the room it still has. Present when status is SUCCESS.
+          items:
+            $ref: "#/components/schemas/KeptDay"
         not_in_file:
           $ref: "#/components/schemas/ImportOrphans"
+        removed:
+          $ref: "#/components/schemas/ImportRemoved"
+        not_removed:
+          $ref: "#/components/schemas/ImportNotRemoved"
         error_log:
           type: string
           description: Present when status is FAILED.
       required: [status]
 
+    KeptDay:
+      type: object
+      description: >
+        A day a re-import left as it was, because attendance or a note has
+        been recorded against it. It keeps the room, lead and window it
+        was held with.
+      properties:
+        id:
+          type: integer
+          description: The ledger entry, as GET /schedule/ledger returns it.
+        date:
+          type: string
+          format: date
+        activity_code:
+          type: string
+        master_slot_id:
+          type: integer
+          description: The slot the file corrected.
+        time_window_start:
+          type: string
+          format: time
+        room:
+          type: string
+          nullable: true
+          description: The room the day still has, not the one the file names.
+      required: [id, date, activity_code, master_slot_id, time_window_start, room]
+
     ImportOrphans:
       type: object
       description: >
-        What the cycle holds that this file did not mention. A report and
-        never an action: a file covering half a timetable cannot be told
-        apart from a timetable that lost half its classes, so nothing here
-        is removed and somebody decides.
+        What the cycle holds that this file did not mention. A report, and
+        an action only when the upload sets `remove_missing`: a file covering
+        half a timetable cannot be told apart from a timetable that lost half
+        its classes, so by default nothing here is removed and somebody
+        decides.
 
 
         Scoped to the units named in the file, not to the whole cycle, so a
@@ -393,6 +432,66 @@ components:
         activity_code:
           type: string
       required: [member_id, activity_code]
+
+    ImportRemoved:
+      type: object
+      description: >
+        What an upload with `remove_missing` set removed, from among the rows
+        in `not_in_file`. Both lists are empty when the option is off.
+      properties:
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/RemovedSlot"
+        enrollments:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrphanEnrollment"
+      required: [slots, enrollments]
+
+    RemovedSlot:
+      description: A slot the upload removed, as it was listed in `not_in_file`.
+      allOf:
+        - $ref: "#/components/schemas/OrphanSlot"
+        - type: object
+          properties:
+            ledger_rows_removed:
+              type: integer
+              description: Days from today on that the slot had produced, now withdrawn.
+            ledger_rows_detached:
+              type: integer
+              description: >
+                Days already past, kept with everything recorded on them and
+                no longer pointing at a slot.
+          required: [ledger_rows_removed, ledger_rows_detached]
+
+    ImportNotRemoved:
+      type: object
+      description: >
+        What an upload with `remove_missing` set listed for removal and left
+        in place. Empty when the option is off.
+      properties:
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotRemovedSlot"
+      required: [slots]
+
+    NotRemovedSlot:
+      description: >
+        A slot the upload did not remove, as it was listed in `not_in_file`.
+        It stays on the timetable with all its days.
+      allOf:
+        - $ref: "#/components/schemas/OrphanSlot"
+        - type: object
+          properties:
+            reason:
+              type: string
+              description: >
+                Why it was left, naming the dates of the days ahead that carry
+                attendance or a note. Act on it with `POST /schedule/slots/{id}/retire`,
+                which keeps those days.
+          required: [reason]
 
     PasswordResetResponse:
       type: object
@@ -6115,9 +6214,24 @@ paths:
         keeps their password.
 
 
-        Never removes. Slots and enrollments the cycle holds that the file
-        does not mention come back in `not_in_file` for somebody to act on,
-        which is what makes a partial upload safe.
+        Removes nothing unless `remove_missing` is set. Slots and
+        enrollments the file does not mention come back in `not_in_file` for
+        somebody to act on, which is what makes a partial upload safe. With
+        `remove_missing=true` the upload also removes exactly those, and
+        reports what it removed in `removed` and what it could not remove in
+        `not_removed`. They are the rows of this cycle, in the units the file
+        names, that the file does not list; a unit the file does not name, or
+        another cycle, is never touched. A slot goes the way
+        `DELETE /schedule/slots/{id}` removes one: its days from today on are
+        withdrawn and its past days stay. A slot with attendance or a note on
+        a day ahead is left and listed in `not_removed` with the reason,
+        and the rest of the import carries on. An enrollment goes the way
+        `DELETE /schedule/activities/{id}/enrollments/{member_id}` removes
+        one, and the attendance already recorded for the member stays. The
+        removal is part of the import's transaction, and the rows are checked
+        before the removal runs, so a row that needs a room a missing slot
+        holds is refused: upload without the option first, or remove that
+        slot yourself.
 
 
         A row that would put a class in a room already taken for that window,
@@ -6149,6 +6263,16 @@ paths:
           schema:
             type: integer
           description: Target planning cycle ID.
+        - name: remove_missing
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: >
+            Also remove the slots and enrollments the response lists in
+            `not_in_file`. Off by default, and with it off the upload removes
+            nothing and `removed` and `not_removed` come back empty.
       requestBody:
         required: true
         content:

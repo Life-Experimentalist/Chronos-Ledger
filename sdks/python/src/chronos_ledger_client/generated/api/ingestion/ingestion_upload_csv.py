@@ -8,19 +8,22 @@ from ...client import AuthenticatedClient, Client
 from ...models.csv_import_result import CsvImportResult
 from ...models.error_response import ErrorResponse
 from ...models.ingestion_upload_csv_body import IngestionUploadCsvBody
-from ...types import UNSET, Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     *,
     body: IngestionUploadCsvBody,
     cycle_id: int,
+    remove_missing: bool | Unset = False,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
 
     params: dict[str, Any] = {}
 
     params["cycle_id"] = cycle_id
+
+    params["remove_missing"] = remove_missing
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
@@ -93,6 +96,7 @@ def sync_detailed(
     client: AuthenticatedClient | Client,
     body: IngestionUploadCsvBody,
     cycle_id: int,
+    remove_missing: bool | Unset = False,
 ) -> Response[CsvImportResult | ErrorResponse]:
     """Bulk import schedule from CSV
 
@@ -105,8 +109,18 @@ def sync_detailed(
     Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent,
     re-uploading the same CSV is safe: an existing member keeps their password.
 
-    Never removes. Slots and enrollments the cycle holds that the file does not mention come back in
-    `not_in_file` for somebody to act on, which is what makes a partial upload safe.
+    Removes nothing unless `remove_missing` is set. Slots and enrollments the file does not mention come
+    back in `not_in_file` for somebody to act on, which is what makes a partial upload safe. With
+    `remove_missing=true` the upload also removes exactly those, and reports what it removed in
+    `removed` and what it could not remove in `not_removed`. They are the rows of this cycle, in the
+    units the file names, that the file does not list; a unit the file does not name, or another cycle,
+    is never touched. A slot goes the way `DELETE /schedule/slots/{id}` removes one: its days from today
+    on are withdrawn and its past days stay. A slot with attendance or a note on a day ahead is left and
+    listed in `not_removed` with the reason, and the rest of the import carries on. An enrollment goes
+    the way `DELETE /schedule/activities/{id}/enrollments/{member_id}` removes one, and the attendance
+    already recorded for the member stays. The removal is part of the import's transaction, and the rows
+    are checked before the removal runs, so a row that needs a room a missing slot holds is refused:
+    upload without the option first, or remove that slot yourself.
 
     A row that would put a class in a room already taken for that window, by a booking, by another
     class, or by a day already generated onto it, is refused with 422 and the whole file is rolled back,
@@ -125,6 +139,7 @@ def sync_detailed(
 
     Args:
         cycle_id (int):
+        remove_missing (bool | Unset):  Default: False.
         body (IngestionUploadCsvBody):
 
     Raises:
@@ -138,6 +153,7 @@ def sync_detailed(
     kwargs = _get_kwargs(
         body=body,
         cycle_id=cycle_id,
+        remove_missing=remove_missing,
     )
 
     response = client.get_httpx_client().request(
@@ -152,6 +168,7 @@ def sync(
     client: AuthenticatedClient | Client,
     body: IngestionUploadCsvBody,
     cycle_id: int,
+    remove_missing: bool | Unset = False,
 ) -> CsvImportResult | ErrorResponse | None:
     """Bulk import schedule from CSV
 
@@ -164,8 +181,18 @@ def sync(
     Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent,
     re-uploading the same CSV is safe: an existing member keeps their password.
 
-    Never removes. Slots and enrollments the cycle holds that the file does not mention come back in
-    `not_in_file` for somebody to act on, which is what makes a partial upload safe.
+    Removes nothing unless `remove_missing` is set. Slots and enrollments the file does not mention come
+    back in `not_in_file` for somebody to act on, which is what makes a partial upload safe. With
+    `remove_missing=true` the upload also removes exactly those, and reports what it removed in
+    `removed` and what it could not remove in `not_removed`. They are the rows of this cycle, in the
+    units the file names, that the file does not list; a unit the file does not name, or another cycle,
+    is never touched. A slot goes the way `DELETE /schedule/slots/{id}` removes one: its days from today
+    on are withdrawn and its past days stay. A slot with attendance or a note on a day ahead is left and
+    listed in `not_removed` with the reason, and the rest of the import carries on. An enrollment goes
+    the way `DELETE /schedule/activities/{id}/enrollments/{member_id}` removes one, and the attendance
+    already recorded for the member stays. The removal is part of the import's transaction, and the rows
+    are checked before the removal runs, so a row that needs a room a missing slot holds is refused:
+    upload without the option first, or remove that slot yourself.
 
     A row that would put a class in a room already taken for that window, by a booking, by another
     class, or by a day already generated onto it, is refused with 422 and the whole file is rolled back,
@@ -184,6 +211,7 @@ def sync(
 
     Args:
         cycle_id (int):
+        remove_missing (bool | Unset):  Default: False.
         body (IngestionUploadCsvBody):
 
     Raises:
@@ -198,6 +226,7 @@ def sync(
         client=client,
         body=body,
         cycle_id=cycle_id,
+        remove_missing=remove_missing,
     ).parsed
 
 
@@ -206,6 +235,7 @@ async def asyncio_detailed(
     client: AuthenticatedClient | Client,
     body: IngestionUploadCsvBody,
     cycle_id: int,
+    remove_missing: bool | Unset = False,
 ) -> Response[CsvImportResult | ErrorResponse]:
     """Bulk import schedule from CSV
 
@@ -218,8 +248,18 @@ async def asyncio_detailed(
     Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent,
     re-uploading the same CSV is safe: an existing member keeps their password.
 
-    Never removes. Slots and enrollments the cycle holds that the file does not mention come back in
-    `not_in_file` for somebody to act on, which is what makes a partial upload safe.
+    Removes nothing unless `remove_missing` is set. Slots and enrollments the file does not mention come
+    back in `not_in_file` for somebody to act on, which is what makes a partial upload safe. With
+    `remove_missing=true` the upload also removes exactly those, and reports what it removed in
+    `removed` and what it could not remove in `not_removed`. They are the rows of this cycle, in the
+    units the file names, that the file does not list; a unit the file does not name, or another cycle,
+    is never touched. A slot goes the way `DELETE /schedule/slots/{id}` removes one: its days from today
+    on are withdrawn and its past days stay. A slot with attendance or a note on a day ahead is left and
+    listed in `not_removed` with the reason, and the rest of the import carries on. An enrollment goes
+    the way `DELETE /schedule/activities/{id}/enrollments/{member_id}` removes one, and the attendance
+    already recorded for the member stays. The removal is part of the import's transaction, and the rows
+    are checked before the removal runs, so a row that needs a room a missing slot holds is refused:
+    upload without the option first, or remove that slot yourself.
 
     A row that would put a class in a room already taken for that window, by a booking, by another
     class, or by a day already generated onto it, is refused with 422 and the whole file is rolled back,
@@ -238,6 +278,7 @@ async def asyncio_detailed(
 
     Args:
         cycle_id (int):
+        remove_missing (bool | Unset):  Default: False.
         body (IngestionUploadCsvBody):
 
     Raises:
@@ -251,6 +292,7 @@ async def asyncio_detailed(
     kwargs = _get_kwargs(
         body=body,
         cycle_id=cycle_id,
+        remove_missing=remove_missing,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -263,6 +305,7 @@ async def asyncio(
     client: AuthenticatedClient | Client,
     body: IngestionUploadCsvBody,
     cycle_id: int,
+    remove_missing: bool | Unset = False,
 ) -> CsvImportResult | ErrorResponse | None:
     """Bulk import schedule from CSV
 
@@ -275,8 +318,18 @@ async def asyncio(
     Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent,
     re-uploading the same CSV is safe: an existing member keeps their password.
 
-    Never removes. Slots and enrollments the cycle holds that the file does not mention come back in
-    `not_in_file` for somebody to act on, which is what makes a partial upload safe.
+    Removes nothing unless `remove_missing` is set. Slots and enrollments the file does not mention come
+    back in `not_in_file` for somebody to act on, which is what makes a partial upload safe. With
+    `remove_missing=true` the upload also removes exactly those, and reports what it removed in
+    `removed` and what it could not remove in `not_removed`. They are the rows of this cycle, in the
+    units the file names, that the file does not list; a unit the file does not name, or another cycle,
+    is never touched. A slot goes the way `DELETE /schedule/slots/{id}` removes one: its days from today
+    on are withdrawn and its past days stay. A slot with attendance or a note on a day ahead is left and
+    listed in `not_removed` with the reason, and the rest of the import carries on. An enrollment goes
+    the way `DELETE /schedule/activities/{id}/enrollments/{member_id}` removes one, and the attendance
+    already recorded for the member stays. The removal is part of the import's transaction, and the rows
+    are checked before the removal runs, so a row that needs a room a missing slot holds is refused:
+    upload without the option first, or remove that slot yourself.
 
     A row that would put a class in a room already taken for that window, by a booking, by another
     class, or by a day already generated onto it, is refused with 422 and the whole file is rolled back,
@@ -295,6 +348,7 @@ async def asyncio(
 
     Args:
         cycle_id (int):
+        remove_missing (bool | Unset):  Default: False.
         body (IngestionUploadCsvBody):
 
     Raises:
@@ -310,5 +364,6 @@ async def asyncio(
             client=client,
             body=body,
             cycle_id=cycle_id,
+            remove_missing=remove_missing,
         )
     ).parsed

@@ -236,3 +236,50 @@ def test_a_correction_does_not_rewrite_the_past(client, db, seed_users):
     assert db.query(DailyLedger).one().target_room_identifier == "LH-201"
     assert body["slots_corrected"] == 1
     assert body["ledger_rows_updated"] == 0
+
+
+def test_a_new_room_reaches_future_days_and_a_marked_day_is_listed(client, db, seed_users):
+    # The class has two days on the board: tomorrow, which somebody has
+    # already marked, and the same day next week, which is still a plan.
+    cycle = _make_cycle(db)
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    assert _upload(client, headers, cycle.id, _csv(_row(room="LH-201"))).status_code == 200
+    next_week = TOMORROW + datetime.timedelta(days=7)
+    assert generate_daily_ledger_entries(TOMORROW, db) == 1
+    assert generate_daily_ledger_entries(next_week, db) == 1
+    marked = db.query(DailyLedger).filter(DailyLedger.target_date == TOMORROW).one()
+    db.add(
+        VerificationLedger(
+            ledger_instance_id=marked.id,
+            member_id="STU900",
+            marking_status=VerificationMetric.PRESENT,
+        )
+    )
+    db.commit()
+
+    r = _upload(client, headers, cycle.id, _csv(_row(room="LH-305")))
+    assert r.status_code == 200, r.text
+    body = r.json()
+
+    db.expire_all()
+    rooms = {row.target_date: row.target_room_identifier for row in db.query(DailyLedger)}
+    assert rooms == {TOMORROW: "LH-201", next_week: "LH-305"}
+    assert body["ledger_rows_updated"] == 1
+    assert body["ledger_rows_kept"] == 1
+    # The day left alone is named, with the room it still has, so whoever
+    # uploaded the file can see which day now disagrees with it.
+    assert body["kept_days"] == [
+        {
+            "id": marked.id,
+            "date": TOMORROW.isoformat(),
+            "activity_code": "MA201",
+            "master_slot_id": _slots(db)[0].id,
+            "time_window_start": "09:00:00",
+            "room": "LH-201",
+        }
+    ]
+
+
+def test_an_upload_that_keeps_nothing_lists_nothing(client, db, seed_users):
+    body = _import_twice(client, db, seed_users, _csv(_row()), _csv(_row()))
+    assert body["kept_days"] == []

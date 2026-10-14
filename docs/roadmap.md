@@ -325,6 +325,7 @@ integration contract applies.
 - **Done when:** changing a room in the CSV and re-importing changes the room
   on future days; a day with recorded attendance is left as it was and listed
   in the import report.
+- **Status:** built in #95 for 0.17.
 
 ### E-7. Exclusion on materialized instances
 
