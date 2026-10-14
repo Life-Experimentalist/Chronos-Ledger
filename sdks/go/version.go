@@ -5,4 +5,4 @@ package chronos
 
 // Version is the library version. It moves with the server release it was
 // generated from.
-const Version = "0.16.0" // x-release-please-version
+const Version = "0.17.0" // x-release-please-version
