@@ -1,6 +1,6 @@
 {
   "name": "chronosledger-client",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "Typed client for the Chronos Ledger REST API",
   "license": "Apache-2.0",
   "repository": {

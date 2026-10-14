@@ -10,6 +10,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.18.0](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.17.0...v0.18.0) (2026-10-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* the SDKs are renamed (chronosledger-client on npm, PyPI and crates.io; Python module chronosledger_client) and the Go module path is chronos.vkrishna04.me/sdks/go.
+* **api:** slot responses drop day_of_week_index; read rrule and dtstart instead.
+
+### Features
+
+* **api:** slots no longer return day_of_week_index ([#112](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/112)) ([e0bfbfd](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/e0bfbfdc7a5b1ccb7861cbb8133e0ee3c4f2134f))
+* one package name, chronosledger, on every registry ([#116](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/116)) ([343c83f](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/343c83fc01f0043f81b9a24e3af239002b91bb1d))
+* publish the CLI and the SDKs to npm, PyPI and crates.io ([#117](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/117)) ([3785077](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/37850773b12e1dbd16f0dfdad1219c4ec8797abc))
+
 ## [0.17.0](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.16.0...v0.17.0) (2026-10-14)
 
 
