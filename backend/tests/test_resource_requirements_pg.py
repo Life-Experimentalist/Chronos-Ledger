@@ -37,7 +37,6 @@ from app.models.db import (
     Resource,
     ResourceMode,
     ResourceRequirement,
-    ResourceType,
     User,
 )
 
@@ -120,7 +119,7 @@ def test_a_requirement_with_two_targets_is_refused_by_the_database(db):
             owner_kind=RequirementOwner.RESOURCE,
             owner_id=room.id,
             target_resource_id=crew.id,
-            target_kind=ResourceType.PERSON,
+            target_kind="PERSON",
         )
     )
     with pytest.raises(IntegrityError) as refused:

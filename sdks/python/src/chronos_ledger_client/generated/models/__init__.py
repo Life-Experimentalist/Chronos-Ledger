@@ -101,11 +101,9 @@ from .refresh_request import RefreshRequest
 from .removed_slot import RemovedSlot
 from .requirement_create import RequirementCreate
 from .requirement_create_enforcement import RequirementCreateEnforcement
-from .requirement_create_target_kind import RequirementCreateTargetKind
 from .requirement_response import RequirementResponse
 from .requirement_response_enforcement import RequirementResponseEnforcement
 from .requirement_response_owner_kind import RequirementResponseOwnerKind
-from .requirement_response_target_kind import RequirementResponseTargetKind
 from .reservation_conflict import ReservationConflict
 from .reservation_conflict_detail import ReservationConflictDetail
 from .reservation_create import ReservationCreate
@@ -116,14 +114,15 @@ from .reservation_ref_taken_detail import ReservationRefTakenDetail
 from .reservation_response import ReservationResponse
 from .reservation_response_status import ReservationResponseStatus
 from .reservation_update import ReservationUpdate
+from .resource_class_create import ResourceClassCreate
+from .resource_class_response import ResourceClassResponse
+from .resource_class_update import ResourceClassUpdate
 from .resource_create import ResourceCreate
 from .resource_create_mode import ResourceCreateMode
 from .resource_response import ResourceResponse
 from .resource_response_mode import ResourceResponseMode
-from .resource_response_resource_type import ResourceResponseResourceType
 from .resource_update import ResourceUpdate
 from .resource_update_mode import ResourceUpdateMode
-from .resources_list_resource_type import ResourcesListResourceType
 from .retire_result import RetireResult
 from .reverse_rsvp_create import ReverseRsvpCreate
 from .reverse_rsvp_response import ReverseRsvpResponse
@@ -147,7 +146,6 @@ from .token_response import TokenResponse
 from .unmet_requirement import UnmetRequirement
 from .unmet_requirement_enforcement import UnmetRequirementEnforcement
 from .unmet_requirement_owner_kind import UnmetRequirementOwnerKind
-from .unmet_requirement_target_kind import UnmetRequirementTargetKind
 from .user_create import UserCreate
 from .user_response import UserResponse
 from .user_status_update import UserStatusUpdate
@@ -264,11 +262,9 @@ __all__ = (
     "RemovedSlot",
     "RequirementCreate",
     "RequirementCreateEnforcement",
-    "RequirementCreateTargetKind",
     "RequirementResponse",
     "RequirementResponseEnforcement",
     "RequirementResponseOwnerKind",
-    "RequirementResponseTargetKind",
     "ReservationConflict",
     "ReservationConflictDetail",
     "ReservationCreate",
@@ -279,12 +275,13 @@ __all__ = (
     "ReservationResponse",
     "ReservationResponseStatus",
     "ReservationUpdate",
+    "ResourceClassCreate",
+    "ResourceClassResponse",
+    "ResourceClassUpdate",
     "ResourceCreate",
     "ResourceCreateMode",
     "ResourceResponse",
     "ResourceResponseMode",
-    "ResourceResponseResourceType",
-    "ResourcesListResourceType",
     "ResourceUpdate",
     "ResourceUpdateMode",
     "RetireResult",
@@ -310,7 +307,6 @@ __all__ = (
     "UnmetRequirement",
     "UnmetRequirementEnforcement",
     "UnmetRequirementOwnerKind",
-    "UnmetRequirementTargetKind",
     "UserCreate",
     "UserResponse",
     "UsersListAvailableStaffResponse200Item",

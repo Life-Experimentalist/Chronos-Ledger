@@ -16,8 +16,10 @@ from app.core import clock, ids
 from app.core.config import get_settings
 from app.core.database import Base, get_db, get_session_opener
 from app.core.host_identity import SYSTEM_ACTOR_ID, seed_system_account
+from app.core.organization import DEFAULT_ORGANIZATION_ID
 from app.cron import scheduled
 from app.embedded import build_app
+from app.models.db import Organization
 from tests.conftest import TestingSessionLocal, engine
 
 SECRET = "h" * 40
@@ -207,7 +209,11 @@ def test_advances_are_serialized(embedded, monkeypatch):
 def _fresh_database():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
-    return TestingSessionLocal()
+    session = TestingSessionLocal()
+    # The organization every row is filed under, which seeds its resource classes.
+    session.add(Organization(id=DEFAULT_ORGANIZATION_ID, name="Default organization"))
+    session.commit()
+    return session
 
 
 def _export(db):

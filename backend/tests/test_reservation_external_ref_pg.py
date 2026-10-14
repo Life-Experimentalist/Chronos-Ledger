@@ -33,7 +33,6 @@ from app.models.db import (
     Reservation,
     ReservationStatus,
     Resource,
-    ResourceType,
     User,
 )
 
@@ -88,7 +87,7 @@ def admin(db):
 
 @pytest.fixture()
 def resource(db):
-    room = Resource(code="PG-REF-1", label="Reference Lab", resource_type=ResourceType.ROOM)
+    room = Resource(code="PG-REF-1", label="Reference Lab", resource_type="ROOM")
     db.add(room)
     db.commit()
     return room

@@ -11,11 +11,11 @@ T = TypeVar("T", bound="ReservationCreateAssignmentsType0")
 
 @_attrs_define
 class ReservationCreateAssignmentsType0:
-    """Which resources to hold for the requirements that name a kind of resource: `ROOM` or `PERSON` mapped to resource
-    ids, used in order. Where it says nothing, or runs out, the engine picks the first free resources of the kind by
-    code. An id that is not an active resource of that kind in this organization, or that no requirement asks for, is a
-    422. A named resource that is not free is a gap and is not swapped for another. Part of what a retry is compared on
-    only when it is sent.
+    """Which resources to hold for the requirements that name a kind of resource: a resource class code (`ROOM`, `PERSON`
+    or one the organization made) mapped to resource ids, used in order. Where it says nothing, or runs out, the engine
+    picks the first free resources of the kind by code. An id that is not an active resource of that kind in this
+    organization, or that no requirement asks for, is a 422. A named resource that is not free is a gap and is not
+    swapped for another. Part of what a retry is compared on only when it is sent.
 
         Example:
             {'PERSON': [12, 15]}

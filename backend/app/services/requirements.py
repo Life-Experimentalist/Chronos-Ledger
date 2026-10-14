@@ -58,9 +58,9 @@ from app.models.db import (
     Resource,
     ResourceMode,
     ResourceRequirement,
-    ResourceType,
 )
 from app.services.availability import last_date, occupied, pool_state, window_conflicts
+from app.services.resource_classes import require_active_class
 
 MAX_DEPTH = 4
 
@@ -139,7 +139,7 @@ class _Run:
     # Dry runs hold nothing and never refuse; they list every gap.
     parent: Reservation | None
     requester_id: str | None = None
-    assigned: dict[ResourceType, list[int]] = field(default_factory=dict)
+    assigned: dict[str, list[int]] = field(default_factory=dict)
     named: set[int] = field(default_factory=set)
     resolution: Resolution = field(default_factory=Resolution)
 
@@ -341,13 +341,13 @@ def _kind(run, row, window, depth):
             got += 1
     missing = row.quantity - got
     if missing:
-        message, conflicts = seen[0] if seen else (f"no free {row.target_kind.value} resource", [])
+        message, conflicts = seen[0] if seen else (f"no free {row.target_kind} resource", [])
         if seen:
             conflicts = [c for _, found in seen for c in found]
         _miss(
             run,
             row,
-            f"{message}: {missing} of {row.quantity} {row.target_kind.value} missing",
+            f"{message}: {missing} of {row.quantity} {row.target_kind} missing",
             conflicts,
             missing,
         )
@@ -360,7 +360,7 @@ def resolve(
     used: set[int],
     parent: Reservation | None = None,
     requester_id: str | None = None,
-    assignments: dict[ResourceType, list[int]] | None = None,
+    assignments: dict[str, list[int]] | None = None,
 ) -> Resolution:
     """Walk the requirements of the owners over a window.
 
@@ -390,8 +390,8 @@ def resolve(
 
 
 def check_assignments(
-    db: Session, assignments: dict[ResourceType, list[int]] | None
-) -> dict[ResourceType, list[int]]:
+    db: Session, assignments: dict[str, list[int]] | None
+) -> dict[str, list[int]]:
     """Refuse a resource that is not of the kind it was named under, or not in this organization.
 
     The query is scoped to the caller's organization, so a resource of another
@@ -401,10 +401,10 @@ def check_assignments(
     for kind, ids in (assignments or {}).items():
         for rid in ids:
             resource = db.query(Resource).filter(Resource.id == rid).first()
-            if resource is None or resource.resource_type is not kind or not resource.active:
+            if resource is None or resource.resource_type != kind or not resource.active:
                 raise ChronosError(
                     status_code=422,
-                    detail=f"resource {rid} is not an active {kind.value} of this organization",
+                    detail=f"resource {rid} is not an active {kind} resource of this organization",
                     code=ErrorCode.INVALID_VALUE,
                 )
         checked[kind] = list(ids)
@@ -502,6 +502,8 @@ def add_requirement(
     owner that is a resource may not (through any chain of named resources)
     require itself.
     """
+    if payload.target_kind is not None:
+        require_active_class(db, payload.target_kind)
     if payload.target_resource_id is not None:
         target = db.query(Resource).filter(Resource.id == payload.target_resource_id).first()
         if target is None:

@@ -188,7 +188,7 @@ in Chronos. A booking that runs past midnight has an end before its start.
     "users": ["calendar_feed_token", "credential_secure_hash"],
     "webhook_subscriptions": ["previous_secret", "secret"]
   },
-  "schema_version": "5",
+  "schema_version": "6",
   "secrets_included": false,
   "tables": [
     { "file": "audit_records.jsonl", "name": "audit_records", "rows": 4812 }
@@ -260,6 +260,12 @@ Identity providers this deployment accepts federated sign-in from
 ### planning_cycles
 
 Terms or cycles: a label, the first and last date, and whether it is open.
+
+### resource_classes
+
+The kinds of resource each organization books, `ROOM` and `PERSON` among them.
+It points only at the organization, and `resources` and `resource_requirements`
+point at it, so it comes before them.
 
 ### users
 

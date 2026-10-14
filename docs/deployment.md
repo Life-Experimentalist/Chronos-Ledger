@@ -124,7 +124,7 @@ nothing inside the stack changes.
 describe, which is the quickest way to confirm an upgrade landed:
 
 ```json
-{"status": "healthy", "service": "chronos-ledger", "version": "0.17.0", "schema_version": "5"}
+{"status": "healthy", "service": "chronos-ledger", "version": "0.17.0", "schema_version": "6"}
 ```
 
 There are no migrations before the first real deployment. The app container

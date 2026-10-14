@@ -53,12 +53,21 @@ erDiagram
         int cycle_id FK "→ PlanningCycle.id"
     }
 
+    ResourceClass {
+        int id PK
+        string organization_id FK "→ Organization.id"
+        string code "uppercase, unique within the organization, never changed"
+        string name
+        bool active
+        datetime created_at
+    }
+
     Resource {
         int id PK
         string organization_id FK "→ Organization.id"
         string code "the room name, unique within the organization"
         string label
-        string resource_type "ROOM | PERSON"
+        string resource_type "a resource class code, FK with organization_id"
         string unit_code "nullable"
         int capacity "nullable, at least 1 when POOLED"
         string mode "EXCLUSIVE | POOLED | SHARED"
@@ -231,6 +240,8 @@ erDiagram
     User ||--o{ DailyLedger : "teaches (active)"
     Organization ||--o{ User : "has"
     Organization ||--o{ Resource : "has"
+    Organization ||--o{ ResourceClass : "configures"
+    ResourceClass ||--o{ Resource : "kind of"
     User ||--o{ DailyLedger : "substitutes"
     DailyLedger ||--o{ VerificationLedger : "records attendance"
     DailyLedger ||--o{ LedgerAnnotation : "annotated by"
@@ -293,7 +304,9 @@ A thing a reservation consumes. Every room is one row, created on first sight by
 
 `mode` (`models/db.py::ResourceMode`) says how a reservation takes the resource: `EXCLUSIVE`, the default, one at a time; `POOLED`, `capacity` interchangeable units of which a reservation takes its `quantity`; `SHARED`, never contended. `ck_resources_pool_capacity` holds a pooled resource to a capacity of at least 1. The mode governs reservations only: slots and generated days are one at a time on every resource.
 
-`resource_requirements` (`models/db.py::ResourceRequirement`) says that using an owner also needs a target. `owner_kind` is `RESOURCE` or `ACTIVITY` and `owner_id` points into that table, with no foreign key because it can point into either; the routes check it. The target is `target_resource_id` (a foreign key, cascading) or `target_kind` (`ROOM` or `PERSON`, the existing `ResourceType`), and `ck_resource_requirements_one_target` holds it to exactly one. `quantity` is at least 1, `before_minutes` and `after_minutes` are at least 0, and `enforcement` is `REQUIRED`, `ADVISORY` or null, where null follows `organizations.default_requirement_enforcement` (not null, default `REQUIRED`). A reservation made for a requirement has `parent_reservation_id` set to the booking that caused it, a self foreign key that is nulled if the parent row is ever deleted. `target_kind` stands in for a resource class until classes exist.
+`resource_type` is the `code` of a row in `resource_classes` (`models/db.py::ResourceClass`), the kinds of resource an organization books. The pair (`organization_id`, `resource_type`) is a composite foreign key to (`organization_id`, `code`) (`fk_resources_class`), so the database itself refuses a class of another organization or one that does not exist. `uq_resource_classes_organization_code` keeps a code unique within an organization. `ROOM` and `PERSON` are inserted for every organization when it is created, the default one included (`models/db.py::_seed_resource_classes`), and cannot be deleted, switched off or recoded; any other class is a label that carries no behaviour. `active` gates new references only. `ResourceRequirement.target_kind` is held the same way (`fk_resource_requirements_class`), and a null `target_kind` skips the check.
+
+`resource_requirements` (`models/db.py::ResourceRequirement`) says that using an owner also needs a target. `owner_kind` is `RESOURCE` or `ACTIVITY` and `owner_id` points into that table, with no foreign key because it can point into either; the routes check it. The target is `target_resource_id` (a foreign key, cascading) or `target_kind` (a resource class code, held to one of the organization's own by `fk_resource_requirements_class`), and `ck_resource_requirements_one_target` holds it to exactly one. `quantity` is at least 1, `before_minutes` and `after_minutes` are at least 0, and `enforcement` is `REQUIRED`, `ADVISORY` or null, where null follows `organizations.default_requirement_enforcement` (not null, default `REQUIRED`). A reservation made for a requirement has `parent_reservation_id` set to the booking that caused it, a self foreign key that is nulled if the parent row is ever deleted.
 
 ### `StructuralMasterSlot`
 The repeating timetable entry. `rrule` is the value of one RFC 5545 RRULE property (`FREQ=WEEKLY;BYDAY=MO` for every Monday) and `dtstart` is the date it counts from, always the rule's own first date. Both are in the organization's calendar (`ORG_TIMEZONE`): the rule gives calendar dates and the slot's `time_window_start` and `time_window_end` are read on each of them, so the time of day does not move across a daylight saving change. `backend/app/core/recurrence.py` is the one place the pair is expanded. `day_of_week_index` is no longer stored; the model and the API work it out as the weekday of the first date, and the API stops sending it after 0.17. These are the *template* rows that `ledger_generator` reads each night.

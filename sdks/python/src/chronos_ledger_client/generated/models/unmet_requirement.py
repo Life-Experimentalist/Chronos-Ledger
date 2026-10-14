@@ -8,7 +8,6 @@ from attrs import field as _attrs_field
 
 from ..models.unmet_requirement_enforcement import UnmetRequirementEnforcement
 from ..models.unmet_requirement_owner_kind import UnmetRequirementOwnerKind
-from ..models.unmet_requirement_target_kind import UnmetRequirementTargetKind
 
 if TYPE_CHECKING:
     from ..models.busy_interval import BusyInterval
@@ -27,7 +26,7 @@ class UnmetRequirement:
             owner_kind (UnmetRequirementOwnerKind):
             owner_id (int):
             target_resource_id (int | None):
-            target_kind (UnmetRequirementTargetKind):
+            target_kind (None | str): A resource class code.
             quantity (int): How many units or resources were missing, not how many were asked for.
             enforcement (UnmetRequirementEnforcement): The enforcement that applied, with the organization's default filled
                 in where the requirement did not say.
@@ -40,7 +39,7 @@ class UnmetRequirement:
     owner_kind: UnmetRequirementOwnerKind
     owner_id: int
     target_resource_id: int | None
-    target_kind: UnmetRequirementTargetKind
+    target_kind: None | str
     quantity: int
     enforcement: UnmetRequirementEnforcement
     message: str
@@ -57,7 +56,8 @@ class UnmetRequirement:
         target_resource_id: int | None
         target_resource_id = self.target_resource_id
 
-        target_kind = self.target_kind.value
+        target_kind: None | str
+        target_kind = self.target_kind
 
         quantity = self.quantity
 
@@ -106,7 +106,12 @@ class UnmetRequirement:
 
         target_resource_id = _parse_target_resource_id(d.pop("target_resource_id"))
 
-        target_kind = UnmetRequirementTargetKind(d.pop("target_kind"))
+        def _parse_target_kind(data: object) -> None | str:
+            if data is None:
+                return data
+            return cast(None | str, data)
+
+        target_kind = _parse_target_kind(d.pop("target_kind"))
 
         quantity = d.pop("quantity")
 

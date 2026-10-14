@@ -22,7 +22,6 @@ from app.models.db import (
     Reservation,
     ReservationStatus,
     Resource,
-    ResourceType,
     StructuralMasterSlot,
 )
 from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, STAFF_PASSWORD, login, weekly
@@ -34,7 +33,7 @@ URL = "/api/v1/schedule/conflicts"
 
 
 def _room(db, code):
-    room = Resource(code=code, label=code, resource_type=ResourceType.ROOM)
+    room = Resource(code=code, label=code, resource_type="ROOM")
     db.add(room)
     db.commit()
     return room

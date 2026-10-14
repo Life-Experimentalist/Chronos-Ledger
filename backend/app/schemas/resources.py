@@ -10,15 +10,15 @@ from app.models.db import (
     RequirementOwner,
     ReservationStatus,
     ResourceMode,
-    ResourceType,
 )
+from app.schemas.resource_classes import ClassCode
 
 
 class ResourceResponse(BaseModel):
     id: int
     code: str
     label: str
-    resource_type: ResourceType
+    resource_type: str
     unit_code: str | None
     capacity: int | None
     mode: ResourceMode
@@ -35,7 +35,7 @@ POOL_NEEDS_CAPACITY = "a POOLED resource needs a capacity of at least 1"
 
 
 class ResourceCreate(BaseModel):
-    """A room registered before any timetable names it.
+    """A resource registered before any timetable names it.
 
     Every string is stripped first, code included, the same as the importer
     strips a room name, so this row and a later CSV mentioning the room are
@@ -51,6 +51,9 @@ class ResourceCreate(BaseModel):
 
     code: str = Field(min_length=1, max_length=30)
     label: str | None = Field(default=None, min_length=1, max_length=120)
+    # The code of an active class of the organization. ROOM is what a
+    # resource was before classes were configured.
+    resource_type: ClassCode = "ROOM"
     unit_code: str | None = Field(default=None, max_length=50)
     capacity: int | None = Field(default=None, ge=0)
     mode: ResourceMode = ResourceMode.EXCLUSIVE
@@ -161,7 +164,7 @@ class UnmetRequirement(BaseModel):
     owner_kind: RequirementOwner
     owner_id: int
     target_resource_id: int | None
-    target_kind: ResourceType | None
+    target_kind: str | None
     quantity: int
     enforcement: RequirementEnforcement
     message: str
@@ -204,10 +207,10 @@ class ReservationCreate(BaseModel):
     # GET /resources/reservations?external_ref=.
     external_ref: str | None = Field(default=None, min_length=1, max_length=120)
     # Which resources to hold for the requirements that name a kind of
-    # resource rather than a resource: ROOM or PERSON mapped to the ids to
+    # resource rather than a resource: a class code mapped to the ids to
     # use, in order. Where it says nothing, or runs out, the engine picks the
     # first free resources of the kind by code.
-    assignments: dict[ResourceType, list[int]] | None = None
+    assignments: dict[str, list[int]] | None = None
 
     @model_validator(mode="after")
     def _is_a_window_at_all(self):
@@ -362,7 +365,7 @@ class RequirementCreate(BaseModel):
     """
 
     target_resource_id: int | None = Field(default=None, ge=1)
-    target_kind: ResourceType | None = None
+    target_kind: ClassCode | None = None
     quantity: int = Field(default=1, ge=1, le=1000)
     before_minutes: int = Field(default=0, ge=0, le=1440)
     after_minutes: int = Field(default=0, ge=0, le=1440)
@@ -380,7 +383,7 @@ class RequirementResponse(BaseModel):
     owner_kind: RequirementOwner
     owner_id: int
     target_resource_id: int | None
-    target_kind: ResourceType | None
+    target_kind: str | None
     quantity: int
     before_minutes: int
     after_minutes: int

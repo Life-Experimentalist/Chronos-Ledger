@@ -17,7 +17,6 @@ from app.models.db import (
     Activity,
     DailyLedger,
     Resource,
-    ResourceType,
     StructuralMasterSlot,
 )
 from app.services.master_slot import propagate_slot_corrections
@@ -39,7 +38,7 @@ def test_an_imported_room_becomes_a_resource(client, db, seed_users):
     db.expire_all()
     rooms = _rooms(db)
     assert [r.code for r in rooms] == ["LH-201"]
-    assert rooms[0].resource_type == ResourceType.ROOM
+    assert rooms[0].resource_type == "ROOM"
     assert rooms[0].label == "LH-201"
     # Nothing in a CSV knows a room's capacity or where it is.
     assert rooms[0].capacity is None

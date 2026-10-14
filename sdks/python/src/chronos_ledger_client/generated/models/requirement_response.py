@@ -9,7 +9,6 @@ from attrs import field as _attrs_field
 
 from ..models.requirement_response_enforcement import RequirementResponseEnforcement
 from ..models.requirement_response_owner_kind import RequirementResponseOwnerKind
-from ..models.requirement_response_target_kind import RequirementResponseTargetKind
 
 T = TypeVar("T", bound="RequirementResponse")
 
@@ -22,7 +21,7 @@ class RequirementResponse:
         owner_kind (RequirementResponseOwnerKind):
         owner_id (int):
         target_resource_id (int | None):
-        target_kind (RequirementResponseTargetKind):
+        target_kind (None | str): A resource class code.
         quantity (int):
         before_minutes (int):
         after_minutes (int):
@@ -34,7 +33,7 @@ class RequirementResponse:
     owner_kind: RequirementResponseOwnerKind
     owner_id: int
     target_resource_id: int | None
-    target_kind: RequirementResponseTargetKind
+    target_kind: None | str
     quantity: int
     before_minutes: int
     after_minutes: int
@@ -52,7 +51,8 @@ class RequirementResponse:
         target_resource_id: int | None
         target_resource_id = self.target_resource_id
 
-        target_kind = self.target_kind.value
+        target_kind: None | str
+        target_kind = self.target_kind
 
         quantity = self.quantity
 
@@ -99,7 +99,12 @@ class RequirementResponse:
 
         target_resource_id = _parse_target_resource_id(d.pop("target_resource_id"))
 
-        target_kind = RequirementResponseTargetKind(d.pop("target_kind"))
+        def _parse_target_kind(data: object) -> None | str:
+            if data is None:
+                return data
+            return cast(None | str, data)
+
+        target_kind = _parse_target_kind(d.pop("target_kind"))
 
         quantity = d.pop("quantity")
 

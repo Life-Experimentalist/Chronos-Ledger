@@ -166,7 +166,6 @@ could no longer reason about its own data.
 | `AccessReadiness`       | `VERY_FREE`, `OPEN_AD_HOC`, `BUSY`, `CRITICAL_DO_NOT_DISTURB`                        |
 | `LogVerificationState`  | `PENDING_VERIFICATION`, `VERIFIED_APPROVED`, `VERIFIED_DENIED`                       |
 | `ReservationStatus`     | `HELD`, `CANCELLED`                                                                  |
-| `ResourceType`          | `ROOM`, `PERSON`                                                                     |
 
 Wanting a different word for one of these on screen is a display problem, and
 the six label keys do not cover it: they name nouns, not states. A hospital

@@ -84,17 +84,19 @@ def sync_detailed(
     body: ResourceCreate,
     idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | ResourceResponse]:
-    """Create a room
+    """Create a resource
 
-     Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its
-    own rooms. The row is the one an import would have made, so a later CSV naming the room finds it
-    rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read
-    the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
+     Requires `ORG_ADMIN`. Registers a resource before any timetable names it, for a system that manages
+    its own rooms. It is a room unless `resource_type` names another class of the organization. The row
+    is the one an import would have made, so a later CSV naming the room finds it rather than creating a
+    second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET
+    /api/v1/resources/?code=`: the code already identifies it.
 
     Args:
         idempotency_key (str | Unset):
-        body (ResourceCreate): A room. Every string is trimmed first, code included, the same as
-            the importer trims a room name, so this room and the same name in a later CSV are one row.
+        body (ResourceCreate): A resource, a room unless `resource_type` says otherwise. Every
+            string is trimmed first, code included, the same as the importer trims a room name, so
+            this room and the same name in a later CSV are one row.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -122,17 +124,19 @@ def sync(
     body: ResourceCreate,
     idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | ResourceResponse | None:
-    """Create a room
+    """Create a resource
 
-     Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its
-    own rooms. The row is the one an import would have made, so a later CSV naming the room finds it
-    rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read
-    the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
+     Requires `ORG_ADMIN`. Registers a resource before any timetable names it, for a system that manages
+    its own rooms. It is a room unless `resource_type` names another class of the organization. The row
+    is the one an import would have made, so a later CSV naming the room finds it rather than creating a
+    second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET
+    /api/v1/resources/?code=`: the code already identifies it.
 
     Args:
         idempotency_key (str | Unset):
-        body (ResourceCreate): A room. Every string is trimmed first, code included, the same as
-            the importer trims a room name, so this room and the same name in a later CSV are one row.
+        body (ResourceCreate): A resource, a room unless `resource_type` says otherwise. Every
+            string is trimmed first, code included, the same as the importer trims a room name, so
+            this room and the same name in a later CSV are one row.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -155,17 +159,19 @@ async def asyncio_detailed(
     body: ResourceCreate,
     idempotency_key: str | Unset = UNSET,
 ) -> Response[ErrorResponse | ResourceResponse]:
-    """Create a room
+    """Create a resource
 
-     Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its
-    own rooms. The row is the one an import would have made, so a later CSV naming the room finds it
-    rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read
-    the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
+     Requires `ORG_ADMIN`. Registers a resource before any timetable names it, for a system that manages
+    its own rooms. It is a room unless `resource_type` names another class of the organization. The row
+    is the one an import would have made, so a later CSV naming the room finds it rather than creating a
+    second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET
+    /api/v1/resources/?code=`: the code already identifies it.
 
     Args:
         idempotency_key (str | Unset):
-        body (ResourceCreate): A room. Every string is trimmed first, code included, the same as
-            the importer trims a room name, so this room and the same name in a later CSV are one row.
+        body (ResourceCreate): A resource, a room unless `resource_type` says otherwise. Every
+            string is trimmed first, code included, the same as the importer trims a room name, so
+            this room and the same name in a later CSV are one row.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -191,17 +197,19 @@ async def asyncio(
     body: ResourceCreate,
     idempotency_key: str | Unset = UNSET,
 ) -> ErrorResponse | ResourceResponse | None:
-    """Create a room
+    """Create a resource
 
-     Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its
-    own rooms. The row is the one an import would have made, so a later CSV naming the room finds it
-    rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read
-    the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
+     Requires `ORG_ADMIN`. Registers a resource before any timetable names it, for a system that manages
+    its own rooms. It is a room unless `resource_type` names another class of the organization. The row
+    is the one an import would have made, so a later CSV naming the room finds it rather than creating a
+    second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET
+    /api/v1/resources/?code=`: the code already identifies it.
 
     Args:
         idempotency_key (str | Unset):
-        body (ResourceCreate): A room. Every string is trimmed first, code included, the same as
-            the importer trims a room name, so this room and the same name in a later CSV are one row.
+        body (ResourceCreate): A resource, a room unless `resource_type` says otherwise. Every
+            string is trimmed first, code included, the same as the importer trims a room name, so
+            this room and the same name in a later CSV are one row.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.

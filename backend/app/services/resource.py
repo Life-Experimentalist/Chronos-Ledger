@@ -5,7 +5,7 @@
 
 from sqlalchemy.orm import Session
 
-from app.models.db import Resource, ResourceType
+from app.models.db import ROOM_CLASS, Resource
 
 
 def get_or_create_room(code: str, db: Session) -> Resource:
@@ -24,7 +24,7 @@ def get_or_create_room(code: str, db: Session) -> Resource:
     existing = db.query(Resource).filter(Resource.code == code).first()
     if existing:
         return existing
-    room = Resource(code=code, label=code, resource_type=ResourceType.ROOM)
+    room = Resource(code=code, label=code, resource_type=ROOM_CLASS)
     db.add(room)
     db.flush()
     return room

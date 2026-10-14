@@ -26,7 +26,6 @@ from app.models.db import (
     Resource,
     ResourceMode,
     ResourceRequirement,
-    ResourceType,
     StructuralMasterSlot,
 )
 from tests.conftest import ADMIN_PASSWORD, STAFF_PASSWORD, login, weekly
@@ -46,7 +45,7 @@ def _admin(client):
 def _resource(
     db,
     code,
-    kind=ResourceType.ROOM,
+    kind="ROOM",
     mode=ResourceMode.EXCLUSIVE,
     capacity=None,
 ):
@@ -57,7 +56,7 @@ def _resource(
 
 
 def _person(db, code):
-    return _resource(db, code, kind=ResourceType.PERSON)
+    return _resource(db, code, kind="PERSON")
 
 
 def _require(client, headers, owner_id, **body):
@@ -409,9 +408,7 @@ def test_an_assignment_from_another_organization_is_refused(client, db, seed_use
     _needs_kind(client, headers, room.id, "PERSON")
     db.add(Organization(id="other", name="Other"))
     db.commit()
-    stranger = Resource(
-        code="P-X", label="P-X", resource_type=ResourceType.PERSON, organization_id="other"
-    )
+    stranger = Resource(code="P-X", label="P-X", resource_type="PERSON", organization_id="other")
     db.add(stranger)
     db.commit()
 

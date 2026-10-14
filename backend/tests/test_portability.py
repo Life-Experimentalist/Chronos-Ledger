@@ -47,7 +47,6 @@ from app.models.db import (
     ReservationStatus,
     Resource,
     ResourceRequirement,
-    ResourceType,
     ReverseRsvpLog,
     StructuralMasterSlot,
     User,
@@ -222,7 +221,7 @@ def seed(engine):
                     id=2,
                     code="P-AS100",
                     label="Staff Reporting Up",
-                    resource_type=ResourceType.PERSON,
+                    resource_type="PERSON",
                     user_id="AS100",
                     active=False,
                 ),
@@ -246,7 +245,7 @@ def seed(engine):
                     id=2,
                     owner_kind=RequirementOwner.ACTIVITY,
                     owner_id=1,
-                    target_kind=ResourceType.PERSON,
+                    target_kind="PERSON",
                     quantity=2,
                     enforcement=None,
                     created_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
@@ -731,8 +730,9 @@ def test_an_import_without_secrets_pauses_webhooks_with_a_new_secret(source, eng
 
 def test_a_database_with_rows_is_refused(source, engines):
     target = engines("target")
-    ensure_schema(target)  # a first start leaves the default organization and its administrator
-    with pytest.raises(ArchiveError, match="not empty: organizations, users"):
+    # A first start leaves the default organization, its classes and its administrator.
+    ensure_schema(target)
+    with pytest.raises(ArchiveError, match="not empty: organizations, resource_classes, users"):
         import_archive(target, io.BytesIO(export_bytes(source)), admin_password=IMPORT_PASSWORD)
     assert row_count(target, "users") == 1
 

@@ -18,6 +18,7 @@ from sqlalchemy import select
 from app.core import clock, ids
 from app.core.config import get_settings
 from app.core.database import Base, get_db, get_session_opener
+from app.core.organization import DEFAULT_ORGANIZATION_ID
 from app.core.security import hash_api_key
 from app.cron import scheduled
 from app.main import app
@@ -26,6 +27,7 @@ from app.models.db import (
     ApiKey,
     AuditRecord,
     InstitutionalRole,
+    Organization,
     PlanningCycle,
     Reservation,
     StructuralMasterSlot,
@@ -60,6 +62,8 @@ def _fresh_database():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
+    # The organization every row is filed under, which seeds its resource classes.
+    db.add(Organization(id=DEFAULT_ORGANIZATION_ID, name="Default organization"))
     db.add(
         User(
             id="ADM001",

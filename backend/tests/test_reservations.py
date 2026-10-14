@@ -19,7 +19,6 @@ from app.models.db import (
     Reservation,
     ReservationStatus,
     Resource,
-    ResourceType,
     StructuralMasterSlot,
     User,
 )
@@ -35,7 +34,7 @@ SUNDAY = datetime.date(2026, 1, 11)
 UNIT_ADMIN_PASSWORD = "UnitAdminPass123!"
 
 
-def _room(db, code="LH-201", resource_type=ResourceType.ROOM, **extra):
+def _room(db, code="LH-201", resource_type="ROOM", **extra):
     room = Resource(code=code, label=code, resource_type=resource_type, **extra)
     db.add(room)
     db.commit()
