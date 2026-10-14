@@ -332,6 +332,7 @@ integration contract applies.
   no-overlap guarantee moves entirely to materialized instances, and
   template-level checks expand rules in the application before saving.
 - **Done when:** two rules that only collide on one date in the horizon are refused at save time and cannot be forced in through the ledger.
+- **Status:** built in PR #93, held for 0.17.
 
 ---
 

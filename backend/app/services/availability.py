@@ -143,38 +143,37 @@ def _held_interval(held: Reservation) -> dict:
 def held_against_slot(
     db: Session,
     resource_id: int,
-    weekday: int,
+    rule: str,
+    dtstart: datetime.date,
     start: datetime.time,
     end: datetime.time,
     cycle: PlanningCycle | None = None,
 ) -> list[dict]:
-    """The still standing bookings a weekly slot at this window would sit on.
+    """The still standing bookings a slot with this rule and window would sit on.
 
     This is the same question the other way round. Availability and booking
     ask what occupies a resource over a range of dates; a slot has no range,
-    so what it needs to know is which of a resource's holds fall on its
-    weekday, and which of those overlap its window.
+    so what it needs to know is which of a resource's holds fall on one of
+    the dates its rule gives, and which of those overlap its window.
 
-    The weekday match is done here in Python rather than in SQL. Postgres
-    numbers isodow Monday 1 to Sunday 7 and SQLite numbers strftime('%w')
-    Sunday 0 to Saturday 6, and the suite runs on SQLite while a deployment
-    runs on Postgres, so a comparison written in SQL would be a day out in
-    production and correct in every test. day_of_week_index is 1 for Monday,
-    which is what isoweekday() returns.
+    Whether the rule lands on a date is asked in Python, through
+    app/core/recurrence.py. Neither database can evaluate an RRULE, and the
+    nightly generator asks the same function, so this refuses exactly the
+    dates the generator would write.
 
     Only holds from today forward count. A slot produces days from now
     onwards, never backwards, so a hold that has already passed cannot be
     sat on by a class created after it. Counting those would mean a Monday
     class could not be created because the room was held one Monday in March.
 
-    Matching the weekday is not the same as matching the date, once either
-    side may run past midnight. A hold dated Tuesday that starts at five in
-    the morning is sat on by a Monday slot running 22:00 to 06:00, and a hold
-    dated Monday running 22:00 to 06:00 is sat on by a Tuesday slot starting
-    at five. So each hold is tried against the three dates a slot on this
-    weekday could have and still touch it, its own and the two either side.
-    Only one of those three is this weekday, so a hold can be named once at
-    most. Nothing further apart can reach it: both windows are under a day.
+    Sharing a date is not the same as clashing, once either side may run past
+    midnight. A hold dated Tuesday that starts at five in the morning is sat
+    on by a Monday slot running 22:00 to 06:00, and a hold dated Monday
+    running 22:00 to 06:00 is sat on by a Tuesday slot starting at five. So
+    each hold is tried against the three dates a slot could have and still
+    touch it, its own and the two either side. Nothing further apart can
+    reach it: both windows are under a day. A daily rule can land on all
+    three, and the hold is still named once.
 
     cycle is the new slot's own. The slot only ever produces days inside its
     cycle's dates, so a hold on a date it will never run on is not sat on.
@@ -194,46 +193,51 @@ def held_against_slot(
         )
         .all()
     ):
+        taken = window_span(held.reserved_date, held.time_window_start, held.time_window_end)
         for offset in (-1, 0, 1):
             slot_date = held.reserved_date + datetime.timedelta(days=offset)
-            if slot_date.isoweekday() != weekday:
-                continue
             if not _within(cycle, slot_date):
                 continue
-            taken = window_span(held.reserved_date, held.time_window_start, held.time_window_end)
+            if not recurrence.occurs_on(rule, dtstart, slot_date):
+                continue
             if _overlaps(window_span(slot_date, start, end), taken):
                 clashes.append(_held_interval(held))
+                break
     return clashes
 
 
 def slots_against_slot(
     db: Session,
     resource_id: int,
-    weekday: int,
+    rule: str,
+    dtstart: datetime.date,
     start: datetime.time,
     end: datetime.time,
     exclude_slot_id: int | None = None,
     cycle: PlanningCycle | None = None,
 ) -> list[dict]:
-    """The weekly slots a slot at this window on this resource would sit on.
+    """The slots a slot with this rule and window on this resource would sit on.
 
     held_against_slot answers this for bookings. Nothing answered it for the
     timetable itself, so two classes could be put in one room at one time and
     the only sign of it was two rows in the ledger every day from then on.
 
-    Both sides are weekly repeats with no date, so the comparison is made on
-    a date picked to stand for every week: the next occurrence of the new
-    slot's weekday. The clash repeats until one of the two moves, and the
-    date returned is the first time it happens rather than a date the caller
-    asked about. Tomorrow is the earliest one considered, so an adjacent
-    weekday is never reported as yesterday.
+    Both sides are rules, and two rules can meet on one date in a year and
+    on no other: a fortnightly class and a monthly one, or a weekly class and
+    a short daily block. Comparing one weekday cannot see that. So both rules
+    are expanded into the dates they will actually be written on, the dates
+    inside each one's cycle, and compared date by date. Those are the rows
+    the ledger will hold, so a clash this misses is a row the ledger refuses
+    later, and a clash this reports is one the ledger would have had.
 
-    The weekday either side is checked as well, for the same reason
+    Tomorrow is the earliest date considered, the same as the generator's
+    horizon, and the date reported is the first one where the other slot's
+    day is sat on. The other slot is named once however often the two meet.
+
+    The day either side is checked as well, for the same reason
     held_against_slot checks the dates either side: once a window may run
-    past midnight, sharing a weekday and overlapping in time have come
-    apart. A Monday 22:00 to 06:00 class occupies Tuesday morning. Only one
-    of the three candidate dates falls on any given weekday, so a slot can
-    be named at most once.
+    past midnight, sharing a date and overlapping in time have come apart. A
+    Monday 22:00 to 06:00 class occupies Tuesday morning.
 
     exclude_slot_id keeps a slot being edited from finding itself. Widening
     a window from 09:00 to 10:00 into 09:00 to 11:00 overlaps the window it
@@ -241,58 +245,86 @@ def slots_against_slot(
 
     Which slots count is booked_slots' decision, not this function's, so
     this and the availability endpoint cannot disagree about whether a room
-    is free. Two windows that meet on the probe meet in every week both
-    slots run, and each runs only inside its own cycle's dates, so what is
-    left to ask is whether there is such a week. cycle is the new slot's
-    own. Two open cycles covering different parts of the year can share a
-    room at one hour, and when they do overlap the date reported is the
-    first week they both run, not the probe.
+    is free. cycle is the new slot's own. With no cycle the new rule is
+    expanded over the other slot's cycle only, which is as far as a clash
+    with it could reach.
     """
-    probe = org_today() + datetime.timedelta(days=1)
-    while probe.isoweekday() != weekday:
-        probe += datetime.timedelta(days=1)
-    window = window_span(probe, start, end)
+    one_day = datetime.timedelta(days=1)
+    tomorrow = org_today() + one_day
 
     clashes = []
     for slot in booked_slots(db, resource_id):
         if slot.id == exclude_slot_id:
             continue
-        for offset in (-1, 0, 1):
-            shift = datetime.timedelta(days=offset)
-            day = probe + shift
-            if day.isoweekday() != slot.day_of_week_index:
-                continue
-            if not _overlaps(
-                window_span(day, slot.time_window_start, slot.time_window_end), window
-            ):
-                continue
-            # The first date on the new slot's weekday, from the probe on,
-            # that is inside its cycle while the other side, a shift away, is
-            # inside the other cycle. None of them means the two never meet.
-            other = slot.activity.cycle
-            first = max(probe, other.date_bounds_start - shift)
-            last = other.date_bounds_end - shift
-            if cycle is not None:
-                first = max(first, cycle.date_bounds_start)
-                last = min(last, cycle.date_bounds_end)
-            first += datetime.timedelta(days=(weekday - first.isoweekday()) % 7)
-            if first > last:
-                continue
-            day = first + shift
-            _, ends = window_span(day, slot.time_window_start, slot.time_window_end)
-            clashes.append(
-                {
-                    "date": day,
-                    "start": slot.time_window_start,
-                    "end_date": ends.date(),
-                    "end": slot.time_window_end,
-                    "activity_id": slot.activity_id,
-                    "activity_code": slot.activity.activity_code,
-                    "master_slot_id": slot.id,
-                    "reservation_id": None,
-                }
+        other = slot.activity.cycle
+        # The new slot's dates that can touch one of the other's: its own
+        # cycle, from tomorrow, and no more than a day outside the other's.
+        first = max(tomorrow, other.date_bounds_start - one_day)
+        last = other.date_bounds_end + one_day
+        if cycle is not None:
+            first = max(first, cycle.date_bounds_start)
+            last = min(last, cycle.date_bounds_end)
+        if first > last:
+            continue
+        theirs = set(
+            recurrence.occurrences(
+                slot.rrule,
+                slot.dtstart,
+                max(first - one_day, other.date_bounds_start),
+                min(last + one_day, other.date_bounds_end),
             )
+        )
+        if not theirs:
+            continue
+        met = _first_meeting(
+            recurrence.occurrences(rule, dtstart, first, last),
+            start,
+            end,
+            theirs,
+            slot.time_window_start,
+            slot.time_window_end,
+        )
+        if met is None:
+            continue
+        _, ends = window_span(met, slot.time_window_start, slot.time_window_end)
+        clashes.append(
+            {
+                "date": met,
+                "start": slot.time_window_start,
+                "end_date": ends.date(),
+                "end": slot.time_window_end,
+                "activity_id": slot.activity_id,
+                "activity_code": slot.activity.activity_code,
+                "master_slot_id": slot.id,
+                "reservation_id": None,
+            }
+        )
     return clashes
+
+
+def _first_meeting(
+    ours: list[datetime.date],
+    start: datetime.time,
+    end: datetime.time,
+    theirs: set[datetime.date],
+    their_start: datetime.time,
+    their_end: datetime.time,
+) -> datetime.date | None:
+    """The first of their dates that one of ours sits on, or None.
+
+    ours is in date order, so the first hit is the earliest clash on our
+    side. The date returned is theirs, which is what a conflict entry
+    describes: the window that is already there.
+    """
+    for day in ours:
+        window = window_span(day, start, end)
+        for offset in (-1, 0, 1):
+            their_day = day + datetime.timedelta(days=offset)
+            if their_day not in theirs:
+                continue
+            if _overlaps(window, window_span(their_day, their_start, their_end)):
+                return their_day
+    return None
 
 
 def _day_interval(day: DailyLedger) -> dict:
@@ -404,13 +436,14 @@ def days_against_window(
 def days_against_slot(
     db: Session,
     resource_id: int,
-    weekday: int,
+    rule: str,
+    dtstart: datetime.date,
     start: datetime.time,
     end: datetime.time,
     exclude_slot_id: int | None = None,
     cycle: PlanningCycle | None = None,
 ) -> list[dict]:
-    """The generated days a weekly slot at this window would sit on.
+    """The generated days a slot with this rule and window would sit on.
 
     slots_against_slot asks this of the timetable and held_against_slot asks
     it of the bookings. Neither sees the rows that actually put somebody at a
@@ -427,27 +460,26 @@ def days_against_slot(
     produces days inside that cycle's dates, so a day on a date it will never
     run beside is not a clash.
 
-    Every future day of the resource is scanned rather than one probe date,
-    because a correction is copied onto every day this slot has still to run
-    and the clash can be on any of them. The three date offsets are the same
-    ones held_against_slot uses and for the same reason: sharing a weekday and
-    overlapping in time came apart the moment a window could pass midnight.
-    Only one of three consecutive dates falls on a given weekday, so a day is
-    named at most once.
+    Every future day of the resource is scanned, because a correction is
+    copied onto every day this slot has still to run and the clash can be on
+    any of them. Each is tried against the three dates around it that the
+    rule could land on, for the same reason held_against_slot does, and is
+    named once however many of them the rule lands on.
     """
     clashes = []
     for row in _dated_days(db, resource_id, org_today()):
         if exclude_slot_id is not None and row.master_slot_id == exclude_slot_id:
             continue
+        entry = _day_interval(row)
         for offset in (-1, 0, 1):
             slot_date = row.target_date + datetime.timedelta(days=offset)
-            if slot_date.isoweekday() != weekday:
-                continue
             if not _within(cycle, slot_date):
                 continue
-            entry = _day_interval(row)
+            if not recurrence.occurs_on(rule, dtstart, slot_date):
+                continue
             if _overlaps(_bounds(entry), window_span(slot_date, start, end)):
                 clashes.append(entry)
+                break
     return clashes
 
 

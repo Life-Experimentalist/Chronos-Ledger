@@ -287,8 +287,11 @@ def test_a_shared_resource_and_the_timetable_do_not_refuse_each_other(client, db
     headers = _admin(client)
 
     assert _book(client, headers, lounge.id, "key-over-class").status_code == 201
+    rule = weekly(DAY.isoweekday())
     assert (
-        held_against_slot(db, lounge.id, DAY.isoweekday(), datetime.time(9), datetime.time(10))
+        held_against_slot(
+            db, lounge.id, rule["rrule"], rule["dtstart"], datetime.time(9), datetime.time(10)
+        )
         == []
     )
 

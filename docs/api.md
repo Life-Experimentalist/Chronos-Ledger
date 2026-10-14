@@ -1785,8 +1785,12 @@ returns `day_of_week_index`, the ISO weekday of the slot's first date, through
 0.17; it is deprecated and will be removed. The request bodies no longer take
 it.
 
-The room checks below compare the weekday of the slot's first date. A rule on
-more than one weekday is checked on that first weekday only.
+The room checks below compare dates, not weekdays. The slot's rule is
+expanded into the dates it will actually run on, inside its cycle and from
+tomorrow, and so is the rule of every class it is compared with, so two
+rules that meet on one date in the whole cycle are refused, and two on the
+same weekday that never meet (two fortnightly classes a week apart) are
+not.
 
 Both are refused with `409` where the room is already taken for part of that
 window, by a booking, by another class already on the timetable, or by a day
@@ -1853,13 +1857,14 @@ has since been deleted. Unlike the other two it counts whatever its cycle now
 says: closing a cycle keeps the days ahead that carry attendance or a note, and
 the database refuses a second row on top of one either way.
 
-A weekly slot has no date of its own, so the one reported is the next time
-the clash actually happens. It repeats every week until one of the two moves.
+A slot has no single date of its own, so the one reported is the first date
+the clash actually happens: the other class's date, the booking's date or the
+generated day's date. A class is named once however often the two meet.
 
 Every open cycle counts, on its own dates only. A slot produces days only from
 its cycle's `date_bounds_start` to its `date_bounds_end`, so a class in a cycle
 covering the spring does not block one in a cycle covering the autumn, and
-where two cycles do overlap the date reported is the first week both classes
+where two cycles do overlap the date reported is the first date both classes
 run. The new slot's own cycle limits it the same way: a booking or a generated
 day on a date that cycle never reaches is not a clash.
 

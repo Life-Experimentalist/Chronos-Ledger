@@ -325,6 +325,10 @@ class ChronosIngestionEngine:
                         f"activity '{row['activity_code']}': the slot on day {day} at "
                         f"{t_start} is retired; take its rows out of the file"
                     )
+                # The pair the room checks expand: the slot's own when the row
+                # matches one, and otherwise the one a new slot is given below.
+                made = None if slot is not None else recurrence.weekly(day, cycle.date_bounds_start)
+                dtstart = slot.dtstart if slot is not None else made["dtstart"]
                 room = rooms.get(str(row["room"]))
                 if room is None:
                     room = rooms[str(row["room"])] = get_or_create_room(str(row["room"]), self.db)
@@ -342,7 +346,8 @@ class ChronosIngestionEngine:
                         held = held_against_slot(
                             self.db,
                             room.id,
-                            day,
+                            rule,
+                            dtstart,
                             t_start,
                             t_end,
                             cycle=cycle,
@@ -364,7 +369,8 @@ class ChronosIngestionEngine:
                         booked = slots_against_slot(
                             self.db,
                             room.id,
-                            day,
+                            rule,
+                            dtstart,
                             t_start,
                             t_end,
                             slot.id if slot else None,
@@ -390,7 +396,8 @@ class ChronosIngestionEngine:
                     days = days_against_slot(
                         self.db,
                         room.id,
-                        day,
+                        rule,
+                        dtstart,
                         t_start,
                         t_end,
                         slot.id if slot else None,
@@ -423,7 +430,7 @@ class ChronosIngestionEngine:
                     )
                 if not slot:
                     slot = StructuralMasterSlot(
-                        **recurrence.weekly(day, cycle.date_bounds_start),
+                        **made,
                         time_window_start=t_start,
                         time_window_end=t_end,
                         activity_id=offering.id,
