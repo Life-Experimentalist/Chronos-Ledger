@@ -4,7 +4,7 @@
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
 from sqlalchemy import or_, select, true
 from sqlalchemy.orm import Session
 
@@ -52,6 +52,7 @@ def _as_utc(moment: datetime) -> datetime:
 @router.post("/register-checkin", operation_id="guest.checkIn")
 def process_guest_entry(
     payload: GuestCheckInRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     # The visitor does not sign in; the kiosk device does, with an API key an
@@ -61,13 +62,14 @@ def process_guest_entry(
 ):
     # Keyed on the account the kiosk key belongs to rather than the address it
     # dialled from: a lobby tablet on the guest network changes address, and
-    # two kiosks behind one router would otherwise share a budget.
+    # two kiosks behind one router would otherwise share a budget. The state
+    # holds the key's own account even when the key is acting for someone else
+    # (X-Chronos-Actor), so naming other people does not mint other budgets.
+    device = request.state.actor_id
     budget = get_settings().rate_limit_guest_checkin
     window = rate_limit.GUEST_WINDOW_SECONDS
-    rate_limit.guard(
-        "guest-checkin", caller.id, budget, window, "visitor check-ins from this device"
-    )
-    rate_limit.spend("guest-checkin", caller.id, budget, window)
+    rate_limit.guard("guest-checkin", device, budget, window, "visitor check-ins from this device")
+    rate_limit.spend("guest-checkin", device, budget, window)
 
     staff = db.query(User).filter(User.id == payload.target_staff_id).first()
     if (

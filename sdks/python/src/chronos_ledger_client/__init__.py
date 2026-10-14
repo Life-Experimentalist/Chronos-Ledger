@@ -38,6 +38,7 @@ def connect(
     base_url: str,
     *,
     api_key: str | None = None,
+    acting_for: str | None = None,
     tokens: Tokens | None = None,
     on_tokens: Callable[[Tokens], None] | None = None,
     retry: RetryPolicy | None = DEFAULT_RETRY,
@@ -47,6 +48,9 @@ def connect(
     """A client for the server at ``base_url``, for example ``https://chronos.example.org``.
 
     Pass ``api_key`` for a scoped API key, or ``tokens`` from ``POST /api/v1/auth/login``.
+    ``acting_for`` is a user id sent as ``X-Chronos-Actor`` on every request, for a key
+    that holds the ``impersonate`` scope; it needs ``api_key``. A single call can send
+    its own header instead, and that one wins.
     Tokens are refreshed once on a 401 and each new pair goes to ``on_tokens``,
     because a refresh token works only once. ``retry`` says how a failed request
     is tried again, and ``None`` turns retries off. ``transport`` replaces the
@@ -54,6 +58,8 @@ def connect(
     """
     if api_key and tokens:
         raise ValueError("pass api_key or tokens, not both")
+    if acting_for and not api_key:
+        raise ValueError("acting_for needs api_key")
     base_url = base_url.rstrip("/").removesuffix("/api/v1")
     return Client(
         base_url=base_url,
@@ -64,6 +70,7 @@ def connect(
                 base_url=base_url,
                 user_agent=f"chronos-python/{__version__}",
                 api_key=api_key,
+                acting_for=acting_for,
                 tokens=tokens,
                 on_tokens=on_tokens,
                 retry=retry,

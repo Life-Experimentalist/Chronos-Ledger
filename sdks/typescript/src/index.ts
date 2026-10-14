@@ -17,6 +17,11 @@ export interface ChronosOptions {
   baseUrl: string;
   /** A scoped API key, sent as `X-API-Key`. */
   apiKey?: string;
+  /**
+   * A user id sent as `X-Chronos-Actor` on every request, for an API key that
+   * holds the `impersonate` scope. Needs `apiKey`. A header set on one request wins.
+   */
+  actingFor?: string;
   /** Tokens from `POST /api/v1/auth/login`. Refreshed once on a 401. */
   tokens?: Tokens;
   /** Called with each refreshed pair, so it can be stored. */
@@ -38,12 +43,16 @@ export function createChronosClient(options: ChronosOptions) {
   if (options.apiKey && options.tokens) {
     throw new Error("pass apiKey or tokens, not both");
   }
+  if (options.actingFor && !options.apiKey) {
+    throw new Error("actingFor needs apiKey");
+  }
   const baseUrl = options.baseUrl.replace(/\/+$/, "").replace(/\/api\/v1$/, "");
   const client = createClient<paths>({
     baseUrl,
     fetch: chronosFetch({
       baseUrl,
       apiKey: options.apiKey,
+      actingFor: options.actingFor,
       tokens: options.tokens,
       onTokens: options.onTokens,
       retry: resolveRetry(options.retry),

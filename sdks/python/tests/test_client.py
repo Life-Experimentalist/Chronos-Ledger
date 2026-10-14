@@ -57,6 +57,35 @@ def test_api_key_goes_out_as_x_api_key_with_the_user_agent():
     assert "Authorization" not in request.headers
 
 
+def test_acting_for_goes_out_as_x_chronos_actor_beside_the_key():
+    server = Server(lambda r: httpx.Response(200, json=[]))
+    c = client(server, api_key="k1", acting_for="STU001")
+    assert resources_list.sync(client=c) == []
+    (request,) = server.seen
+    assert request.headers["X-API-Key"] == "k1"
+    assert request.headers["X-Chronos-Actor"] == "STU001"
+
+
+def test_without_acting_for_no_actor_header_is_sent():
+    server = Server(lambda r: httpx.Response(200, json=[]))
+    assert resources_list.sync(client=client(server, api_key="k1")) == []
+    assert "X-Chronos-Actor" not in server.seen[0].headers
+
+
+def test_a_header_set_on_the_request_wins_over_acting_for():
+    server = Server(lambda r: httpx.Response(200, json=[]))
+    c = client(server, api_key="k1", acting_for="STU001")
+    c.get_httpx_client().get("/api/v1/resources/", headers={"X-Chronos-Actor": "FAC001"})
+    assert server.seen[0].headers["X-Chronos-Actor"] == "FAC001"
+
+
+def test_acting_for_needs_an_api_key():
+    with pytest.raises(ValueError):
+        chronos.connect("https://c.test", acting_for="STU001")
+    with pytest.raises(ValueError):
+        chronos.connect("https://c.test", tokens=chronos.Tokens("a", "r"), acting_for="STU001")
+
+
 def test_a_401_refreshes_once_stores_the_pair_and_repeats_the_call():
     def handle(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/auth/refresh"):

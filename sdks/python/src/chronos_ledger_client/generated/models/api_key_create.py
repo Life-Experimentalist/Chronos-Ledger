@@ -21,6 +21,8 @@ class ApiKeyCreate:
              Example: SVC001.
         scopes (list[str] | None | Unset): Areas this key may reach. Omit the field for an unrestricted key; an empty
             array is refused, since a key that can reach nothing is not a key anybody wants. Stored sorted and deduplicated.
+            The scope `impersonate` lets the key act for a named person in its organization (header `X-Chronos-Actor`); it
+            is granted only by naming it, and `*` does not include it.
              Example: ['schedule:read', 'resources:read'].
         expires_at (datetime.datetime | None | Unset): When the key stops working. Omit for a key that never does. A
             time already past is refused at creation.

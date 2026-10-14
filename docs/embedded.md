@@ -83,6 +83,11 @@ X-Chronos-Actor-Email: <address>                optional
 X-Chronos-Actor-Unit: <unit code>               optional
 ```
 
+The server flavours read the same header too, as an option: an API key with
+the `impersonate` scope can name the person a request is for. There it only
+looks an existing account up and never makes one. See
+[Acting for a person](api.md#acting-for-a-person).
+
 The secret is compared in constant time by
 `backend/app/core/host_identity.py::HostSecretMiddleware`. A missing or wrong
 one is `401 {"detail": "Not authenticated"}` with `WWW-Authenticate: Host`,

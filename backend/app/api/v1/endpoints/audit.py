@@ -54,6 +54,7 @@ def list_audit_records(
             "at": (r.at if r.at.tzinfo else r.at.replace(tzinfo=UTC)).isoformat(),
             "actor_id": r.actor_id,
             "api_key_id": r.api_key_id,
+            "acting_for_user_id": r.acting_for_user_id,
             "method": r.method,
             "path": r.path,
             "status_code": r.status_code,

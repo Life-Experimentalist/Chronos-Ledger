@@ -20,6 +20,9 @@ class AuditRecord:
         at (datetime.datetime | Unset):
         actor_id (None | str | Unset): The account, or null when the request carried no valid credentials.
         api_key_id (int | None | Unset): The key used, or null for a signed-in person.
+        acting_for_user_id (None | str | Unset): The id sent in `X-Chronos-Actor`, exactly as asked for and cut to 50
+            characters, or null when the request did not send the header. Set on a refused attempt too, whether or not that
+            id exists, so `actor_id` is who sent the request and this is who it named.
         method (str | Unset):
         path (str | Unset):
         status_code (int | Unset):
@@ -29,6 +32,7 @@ class AuditRecord:
     at: datetime.datetime | Unset = UNSET
     actor_id: None | str | Unset = UNSET
     api_key_id: int | None | Unset = UNSET
+    acting_for_user_id: None | str | Unset = UNSET
     method: str | Unset = UNSET
     path: str | Unset = UNSET
     status_code: int | Unset = UNSET
@@ -53,6 +57,12 @@ class AuditRecord:
         else:
             api_key_id = self.api_key_id
 
+        acting_for_user_id: None | str | Unset
+        if isinstance(self.acting_for_user_id, Unset):
+            acting_for_user_id = UNSET
+        else:
+            acting_for_user_id = self.acting_for_user_id
+
         method = self.method
 
         path = self.path
@@ -70,6 +80,8 @@ class AuditRecord:
             field_dict["actor_id"] = actor_id
         if api_key_id is not UNSET:
             field_dict["api_key_id"] = api_key_id
+        if acting_for_user_id is not UNSET:
+            field_dict["acting_for_user_id"] = acting_for_user_id
         if method is not UNSET:
             field_dict["method"] = method
         if path is not UNSET:
@@ -109,6 +121,15 @@ class AuditRecord:
 
         api_key_id = _parse_api_key_id(d.pop("api_key_id", UNSET))
 
+        def _parse_acting_for_user_id(data: object) -> None | str | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(None | str | Unset, data)
+
+        acting_for_user_id = _parse_acting_for_user_id(d.pop("acting_for_user_id", UNSET))
+
         method = d.pop("method", UNSET)
 
         path = d.pop("path", UNSET)
@@ -120,6 +141,7 @@ class AuditRecord:
             at=at,
             actor_id=actor_id,
             api_key_id=api_key_id,
+            acting_for_user_id=acting_for_user_id,
             method=method,
             path=path,
             status_code=status_code,

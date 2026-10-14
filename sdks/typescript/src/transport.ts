@@ -47,6 +47,8 @@ export function resolveRetry(retry: RetryOptions | false | undefined): RetryPoli
 export interface TransportOptions {
   baseUrl: string;
   apiKey?: string;
+  /** Sent as `X-Chronos-Actor` beside the key, unless the request already sets it. */
+  actingFor?: string;
   tokens?: Tokens;
   /** Called with each new pair. A refresh token works once, so store the new one. */
   onTokens?: (tokens: Tokens) => void | Promise<void>;
@@ -81,8 +83,12 @@ export function chronosFetch(options: TransportOptions): (request: Request) => P
     const out = request.clone();
     out.headers.set("User-Agent", USER_AGENT);
     if (idempotencyKey) out.headers.set("Idempotency-Key", idempotencyKey);
-    if (options.apiKey) out.headers.set("X-API-Key", options.apiKey);
-    else if (tokens) out.headers.set("Authorization", `Bearer ${tokens.accessToken}`);
+    if (options.apiKey) {
+      out.headers.set("X-API-Key", options.apiKey);
+      if (options.actingFor && !out.headers.has("X-Chronos-Actor")) {
+        out.headers.set("X-Chronos-Actor", options.actingFor);
+      }
+    } else if (tokens) out.headers.set("Authorization", `Bearer ${tokens.accessToken}`);
     return out;
   };
 

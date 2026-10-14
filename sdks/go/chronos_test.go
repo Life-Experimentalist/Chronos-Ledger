@@ -159,6 +159,41 @@ func TestAPIKeyGoesOutAsXAPIKeyWithTheUserAgent(t *testing.T) {
 	}
 }
 
+func TestActingForGoesOutAsXChronosActorBesideTheKey(t *testing.T) {
+	s := newStub(t, func(_ int, w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, []any{}) })
+	c := newClient(t, s, WithAPIKey("k1"), WithActingFor("STU001"))
+	if _, err := c.ResourcesListWithResponse(context.Background(), &generated.ResourcesListParams{}); err != nil {
+		t.Fatal(err)
+	}
+	got := s.seen()[0]
+	if got.Header.Get("X-API-Key") != "k1" {
+		t.Errorf("X-API-Key %q", got.Header.Get("X-API-Key"))
+	}
+	if got.Header.Get("X-Chronos-Actor") != "STU001" {
+		t.Errorf("X-Chronos-Actor %q", got.Header.Get("X-Chronos-Actor"))
+	}
+}
+
+func TestNoActorHeaderWithoutActingFor(t *testing.T) {
+	s := newStub(t, func(_ int, w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, []any{}) })
+	c := newClient(t, s, WithAPIKey("k1"))
+	if _, err := c.ResourcesListWithResponse(context.Background(), &generated.ResourcesListParams{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.seen()[0].Header.Get("X-Chronos-Actor"); got != "" {
+		t.Errorf("X-Chronos-Actor %q", got)
+	}
+}
+
+func TestActingForNeedsAnAPIKey(t *testing.T) {
+	if _, err := New("https://c.test", WithActingFor("STU001")); err == nil {
+		t.Error("acting for without an API key must be refused")
+	}
+	if _, err := New("https://c.test", WithTokens(Tokens{"a", "r"}, nil), WithActingFor("STU001")); err == nil {
+		t.Error("acting for with tokens must be refused")
+	}
+}
+
 func TestBaseURLMayEndInAPIV1(t *testing.T) {
 	s := newStub(t, func(_ int, w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, []any{}) })
 	c, err := New(s.URL+"/api/v1/", WithAPIKey("k"))
