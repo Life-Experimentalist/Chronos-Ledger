@@ -38,7 +38,7 @@ import datetime
 from app.core.time import org_today
 from app.models.db import DailyLedger, StructuralMasterSlot
 from app.services.availability import days_against_slot
-from tests.conftest import ADMIN_PASSWORD, login
+from tests.conftest import ADMIN_PASSWORD, login, weekly
 from tests.test_import_corrections import TOMORROW, _csv, _row
 from tests.test_ingestion import _make_cycle, _upload
 from tests.test_slot_vs_hold import DAY_AFTER, _activity, _new_slot, _room
@@ -329,8 +329,14 @@ def test_the_search_names_a_day_once_and_not_three_times(db, seed_users):
     gone = _activity(db)
     day = _day(db, gone.id, room.id, TOMORROW)
 
+    slot = weekly(TOMORROW.isoweekday())
     found = days_against_slot(
-        db, room.id, TOMORROW.isoweekday(), datetime.time(9, 30), datetime.time(10, 30)
+        db,
+        room.id,
+        slot["rrule"],
+        slot["dtstart"],
+        datetime.time(9, 30),
+        datetime.time(10, 30),
     )
     assert [c["master_slot_id"] for c in found] == [None]
     assert [c["date"] for c in found] == [day.target_date]
@@ -348,8 +354,14 @@ def test_today_is_searched_and_not_only_tomorrow(db, seed_users):
     today = org_today()
     _day(db, gone.id, room.id, today, start=15, end=16)
 
+    slot = weekly(today.isoweekday())
     found = days_against_slot(
-        db, room.id, today.isoweekday(), datetime.time(15, 30), datetime.time(16, 30)
+        db,
+        room.id,
+        slot["rrule"],
+        slot["dtstart"],
+        datetime.time(15, 30),
+        datetime.time(16, 30),
     )
     assert [c["date"] for c in found] == [today]
 

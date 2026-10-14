@@ -310,6 +310,8 @@ The materialized daily schedule. Generated nightly from `StructuralMasterSlot` b
 
 A slot has at most one row per date. `uq_daily_ledger_slot_date` is a unique key on `target_date` and `master_slot_id`, so two runs of the nightly job cannot both write the day, including for a slot with no room, which the overlap constraint `ex_daily_ledger_no_overlap` does not see. Rows with no slot are not limited by it.
 
+Two rows with a room and a window cannot overlap on that room. `ex_daily_ledger_no_overlap` is declared for PostgreSQL only, so the generator checks first, on every database: `cron/ledger_generator.py` does not write a day that would sit on one already there (`_insert_day`) or on one earlier in the same batch (`_without_overlaps`), and logs it instead. Where two slots want one room on one date, the older slot keeps it. On PostgreSQL the constraint still catches two writers that both checked before either wrote.
+
 ### `VerificationLedger`
 One row per member per ledger entry. `authorizing_agent_id` is whoever set the current status: the member for a self-mark, otherwise the lead or admin. The same row is overwritten on re-mark (upsert logic in `attendance.py`).
 

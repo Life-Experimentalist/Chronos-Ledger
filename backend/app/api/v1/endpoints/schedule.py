@@ -73,7 +73,7 @@ def _anchor(rule: str, on_or_after: datetime.date) -> datetime.date:
         raise ChronosError(status_code=422, detail=str(exc), code=ErrorCode.INVALID_VALUE) from None
 
 
-def _refuse_if_held(db, cycle, resource_id, weekday, start, end) -> None:
+def _refuse_if_held(db, cycle, resource_id, rule, dtstart, start, end) -> None:
     """Refuse a slot that would be laid on top of a booking.
 
     Chronos refused an external booking that clashed with a class and did
@@ -92,7 +92,7 @@ def _refuse_if_held(db, cycle, resource_id, weekday, start, end) -> None:
     """
     if cycle is None or not cycle.operational_status:
         return
-    conflicts = held_against_slot(db, resource_id, weekday, start, end, cycle=cycle)
+    conflicts = held_against_slot(db, resource_id, rule, dtstart, start, end, cycle=cycle)
     if conflicts:
         raise ChronosError(
             status_code=409,
@@ -101,7 +101,9 @@ def _refuse_if_held(db, cycle, resource_id, weekday, start, end) -> None:
         )
 
 
-def _refuse_if_scheduled(db, cycle, resource_id, weekday, start, end, exclude_slot_id=None) -> None:
+def _refuse_if_scheduled(
+    db, cycle, resource_id, rule, dtstart, start, end, exclude_slot_id=None
+) -> None:
     """Refuse a slot that would be laid on top of another slot.
 
     Chronos refused a booking that clashed with a class and a class that
@@ -122,7 +124,7 @@ def _refuse_if_scheduled(db, cycle, resource_id, weekday, start, end, exclude_sl
     if cycle is None or not cycle.operational_status:
         return
     conflicts = slots_against_slot(
-        db, resource_id, weekday, start, end, exclude_slot_id, cycle=cycle
+        db, resource_id, rule, dtstart, start, end, exclude_slot_id, cycle=cycle
     )
     if conflicts:
         raise ChronosError(
@@ -133,7 +135,7 @@ def _refuse_if_scheduled(db, cycle, resource_id, weekday, start, end, exclude_sl
 
 
 def _refuse_if_a_day_is_there(
-    db, cycle, resource_id, weekday, start, end, exclude_slot_id=None
+    db, cycle, resource_id, rule, dtstart, start, end, exclude_slot_id=None
 ) -> None:
     """Refuse a slot that would be laid on top of a day already generated.
 
@@ -161,7 +163,7 @@ def _refuse_if_a_day_is_there(
     beat it rather than handed a stack trace.
     """
     conflicts = days_against_slot(
-        db, resource_id, weekday, start, end, exclude_slot_id, cycle=cycle
+        db, resource_id, rule, dtstart, start, end, exclude_slot_id, cycle=cycle
     )
     if conflicts:
         raise ChronosError(
@@ -314,7 +316,7 @@ def open_cycle(cycle_id: int, db: Session = Depends(get_db), _=Depends(require_r
         # can leave one that way when a room name does not resolve.
         if slot.resource_id is None:
             continue
-        window = (slot.day_of_week_index, slot.time_window_start, slot.time_window_end)
+        window = (slot.rrule, slot.dtstart, slot.time_window_start, slot.time_window_end)
         found = (
             held_against_slot(db, slot.resource_id, *window, cycle=cycle)
             + slots_against_slot(
@@ -796,15 +798,13 @@ def create_master_slot(
     if payload.primary_lead_id is not None:
         _refuse_unless_active(db, payload.primary_lead_id, "Lead")
     dtstart = _anchor(payload.rrule, payload.dtstart or offering.cycle.date_bounds_start)
-    # The room checks compare one weekday: the one the rule starts on. For a
-    # rule on several weekdays that is the first of them only.
-    weekday = dtstart.isoweekday()
     room = get_or_create_room(payload.target_room_identifier, db)
     _refuse_if_held(
         db,
         offering.cycle,
         room.id,
-        weekday,
+        payload.rrule,
+        dtstart,
         payload.time_window_start,
         payload.time_window_end,
     )
@@ -812,7 +812,8 @@ def create_master_slot(
         db,
         offering.cycle,
         room.id,
-        weekday,
+        payload.rrule,
+        dtstart,
         payload.time_window_start,
         payload.time_window_end,
     )
@@ -820,7 +821,8 @@ def create_master_slot(
         db,
         offering.cycle,
         room.id,
-        weekday,
+        payload.rrule,
+        dtstart,
         payload.time_window_start,
         payload.time_window_end,
     )
@@ -900,7 +902,6 @@ def update_master_slot(
     if rule != slot.rrule or "dtstart" in fields:
         dtstart = _anchor(rule, fields.get("dtstart") or slot.activity.cycle.date_bounds_start)
         fields["rrule"], fields["dtstart"] = rule, dtstart
-    weekday = dtstart.isoweekday()
 
     # The room is resolved and the holds are checked before anything is
     # withdrawn or written, so a refusal leaves the slot and the days it has
@@ -923,11 +924,10 @@ def update_master_slot(
         # not be refused over it: there would be no way to fix the lead
         # short of cancelling somebody else's booking. The same guard the
         # CSV importer uses, for the same reason.
-        _refuse_if_held(db, slot.activity.cycle, resource_id, weekday, start, end)
-        _refuse_if_scheduled(db, slot.activity.cycle, resource_id, weekday, start, end, slot.id)
-        _refuse_if_a_day_is_there(
-            db, slot.activity.cycle, resource_id, weekday, start, end, slot.id
-        )
+        cycle = slot.activity.cycle
+        _refuse_if_held(db, cycle, resource_id, rule, dtstart, start, end)
+        _refuse_if_scheduled(db, cycle, resource_id, rule, dtstart, start, end, slot.id)
+        _refuse_if_a_day_is_there(db, cycle, resource_id, rule, dtstart, start, end, slot.id)
 
     removed = 0
     if (rule, dtstart) != (slot.rrule, slot.dtstart):
@@ -953,7 +953,7 @@ def update_master_slot(
         # honored can sit outside them and still be moved, and a refusal
         # over it has to come back as a 409 and not a 500.
         db.rollback()
-        _refuse_if_a_day_is_there(db, None, resource_id, weekday, start, end, slot_id)
+        _refuse_if_a_day_is_there(db, None, resource_id, rule, dtstart, start, end, slot_id)
         raise
     return {**result, "ledger_rows_removed": removed}
 
