@@ -528,3 +528,7 @@ A constraint solver as an optional extra (`chronos-ledger[solver]`, CP-SAT)
 that proposes timetables rather than only checking them; repair of an existing
 timetable after a change; precedence and changeover time for ordered lists
 such as operating theatres.
+
+A settings screen for resource classes in the web app. 0.17 added them to
+the API only (`/api/v1/resource-classes/`), so today an organization adds,
+renames and deactivates its classes through the API or an SDK.
