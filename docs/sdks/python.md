@@ -47,7 +47,9 @@ client = chronos.connect(
 
 On a `401` the client calls `/api/v1/auth/refresh` once and repeats the
 request. A refresh token works only once, so `on_tokens` must store each new
-pair. Threads that hit a `401` together share one refresh. Passing both
+pair. Threads that hit a `401` together share one refresh. If the refresh
+itself fails (the server refuses it, the connection drops or the answer is not a
+token pair), the original `401` is raised as `ChronosError`. Passing both
 `api_key` and `tokens` raises `ValueError`.
 
 ## Reservations
@@ -88,11 +90,16 @@ each retry, so a retried write has one effect. A write
 is never sent without a key, which is why writes can be retried at all. `GET`,
 `HEAD` and `OPTIONS` carry none.
 
+The one `multipart/form-data` request, the CSV import, is sent once and never
+retried, and it is not sent again after a token refresh. A failure comes back as
+it is.
+
 The wait before retry `n` (counting from 0) is a random number between 0 and
 `min(max_delay, base_delay * 2**n)`. When the response has a `Retry-After`
-header, in seconds or as an HTTP date, the client waits that long instead. A
-wait that would run past the deadline is not started: the last response is
-raised instead.
+header, in seconds or as an HTTP date, the client waits that long instead; a
+negative or unreadable value is ignored. A wait that would run past the
+deadline is not started: the last response is raised
+instead.
 
 Settings go in a `RetryPolicy`:
 

@@ -83,6 +83,27 @@ def test_a_refused_refresh_ends_in_the_original_401():
     assert len(server.seen) == 2
 
 
+@pytest.mark.parametrize("answer", ["refused", "no_json", "no_refresh_token"])
+def test_a_refresh_that_fails_in_any_way_ends_in_the_original_401(answer):
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/auth/refresh"):
+            if answer == "refused":
+                raise httpx.ConnectError("refused", request=request)
+            if answer == "no_json":
+                return httpx.Response(200, text="oops")
+            return httpx.Response(200, json={"access_token": "a2"})
+        return httpx.Response(401, json={"detail": "expired"})
+
+    server = Server(handle)
+    stored: list[chronos.Tokens] = []
+    c = client(server, tokens=chronos.Tokens("a1", "r1"), on_tokens=stored.append)
+    with pytest.raises(chronos.ChronosError) as caught:
+        resources_list.sync(client=c)
+    assert (caught.value.status, caught.value.detail) == (401, "expired")
+    assert len(server.seen) == 2
+    assert stored == []
+
+
 def test_threads_that_see_a_401_together_spend_the_refresh_token_once():
     refreshes = []
 
@@ -185,6 +206,8 @@ def test_retry_after_reads_seconds_and_http_dates():
     later = email.utils.formatdate(time.time() + 5, usegmt=True)
     assert 3.0 < retry_after(httpx.Response(429, headers={"Retry-After": later})) <= 5.0
     assert retry_after(httpx.Response(429)) is None
+    assert retry_after(httpx.Response(429, headers={"Retry-After": "-1"})) is None
+    assert retry_after(httpx.Response(429, headers={"Retry-After": "nan"})) is None
 
 
 def test_a_non_json_error_body_is_kept_as_text():
