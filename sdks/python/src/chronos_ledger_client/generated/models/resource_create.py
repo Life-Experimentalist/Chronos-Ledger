@@ -14,13 +14,16 @@ T = TypeVar("T", bound="ResourceCreate")
 
 @_attrs_define
 class ResourceCreate:
-    """A room. Every string is trimmed first, code included, the same as the importer trims a room name, so this room and
-    the same name in a later CSV are one row.
+    """A resource, a room unless `resource_type` says otherwise. Every string is trimmed first, code included, the same as
+    the importer trims a room name, so this room and the same name in a later CSV are one row.
 
         Attributes:
             code (str): The importer's match key, unique across every resource. Not editable afterwards.
                  Example: LH-3.
             label (str | Unset): Defaults to the code, which is what an imported room gets. Example: Lecture Hall 3.
+            resource_type (str | Unset): The code of an active resource class of the organization. `ROOM` when left out. A
+                class that is unknown, inactive or another organization's is a 422 with `UNKNOWN_RESOURCE_CLASS`.
+                 Example: ROOM.
             unit_code (None | str | Unset):
             capacity (int | None | Unset): Required, and at least 1, when mode is POOLED.
             mode (ResourceCreateMode | Unset): See ResourceResponse.mode. EXCLUSIVE when left out.
@@ -31,6 +34,7 @@ class ResourceCreate:
 
     code: str
     label: str | Unset = UNSET
+    resource_type: str | Unset = UNSET
     unit_code: None | str | Unset = UNSET
     capacity: int | None | Unset = UNSET
     mode: ResourceCreateMode | Unset = UNSET
@@ -43,6 +47,8 @@ class ResourceCreate:
         code = self.code
 
         label = self.label
+
+        resource_type = self.resource_type
 
         unit_code: None | str | Unset
         if isinstance(self.unit_code, Unset):
@@ -87,6 +93,8 @@ class ResourceCreate:
         )
         if label is not UNSET:
             field_dict["label"] = label
+        if resource_type is not UNSET:
+            field_dict["resource_type"] = resource_type
         if unit_code is not UNSET:
             field_dict["unit_code"] = unit_code
         if capacity is not UNSET:
@@ -108,6 +116,8 @@ class ResourceCreate:
         code = d.pop("code")
 
         label = d.pop("label", UNSET)
+
+        resource_type = d.pop("resource_type", UNSET)
 
         def _parse_unit_code(data: object) -> None | str | Unset:
             if data is None:
@@ -164,6 +174,7 @@ class ResourceCreate:
         resource_create = cls(
             code=code,
             label=label,
+            resource_type=resource_type,
             unit_code=unit_code,
             capacity=capacity,
             mode=mode,

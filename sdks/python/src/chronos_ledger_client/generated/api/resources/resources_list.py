@@ -7,13 +7,12 @@ from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.error_response import ErrorResponse
 from ...models.resource_response import ResourceResponse
-from ...models.resources_list_resource_type import ResourcesListResourceType
 from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     *,
-    resource_type: ResourcesListResourceType | Unset = UNSET,
+    resource_type: str | Unset = UNSET,
     active: bool | Unset = UNSET,
     code: str | Unset = UNSET,
     limit: int | Unset = UNSET,
@@ -22,11 +21,7 @@ def _get_kwargs(
 
     params: dict[str, Any] = {}
 
-    json_resource_type: str | Unset = UNSET
-    if not isinstance(resource_type, Unset):
-        json_resource_type = resource_type.value
-
-    params["resource_type"] = json_resource_type
+    params["resource_type"] = resource_type
 
     params["active"] = active
 
@@ -85,7 +80,7 @@ def _build_response(
 def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
-    resource_type: ResourcesListResourceType | Unset = UNSET,
+    resource_type: str | Unset = UNSET,
     active: bool | Unset = UNSET,
     code: str | Unset = UNSET,
     limit: int | Unset = UNSET,
@@ -97,7 +92,7 @@ def sync_detailed(
     an external system that has to book a room needs to be able to find it first.
 
     Args:
-        resource_type (ResourcesListResourceType | Unset):
+        resource_type (str | Unset):
         active (bool | Unset):
         code (str | Unset):
         limit (int | Unset):
@@ -129,7 +124,7 @@ def sync_detailed(
 def sync(
     *,
     client: AuthenticatedClient | Client,
-    resource_type: ResourcesListResourceType | Unset = UNSET,
+    resource_type: str | Unset = UNSET,
     active: bool | Unset = UNSET,
     code: str | Unset = UNSET,
     limit: int | Unset = UNSET,
@@ -141,7 +136,7 @@ def sync(
     an external system that has to book a room needs to be able to find it first.
 
     Args:
-        resource_type (ResourcesListResourceType | Unset):
+        resource_type (str | Unset):
         active (bool | Unset):
         code (str | Unset):
         limit (int | Unset):
@@ -168,7 +163,7 @@ def sync(
 async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
-    resource_type: ResourcesListResourceType | Unset = UNSET,
+    resource_type: str | Unset = UNSET,
     active: bool | Unset = UNSET,
     code: str | Unset = UNSET,
     limit: int | Unset = UNSET,
@@ -180,7 +175,7 @@ async def asyncio_detailed(
     an external system that has to book a room needs to be able to find it first.
 
     Args:
-        resource_type (ResourcesListResourceType | Unset):
+        resource_type (str | Unset):
         active (bool | Unset):
         code (str | Unset):
         limit (int | Unset):
@@ -210,7 +205,7 @@ async def asyncio_detailed(
 async def asyncio(
     *,
     client: AuthenticatedClient | Client,
-    resource_type: ResourcesListResourceType | Unset = UNSET,
+    resource_type: str | Unset = UNSET,
     active: bool | Unset = UNSET,
     code: str | Unset = UNSET,
     limit: int | Unset = UNSET,
@@ -222,7 +217,7 @@ async def asyncio(
     an external system that has to book a room needs to be able to find it first.
 
     Args:
-        resource_type (ResourcesListResourceType | Unset):
+        resource_type (str | Unset):
         active (bool | Unset):
         code (str | Unset):
         limit (int | Unset):

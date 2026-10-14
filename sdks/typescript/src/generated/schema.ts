@@ -522,6 +522,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/resource-classes/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List resource classes
+         * @description The kinds of resource the organization books, in code order, `ROOM` and `PERSON` among them. Readable by anyone signed in, as resources are.
+         */
+        get: operations["resourceClasses.list"];
+        put?: never;
+        /**
+         * Create a resource class
+         * @description Requires `ORG_ADMIN`. Adds a kind of resource. The class is a label: resources are filed under it and requirements can ask for it, and nothing about how it books differs from any other resource. The code is permanent.
+         */
+        post: operations["resourceClasses.create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resource-classes/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example EQUIPMENT_CART */
+                code: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a class nothing uses
+         * @description Requires `ORG_ADMIN`. Refused with 409 `RESOURCE_CLASS_PROTECTED` for `ROOM` and `PERSON`, and with 409 `RESOURCE_CLASS_IN_USE` while any resource has the class or any requirement asks for it, whether the class is active or not. Switch it off instead to stop new uses and keep the old.
+         */
+        delete: operations["resourceClasses.delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename or switch a class off
+         * @description Requires `ORG_ADMIN`. Renaming is allowed for every class. Deactivating stops new resources and new requirements naming the class and leaves the ones that already do as they are; deactivating `ROOM` or `PERSON` is a 409 with `RESOURCE_CLASS_PROTECTED`.
+         */
+        patch: operations["resourceClasses.update"];
+        trace?: never;
+    };
     "/api/v1/resources/": {
         parameters: {
             query?: never;
@@ -536,8 +587,8 @@ export interface paths {
         get: operations["resources.list"];
         put?: never;
         /**
-         * Create a room
-         * @description Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
+         * Create a resource
+         * @description Requires `ORG_ADMIN`. Registers a resource before any timetable names it, for a system that manages its own rooms. It is a room unless `resource_type` names another class of the organization. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
          */
         post: operations["resources.create"];
         delete?: never;
@@ -2328,6 +2379,39 @@ export interface components {
             /** Format: date-time */
             created_at?: string | null;
         };
+        ResourceClassResponse: {
+            id: number;
+            /**
+             * @description The stable identifier. Uppercase, unique in the organization, never changed.
+             * @example ROOM
+             */
+            code: string;
+            /**
+             * @description What is shown. Free to change.
+             * @example Room
+             */
+            name: string;
+            /** @description Whether a new resource or requirement may name the class. Switching it off leaves the ones that already do as they are. */
+            active: boolean;
+            /** @description True for `ROOM` and `PERSON`, which every organization has and which can be renamed but not removed or switched off. They are also where the engine's older behaviour is anchored: an import files rooms under `ROOM`. Any other class carries no behaviour, it is a label that resources are filed under and requirements can ask for. */
+            seeded: boolean;
+            /** Format: date-time */
+            created_at: string;
+        };
+        ResourceClassCreate: {
+            /**
+             * @description Uppercase letters, digits and underscores, starting with a letter.
+             * @example EQUIPMENT_CART
+             */
+            code: string;
+            /** @example Equipment cart */
+            name: string;
+        };
+        /** @description Every field is optional and one left out is left alone. Neither can be null. code is absent on purpose: it never changes. */
+        ResourceClassUpdate: {
+            name?: string;
+            active?: boolean;
+        };
         ResourceResponse: {
             id?: number;
             /**
@@ -2337,8 +2421,11 @@ export interface components {
             code?: string;
             /** @example Lecture Hall 3 */
             label?: string;
-            /** @enum {string} */
-            resource_type?: "ROOM" | "PERSON";
+            /**
+             * @description The code of one of the organization's resource classes. `ROOM` and `PERSON` exist everywhere; see `GET /api/v1/resource-classes/` for the rest.
+             * @example ROOM
+             */
+            resource_type?: string;
             unit_code?: string | null;
             /** @description How many people a room holds, or on a POOLED resource how many units the pool has. */
             capacity?: number | null;
@@ -2354,7 +2441,7 @@ export interface components {
             altitude_target?: number | null;
             active?: boolean;
         };
-        /** @description A room. Every string is trimmed first, code included, the same as the importer trims a room name, so this room and the same name in a later CSV are one row. */
+        /** @description A resource, a room unless `resource_type` says otherwise. Every string is trimmed first, code included, the same as the importer trims a room name, so this room and the same name in a later CSV are one row. */
         ResourceCreate: {
             /**
              * @description The importer's match key, unique across every resource. Not editable afterwards.
@@ -2366,6 +2453,11 @@ export interface components {
              * @example Lecture Hall 3
              */
             label?: string;
+            /**
+             * @description The code of an active resource class of the organization. `ROOM` when left out. A class that is unknown, inactive or another organization's is a 422 with `UNKNOWN_RESOURCE_CLASS`.
+             * @example ROOM
+             */
+            resource_type?: string;
             unit_code?: string | null;
             /** @description Required, and at least 1, when mode is POOLED. */
             capacity?: number | null;
@@ -2557,7 +2649,7 @@ export interface components {
              */
             quantity?: number;
             /**
-             * @description Which resources to hold for the requirements that name a kind of resource: `ROOM` or `PERSON` mapped to resource ids, used in order. Where it says nothing, or runs out, the engine picks the first free resources of the kind by code. An id that is not an active resource of that kind in this organization, or that no requirement asks for, is a 422. A named resource that is not free is a gap and is not swapped for another. Part of what a retry is compared on only when it is sent.
+             * @description Which resources to hold for the requirements that name a kind of resource: a resource class code (`ROOM`, `PERSON` or one the organization made) mapped to resource ids, used in order. Where it says nothing, or runs out, the engine picks the first free resources of the kind by code. An id that is not an active resource of that kind in this organization, or that no requirement asks for, is a 422. A named resource that is not free is a gap and is not swapped for another. Part of what a retry is compared on only when it is sent.
              * @example {
              *       "PERSON": [
              *         12,
@@ -2619,8 +2711,8 @@ export interface components {
             owner_kind: "RESOURCE" | "ACTIVITY";
             owner_id: number;
             target_resource_id: number | null;
-            /** @enum {string|null} */
-            target_kind: "ROOM" | "PERSON" | null;
+            /** @description A resource class code. */
+            target_kind: string | null;
             /** @description How many units or resources were missing, not how many were asked for. */
             quantity: number;
             /**
@@ -2636,11 +2728,8 @@ export interface components {
         RequirementCreate: {
             /** @description A specific resource of this organization. Never an activity. */
             target_resource_id?: number | null;
-            /**
-             * @description Any resource of this kind, picked at booking time.
-             * @enum {string|null}
-             */
-            target_kind?: "ROOM" | "PERSON" | null;
+            /** @description Any resource of this class, picked at booking time. The code of an active resource class of the organization; anything else is a 422 with `UNKNOWN_RESOURCE_CLASS`. */
+            target_kind?: string | null;
             /** @description How many. Units of the pool on a POOLED named target, which a named target of another mode cannot take above 1 (422); the number of distinct resources on a kind. 1 when left out. */
             quantity?: number;
             /** @description Setup time held before the window. 0 when left out. */
@@ -2659,8 +2748,8 @@ export interface components {
             owner_kind: "RESOURCE" | "ACTIVITY";
             owner_id: number;
             target_resource_id: number | null;
-            /** @enum {string|null} */
-            target_kind: "ROOM" | "PERSON" | null;
+            /** @description A resource class code. */
+            target_kind: string | null;
             quantity: number;
             before_minutes: number;
             after_minutes: number;
@@ -3262,7 +3351,7 @@ export interface components {
          * @example NOT_FOUND
          * @enum {string}
          */
-        ErrorCode: "BAD_REQUEST" | "NOT_AUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "STATE_CONFLICT" | "PAYLOAD_TOO_LARGE" | "INVALID_VALUE" | "RATE_LIMITED" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE" | "VALIDATION_FAILED" | "INVALID_CREDENTIALS" | "TOKEN_INVALID" | "API_KEY_INVALID" | "API_KEY_EXPIRED" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_DEACTIVATED" | "REFRESH_TOKEN_INVALID" | "REFRESH_TOKEN_EXPIRED" | "REFRESH_TOKEN_USED" | "REFRESH_TOKEN_REUSED" | "FEDERATED_TOKEN_INVALID" | "FEDERATED_EMAIL_MISSING" | "FEDERATED_ADMIN_REFUSED" | "FEDERATION_UNAVAILABLE" | "CURRENT_PASSWORD_INCORRECT" | "PASSWORD_UNCHANGED" | "PASSWORD_CHANGE_REQUIRED" | "INSUFFICIENT_ROLE" | "SCOPE_MISSING" | "OUTSIDE_UNIT" | "IMPERSONATION_NOT_ALLOWED" | "IMPERSONATION_REFUSED" | "RESOURCE_CONFLICT" | "ALREADY_EXISTS" | "EMAIL_TAKEN" | "USER_DEACTIVATED" | "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_KEY_IN_PROGRESS" | "RESERVATION_EXTERNAL_REF_TAKEN" | "RESOURCE_CAPACITY_EXCEEDED" | "RESOURCE_BOOKINGS_WOULD_NOT_FIT" | "REQUIREMENT_UNSATISFIED" | "LOCATION_REQUIRED" | "LOCATION_TOO_COARSE" | "OUTSIDE_GEOFENCE" | "MANAGER_NOT_SET" | "IMPORT_REJECTED" | "CHANGE_FEED_DISABLED" | "SERVER_BUSY" | "DATABASE_UNAVAILABLE" | "WEBHOOK_URL_REFUSED" | "WEBHOOK_SECRET_LIMIT";
+        ErrorCode: "BAD_REQUEST" | "NOT_AUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "STATE_CONFLICT" | "PAYLOAD_TOO_LARGE" | "INVALID_VALUE" | "RATE_LIMITED" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE" | "VALIDATION_FAILED" | "INVALID_CREDENTIALS" | "TOKEN_INVALID" | "API_KEY_INVALID" | "API_KEY_EXPIRED" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_DEACTIVATED" | "REFRESH_TOKEN_INVALID" | "REFRESH_TOKEN_EXPIRED" | "REFRESH_TOKEN_USED" | "REFRESH_TOKEN_REUSED" | "FEDERATED_TOKEN_INVALID" | "FEDERATED_EMAIL_MISSING" | "FEDERATED_ADMIN_REFUSED" | "FEDERATION_UNAVAILABLE" | "CURRENT_PASSWORD_INCORRECT" | "PASSWORD_UNCHANGED" | "PASSWORD_CHANGE_REQUIRED" | "INSUFFICIENT_ROLE" | "SCOPE_MISSING" | "OUTSIDE_UNIT" | "IMPERSONATION_NOT_ALLOWED" | "IMPERSONATION_REFUSED" | "RESOURCE_CONFLICT" | "ALREADY_EXISTS" | "EMAIL_TAKEN" | "USER_DEACTIVATED" | "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_KEY_IN_PROGRESS" | "RESERVATION_EXTERNAL_REF_TAKEN" | "RESOURCE_CAPACITY_EXCEEDED" | "RESOURCE_BOOKINGS_WOULD_NOT_FIT" | "REQUIREMENT_UNSATISFIED" | "UNKNOWN_RESOURCE_CLASS" | "RESOURCE_CLASS_IN_USE" | "RESOURCE_CLASS_PROTECTED" | "LOCATION_REQUIRED" | "LOCATION_TOO_COARSE" | "OUTSIDE_GEOFENCE" | "MANAGER_NOT_SET" | "IMPORT_REJECTED" | "CHANGE_FEED_DISABLED" | "SERVER_BUSY" | "DATABASE_UNAVAILABLE" | "WEBHOOK_URL_REFUSED" | "WEBHOOK_SECRET_LIMIT";
     };
     responses: {
         /** @description Missing or invalid JWT. */
@@ -4522,10 +4611,160 @@ export interface operations {
             422: components["responses"]["UnprocessableEntity"];
         };
     };
+    "resourceClasses.list": {
+        parameters: {
+            query?: {
+                active?: boolean;
+                /** @description At most this many rows. Every matching row if omitted. */
+                limit?: components["parameters"]["Limit"];
+                /** @description Skip this many rows first. Rows come in id order. */
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Classes, ordered by code. */
+            200: {
+                headers: {
+                    "X-Total-Count": components["headers"]["XTotalCount"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceClassResponse"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    "resourceClasses.create": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourceClassCreate"];
+            };
+        };
+        responses: {
+            /** @description The class as created. */
+            201: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceClassResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The organization already has a class with that code (`ALREADY_EXISTS`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    "resourceClasses.delete": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @example EQUIPMENT_CART */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Protected (`RESOURCE_CLASS_PROTECTED`) or in use (`RESOURCE_CLASS_IN_USE`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    "resourceClasses.update": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @example EQUIPMENT_CART */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourceClassUpdate"];
+            };
+        };
+        responses: {
+            /** @description The class as it now stands. */
+            200: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceClassResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description `ROOM` or `PERSON` cannot be switched off (`RESOURCE_CLASS_PROTECTED`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
     "resources.list": {
         parameters: {
             query?: {
-                resource_type?: "ROOM" | "PERSON";
+                /** @description A resource class code. */
+                resource_type?: string;
                 active?: boolean;
                 code?: string;
                 /** @description At most this many rows. Every matching row if omitted. */
@@ -4589,7 +4828,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description A blank or over-long code, latitude without longitude or the reverse, or a coordinate out of range. A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`. */
+            /** @description A blank or over-long code, latitude without longitude or the reverse, a coordinate out of range, or a `resource_type` that is not an active class of the organization (`UNKNOWN_RESOURCE_CLASS`). A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`. */
             422: {
                 headers: {
                     [name: string]: unknown;

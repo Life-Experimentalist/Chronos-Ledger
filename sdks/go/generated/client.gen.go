@@ -136,12 +136,15 @@ const (
 	RESERVATIONEXTERNALREFTAKEN ErrorCode = "RESERVATION_EXTERNAL_REF_TAKEN"
 	RESOURCEBOOKINGSWOULDNOTFIT ErrorCode = "RESOURCE_BOOKINGS_WOULD_NOT_FIT"
 	RESOURCECAPACITYEXCEEDED    ErrorCode = "RESOURCE_CAPACITY_EXCEEDED"
+	RESOURCECLASSINUSE          ErrorCode = "RESOURCE_CLASS_IN_USE"
+	RESOURCECLASSPROTECTED      ErrorCode = "RESOURCE_CLASS_PROTECTED"
 	RESOURCECONFLICT            ErrorCode = "RESOURCE_CONFLICT"
 	SCOPEMISSING                ErrorCode = "SCOPE_MISSING"
 	SERVERBUSY                  ErrorCode = "SERVER_BUSY"
 	SERVICEUNAVAILABLE          ErrorCode = "SERVICE_UNAVAILABLE"
 	STATECONFLICT               ErrorCode = "STATE_CONFLICT"
 	TOKENINVALID                ErrorCode = "TOKEN_INVALID"
+	UNKNOWNRESOURCECLASS        ErrorCode = "UNKNOWN_RESOURCE_CLASS"
 	USERDEACTIVATED             ErrorCode = "USER_DEACTIVATED"
 	VALIDATIONFAILED            ErrorCode = "VALIDATION_FAILED"
 	WEBHOOKSECRETLIMIT          ErrorCode = "WEBHOOK_SECRET_LIMIT"
@@ -239,6 +242,10 @@ func (e ErrorCode) Valid() bool {
 		return true
 	case RESOURCECAPACITYEXCEEDED:
 		return true
+	case RESOURCECLASSINUSE:
+		return true
+	case RESOURCECLASSPROTECTED:
+		return true
 	case RESOURCECONFLICT:
 		return true
 	case SCOPEMISSING:
@@ -250,6 +257,8 @@ func (e ErrorCode) Valid() bool {
 	case STATECONFLICT:
 		return true
 	case TOKENINVALID:
+		return true
+	case UNKNOWNRESOURCECLASS:
 		return true
 	case USERDEACTIVATED:
 		return true
@@ -435,24 +444,6 @@ func (e RequirementCreateEnforcement) Valid() bool {
 	}
 }
 
-// Defines values for RequirementCreateTargetKind.
-const (
-	RequirementCreateTargetKindPERSON RequirementCreateTargetKind = "PERSON"
-	RequirementCreateTargetKindROOM   RequirementCreateTargetKind = "ROOM"
-)
-
-// Valid indicates whether the value is a known member of the RequirementCreateTargetKind enum.
-func (e RequirementCreateTargetKind) Valid() bool {
-	switch e {
-	case RequirementCreateTargetKindPERSON:
-		return true
-	case RequirementCreateTargetKindROOM:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for RequirementResponseEnforcement.
 const (
 	RequirementResponseEnforcementADVISORY RequirementResponseEnforcement = "ADVISORY"
@@ -483,24 +474,6 @@ func (e RequirementResponseOwnerKind) Valid() bool {
 	case RequirementResponseOwnerKindACTIVITY:
 		return true
 	case RequirementResponseOwnerKindRESOURCE:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for RequirementResponseTargetKind.
-const (
-	RequirementResponseTargetKindPERSON RequirementResponseTargetKind = "PERSON"
-	RequirementResponseTargetKindROOM   RequirementResponseTargetKind = "ROOM"
-)
-
-// Valid indicates whether the value is a known member of the RequirementResponseTargetKind enum.
-func (e RequirementResponseTargetKind) Valid() bool {
-	switch e {
-	case RequirementResponseTargetKindPERSON:
-		return true
-	case RequirementResponseTargetKindROOM:
 		return true
 	default:
 		return false
@@ -579,24 +552,6 @@ func (e ResourceResponseMode) Valid() bool {
 	case ResourceResponseModePOOLED:
 		return true
 	case ResourceResponseModeSHARED:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ResourceResponseResourceType.
-const (
-	ResourceResponseResourceTypePERSON ResourceResponseResourceType = "PERSON"
-	ResourceResponseResourceTypeROOM   ResourceResponseResourceType = "ROOM"
-)
-
-// Valid indicates whether the value is a known member of the ResourceResponseResourceType enum.
-func (e ResourceResponseResourceType) Valid() bool {
-	switch e {
-	case ResourceResponseResourceTypePERSON:
-		return true
-	case ResourceResponseResourceTypeROOM:
 		return true
 	default:
 		return false
@@ -696,24 +651,6 @@ func (e UnmetRequirementOwnerKind) Valid() bool {
 	}
 }
 
-// Defines values for UnmetRequirementTargetKind.
-const (
-	UnmetRequirementTargetKindPERSON UnmetRequirementTargetKind = "PERSON"
-	UnmetRequirementTargetKindROOM   UnmetRequirementTargetKind = "ROOM"
-)
-
-// Valid indicates whether the value is a known member of the UnmetRequirementTargetKind enum.
-func (e UnmetRequirementTargetKind) Valid() bool {
-	switch e {
-	case UnmetRequirementTargetKindPERSON:
-		return true
-	case UnmetRequirementTargetKindROOM:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for VerificationMetric.
 const (
 	ABSENT  VerificationMetric = "ABSENT"
@@ -792,24 +729,6 @@ func (e WebhookEventType) Valid() bool {
 	case WebhookEventTypeResourceCreated:
 		return true
 	case WebhookEventTypeResourceUpdated:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ResourcesListParamsResourceType.
-const (
-	ResourcesListParamsResourceTypePERSON ResourcesListParamsResourceType = "PERSON"
-	ResourcesListParamsResourceTypeROOM   ResourcesListParamsResourceType = "ROOM"
-)
-
-// Valid indicates whether the value is a known member of the ResourcesListParamsResourceType enum.
-func (e ResourcesListParamsResourceType) Valid() bool {
-	switch e {
-	case ResourcesListParamsResourceTypePERSON:
-		return true
-	case ResourcesListParamsResourceTypeROOM:
 		return true
 	default:
 		return false
@@ -1698,8 +1617,8 @@ type RequirementCreate struct {
 	// Quantity How many. Units of the pool on a POOLED named target, which a named target of another mode cannot take above 1 (422); the number of distinct resources on a kind. 1 when left out.
 	Quantity *int `json:"quantity,omitempty"`
 
-	// TargetKind Any resource of this kind, picked at booking time.
-	TargetKind *RequirementCreateTargetKind `json:"target_kind,omitempty"`
+	// TargetKind Any resource of this class, picked at booking time. The code of an active resource class of the organization; anything else is a 422 with `UNKNOWN_RESOURCE_CLASS`.
+	TargetKind *string `json:"target_kind,omitempty"`
 
 	// TargetResourceId A specific resource of this organization. Never an activity.
 	TargetResourceId *int `json:"target_resource_id,omitempty"`
@@ -1708,9 +1627,6 @@ type RequirementCreate struct {
 // RequirementCreateEnforcement REQUIRED refuses a booking that cannot meet it. ADVISORY books without it and lists the gap. Null, or left out, follows the organization's `default_requirement_enforcement`.
 type RequirementCreateEnforcement string
 
-// RequirementCreateTargetKind Any resource of this kind, picked at booking time.
-type RequirementCreateTargetKind string
-
 // RequirementResponse defines model for RequirementResponse.
 type RequirementResponse struct {
 	AfterMinutes  int       `json:"after_minutes"`
@@ -1718,13 +1634,15 @@ type RequirementResponse struct {
 	CreatedAt     time.Time `json:"created_at"`
 
 	// Enforcement Null means the organization's default applies.
-	Enforcement      RequirementResponseEnforcement `json:"enforcement"`
-	Id               int                            `json:"id"`
-	OwnerId          int                            `json:"owner_id"`
-	OwnerKind        RequirementResponseOwnerKind   `json:"owner_kind"`
-	Quantity         int                            `json:"quantity"`
-	TargetKind       RequirementResponseTargetKind  `json:"target_kind"`
-	TargetResourceId int                            `json:"target_resource_id"`
+	Enforcement RequirementResponseEnforcement `json:"enforcement"`
+	Id          int                            `json:"id"`
+	OwnerId     int                            `json:"owner_id"`
+	OwnerKind   RequirementResponseOwnerKind   `json:"owner_kind"`
+	Quantity    int                            `json:"quantity"`
+
+	// TargetKind A resource class code.
+	TargetKind       string `json:"target_kind"`
+	TargetResourceId int    `json:"target_resource_id"`
 }
 
 // RequirementResponseEnforcement Null means the organization's default applies.
@@ -1732,9 +1650,6 @@ type RequirementResponseEnforcement string
 
 // RequirementResponseOwnerKind defines model for RequirementResponse.OwnerKind.
 type RequirementResponseOwnerKind string
-
-// RequirementResponseTargetKind defines model for RequirementResponse.TargetKind.
-type RequirementResponseTargetKind string
 
 // ReservationConflict The body of a 409. What the booking ran into, not merely that it ran into something, so a caller can pick its next hour without asking availability again and diffing the answers. Nested under detail like every other error here, so one error handler reads them all.
 type ReservationConflict struct {
@@ -1748,7 +1663,7 @@ type ReservationConflict struct {
 
 // ReservationCreate defines model for ReservationCreate.
 type ReservationCreate struct {
-	// Assignments Which resources to hold for the requirements that name a kind of resource: `ROOM` or `PERSON` mapped to resource ids, used in order. Where it says nothing, or runs out, the engine picks the first free resources of the kind by code. An id that is not an active resource of that kind in this organization, or that no requirement asks for, is a 422. A named resource that is not free is a gap and is not swapped for another. Part of what a retry is compared on only when it is sent.
+	// Assignments Which resources to hold for the requirements that name a kind of resource: a resource class code (`ROOM`, `PERSON` or one the organization made) mapped to resource ids, used in order. Where it says nothing, or runs out, the engine picks the first free resources of the kind by code. An id that is not an active resource of that kind in this organization, or that no requirement asks for, is a 422. A named resource that is not free is a gap and is not swapped for another. Part of what a retry is compared on only when it is sent.
 	Assignments *map[string][]int `json:"assignments,omitempty"`
 
 	// Date The day the window opens on. A window that runs past midnight finishes on the day after this one.
@@ -1852,7 +1767,37 @@ type ReservationUpdate struct {
 	ExternalRef *string `json:"external_ref,omitempty"`
 }
 
-// ResourceCreate A room. Every string is trimmed first, code included, the same as the importer trims a room name, so this room and the same name in a later CSV are one row.
+// ResourceClassCreate defines model for ResourceClassCreate.
+type ResourceClassCreate struct {
+	// Code Uppercase letters, digits and underscores, starting with a letter.
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+// ResourceClassResponse defines model for ResourceClassResponse.
+type ResourceClassResponse struct {
+	// Active Whether a new resource or requirement may name the class. Switching it off leaves the ones that already do as they are.
+	Active bool `json:"active"`
+
+	// Code The stable identifier. Uppercase, unique in the organization, never changed.
+	Code      string    `json:"code"`
+	CreatedAt time.Time `json:"created_at"`
+	Id        int       `json:"id"`
+
+	// Name What is shown. Free to change.
+	Name string `json:"name"`
+
+	// Seeded True for `ROOM` and `PERSON`, which every organization has and which can be renamed but not removed or switched off. They are also where the engine's older behaviour is anchored: an import files rooms under `ROOM`. Any other class carries no behaviour, it is a label that resources are filed under and requirements can ask for.
+	Seeded bool `json:"seeded"`
+}
+
+// ResourceClassUpdate Every field is optional and one left out is left alone. Neither can be null. code is absent on purpose: it never changes.
+type ResourceClassUpdate struct {
+	Active *bool   `json:"active,omitempty"`
+	Name   *string `json:"name,omitempty"`
+}
+
+// ResourceCreate A resource, a room unless `resource_type` says otherwise. Every string is trimmed first, code included, the same as the importer trims a room name, so this room and the same name in a later CSV are one row.
 type ResourceCreate struct {
 	AltitudeTarget *float32 `json:"altitude_target,omitempty"`
 
@@ -1870,8 +1815,11 @@ type ResourceCreate struct {
 	Longitude *float32 `json:"longitude,omitempty"`
 
 	// Mode See ResourceResponse.mode. EXCLUSIVE when left out.
-	Mode     *ResourceCreateMode `json:"mode,omitempty"`
-	UnitCode *string             `json:"unit_code,omitempty"`
+	Mode *ResourceCreateMode `json:"mode,omitempty"`
+
+	// ResourceType The code of an active resource class of the organization. `ROOM` when left out. A class that is unknown, inactive or another organization's is a 422 with `UNKNOWN_RESOURCE_CLASS`.
+	ResourceType *string `json:"resource_type,omitempty"`
+	UnitCode     *string `json:"unit_code,omitempty"`
 }
 
 // ResourceCreateMode See ResourceResponse.mode. EXCLUSIVE when left out.
@@ -1893,9 +1841,11 @@ type ResourceResponse struct {
 	Longitude *float32 `json:"longitude,omitempty"`
 
 	// Mode How a reservation takes the resource. EXCLUSIVE, the default, is one booking at a time. POOLED is capacity interchangeable units, of which a booking takes its quantity, refused with `RESOURCE_CAPACITY_EXCEEDED` when the bookings already there leave too few at some moment of the window. SHARED records who is there and refuses nobody. The mode governs reservations only: the timetable on any resource is one class at a time, and a class on a pooled resource takes the whole pool.
-	Mode         *ResourceResponseMode         `json:"mode,omitempty"`
-	ResourceType *ResourceResponseResourceType `json:"resource_type,omitempty"`
-	UnitCode     *string                       `json:"unit_code,omitempty"`
+	Mode *ResourceResponseMode `json:"mode,omitempty"`
+
+	// ResourceType The code of one of the organization's resource classes. `ROOM` and `PERSON` exist everywhere; see `GET /api/v1/resource-classes/` for the rest.
+	ResourceType *string `json:"resource_type,omitempty"`
+	UnitCode     *string `json:"unit_code,omitempty"`
 
 	// UserId Set when this resource is a person.
 	UserId *string `json:"user_id,omitempty"`
@@ -1903,9 +1853,6 @@ type ResourceResponse struct {
 
 // ResourceResponseMode How a reservation takes the resource. EXCLUSIVE, the default, is one booking at a time. POOLED is capacity interchangeable units, of which a booking takes its quantity, refused with `RESOURCE_CAPACITY_EXCEEDED` when the bookings already there leave too few at some moment of the window. SHARED records who is there and refuses nobody. The mode governs reservations only: the timetable on any resource is one class at a time, and a class on a pooled resource takes the whole pool.
 type ResourceResponseMode string
-
-// ResourceResponseResourceType defines model for ResourceResponse.ResourceType.
-type ResourceResponseResourceType string
 
 // ResourceUpdate Every field is optional and a field left out is left alone. code, resource_type and user_id are absent on purpose: code is the importer's match key, and a room that becomes a person is a different resource, not an edit.
 type ResourceUpdate struct {
@@ -2085,10 +2032,12 @@ type UnmetRequirement struct {
 	OwnerKind   UnmetRequirementOwnerKind   `json:"owner_kind"`
 
 	// Quantity How many units or resources were missing, not how many were asked for.
-	Quantity         int                        `json:"quantity"`
-	RequirementId    int                        `json:"requirement_id"`
-	TargetKind       UnmetRequirementTargetKind `json:"target_kind"`
-	TargetResourceId int                        `json:"target_resource_id"`
+	Quantity      int `json:"quantity"`
+	RequirementId int `json:"requirement_id"`
+
+	// TargetKind A resource class code.
+	TargetKind       string `json:"target_kind"`
+	TargetResourceId int    `json:"target_resource_id"`
 }
 
 // UnmetRequirementEnforcement The enforcement that applied, with the organization's default filled in where the requirement did not say.
@@ -2096,9 +2045,6 @@ type UnmetRequirementEnforcement string
 
 // UnmetRequirementOwnerKind defines model for UnmetRequirement.OwnerKind.
 type UnmetRequirementOwnerKind string
-
-// UnmetRequirementTargetKind defines model for UnmetRequirement.TargetKind.
-type UnmetRequirementTargetKind string
 
 // UserCreate defines model for UserCreate.
 type UserCreate struct {
@@ -2471,11 +2417,9 @@ type IngestionUploadCsvParams struct {
 	RemoveMissing *bool `form:"remove_missing,omitempty" json:"remove_missing,omitempty"`
 }
 
-// ResourcesListParams defines parameters for ResourcesList.
-type ResourcesListParams struct {
-	ResourceType *ResourcesListParamsResourceType `form:"resource_type,omitempty" json:"resource_type,omitempty"`
-	Active       *bool                            `form:"active,omitempty" json:"active,omitempty"`
-	Code         *string                          `form:"code,omitempty" json:"code,omitempty"`
+// ResourceClassesListParams defines parameters for ResourceClassesList.
+type ResourceClassesListParams struct {
+	Active *bool `form:"active,omitempty" json:"active,omitempty"`
 
 	// Limit At most this many rows. Every matching row if omitted.
 	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
@@ -2484,8 +2428,37 @@ type ResourcesListParams struct {
 	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
-// ResourcesListParamsResourceType defines parameters for ResourcesList.
-type ResourcesListParamsResourceType string
+// ResourceClassesCreateParams defines parameters for ResourceClassesCreate.
+type ResourceClassesCreateParams struct {
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// ResourceClassesDeleteParams defines parameters for ResourceClassesDelete.
+type ResourceClassesDeleteParams struct {
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// ResourceClassesUpdateParams defines parameters for ResourceClassesUpdate.
+type ResourceClassesUpdateParams struct {
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// ResourcesListParams defines parameters for ResourcesList.
+type ResourcesListParams struct {
+	// ResourceType A resource class code.
+	ResourceType *string `form:"resource_type,omitempty" json:"resource_type,omitempty"`
+	Active       *bool   `form:"active,omitempty" json:"active,omitempty"`
+	Code         *string `form:"code,omitempty" json:"code,omitempty"`
+
+	// Limit At most this many rows. Every matching row if omitted.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Skip this many rows first. Rows come in id order.
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+}
 
 // ResourcesCreateParams defines parameters for ResourcesCreate.
 type ResourcesCreateParams struct {
@@ -2904,6 +2877,12 @@ type GuestExtendVisitJSONRequestBody = GuestExtensionRequest
 
 // IngestionUploadCsvMultipartRequestBody defines body for IngestionUploadCsv for multipart/form-data ContentType.
 type IngestionUploadCsvMultipartRequestBody IngestionUploadCsvMultipartBody
+
+// ResourceClassesCreateJSONRequestBody defines body for ResourceClassesCreate for application/json ContentType.
+type ResourceClassesCreateJSONRequestBody = ResourceClassCreate
+
+// ResourceClassesUpdateJSONRequestBody defines body for ResourceClassesUpdate for application/json ContentType.
+type ResourceClassesUpdateJSONRequestBody = ResourceClassUpdate
 
 // ResourcesCreateJSONRequestBody defines body for ResourcesCreate for application/json ContentType.
 type ResourcesCreateJSONRequestBody = ResourceCreate
@@ -3754,6 +3733,56 @@ type ClientInterface interface {
 	// Corresponds with POST /api/v1/ingestion/upload-csv (the `IngestionUploadCsv` operationId).
 	IngestionUploadCsvWithBody(ctx context.Context, params *IngestionUploadCsvParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ResourceClassesList List resource classes
+	//
+	// The kinds of resource the organization books, in code order, `ROOM` and `PERSON` among them. Readable by anyone signed in, as resources are.
+	//
+	// Corresponds with GET /api/v1/resource-classes/ (the `ResourceClassesList` operationId).
+	ResourceClassesList(ctx context.Context, params *ResourceClassesListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ResourceClassesCreateWithBody Create a resource class
+	//
+	// Requires `ORG_ADMIN`. Adds a kind of resource. The class is a label: resources are filed under it and requirements can ask for it, and nothing about how it books differs from any other resource. The code is permanent.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/resource-classes/ (the `ResourceClassesCreate` operationId).
+	ResourceClassesCreateWithBody(ctx context.Context, params *ResourceClassesCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ResourceClassesCreate Create a resource class
+	//
+	// Requires `ORG_ADMIN`. Adds a kind of resource. The class is a label: resources are filed under it and requirements can ask for it, and nothing about how it books differs from any other resource. The code is permanent.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/resource-classes/ (the `ResourceClassesCreate` operationId).
+	ResourceClassesCreate(ctx context.Context, params *ResourceClassesCreateParams, body ResourceClassesCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ResourceClassesDelete Delete a class nothing uses
+	//
+	// Requires `ORG_ADMIN`. Refused with 409 `RESOURCE_CLASS_PROTECTED` for `ROOM` and `PERSON`, and with 409 `RESOURCE_CLASS_IN_USE` while any resource has the class or any requirement asks for it, whether the class is active or not. Switch it off instead to stop new uses and keep the old.
+	//
+	// Corresponds with DELETE /api/v1/resource-classes/{code} (the `ResourceClassesDelete` operationId).
+	ResourceClassesDelete(ctx context.Context, code string, params *ResourceClassesDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ResourceClassesUpdateWithBody Rename or switch a class off
+	//
+	// Requires `ORG_ADMIN`. Renaming is allowed for every class. Deactivating stops new resources and new requirements naming the class and leaves the ones that already do as they are; deactivating `ROOM` or `PERSON` is a 409 with `RESOURCE_CLASS_PROTECTED`.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /api/v1/resource-classes/{code} (the `ResourceClassesUpdate` operationId).
+	ResourceClassesUpdateWithBody(ctx context.Context, code string, params *ResourceClassesUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ResourceClassesUpdate Rename or switch a class off
+	//
+	// Requires `ORG_ADMIN`. Renaming is allowed for every class. Deactivating stops new resources and new requirements naming the class and leaves the ones that already do as they are; deactivating `ROOM` or `PERSON` is a 409 with `RESOURCE_CLASS_PROTECTED`.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /api/v1/resource-classes/{code} (the `ResourceClassesUpdate` operationId).
+	ResourceClassesUpdate(ctx context.Context, code string, params *ResourceClassesUpdateParams, body ResourceClassesUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ResourcesList List resources
 	//
 	// Every room, person and piece of equipment the schedule can point at. Readable by anyone signed in: an external system that has to book a room needs to be able to find it first.
@@ -3761,18 +3790,18 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/resources/ (the `ResourcesList` operationId).
 	ResourcesList(ctx context.Context, params *ResourcesListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ResourcesCreateWithBody Create a room
+	// ResourcesCreateWithBody Create a resource
 	//
-	// Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
+	// Requires `ORG_ADMIN`. Registers a resource before any timetable names it, for a system that manages its own rooms. It is a room unless `resource_type` names another class of the organization. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/resources/ (the `ResourcesCreate` operationId).
 	ResourcesCreateWithBody(ctx context.Context, params *ResourcesCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ResourcesCreate Create a room
+	// ResourcesCreate Create a resource
 	//
-	// Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
+	// Requires `ORG_ADMIN`. Registers a resource before any timetable names it, for a system that manages its own rooms. It is a room unless `resource_type` names another class of the organization. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -5715,6 +5744,116 @@ func (c *Client) IngestionUploadCsvWithBody(ctx context.Context, params *Ingesti
 	return c.Client.Do(req)
 }
 
+// ResourceClassesList List resource classes
+//
+// The kinds of resource the organization books, in code order, `ROOM` and `PERSON` among them. Readable by anyone signed in, as resources are.
+//
+// Corresponds with GET /api/v1/resource-classes/ (the `ResourceClassesList` operationId).
+func (c *Client) ResourceClassesList(ctx context.Context, params *ResourceClassesListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewResourceClassesListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ResourceClassesCreateWithBody Create a resource class
+//
+// Requires `ORG_ADMIN`. Adds a kind of resource. The class is a label: resources are filed under it and requirements can ask for it, and nothing about how it books differs from any other resource. The code is permanent.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/resource-classes/ (the `ResourceClassesCreate` operationId).
+func (c *Client) ResourceClassesCreateWithBody(ctx context.Context, params *ResourceClassesCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewResourceClassesCreateRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ResourceClassesCreate Create a resource class
+//
+// Requires `ORG_ADMIN`. Adds a kind of resource. The class is a label: resources are filed under it and requirements can ask for it, and nothing about how it books differs from any other resource. The code is permanent.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/resource-classes/ (the `ResourceClassesCreate` operationId).
+func (c *Client) ResourceClassesCreate(ctx context.Context, params *ResourceClassesCreateParams, body ResourceClassesCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewResourceClassesCreateRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ResourceClassesDelete Delete a class nothing uses
+//
+// Requires `ORG_ADMIN`. Refused with 409 `RESOURCE_CLASS_PROTECTED` for `ROOM` and `PERSON`, and with 409 `RESOURCE_CLASS_IN_USE` while any resource has the class or any requirement asks for it, whether the class is active or not. Switch it off instead to stop new uses and keep the old.
+//
+// Corresponds with DELETE /api/v1/resource-classes/{code} (the `ResourceClassesDelete` operationId).
+func (c *Client) ResourceClassesDelete(ctx context.Context, code string, params *ResourceClassesDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewResourceClassesDeleteRequest(c.Server, code, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ResourceClassesUpdateWithBody Rename or switch a class off
+//
+// Requires `ORG_ADMIN`. Renaming is allowed for every class. Deactivating stops new resources and new requirements naming the class and leaves the ones that already do as they are; deactivating `ROOM` or `PERSON` is a 409 with `RESOURCE_CLASS_PROTECTED`.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /api/v1/resource-classes/{code} (the `ResourceClassesUpdate` operationId).
+func (c *Client) ResourceClassesUpdateWithBody(ctx context.Context, code string, params *ResourceClassesUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewResourceClassesUpdateRequestWithBody(c.Server, code, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ResourceClassesUpdate Rename or switch a class off
+//
+// Requires `ORG_ADMIN`. Renaming is allowed for every class. Deactivating stops new resources and new requirements naming the class and leaves the ones that already do as they are; deactivating `ROOM` or `PERSON` is a 409 with `RESOURCE_CLASS_PROTECTED`.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /api/v1/resource-classes/{code} (the `ResourceClassesUpdate` operationId).
+func (c *Client) ResourceClassesUpdate(ctx context.Context, code string, params *ResourceClassesUpdateParams, body ResourceClassesUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewResourceClassesUpdateRequest(c.Server, code, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // ResourcesList List resources
 //
 // Every room, person and piece of equipment the schedule can point at. Readable by anyone signed in: an external system that has to book a room needs to be able to find it first.
@@ -5732,9 +5871,9 @@ func (c *Client) ResourcesList(ctx context.Context, params *ResourcesListParams,
 	return c.Client.Do(req)
 }
 
-// ResourcesCreateWithBody Create a room
+// ResourcesCreateWithBody Create a resource
 //
-// Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
+// Requires `ORG_ADMIN`. Registers a resource before any timetable names it, for a system that manages its own rooms. It is a room unless `resource_type` names another class of the organization. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
 //
 // Takes any type of body and a specified content type.
 //
@@ -5751,9 +5890,9 @@ func (c *Client) ResourcesCreateWithBody(ctx context.Context, params *ResourcesC
 	return c.Client.Do(req)
 }
 
-// ResourcesCreate Create a room
+// ResourcesCreate Create a resource
 //
-// Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
+// Requires `ORG_ADMIN`. Registers a resource before any timetable names it, for a system that manages its own rooms. It is a room unless `resource_type` names another class of the organization. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -9475,6 +9614,250 @@ func NewIngestionUploadCsvRequestWithBody(server string, params *IngestionUpload
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewResourceClassesListRequest constructs an http.Request for the ResourceClassesList method
+func NewResourceClassesListRequest(server string, params *ResourceClassesListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resource-classes/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Active != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "active", *params.Active, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "offset", *params.Offset, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewResourceClassesCreateRequest calls the generic ResourceClassesCreate builder with application/json body
+func NewResourceClassesCreateRequest(server string, params *ResourceClassesCreateParams, body ResourceClassesCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewResourceClassesCreateRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewResourceClassesCreateRequestWithBody constructs an http.Request for the ResourceClassesCreate method, with any body, and a specified content type
+func NewResourceClassesCreateRequestWithBody(server string, params *ResourceClassesCreateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resource-classes/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewResourceClassesDeleteRequest constructs an http.Request for the ResourceClassesDelete method
+func NewResourceClassesDeleteRequest(server string, code string, params *ResourceClassesDeleteParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "code", code, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resource-classes/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewResourceClassesUpdateRequest calls the generic ResourceClassesUpdate builder with application/json body
+func NewResourceClassesUpdateRequest(server string, code string, params *ResourceClassesUpdateParams, body ResourceClassesUpdateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewResourceClassesUpdateRequestWithBody(server, code, params, "application/json", bodyReader)
+}
+
+// NewResourceClassesUpdateRequestWithBody constructs an http.Request for the ResourceClassesUpdate method, with any body, and a specified content type
+func NewResourceClassesUpdateRequestWithBody(server string, code string, params *ResourceClassesUpdateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "code", code, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resource-classes/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -13637,6 +14020,60 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/v1/ingestion/upload-csv (the `IngestionUploadCsv` operationId).
 	IngestionUploadCsvWithBodyWithResponse(ctx context.Context, params *IngestionUploadCsvParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*IngestionUploadCsvResponse, error)
 
+	// ResourceClassesListWithResponse List resource classes
+	//
+	// The kinds of resource the organization books, in code order, `ROOM` and `PERSON` among them. Readable by anyone signed in, as resources are.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/resource-classes/ (the `ResourceClassesList` operationId).
+	ResourceClassesListWithResponse(ctx context.Context, params *ResourceClassesListParams, reqEditors ...RequestEditorFn) (*ResourceClassesListResponse, error)
+
+	// ResourceClassesCreateWithBodyWithResponse Create a resource class
+	//
+	// Requires `ORG_ADMIN`. Adds a kind of resource. The class is a label: resources are filed under it and requirements can ask for it, and nothing about how it books differs from any other resource. The code is permanent.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/resource-classes/ (the `ResourceClassesCreate` operationId).
+	ResourceClassesCreateWithBodyWithResponse(ctx context.Context, params *ResourceClassesCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ResourceClassesCreateResponse, error)
+
+	// ResourceClassesCreateWithResponse Create a resource class
+	//
+	// Requires `ORG_ADMIN`. Adds a kind of resource. The class is a label: resources are filed under it and requirements can ask for it, and nothing about how it books differs from any other resource. The code is permanent.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/resource-classes/ (the `ResourceClassesCreate` operationId).
+	ResourceClassesCreateWithResponse(ctx context.Context, params *ResourceClassesCreateParams, body ResourceClassesCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ResourceClassesCreateResponse, error)
+
+	// ResourceClassesDeleteWithResponse Delete a class nothing uses
+	//
+	// Requires `ORG_ADMIN`. Refused with 409 `RESOURCE_CLASS_PROTECTED` for `ROOM` and `PERSON`, and with 409 `RESOURCE_CLASS_IN_USE` while any resource has the class or any requirement asks for it, whether the class is active or not. Switch it off instead to stop new uses and keep the old.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/v1/resource-classes/{code} (the `ResourceClassesDelete` operationId).
+	ResourceClassesDeleteWithResponse(ctx context.Context, code string, params *ResourceClassesDeleteParams, reqEditors ...RequestEditorFn) (*ResourceClassesDeleteResponse, error)
+
+	// ResourceClassesUpdateWithBodyWithResponse Rename or switch a class off
+	//
+	// Requires `ORG_ADMIN`. Renaming is allowed for every class. Deactivating stops new resources and new requirements naming the class and leaves the ones that already do as they are; deactivating `ROOM` or `PERSON` is a 409 with `RESOURCE_CLASS_PROTECTED`.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /api/v1/resource-classes/{code} (the `ResourceClassesUpdate` operationId).
+	ResourceClassesUpdateWithBodyWithResponse(ctx context.Context, code string, params *ResourceClassesUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ResourceClassesUpdateResponse, error)
+
+	// ResourceClassesUpdateWithResponse Rename or switch a class off
+	//
+	// Requires `ORG_ADMIN`. Renaming is allowed for every class. Deactivating stops new resources and new requirements naming the class and leaves the ones that already do as they are; deactivating `ROOM` or `PERSON` is a 409 with `RESOURCE_CLASS_PROTECTED`.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /api/v1/resource-classes/{code} (the `ResourceClassesUpdate` operationId).
+	ResourceClassesUpdateWithResponse(ctx context.Context, code string, params *ResourceClassesUpdateParams, body ResourceClassesUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*ResourceClassesUpdateResponse, error)
+
 	// ResourcesListWithResponse List resources
 	//
 	// Every room, person and piece of equipment the schedule can point at. Readable by anyone signed in: an external system that has to book a room needs to be able to find it first.
@@ -13646,18 +14083,18 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/resources/ (the `ResourcesList` operationId).
 	ResourcesListWithResponse(ctx context.Context, params *ResourcesListParams, reqEditors ...RequestEditorFn) (*ResourcesListResponse, error)
 
-	// ResourcesCreateWithBodyWithResponse Create a room
+	// ResourcesCreateWithBodyWithResponse Create a resource
 	//
-	// Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
+	// Requires `ORG_ADMIN`. Registers a resource before any timetable names it, for a system that manages its own rooms. It is a room unless `resource_type` names another class of the organization. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/resources/ (the `ResourcesCreate` operationId).
 	ResourcesCreateWithBodyWithResponse(ctx context.Context, params *ResourcesCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ResourcesCreateResponse, error)
 
-	// ResourcesCreateWithResponse Create a room
+	// ResourcesCreateWithResponse Create a resource
 	//
-	// Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
+	// Requires `ORG_ADMIN`. Registers a resource before any timetable names it, for a system that manages its own rooms. It is a room unless `resource_type` names another class of the organization. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -17466,6 +17903,289 @@ func (r IngestionUploadCsvResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r IngestionUploadCsvResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ResourceClassesListResponse200Headers the declared response headers of an HTTP 200 response for ResourceClassesList
+type ResourceClassesListResponse200Headers struct {
+	XTotalCount *int
+}
+
+type ResourceClassesListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]ResourceClassResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *ResourceClassesListResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ResourceClassesListResponse) GetJSON200() *[]ResourceClassResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r ResourceClassesListResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetBody returns the raw response body bytes
+func (r ResourceClassesListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ResourceClassesListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ResourceClassesListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ResourceClassesListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ResourceClassesCreateResponse201Headers the declared response headers of an HTTP 201 response for ResourceClassesCreate
+type ResourceClassesCreateResponse201Headers struct {
+	IdempotencyReplayed *string
+}
+
+type ResourceClassesCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *ResourceClassResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *ErrorResponse
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *UnprocessableEntity
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *ResourceClassesCreateResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r ResourceClassesCreateResponse) GetJSON201() *ResourceClassResponse {
+	return r.JSON201
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r ResourceClassesCreateResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r ResourceClassesCreateResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r ResourceClassesCreateResponse) GetJSON409() *ErrorResponse {
+	return r.JSON409
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r ResourceClassesCreateResponse) GetJSON422() *UnprocessableEntity {
+	return r.JSON422
+}
+
+// GetBody returns the raw response body bytes
+func (r ResourceClassesCreateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ResourceClassesCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ResourceClassesCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ResourceClassesCreateResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ResourceClassesDeleteResponse204Headers the declared response headers of an HTTP 204 response for ResourceClassesDelete
+type ResourceClassesDeleteResponse204Headers struct {
+	IdempotencyReplayed *string
+}
+
+type ResourceClassesDeleteResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *ErrorResponse
+	// Headers204 the parsed response headers for an HTTP 204 response
+	Headers204 *ResourceClassesDeleteResponse204Headers
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r ResourceClassesDeleteResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r ResourceClassesDeleteResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r ResourceClassesDeleteResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r ResourceClassesDeleteResponse) GetJSON409() *ErrorResponse {
+	return r.JSON409
+}
+
+// GetBody returns the raw response body bytes
+func (r ResourceClassesDeleteResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ResourceClassesDeleteResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ResourceClassesDeleteResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ResourceClassesDeleteResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ResourceClassesUpdateResponse200Headers the declared response headers of an HTTP 200 response for ResourceClassesUpdate
+type ResourceClassesUpdateResponse200Headers struct {
+	IdempotencyReplayed *string
+}
+
+type ResourceClassesUpdateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ResourceClassResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *ErrorResponse
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *UnprocessableEntity
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *ResourceClassesUpdateResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ResourceClassesUpdateResponse) GetJSON200() *ResourceClassResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r ResourceClassesUpdateResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r ResourceClassesUpdateResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r ResourceClassesUpdateResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r ResourceClassesUpdateResponse) GetJSON409() *ErrorResponse {
+	return r.JSON409
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r ResourceClassesUpdateResponse) GetJSON422() *UnprocessableEntity {
+	return r.JSON422
+}
+
+// GetBody returns the raw response body bytes
+func (r ResourceClassesUpdateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ResourceClassesUpdateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ResourceClassesUpdateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ResourceClassesUpdateResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -22654,6 +23374,96 @@ func (c *ClientWithResponses) IngestionUploadCsvWithBodyWithResponse(ctx context
 	return ParseIngestionUploadCsvResponse(rsp)
 }
 
+// ResourceClassesListWithResponse List resource classes
+//
+// The kinds of resource the organization books, in code order, `ROOM` and `PERSON` among them. Readable by anyone signed in, as resources are.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/resource-classes/ (the `ResourceClassesList` operationId).
+func (c *ClientWithResponses) ResourceClassesListWithResponse(ctx context.Context, params *ResourceClassesListParams, reqEditors ...RequestEditorFn) (*ResourceClassesListResponse, error) {
+	rsp, err := c.ResourceClassesList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseResourceClassesListResponse(rsp)
+}
+
+// ResourceClassesCreateWithBodyWithResponse Create a resource class
+//
+// Requires `ORG_ADMIN`. Adds a kind of resource. The class is a label: resources are filed under it and requirements can ask for it, and nothing about how it books differs from any other resource. The code is permanent.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/resource-classes/ (the `ResourceClassesCreate` operationId).
+func (c *ClientWithResponses) ResourceClassesCreateWithBodyWithResponse(ctx context.Context, params *ResourceClassesCreateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ResourceClassesCreateResponse, error) {
+	rsp, err := c.ResourceClassesCreateWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseResourceClassesCreateResponse(rsp)
+}
+
+// ResourceClassesCreateWithResponse Create a resource class
+//
+// Requires `ORG_ADMIN`. Adds a kind of resource. The class is a label: resources are filed under it and requirements can ask for it, and nothing about how it books differs from any other resource. The code is permanent.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/resource-classes/ (the `ResourceClassesCreate` operationId).
+func (c *ClientWithResponses) ResourceClassesCreateWithResponse(ctx context.Context, params *ResourceClassesCreateParams, body ResourceClassesCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ResourceClassesCreateResponse, error) {
+	rsp, err := c.ResourceClassesCreate(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseResourceClassesCreateResponse(rsp)
+}
+
+// ResourceClassesDeleteWithResponse Delete a class nothing uses
+//
+// Requires `ORG_ADMIN`. Refused with 409 `RESOURCE_CLASS_PROTECTED` for `ROOM` and `PERSON`, and with 409 `RESOURCE_CLASS_IN_USE` while any resource has the class or any requirement asks for it, whether the class is active or not. Switch it off instead to stop new uses and keep the old.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/v1/resource-classes/{code} (the `ResourceClassesDelete` operationId).
+func (c *ClientWithResponses) ResourceClassesDeleteWithResponse(ctx context.Context, code string, params *ResourceClassesDeleteParams, reqEditors ...RequestEditorFn) (*ResourceClassesDeleteResponse, error) {
+	rsp, err := c.ResourceClassesDelete(ctx, code, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseResourceClassesDeleteResponse(rsp)
+}
+
+// ResourceClassesUpdateWithBodyWithResponse Rename or switch a class off
+//
+// Requires `ORG_ADMIN`. Renaming is allowed for every class. Deactivating stops new resources and new requirements naming the class and leaves the ones that already do as they are; deactivating `ROOM` or `PERSON` is a 409 with `RESOURCE_CLASS_PROTECTED`.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /api/v1/resource-classes/{code} (the `ResourceClassesUpdate` operationId).
+func (c *ClientWithResponses) ResourceClassesUpdateWithBodyWithResponse(ctx context.Context, code string, params *ResourceClassesUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ResourceClassesUpdateResponse, error) {
+	rsp, err := c.ResourceClassesUpdateWithBody(ctx, code, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseResourceClassesUpdateResponse(rsp)
+}
+
+// ResourceClassesUpdateWithResponse Rename or switch a class off
+//
+// Requires `ORG_ADMIN`. Renaming is allowed for every class. Deactivating stops new resources and new requirements naming the class and leaves the ones that already do as they are; deactivating `ROOM` or `PERSON` is a 409 with `RESOURCE_CLASS_PROTECTED`.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /api/v1/resource-classes/{code} (the `ResourceClassesUpdate` operationId).
+func (c *ClientWithResponses) ResourceClassesUpdateWithResponse(ctx context.Context, code string, params *ResourceClassesUpdateParams, body ResourceClassesUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*ResourceClassesUpdateResponse, error) {
+	rsp, err := c.ResourceClassesUpdate(ctx, code, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseResourceClassesUpdateResponse(rsp)
+}
+
 // ResourcesListWithResponse List resources
 //
 // Every room, person and piece of equipment the schedule can point at. Readable by anyone signed in: an external system that has to book a room needs to be able to find it first.
@@ -22669,9 +23479,9 @@ func (c *ClientWithResponses) ResourcesListWithResponse(ctx context.Context, par
 	return ParseResourcesListResponse(rsp)
 }
 
-// ResourcesCreateWithBodyWithResponse Create a room
+// ResourcesCreateWithBodyWithResponse Create a resource
 //
-// Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
+// Requires `ORG_ADMIN`. Registers a resource before any timetable names it, for a system that manages its own rooms. It is a room unless `resource_type` names another class of the organization. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -22684,9 +23494,9 @@ func (c *ClientWithResponses) ResourcesCreateWithBodyWithResponse(ctx context.Co
 	return ParseResourcesCreateResponse(rsp)
 }
 
-// ResourcesCreateWithResponse Create a room
+// ResourcesCreateWithResponse Create a resource
 //
-// Requires `ORG_ADMIN`. Registers a room before any timetable names it, for a system that manages its own rooms. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
+// Requires `ORG_ADMIN`. Registers a resource before any timetable names it, for a system that manages its own rooms. It is a room unless `resource_type` names another class of the organization. The row is the one an import would have made, so a later CSV naming the room finds it rather than creating a second. A retry after a lost response can send an Idempotency-Key, or read the room back with `GET /api/v1/resources/?code=`: the code already identifies it.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -26383,6 +27193,256 @@ func ParseIngestionUploadCsvResponse(rsp *http.Response) (*IngestionUploadCsvRes
 		}
 		response.JSON422 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseResourceClassesListResponse parses an HTTP response from a ResourceClassesListWithResponse call
+func ParseResourceClassesListResponse(rsp *http.Response) (*ResourceClassesListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ResourceClassesListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []ResourceClassResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers ResourceClassesListResponse200Headers
+		if values := rsp.Header.Values("X-Total-Count"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Total-Count", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XTotalCount = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseResourceClassesCreateResponse parses an HTTP response from a ResourceClassesCreateWithResponse call
+func ParseResourceClassesCreateResponse(rsp *http.Response) (*ResourceClassesCreateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ResourceClassesCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest ResourceClassResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest UnprocessableEntity
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers ResourceClassesCreateResponse201Headers
+		if values := rsp.Header.Values("Idempotency-Replayed"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Idempotency-Replayed", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.IdempotencyReplayed = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseResourceClassesDeleteResponse parses an HTTP response from a ResourceClassesDeleteWithResponse call
+func ParseResourceClassesDeleteResponse(rsp *http.Response) (*ResourceClassesDeleteResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ResourceClassesDeleteResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		var headers ResourceClassesDeleteResponse204Headers
+		if values := rsp.Header.Values("Idempotency-Replayed"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Idempotency-Replayed", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.IdempotencyReplayed = &value
+		}
+		response.Headers204 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseResourceClassesUpdateResponse parses an HTTP response from a ResourceClassesUpdateWithResponse call
+func ParseResourceClassesUpdateResponse(rsp *http.Response) (*ResourceClassesUpdateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ResourceClassesUpdateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ResourceClassResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest UnprocessableEntity
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers ResourceClassesUpdateResponse200Headers
+		if values := rsp.Header.Values("Idempotency-Replayed"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Idempotency-Replayed", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.IdempotencyReplayed = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil

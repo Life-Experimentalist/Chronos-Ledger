@@ -7,7 +7,6 @@ from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
 from ..models.resource_response_mode import ResourceResponseMode
-from ..models.resource_response_resource_type import ResourceResponseResourceType
 from ..types import UNSET, Unset
 
 T = TypeVar("T", bound="ResourceResponse")
@@ -20,7 +19,9 @@ class ResourceResponse:
         id (int | Unset):
         code (str | Unset): The importer's match key. Not editable. Example: LH-3.
         label (str | Unset):  Example: Lecture Hall 3.
-        resource_type (ResourceResponseResourceType | Unset):
+        resource_type (str | Unset): The code of one of the organization's resource classes. `ROOM` and `PERSON` exist
+            everywhere; see `GET /api/v1/resource-classes/` for the rest.
+             Example: ROOM.
         unit_code (None | str | Unset):
         capacity (int | None | Unset): How many people a room holds, or on a POOLED resource how many units the pool
             has.
@@ -39,7 +40,7 @@ class ResourceResponse:
     id: int | Unset = UNSET
     code: str | Unset = UNSET
     label: str | Unset = UNSET
-    resource_type: ResourceResponseResourceType | Unset = UNSET
+    resource_type: str | Unset = UNSET
     unit_code: None | str | Unset = UNSET
     capacity: int | None | Unset = UNSET
     mode: ResourceResponseMode | Unset = UNSET
@@ -57,9 +58,7 @@ class ResourceResponse:
 
         label = self.label
 
-        resource_type: str | Unset = UNSET
-        if not isinstance(self.resource_type, Unset):
-            resource_type = self.resource_type.value
+        resource_type = self.resource_type
 
         unit_code: None | str | Unset
         if isinstance(self.unit_code, Unset):
@@ -142,12 +141,7 @@ class ResourceResponse:
 
         label = d.pop("label", UNSET)
 
-        _resource_type = d.pop("resource_type", UNSET)
-        resource_type: ResourceResponseResourceType | Unset
-        if isinstance(_resource_type, Unset):
-            resource_type = UNSET
-        else:
-            resource_type = ResourceResponseResourceType(_resource_type)
+        resource_type = d.pop("resource_type", UNSET)
 
         def _parse_unit_code(data: object) -> None | str | Unset:
             if data is None:

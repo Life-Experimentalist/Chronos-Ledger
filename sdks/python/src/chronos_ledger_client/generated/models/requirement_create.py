@@ -7,7 +7,6 @@ from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
 from ..models.requirement_create_enforcement import RequirementCreateEnforcement
-from ..models.requirement_create_target_kind import RequirementCreateTargetKind
 from ..types import UNSET, Unset
 
 T = TypeVar("T", bound="RequirementCreate")
@@ -19,7 +18,8 @@ class RequirementCreate:
 
     Attributes:
         target_resource_id (int | None | Unset): A specific resource of this organization. Never an activity.
-        target_kind (RequirementCreateTargetKind | Unset): Any resource of this kind, picked at booking time.
+        target_kind (None | str | Unset): Any resource of this class, picked at booking time. The code of an active
+            resource class of the organization; anything else is a 422 with `UNKNOWN_RESOURCE_CLASS`.
         quantity (int | Unset): How many. Units of the pool on a POOLED named target, which a named target of another
             mode cannot take above 1 (422); the number of distinct resources on a kind. 1 when left out.
         before_minutes (int | Unset): Setup time held before the window. 0 when left out.
@@ -30,7 +30,7 @@ class RequirementCreate:
     """
 
     target_resource_id: int | None | Unset = UNSET
-    target_kind: RequirementCreateTargetKind | Unset = UNSET
+    target_kind: None | str | Unset = UNSET
     quantity: int | Unset = UNSET
     before_minutes: int | Unset = UNSET
     after_minutes: int | Unset = UNSET
@@ -44,9 +44,11 @@ class RequirementCreate:
         else:
             target_resource_id = self.target_resource_id
 
-        target_kind: str | Unset = UNSET
-        if not isinstance(self.target_kind, Unset):
-            target_kind = self.target_kind.value
+        target_kind: None | str | Unset
+        if isinstance(self.target_kind, Unset):
+            target_kind = UNSET
+        else:
+            target_kind = self.target_kind
 
         quantity = self.quantity
 
@@ -89,12 +91,14 @@ class RequirementCreate:
 
         target_resource_id = _parse_target_resource_id(d.pop("target_resource_id", UNSET))
 
-        _target_kind = d.pop("target_kind", UNSET)
-        target_kind: RequirementCreateTargetKind | Unset
-        if isinstance(_target_kind, Unset):
-            target_kind = UNSET
-        else:
-            target_kind = RequirementCreateTargetKind(_target_kind)
+        def _parse_target_kind(data: object) -> None | str | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(None | str | Unset, data)
+
+        target_kind = _parse_target_kind(d.pop("target_kind", UNSET))
 
         quantity = d.pop("quantity", UNSET)
 
