@@ -545,7 +545,7 @@ The header is never quietly ignored. Each of these is a `403`:
 
 | Code | When |
 |---|---|
-| `IMPERSONATION_NOT_ALLOWED` | The request is signed in with a token, or its key does not hold `impersonate` (a `*` key does not). |
+| `IMPERSONATION_NOT_ALLOWED` | The request is signed in with a token, its key does not hold `impersonate` (a `*` key does not), or it issues or changes a credential (below). |
 | `IMPERSONATION_REFUSED` | The id is empty, unknown, deactivated, or belongs to another organization. All of these get the same answer, so the header cannot be used to find out which ids exist. |
 
 Rate limits and idempotency keys stay with the API key, not with the person
@@ -555,10 +555,16 @@ named, so naming other people does not mint other budgets. The same
 answer. The audit log records both identities; see
 [Audit](#audit).
 
+A key acting for someone cannot issue or change a credential or a trust,
+whatever its scopes: no writes under `/auth` (changing a password), `/api-keys`
+(issuing or revoking keys) or `/federation` (trusting an issuer), and no
+`POST /users/{id}/reset-password`. Each of those hands out something that
+outlives the request, and acting for an administrator a key could otherwise
+give itself more than the key and the person allow together. Reads in those
+areas, `GET /auth/me` among them, are allowed as usual.
+
 Because the key becomes the person for the request, scope it as tightly as
-the integration allows. A key that holds `auth:write` can change the password
-of the person it names, and one that holds `api-keys:write` can issue more
-keys while acting for an administrator.
+the integration allows.
 
 ### Service accounts
 

@@ -254,6 +254,50 @@ def test_the_service_accounts_own_role_grants_nothing(client, world):
     assert client.get(USERS, headers=_as("impersonate_only", "ADM002")).status_code == 200
 
 
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("post", "/api/v1/api-keys/", {"label": "wider", "user_id": "ADM002", "scopes": ["*"]}),
+        (
+            "post",
+            "/api/v1/auth/change-password",
+            {"current_password": "Unused-Password-1", "new_password": "Another-Password-2"},
+        ),
+        ("post", "/api/v1/users/FAC001/reset-password", None),
+        ("post", "/api/v1/federation/issuers", {}),
+    ],
+)
+def test_a_key_acting_for_an_administrator_cannot_touch_credentials(
+    client, db, world, method, path, body
+):
+    """Every scope and an administrator to act for, and still no key, password or issuer."""
+    keys_before = db.query(ApiKey).count()
+    res = getattr(client, method)(path, json=body, headers=_as("everything", "ADM002"))
+    assert res.status_code == 403, res.text
+    assert res.json()["code"] == "IMPERSONATION_NOT_ALLOWED"
+    db.expire_all()
+    assert db.query(ApiKey).count() == keys_before
+    rows = _audit_rows(db, path)
+    assert rows and rows[-1].acting_for_user_id == "ADM002"
+
+
+def test_reads_in_the_credential_areas_still_work_for_someone(client, world):
+    res = client.get("/api/v1/api-keys/", headers=_as("everything", "ADM002"))
+    assert res.status_code == 200, res.text
+
+
+def test_without_the_header_the_refusal_is_the_ordinary_one(client, world):
+    """The refusal is about acting for someone, not about the scope itself."""
+    res = client.post(
+        "/api/v1/api-keys/",
+        json={"label": "plain", "user_id": "STU001", "scopes": ["schedule:read"]},
+        headers={"X-API-Key": KEYS["everything"]},
+    )
+    # Bound to a MEMBER, so the role check refuses it, not the acting-for rule.
+    assert res.status_code == 403
+    assert res.json()["code"] == "INSUFFICIENT_ROLE"
+
+
 # --- the caller stays the key ----------------------------------------------------------
 
 

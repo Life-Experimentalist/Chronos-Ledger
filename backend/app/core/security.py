@@ -162,6 +162,20 @@ def key_may_impersonate(scopes: str) -> bool:
 # users.id is 50 characters, and so is the longest id a header can name.
 ACTING_FOR_LIMIT = 50
 
+# Writes a key may not make while acting for someone, whatever its scopes: each
+# one issues or changes a credential or a trust, and what it hands out outlives
+# the request. Acting for an administrator, a key could otherwise mint itself a
+# wider key, set a password it then signs in with, or trust an issuer of its
+# own, and so reach more than the key and the person allow together.
+ACTING_FOR_REFUSED_SCOPES = frozenset({"auth:write", "api-keys:write", "federation:write"})
+
+
+def acting_for_refused(method: str, path: str) -> bool:
+    """Whether a request issues or changes a credential, so a key may not make it for someone."""
+    if required_scope(method, path) in ACTING_FOR_REFUSED_SCOPES:
+        return True
+    return method not in ("GET", "HEAD", "OPTIONS") and path.rstrip("/").endswith("/reset-password")
+
 
 def _refuse_impersonation(request: Request, status_code: int, detail: str, code: ErrorCode):
     """Mark the request for the audit log, then refuse it.
@@ -277,6 +291,13 @@ def get_current_user_id(
                 request,
                 status.HTTP_403_FORBIDDEN,
                 "This API key does not hold the impersonate scope",
+                ErrorCode.IMPERSONATION_NOT_ALLOWED,
+            )
+        if acting_for_refused(request.method, request.url.path):
+            raise _refuse_impersonation(
+                request,
+                status.HTTP_403_FORBIDDEN,
+                "A key acting for someone cannot issue or change credentials",
                 ErrorCode.IMPERSONATION_NOT_ALLOWED,
             )
         from app.models.db import User
