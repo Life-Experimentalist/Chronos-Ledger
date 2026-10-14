@@ -244,12 +244,14 @@ This release lets a resource be consumed in three ways.
   timetable stays one class at a time on every resource. The
   requirements half is in (0.17, `tests/test_resource_requirements.py`,
   `tests/test_resource_requirements_pg.py`): a `resource_requirement` table
-  owned by a resource or an activity, naming a resource or a kind (`ROOM` or
-  `PERSON`, standing in for a class until classes exist), held as child
+  owned by a resource or an activity, naming a resource or a resource class, held as child
   reservations when the resource is booked, `REQUIRED` or `ADVISORY` per
   requirement with an organization default, and reported by the conflict
-  report, the import and the generator for the timetable. Configurable resource
-  classes are not built. The other half of the 0.17 work is in:
+  report, the import and the generator for the timetable. Resource classes are
+  configured per organization (`tests/test_resource_classes.py`,
+  `tests/test_resource_classes_pg.py`): `ROOM` and `PERSON` are seeded for every
+  organization and a class an administrator adds carries no behaviour, and
+  `SCHEMA_VERSION` is 6. The other half of the 0.17 work is in:
   slots and days store only `resource_id`, and `target_room_identifier` in the
   API is the resource's code, read through the key. The CSV import and the
   slot requests still take the room by name and resolve it to a resource.
@@ -309,7 +311,7 @@ release; it is described with the integration contract below.
 
 Until 1.0 a release that changes the models does not upgrade the database the
 one before it made: it bumps `SCHEMA_VERSION` and needs a fresh database, as
-0.16 does. 0.17 moves it to 5 and needs a fresh database too. From 1.0 on, the
+0.16 does. 0.17 moves it to 6 and needs a fresh database too. From 1.0 on, the
 integration contract applies.
 
 ### E-5. Recurrence rules

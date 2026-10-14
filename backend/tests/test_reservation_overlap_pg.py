@@ -36,7 +36,6 @@ from app.models.db import (
     Reservation,
     ReservationStatus,
     Resource,
-    ResourceType,
     User,
 )
 
@@ -91,7 +90,7 @@ def resource(db):
     room = Resource(
         code="PG-LAB-1",
         label="Overlap Lab",
-        resource_type=ResourceType.ROOM,
+        resource_type="ROOM",
         capacity=40,
     )
     db.add(room)
@@ -188,7 +187,7 @@ def test_the_same_window_on_another_resource_is_not_a_clash(db, resource):
     other = Resource(
         code="PG-LAB-2",
         label="Second Lab",
-        resource_type=ResourceType.ROOM,
+        resource_type="ROOM",
         capacity=40,
     )
     db.add(other)

@@ -43,7 +43,6 @@ from app.models.db import (
     InstitutionalRole,
     PlanningCycle,
     Resource,
-    ResourceType,
     StructuralMasterSlot,
     User,
 )
@@ -109,7 +108,7 @@ def room(db):
     built = Resource(
         code="PG-WARD-1",
         label="Overlap Ward",
-        resource_type=ResourceType.ROOM,
+        resource_type="ROOM",
         capacity=30,
     )
     db.add(built)
@@ -348,7 +347,7 @@ def test_a_refused_day_does_not_take_the_rest_of_the_night_with_it(db, room, cyc
     elsewhere = Resource(
         code="PG-WARD-2",
         label="Second Ward",
-        resource_type=ResourceType.ROOM,
+        resource_type="ROOM",
         capacity=30,
     )
     db.add(elsewhere)

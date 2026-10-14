@@ -32,7 +32,6 @@ from app.models.db import (
     Reservation,
     ReservationStatus,
     Resource,
-    ResourceType,
     User,
 )
 
@@ -141,7 +140,7 @@ def test_the_hosts_extension_serves_the_constraints(db):
 
 
 def test_two_overlapping_holds_are_still_refused_inside_the_schema(db):
-    room = Resource(code="PG-EMBED-1", label="Embedded Lab", resource_type=ResourceType.ROOM)
+    room = Resource(code="PG-EMBED-1", label="Embedded Lab", resource_type="ROOM")
     db.add(room)
     db.flush()
 

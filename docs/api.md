@@ -144,6 +144,9 @@ that holds it.
 | `RESOURCE_CAPACITY_EXCEEDED` | A `POOLED` resource has too few units free for the whole window. `detail` carries `conflicts`, `capacity`, `taken` and `requested`. |
 | `RESOURCE_BOOKINGS_WOULD_NOT_FIT` | A change of a resource's `mode` or `capacity` that bookings still to come would no longer fit. `detail.reservations` lists them. |
 | `REQUIREMENT_UNSATISFIED` | A booking needs a `REQUIRED` requirement that could not be held. `detail` carries `message` and `conflicts`, as `RESOURCE_CONFLICT` does. Nothing was held. |
+| `UNKNOWN_RESOURCE_CLASS` | A `resource_type` or `target_kind` is not an active resource class of the caller's organization. `422`. |
+| `RESOURCE_CLASS_IN_USE` | A resource class cannot be deleted while a resource has it or a requirement asks for it. `409`. |
+| `RESOURCE_CLASS_PROTECTED` | `ROOM` and `PERSON` cannot be deleted or switched off. `409`. |
 | `LOCATION_REQUIRED` | The session is geofenced and no location was sent. |
 | `LOCATION_TOO_COARSE` | The location's accuracy is too poor to check against the geofence. |
 | `OUTSIDE_GEOFENCE` | The location is outside the session's geofence. |
@@ -478,6 +481,7 @@ land open by nobody remembering to annotate it.
 | `api-keys` | issuing, listing and revoking keys |
 | `users` | the user directory |
 | `resources` | rooms and their availability |
+| `resource-classes` | the kinds of resource an organization books |
 | `schedule` | slots, the daily ledger, cycles, staff locations |
 | `attendance` | marking, absence requests, annotations |
 | `guest` | the kiosk endpoints |
@@ -1024,6 +1028,68 @@ change where somebody is resolved to be.
 
 ---
 
+## Resource classes
+
+A resource class is a kind of resource the organization books: a room, a
+person, an operating theatre, an equipment cart. Every organization has `ROOM`
+and `PERSON`, and an administrator adds the rest. A resource has a
+`resource_type`, which is the `code` of one of its organization's classes, and
+a requirement can ask for any resource of a class by that code.
+
+`ROOM` and `PERSON` are built in, and the engine's older behaviour hangs on
+them: an import and the backfill file rooms under `ROOM`. They can be renamed,
+but not deleted or switched off, and no class's `code` ever changes. A class an
+administrator adds carries no behaviour of its own. It is a label that
+resources are filed under and requirements can ask for, and a resource of any
+class books by its `mode` like every other.
+
+### GET /resource-classes/
+
+Optional filter: `active`. Readable by anyone signed in, ordered by code, and
+pages with `limit` and `offset`.
+
+```json
+[
+  { "id": 1, "code": "PERSON", "name": "Person", "active": true, "seeded": true,
+    "created_at": "2026-10-14T09:00:00Z" },
+  { "id": 2, "code": "ROOM", "name": "Room", "active": true, "seeded": true,
+    "created_at": "2026-10-14T09:00:00Z" }
+]
+```
+
+### POST /resource-classes/ `[ORG_ADMIN]`
+
+```json
+{ "code": "EQUIPMENT_CART", "name": "Equipment cart" }
+```
+
+`code` is uppercase letters, digits and underscores, starting with a letter, up
+to 30 characters; anything else is `422`. It is unique within the organization
+and permanent. A code already taken is `409` `ALREADY_EXISTS`. Another
+organization's classes are never seen and never clash. The answer is `201`
+with the class.
+
+### PATCH /resource-classes/{code} `[ORG_ADMIN]`
+
+`name` and `active`, either or both. Neither can be null. Deactivating a class
+stops new resources and new requirements from naming it and leaves the ones
+that already do as they are. Deactivating `ROOM` or `PERSON` is `409`
+`RESOURCE_CLASS_PROTECTED`. An unknown code is `404`.
+
+### DELETE /resource-classes/{code} `[ORG_ADMIN]`
+
+Removes a class nothing uses, answering `204`. `ROOM` and `PERSON` are `409`
+`RESOURCE_CLASS_PROTECTED`. A class that any resource has, or any requirement
+asks for, is `409` `RESOURCE_CLASS_IN_USE`, whether the class is active or not.
+Switch it off with `PATCH` to stop new uses and keep the old ones.
+
+A `resource_type` or `target_kind` that is not an active class of the caller's
+organization is `422` `UNKNOWN_RESOURCE_CLASS`. The answer is the same for a
+code nobody made, one that is switched off and one that belongs to another
+organization.
+
+---
+
 ## Resources
 
 A resource is a thing the schedule can point at: a room, a person, a piece of
@@ -1046,7 +1112,8 @@ every resource, and a class on a pooled resource takes the whole pool.
 
 ### GET /resources/
 
-Optional filters: `resource_type` (`ROOM` or `PERSON`), `active`, `code`.
+Optional filters: `resource_type` (a [resource class](#resource-classes) code),
+`active`, `code`.
 Readable by anyone signed in. Ordered by code, and pages with `limit` and
 `offset` like the other lists.
 
@@ -1071,11 +1138,12 @@ Readable by anyone signed in. Ordered by code, and pages with `limit` and
 
 ### POST /resources/ `[ORG_ADMIN]`
 
-Register a room before any timetable names it.
+Register a room before any timetable names it, or another kind of resource.
 
 ```json
 {
   "code": "LH-3",
+  "resource_type": "ROOM",
   "label": "Lecture Hall 3",
   "unit_code": "CSE",
   "capacity": 90,
@@ -1088,6 +1156,9 @@ Register a room before any timetable names it.
 Only `code` is required. It is trimmed, the same as the importer trims a room
 name, so a room created here and the same name in a later CSV are one row and
 the import attaches its slots to this one. `label` defaults to the code.
+`resource_type` is the code of an active [resource class](#resource-classes)
+and defaults to `ROOM`; one that is unknown, switched off or another
+organization's is `422` `UNKNOWN_RESOURCE_CLASS`.
 `latitude` and `longitude` come as a pair or not at all, the same rule as on
 `PATCH`. `mode` defaults to `EXCLUSIVE`; `"mode": "POOLED"` needs a `capacity`
 of at least 1, and without one is `422`.
@@ -1101,7 +1172,7 @@ meets `409` reads the room back with `GET /resources/?code=` and carries on, or
 sends an `Idempotency-Key` ([Idempotency](#idempotency)) and gets the first
 `201` back.
 
-Rooms only. There is no delete either: retiring a room is `PATCH` with
+There is no delete: retiring a room is `PATCH` with
 `"active": false`, which keeps its calendar and every slot and day that points
 at it.
 
@@ -1512,7 +1583,7 @@ Cancelling a booking also cancels the holds its requirements took, see
 A requirement says that using one thing also needs another. The owner is a
 resource (the operating theatre always needs a cleaning crew) or an activity
 (this surgery list needs two nurses). The target is one named resource, or any
-resource of a kind, `ROOM` or `PERSON`. An activity is never a target, because
+resource of a class, such as `ROOM` or `PERSON` or one the organization made. An activity is never a target, because
 only a resource can be held. The two owners have the same three routes, the
 activity ones under `/schedule/activities/{id}`; the activity ones follow the
 role and unit rules of the other activity routes, and the resource ones follow
@@ -1568,7 +1639,7 @@ body is the booking with two more fields:
   by its own mode: an `EXCLUSIVE` one must be free, a `POOLED` one must have
   `quantity` units left, a `SHARED` one is never refused.
 - A kind is filled from the request's optional `assignments`, which maps
-  `ROOM` or `PERSON` to resource ids used in order (`{"assignments":
+  a class code to resource ids used in order (`{"assignments":
   {"PERSON": [41, 44]}}`). Where it says nothing, or runs out, the first free
   active resources of the kind by code are used, so a retry picks the same
   ones. An assigned resource that is not free is a gap and is not swapped for

@@ -914,6 +914,69 @@ components:
           type: string
           format: date-time
           nullable: true
+    # ── Resource classes ──────────────────────
+    ResourceClassResponse:
+      type: object
+      required: [id, code, name, active, seeded, created_at]
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+          description: The stable identifier. Uppercase, unique in the organization, never changed.
+          example: ROOM
+        name:
+          type: string
+          description: What is shown. Free to change.
+          example: Room
+        active:
+          type: boolean
+          description: >
+            Whether a new resource or requirement may name the class.
+            Switching it off leaves the ones that already do as they are.
+        seeded:
+          type: boolean
+          description: >
+            True for `ROOM` and `PERSON`, which every organization has and
+            which can be renamed but not removed or switched off. They are
+            also where the engine's older behaviour is anchored: an import
+            files rooms under `ROOM`. Any other class carries no behaviour,
+            it is a label that resources are filed under and requirements
+            can ask for.
+        created_at:
+          type: string
+          format: date-time
+
+    ResourceClassCreate:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          pattern: "^[A-Z][A-Z0-9_]*$"
+          minLength: 1
+          maxLength: 30
+          description: Uppercase letters, digits and underscores, starting with a letter.
+          example: EQUIPMENT_CART
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: Equipment cart
+
+    ResourceClassUpdate:
+      type: object
+      description: >
+        Every field is optional and one left out is left alone. Neither can be
+        null. code is absent on purpose: it never changes.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        active:
+          type: boolean
+
     # ── Resources ─────────────────────────────
     ResourceResponse:
       type: object
@@ -929,7 +992,11 @@ components:
           example: Lecture Hall 3
         resource_type:
           type: string
-          enum: [ROOM, PERSON]
+          description: >
+            The code of one of the organization's resource classes. `ROOM`
+            and `PERSON` exist everywhere; see `GET /api/v1/resource-classes/`
+            for the rest.
+          example: ROOM
         unit_code:
           type: string
           nullable: true
@@ -971,9 +1038,10 @@ components:
       type: object
       required: [code]
       description: >
-        A room. Every string is trimmed first, code included, the same as
-        the importer trims a room name, so this room and the same name in a
-        later CSV are one row.
+        A resource, a room unless `resource_type` says otherwise. Every
+        string is trimmed first, code included, the same as the importer
+        trims a room name, so this room and the same name in a later CSV are
+        one row.
       properties:
         code:
           type: string
@@ -989,6 +1057,15 @@ components:
           maxLength: 120
           description: Defaults to the code, which is what an imported room gets.
           example: Lecture Hall 3
+        resource_type:
+          type: string
+          pattern: "^[A-Z][A-Z0-9_]*$"
+          maxLength: 30
+          description: >
+            The code of an active resource class of the organization. `ROOM`
+            when left out. A class that is unknown, inactive or another
+            organization's is a 422 with `UNKNOWN_RESOURCE_CLASS`.
+          example: ROOM
         unit_code:
           type: string
           maxLength: 50
@@ -1365,8 +1442,8 @@ components:
           nullable: true
           description: >
             Which resources to hold for the requirements that name a kind of
-            resource: `ROOM` or `PERSON` mapped to resource ids, used in
-            order. Where it says nothing, or runs out, the engine picks the
+            resource: a resource class code (`ROOM`, `PERSON` or one the
+            organization made) mapped to resource ids, used in order. Where it says nothing, or runs out, the engine picks the
             first free resources of the kind by code. An id that is not an
             active resource of that kind in this organization, or that no
             requirement asks for, is a 422. A named resource that is not
@@ -1513,8 +1590,8 @@ components:
           nullable: true
         target_kind:
           type: string
-          enum: [ROOM, PERSON]
           nullable: true
+          description: A resource class code.
         quantity:
           type: integer
           description: How many units or resources were missing, not how many were asked for.
@@ -1547,9 +1624,13 @@ components:
             A specific resource of this organization. Never an activity.
         target_kind:
           type: string
-          enum: [ROOM, PERSON]
+          pattern: "^[A-Z][A-Z0-9_]*$"
+          maxLength: 30
           nullable: true
-          description: Any resource of this kind, picked at booking time.
+          description: >
+            Any resource of this class, picked at booking time. The code of
+            an active resource class of the organization; anything else is a
+            422 with `UNKNOWN_RESOURCE_CLASS`.
         quantity:
           type: integer
           minimum: 1
@@ -1603,8 +1684,8 @@ components:
           nullable: true
         target_kind:
           type: string
-          enum: [ROOM, PERSON]
           nullable: true
+          description: A resource class code.
         quantity:
           type: integer
         before_minutes:
@@ -2821,6 +2902,9 @@ components:
         - RESOURCE_CAPACITY_EXCEEDED
         - RESOURCE_BOOKINGS_WOULD_NOT_FIT
         - REQUIREMENT_UNSATISFIED
+        - UNKNOWN_RESOURCE_CLASS
+        - RESOURCE_CLASS_IN_USE
+        - RESOURCE_CLASS_PROTECTED
         - LOCATION_REQUIRED
         - LOCATION_TOO_COARSE
         - OUTSIDE_GEOFENCE
@@ -4303,6 +4387,162 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/UnprocessableEntity"
+  # ── Resource classes ──────────────────────
+  /api/v1/resource-classes/:
+    get:
+      operationId: resourceClasses.list
+      tags: [Resource classes]
+      summary: List resource classes
+      description: >
+        The kinds of resource the organization books, in code order, `ROOM`
+        and `PERSON` among them. Readable by anyone signed in, as resources
+        are.
+      parameters:
+        - name: active
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Classes, ordered by code.
+          headers:
+            X-Total-Count:
+              $ref: "#/components/headers/XTotalCount"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ResourceClassResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      operationId: resourceClasses.create
+      tags: [Resource classes]
+      summary: Create a resource class
+      description: >
+        Requires `ORG_ADMIN`. Adds a kind of resource. The class is a label:
+        resources are filed under it and requirements can ask for it, and
+        nothing about how it books differs from any other resource. The code
+        is permanent.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResourceClassCreate"
+      responses:
+        "201":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: The class as created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResourceClassResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: The organization already has a class with that code (`ALREADY_EXISTS`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/v1/resource-classes/{code}:
+    parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+        example: EQUIPMENT_CART
+    patch:
+      operationId: resourceClasses.update
+      tags: [Resource classes]
+      summary: Rename or switch a class off
+      description: >
+        Requires `ORG_ADMIN`. Renaming is allowed for every class.
+        Deactivating stops new resources and new requirements naming the
+        class and leaves the ones that already do as they are; deactivating
+        `ROOM` or `PERSON` is a 409 with `RESOURCE_CLASS_PROTECTED`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResourceClassUpdate"
+      responses:
+        "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: The class as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResourceClassResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            `ROOM` or `PERSON` cannot be switched off
+            (`RESOURCE_CLASS_PROTECTED`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+    delete:
+      operationId: resourceClasses.delete
+      tags: [Resource classes]
+      summary: Delete a class nothing uses
+      description: >
+        Requires `ORG_ADMIN`. Refused with 409 `RESOURCE_CLASS_PROTECTED` for
+        `ROOM` and `PERSON`, and with 409 `RESOURCE_CLASS_IN_USE` while any
+        resource has the class or any requirement asks for it, whether the
+        class is active or not. Switch it off instead to stop new uses and
+        keep the old.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: Deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Protected (`RESOURCE_CLASS_PROTECTED`) or in use (`RESOURCE_CLASS_IN_USE`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ── Resources ─────────────────────────────
   /api/v1/resources/:
     get:
@@ -4317,9 +4557,9 @@ paths:
         - name: resource_type
           in: query
           required: false
+          description: A resource class code.
           schema:
             type: string
-            enum: [ROOM, PERSON]
         - name: active
           in: query
           required: false
@@ -4350,10 +4590,11 @@ paths:
     post:
       operationId: resources.create
       tags: [Resources]
-      summary: Create a room
+      summary: Create a resource
       description: >
-        Requires `ORG_ADMIN`. Registers a room before any timetable names
-        it, for a system that manages its own rooms. The row is the one an
+        Requires `ORG_ADMIN`. Registers a resource before any timetable
+        names it, for a system that manages its own rooms. It is a room
+        unless `resource_type` names another class of the organization. The row is the one an
         import would have made, so a later CSV naming the room finds it
         rather than creating a second. A retry after a lost response can
         send an Idempotency-Key, or read the room back with
@@ -4389,7 +4630,8 @@ paths:
         "422":
           description: >
             A blank or over-long code, latitude without longitude or the
-            reverse, or a coordinate out of range.
+            reverse, a coordinate out of range, or a `resource_type` that is
+            not an active class of the organization (`UNKNOWN_RESOURCE_CLASS`).
             A key reused with a different request is `IDEMPOTENCY_KEY_REUSED`.
           content:
             application/json:

@@ -14,6 +14,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     LargeBinary,
@@ -24,6 +25,7 @@ from sqlalchemy import (
     UniqueConstraint,
     event,
     func,
+    insert,
     text,
 )
 from sqlalchemy.dialects.postgresql import ExcludeConstraint
@@ -118,21 +120,6 @@ class LogVerificationState(enum.StrEnum):
     VERIFIED_DENIED = "VERIFIED_DENIED"
 
 
-class ResourceType(enum.StrEnum):
-    """What a bookable thing is.
-
-    Only these two exist because only these two are created. ROOM is what
-    the import and the backfill produce. PERSON exists because
-    Resource.user_id ships alongside it: a resource row carrying a user is a
-    person, and a column that says so with no value to say it with would be
-    incoherent. Adding a kind later is one ALTER TYPE. How a resource is
-    consumed is a separate axis, ResourceMode, so any kind can be any mode.
-    """
-
-    ROOM = "ROOM"
-    PERSON = "PERSON"
-
-
 class ResourceMode(enum.StrEnum):
     """How bookings on one resource stand against each other.
 
@@ -156,8 +143,6 @@ class ResourceMode(enum.StrEnum):
 
 # One Enum object for both tables, so PostgreSQL makes the type once.
 RESOURCE_MODE = Enum(ResourceMode, name="resource_mode")
-# The same for the kind, which resources and the requirements naming a kind share.
-RESOURCE_TYPE = Enum(ResourceType, name="resource_type")
 
 
 class ReservationStatus(enum.StrEnum):
@@ -316,6 +301,78 @@ class ActivityEnrollment(OrganizationScoped, Base):
     member = relationship("User", back_populates="activity_enrollments")
 
 
+# The classes every organization starts with, and the only two the engine
+# gives any meaning to. Their codes are fixed and they cannot be deleted or
+# deactivated; their names may be changed.
+ROOM_CLASS = "ROOM"
+PERSON_CLASS = "PERSON"
+SEEDED_RESOURCE_CLASSES = (
+    (ROOM_CLASS, "Room"),
+    (PERSON_CLASS, "Person"),
+)
+RESOURCE_CLASS_CODE_LIMIT = 30
+
+
+class ResourceClass(OrganizationScoped, Base):
+    """A kind of resource an organization books: a room, a person, a scanner.
+
+    Configured per organization. ROOM and PERSON are seeded into every
+    organization when it is created (_seed_resource_classes) and are the
+    anchors for what the engine already did: the import and the backfill
+    produce ROOM, and a resource row carrying a user_id is a PERSON. Every
+    other class is only a label and a place to hang requirements: it carries
+    no behaviour of its own.
+
+    code is the stable identifier, uppercase, unique within the organization
+    and never changed once made. name is what is shown. A resource or a
+    requirement names a class by code, and the database holds it to one of
+    the organization's own (fk_resources_class, fk_resource_requirements_class).
+    active gates new references only: deactivating a class leaves the
+    resources that already carry it as they are.
+    """
+
+    __tablename__ = "resource_classes"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "code", name="uq_resource_classes_organization_code"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    code = Column(String(RESOURCE_CLASS_CODE_LIMIT), nullable=False)
+    name = Column(String(120), nullable=False)
+    active = Column(Boolean, default=True, server_default=text("true"), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=clock.now)
+
+    @property
+    def seeded(self) -> bool:
+        return self.code in dict(SEEDED_RESOURCE_CLASSES)
+
+
+@event.listens_for(Organization, "after_insert")
+def _seed_resource_classes(mapper, connection, organization):
+    """Every organization starts with ROOM and PERSON, however it was made.
+
+    An event rather than a call in each place that makes an organization
+    (ensure_schema for the default one, create_organization for the rest),
+    so a third way of making one cannot forget. A Core insert on the same
+    connection: the unit of work is mid-flush here. An archive import writes
+    its tables with Core and carries its own classes, so this does not run
+    for it.
+    """
+    connection.execute(
+        insert(ResourceClass.__table__),
+        [
+            {
+                "organization_id": organization.id,
+                "code": code,
+                "name": name,
+                "active": True,
+                "created_at": clock.now(),
+            }
+            for code, name in SEEDED_RESOURCE_CLASSES
+        ],
+    )
+
+
 class Resource(OrganizationScoped, Base):
     """A thing a reservation consumes: a room today, a person or a machine later.
 
@@ -342,16 +399,24 @@ class Resource(OrganizationScoped, Base):
             name="ck_resources_pool_capacity",
         ),
         UniqueConstraint("organization_id", "code", name="uq_resources_organization_code"),
+        # The class has to be one of the organization's own. Composite, so a
+        # code that exists only in another organization does not satisfy it.
+        ForeignKeyConstraint(
+            ["organization_id", "resource_type"],
+            ["resource_classes.organization_id", "resource_classes.code"],
+            name="fk_resources_class",
+        ),
     )
 
     id = Column(Integer, primary_key=True)
     code = Column(String(30), nullable=False, index=True)
     label = Column(String(120), nullable=False)
+    # The code of one of the organization's ResourceClass rows.
     resource_type = Column(
-        RESOURCE_TYPE,
+        String(RESOURCE_CLASS_CODE_LIMIT),
         nullable=False,
-        default=ResourceType.ROOM,
-        server_default="ROOM",
+        default=ROOM_CLASS,
+        server_default=ROOM_CLASS,
     )
     unit_code = Column(String(50), nullable=True)
     # Seats, for information, on an exclusive or shared resource. The size of
@@ -646,9 +711,8 @@ class ResourceRequirement(OrganizationScoped, Base):
     the routes check the id against the right table when the row is saved.
 
     The target is one named resource (target_resource_id), or any resource of
-    a kind (target_kind), never both and never neither. The kind is the
-    existing ResourceType, ROOM or PERSON, until resource classes exist. An
-    activity is never a target: only resources can be held.
+    a kind (target_kind, the code of a ResourceClass), never both and never
+    neither. An activity is never a target: only resources can be held.
 
     quantity is how many units of a named POOLED target one child hold takes,
     or how many distinct resources of the kind are needed. before_minutes and
@@ -673,6 +737,12 @@ class ResourceRequirement(OrganizationScoped, Base):
             "before_minutes >= 0 AND after_minutes >= 0", name="ck_resource_requirements_padding"
         ),
         Index("ix_resource_requirements_owner", "owner_kind", "owner_id"),
+        # A null target_kind skips the check, which is what a named target needs.
+        ForeignKeyConstraint(
+            ["organization_id", "target_kind"],
+            ["resource_classes.organization_id", "resource_classes.code"],
+            name="fk_resource_requirements_class",
+        ),
     )
 
     id = Column(Integer, primary_key=True)
@@ -681,7 +751,7 @@ class ResourceRequirement(OrganizationScoped, Base):
     target_resource_id = Column(
         Integer, ForeignKey("resources.id", ondelete="CASCADE"), nullable=True
     )
-    target_kind = Column(RESOURCE_TYPE, nullable=True)
+    target_kind = Column(String(RESOURCE_CLASS_CODE_LIMIT), nullable=True)
     quantity = Column(Integer, nullable=False, default=1, server_default="1")
     before_minutes = Column(Integer, nullable=False, default=0, server_default="0")
     after_minutes = Column(Integer, nullable=False, default=0, server_default="0")

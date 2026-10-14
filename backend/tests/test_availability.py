@@ -12,7 +12,7 @@ expansion has to agree with: which cycles count.
 
 import datetime
 
-from app.models.db import Activity, PlanningCycle, Resource, ResourceType, StructuralMasterSlot
+from app.models.db import Activity, PlanningCycle, Resource, StructuralMasterSlot
 from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, login, weekly
 
 # Explicit dates, never "today plus one": a weekday computed from the day the
@@ -23,7 +23,7 @@ WEDNESDAY = datetime.date(2026, 1, 7)
 SUNDAY = datetime.date(2026, 1, 11)
 
 
-def _room(db, code="LH-201", resource_type=ResourceType.ROOM, **extra):
+def _room(db, code="LH-201", resource_type="ROOM", **extra):
     room = Resource(code=code, label=code, resource_type=resource_type, **extra)
     db.add(room)
     db.flush()
@@ -301,7 +301,7 @@ def test_availability_of_a_room_that_is_not_there_is_404(client, db, seed_users)
 def test_the_list_can_be_narrowed(client, db, seed_users):
     _room(db, code="LH-201")
     _room(db, code="LH-305", active=False)
-    _room(db, code="FAC001-PERSON", resource_type=ResourceType.PERSON, user_id="FAC001")
+    _room(db, code="FAC001-PERSON", resource_type="PERSON", user_id="FAC001")
     db.commit()
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
 

@@ -22,7 +22,6 @@ from app.models.db import (
     ReservationStatus,
     Resource,
     ResourceMode,
-    ResourceType,
 )
 from app.schemas.resources import (
     POOL_NEEDS_CAPACITY,
@@ -63,6 +62,7 @@ from app.services.requirements import (
     list_requirements,
     resolve,
 )
+from app.services.resource_classes import require_active_class
 
 router = APIRouter()
 
@@ -85,7 +85,7 @@ OVERLAP_CONSTRAINT = "ex_reservations_no_overlap"
 
 @router.get("/", operation_id="resources.list", response_model=list[ResourceResponse])
 def list_resources(
-    resource_type: ResourceType | None = None,
+    resource_type: str | None = None,
     active: bool | None = None,
     code: str | None = None,
     page: Page = Depends(),
@@ -165,8 +165,10 @@ def create_resource(
     row is the one the importer would have made, so a later CSV naming the
     room finds it rather than creating a second.
 
-    A room only. A person resource is tied to a user row, which is a
-    different thing to create, so no resource_type is taken.
+    resource_type is the code of an active class of the organization and
+    defaults to ROOM. A class that is unknown, inactive or another
+    organization's is 422 UNKNOWN_RESOURCE_CLASS. user_id is not taken: a
+    resource tied to a user row is a different thing to create.
 
     A code already taken is 409. A caller retrying after a lost response
     reads the room back with GET /resources/?code=, or sends an
@@ -175,7 +177,8 @@ def create_resource(
     fields = payload.model_dump()
     if fields["label"] is None:
         fields["label"] = fields["code"]
-    resource = Resource(resource_type=ResourceType.ROOM, **fields)
+    require_active_class(db, fields["resource_type"])
+    resource = Resource(**fields)
     db.add(resource)
     try:
         # The insert is what hands out the id the marker points at and what
@@ -526,8 +529,7 @@ def _fingerprint(resource_id: int, payload: ReservationCreate) -> str:
     if payload.assignments:
         # In the order sent, because the order is the order they are used in.
         chosen = ";".join(
-            f"{kind.value}:{','.join(map(str, ids))}"
-            for kind, ids in sorted(payload.assignments.items())
+            f"{kind}:{','.join(map(str, ids))}" for kind, ids in sorted(payload.assignments.items())
         )
         parts.append(f"assignments={chosen}")
     asked = "|".join(parts)

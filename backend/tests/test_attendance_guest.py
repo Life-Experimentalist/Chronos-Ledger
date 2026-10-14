@@ -23,7 +23,6 @@ from app.models.db import (
     LogVerificationState,
     PlanningCycle,
     Resource,
-    ResourceType,
     ReverseRsvpLog,
     User,
     VerificationLedger,
@@ -358,7 +357,7 @@ def _put_in_room(db, ledger, lat=12.9716, lon=77.5946, alt=920.0):
     room = Resource(
         code="LH-101",
         label="LH-101",
-        resource_type=ResourceType.ROOM,
+        resource_type="ROOM",
         latitude=lat,
         longitude=lon,
         altitude_target=alt,

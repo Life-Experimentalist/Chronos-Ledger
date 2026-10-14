@@ -26,7 +26,6 @@ from app.models.db import (
     Reservation,
     ReservationStatus,
     Resource,
-    ResourceType,
     StructuralMasterSlot,
 )
 from tests.conftest import ADMIN_PASSWORD, login
@@ -44,7 +43,7 @@ HELD = "the resource is held for part of that window"
 
 
 def _room(db, code="LH-201"):
-    room = Resource(code=code, label=code, resource_type=ResourceType.ROOM)
+    room = Resource(code=code, label=code, resource_type="ROOM")
     db.add(room)
     db.commit()
     return room
