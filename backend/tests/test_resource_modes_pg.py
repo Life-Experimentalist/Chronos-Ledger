@@ -135,13 +135,14 @@ def test_turning_overlapping_holds_exclusive_is_refused_by_the_database(db):
     db.add(_hold(vents, 10, 12, "b"))
     db.commit()
 
-    db.execute(
-        update(Reservation)
-        .where(Reservation.resource_id == vents.id)
-        .values(mode=ResourceMode.EXCLUSIVE)
-    )
+    # The constraint is not deferred, so the UPDATE itself is refused.
     with pytest.raises(IntegrityError) as refused:
-        db.commit()
+        db.execute(
+            update(Reservation)
+            .where(Reservation.resource_id == vents.id)
+            .values(mode=ResourceMode.EXCLUSIVE)
+        )
+    db.rollback()
     assert "ex_reservations_no_overlap" in str(refused.value.orig)
 
 
@@ -217,27 +218,27 @@ def test_forty_callers_at_once_get_exactly_twelve_of_twelve(engine, crowd):
     app.dependency_overrides[get_db] = own_session
     app.dependency_overrides[get_session_opener] = lambda: own_open_session
     try:
-        with TestClient(app) as client:
-            token = client.post(
-                "/api/v1/auth/login", json={"email": email, "password": ADMIN_PASSWORD}
+        # Not entered as a context manager: that runs the app's startup,
+        # which connects to the configured database, not this one.
+        client = TestClient(app)
+        token = client.post("/api/v1/auth/login", json={"email": email, "password": ADMIN_PASSWORD})
+        assert token.status_code == 200, token.text
+        bearer = {"Authorization": f"Bearer {token.json()['access_token']}"}
+
+        def book(n: int):
+            return client.post(
+                f"/api/v1/resources/{resource_id}/reservations",
+                headers={**bearer, "Idempotency-Key": f"pg-crowd-{n:04d}"},
+                json={
+                    "date": DAY.isoformat(),
+                    "start": "09:00:00",
+                    "end": "10:00:00",
+                    "purpose": f"Patient {n}",
+                },
             )
-            assert token.status_code == 200, token.text
-            bearer = {"Authorization": f"Bearer {token.json()['access_token']}"}
 
-            def book(n: int):
-                return client.post(
-                    f"/api/v1/resources/{resource_id}/reservations",
-                    headers={**bearer, "Idempotency-Key": f"pg-crowd-{n:04d}"},
-                    json={
-                        "date": DAY.isoformat(),
-                        "start": "09:00:00",
-                        "end": "10:00:00",
-                        "purpose": f"Patient {n}",
-                    },
-                )
-
-            with ThreadPoolExecutor(max_workers=CALLERS) as pool:
-                answers = list(pool.map(book, range(CALLERS)))
+        with ThreadPoolExecutor(max_workers=CALLERS) as pool:
+            answers = list(pool.map(book, range(CALLERS)))
     finally:
         app.dependency_overrides.clear()
 
