@@ -30,6 +30,10 @@ class Conflict:
     reservations on a pooled resource are never a `resource_overlap`, and reservations on a SHARED resource are never
     reported at all.
 
+    `requirement_unmet` is a weekly slot or a generated day, its one item, whose activity or resource requires something
+    the window cannot have. requirement_id names the requirement and message says what is missing; both are null on the
+    other kinds. resource_id is the row's own resource. It is a report: nothing is refused for it.
+
         Attributes:
             kind (str):  Example: resource_overlap.
             resource_id (int | None):
@@ -41,6 +45,8 @@ class Conflict:
             items (list[ConflictItem]):
             capacity (int | None | Unset): The pool's capacity, on `resource_overbooked` only.
             taken (int | None | Unset): The most units held at once, on `resource_overbooked` only.
+            requirement_id (int | None | Unset): The requirement that is not met, on `requirement_unmet` only.
+            message (None | str | Unset): What is missing, on `requirement_unmet` only.
     """
 
     kind: str
@@ -53,6 +59,8 @@ class Conflict:
     items: list[ConflictItem]
     capacity: int | None | Unset = UNSET
     taken: int | None | Unset = UNSET
+    requirement_id: int | None | Unset = UNSET
+    message: None | str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -89,6 +97,18 @@ class Conflict:
         else:
             taken = self.taken
 
+        requirement_id: int | None | Unset
+        if isinstance(self.requirement_id, Unset):
+            requirement_id = UNSET
+        else:
+            requirement_id = self.requirement_id
+
+        message: None | str | Unset
+        if isinstance(self.message, Unset):
+            message = UNSET
+        else:
+            message = self.message
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -107,6 +127,10 @@ class Conflict:
             field_dict["capacity"] = capacity
         if taken is not UNSET:
             field_dict["taken"] = taken
+        if requirement_id is not UNSET:
+            field_dict["requirement_id"] = requirement_id
+        if message is not UNSET:
+            field_dict["message"] = message
 
         return field_dict
 
@@ -164,6 +188,24 @@ class Conflict:
 
         taken = _parse_taken(d.pop("taken", UNSET))
 
+        def _parse_requirement_id(data: object) -> int | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(int | None | Unset, data)
+
+        requirement_id = _parse_requirement_id(d.pop("requirement_id", UNSET))
+
+        def _parse_message(data: object) -> None | str | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(None | str | Unset, data)
+
+        message = _parse_message(d.pop("message", UNSET))
+
         conflict = cls(
             kind=kind,
             resource_id=resource_id,
@@ -175,6 +217,8 @@ class Conflict:
             items=items,
             capacity=capacity,
             taken=taken,
+            requirement_id=requirement_id,
+            message=message,
         )
 
         conflict.additional_properties = d

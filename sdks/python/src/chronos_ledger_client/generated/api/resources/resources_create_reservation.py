@@ -10,8 +10,8 @@ from ...models.capacity_exceeded import CapacityExceeded
 from ...models.error_response import ErrorResponse
 from ...models.reservation_conflict import ReservationConflict
 from ...models.reservation_create import ReservationCreate
+from ...models.reservation_created import ReservationCreated
 from ...models.reservation_ref_taken import ReservationRefTaken
-from ...models.reservation_response import ReservationResponse
 from ...types import Response
 
 
@@ -41,16 +41,14 @@ def _get_kwargs(
 
 def _parse_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> (
-    CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse | None
-):
+) -> CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationCreated | None:
     if response.status_code == 200:
-        response_200 = ReservationResponse.from_dict(response.json())
+        response_200 = ReservationCreated.from_dict(response.json())
 
         return response_200
 
     if response.status_code == 201:
-        response_201 = ReservationResponse.from_dict(response.json())
+        response_201 = ReservationCreated.from_dict(response.json())
 
         return response_201
 
@@ -112,7 +110,7 @@ def _parse_response(
 def _build_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
 ) -> Response[
-    CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse
+    CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationCreated
 ]:
     return Response(
         status_code=HTTPStatus(response.status_code),
@@ -129,7 +127,7 @@ def sync_detailed(
     body: ReservationCreate,
     idempotency_key: str,
 ) -> Response[
-    CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse
+    CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationCreated
 ]:
     """Hold a resource for one dated window
 
@@ -165,6 +163,15 @@ def sync_detailed(
     409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is
     not POOLED is a 422.
 
+    What the resource requires is held in the same transaction, each as its own reservation naming this
+    one in `parent_reservation_id`, and listed in `children`. See `GET
+    /api/v1/resources/{resource_id}/requirements`. A named resource is held for the window widened by
+    the requirement's `before_minutes` and `after_minutes`, by its own mode. A kind is filled from
+    `assignments`, then by the first free resources of the kind by code. A REQUIRED requirement that
+    cannot be met holds nothing and answers 409 `REQUIREMENT_UNSATISFIED`; an ADVISORY one is left out
+    and listed in `unmet`. A padded window that would cross midnight of the booking's last day is a 422.
+    Cancelling the booking cancels the holds it took.
+
     Args:
         resource_id (int):
         idempotency_key (str):
@@ -175,7 +182,7 @@ def sync_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse]
+        Response[CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationCreated]
     """
 
     kwargs = _get_kwargs(
@@ -197,9 +204,7 @@ def sync(
     client: AuthenticatedClient | Client,
     body: ReservationCreate,
     idempotency_key: str,
-) -> (
-    CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse | None
-):
+) -> CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationCreated | None:
     """Hold a resource for one dated window
 
      Requires `ORG_ADMIN` or `UNIT_ADMIN`. A UNIT_ADMIN may hold a resource their own unit owns, or one
@@ -234,6 +239,15 @@ def sync(
     409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is
     not POOLED is a 422.
 
+    What the resource requires is held in the same transaction, each as its own reservation naming this
+    one in `parent_reservation_id`, and listed in `children`. See `GET
+    /api/v1/resources/{resource_id}/requirements`. A named resource is held for the window widened by
+    the requirement's `before_minutes` and `after_minutes`, by its own mode. A kind is filled from
+    `assignments`, then by the first free resources of the kind by code. A REQUIRED requirement that
+    cannot be met holds nothing and answers 409 `REQUIREMENT_UNSATISFIED`; an ADVISORY one is left out
+    and listed in `unmet`. A padded window that would cross midnight of the booking's last day is a 422.
+    Cancelling the booking cancels the holds it took.
+
     Args:
         resource_id (int):
         idempotency_key (str):
@@ -244,7 +258,7 @@ def sync(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse
+        CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationCreated
     """
 
     return sync_detailed(
@@ -262,7 +276,7 @@ async def asyncio_detailed(
     body: ReservationCreate,
     idempotency_key: str,
 ) -> Response[
-    CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse
+    CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationCreated
 ]:
     """Hold a resource for one dated window
 
@@ -298,6 +312,15 @@ async def asyncio_detailed(
     409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is
     not POOLED is a 422.
 
+    What the resource requires is held in the same transaction, each as its own reservation naming this
+    one in `parent_reservation_id`, and listed in `children`. See `GET
+    /api/v1/resources/{resource_id}/requirements`. A named resource is held for the window widened by
+    the requirement's `before_minutes` and `after_minutes`, by its own mode. A kind is filled from
+    `assignments`, then by the first free resources of the kind by code. A REQUIRED requirement that
+    cannot be met holds nothing and answers 409 `REQUIREMENT_UNSATISFIED`; an ADVISORY one is left out
+    and listed in `unmet`. A padded window that would cross midnight of the booking's last day is a 422.
+    Cancelling the booking cancels the holds it took.
+
     Args:
         resource_id (int):
         idempotency_key (str):
@@ -308,7 +331,7 @@ async def asyncio_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse]
+        Response[CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationCreated]
     """
 
     kwargs = _get_kwargs(
@@ -328,9 +351,7 @@ async def asyncio(
     client: AuthenticatedClient | Client,
     body: ReservationCreate,
     idempotency_key: str,
-) -> (
-    CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse | None
-):
+) -> CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationCreated | None:
     """Hold a resource for one dated window
 
      Requires `ORG_ADMIN` or `UNIT_ADMIN`. A UNIT_ADMIN may hold a resource their own unit owns, or one
@@ -365,6 +386,15 @@ async def asyncio(
     409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is
     not POOLED is a 422.
 
+    What the resource requires is held in the same transaction, each as its own reservation naming this
+    one in `parent_reservation_id`, and listed in `children`. See `GET
+    /api/v1/resources/{resource_id}/requirements`. A named resource is held for the window widened by
+    the requirement's `before_minutes` and `after_minutes`, by its own mode. A kind is filled from
+    `assignments`, then by the first free resources of the kind by code. A REQUIRED requirement that
+    cannot be met holds nothing and answers 409 `REQUIREMENT_UNSATISFIED`; an ADVISORY one is left out
+    and listed in `unmet`. A padded window that would cross midnight of the booking's last day is a 422.
+    Cancelling the booking cancels the holds it took.
+
     Args:
         resource_id (int):
         idempotency_key (str):
@@ -375,7 +405,7 @@ async def asyncio(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationResponse
+        CapacityExceeded | ReservationConflict | ReservationRefTaken | ErrorResponse | ReservationCreated
     """
 
     return (

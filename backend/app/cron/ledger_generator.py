@@ -54,6 +54,7 @@ from app.models.db import (
     StructuralMasterSlot,
 )
 from app.services.availability import days_against_window
+from app.services.requirements import owners_with_requirements, unmet_for_window
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,37 @@ def _report_taken(db: Session, fields: dict, taken: list) -> None:
         room.code if room else fields["resource_id"],
         taken or "a row this query could not find",
     )
+
+
+def _report_unmet(db: Session, written: list[dict]) -> None:
+    """Log the requirements the days just written cannot have.
+
+    The timetable holds nothing for a requirement, so the log is where a gap
+    shows up on the night it becomes real, next to GET /schedule/conflicts
+    which lists the same gaps on demand. A day is never withheld for one.
+    """
+    needing = owners_with_requirements(db)
+    if not needing:
+        return
+    for fields in written:
+        if not _claims_a_window(fields):
+            continue
+        activity_id = (
+            fields["activity_id"] if ("ACTIVITY", fields["activity_id"]) in needing else None
+        )
+        resource_id = (
+            fields["resource_id"] if ("RESOURCE", fields["resource_id"]) in needing else None
+        )
+        if activity_id is None and resource_id is None:
+            continue
+        window = (fields["target_date"], fields["time_window_start"], fields["time_window_end"])
+        for gap in unmet_for_window(db, activity_id, resource_id, window):
+            logger.warning(
+                "ledger: slot %s on %s has an unmet requirement: %s",
+                fields["master_slot_id"],
+                fields["target_date"],
+                gap["message"],
+            )
 
 
 def _taken_by(db: Session, fields: dict) -> list:
@@ -197,6 +229,7 @@ def generate_daily_ledger_entries(target_date: datetime.date, db: Session) -> in
     slots = [s for s in candidates if recurrence.occurs_on(s.rrule, s.dtstart, target_date)]
 
     created = 0
+    written = []
     for slot in slots:
         # Check for approved leave on this date for this lead
         leave = (
@@ -221,10 +254,13 @@ def generate_daily_ledger_entries(target_date: datetime.date, db: Session) -> in
         if existing:
             continue
 
-        if _insert_day(db, _day_fields(slot, target_date, initial_state)):
+        fields = _day_fields(slot, target_date, initial_state)
+        if _insert_day(db, fields):
             created += 1
+            written.append(fields)
 
     db.commit()
+    _report_unmet(db, written)
     return created
 
 
@@ -330,6 +366,7 @@ def materialize_horizon(db: Session, cycle_id: int | None = None) -> int:
     rows = _without_overlaps(db, rows, first, last)
 
     created = 0
+    written = []
     for offset in range(0, len(rows), LEDGER_BATCH_SIZE):
         batch = rows[offset : offset + LEDGER_BATCH_SIZE]
         try:
@@ -337,12 +374,16 @@ def materialize_horizon(db: Session, cycle_id: int | None = None) -> int:
                 db.add_all(DailyLedger(**fields) for fields in batch)
                 db.flush()
             created += len(batch)
+            written.extend(batch)
         except IntegrityError:
             # One of them was refused: a room clash on PostgreSQL, or another
             # instance writing the same day first. Go a row at a time so only
             # the refused one is lost.
-            created += sum(_insert_day(db, fields) for fields in batch)
+            kept = [fields for fields in batch if _insert_day(db, fields)]
+            created += len(kept)
+            written.extend(kept)
         db.commit()
+    _report_unmet(db, written)
     return created
 
 

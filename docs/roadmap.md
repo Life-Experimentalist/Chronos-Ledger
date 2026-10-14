@@ -241,8 +241,15 @@ This release lets a resource be consumed in three ways.
   `409 RESOURCE_BOOKINGS_WOULD_NOT_FIT`, and availability and the conflict
   report understand the modes (`tests/test_resource_modes.py`,
   `tests/test_resource_modes_pg.py`). The mode governs reservations only; the
-  timetable stays one class at a time on every resource. Deferred to 0.17:
-  the `resource_requirement` table. The other half of the 0.17 work is in:
+  timetable stays one class at a time on every resource. The
+  requirements half is in (0.17, `tests/test_resource_requirements.py`,
+  `tests/test_resource_requirements_pg.py`): a `resource_requirement` table
+  owned by a resource or an activity, naming a resource or a kind (`ROOM` or
+  `PERSON`, standing in for a class until classes exist), held as child
+  reservations when the resource is booked, `REQUIRED` or `ADVISORY` per
+  requirement with an organization default, and reported by the conflict
+  report, the import and the generator for the timetable. Configurable resource
+  classes are not built. The other half of the 0.17 work is in:
   slots and days store only `resource_id`, and `target_room_identifier` in the
   API is the resource's code, read through the key. The CSV import and the
   slot requests still take the room by name and resolve it to a resource.

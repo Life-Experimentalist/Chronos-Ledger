@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
+
+if TYPE_CHECKING:
+    from ..models.reservation_create_assignments_type_0 import ReservationCreateAssignmentsType0
+
 
 T = TypeVar("T", bound="ReservationCreate")
 
@@ -34,6 +38,12 @@ class ReservationCreate:
             resource is a 422. Part of what a retry is compared on only when it is sent, so a retry that leaves it out still
             matches a booking made before the field existed.
              Example: 2.
+        assignments (None | ReservationCreateAssignmentsType0 | Unset): Which resources to hold for the requirements
+            that name a kind of resource: `ROOM` or `PERSON` mapped to resource ids, used in order. Where it says nothing,
+            or runs out, the engine picks the first free resources of the kind by code. An id that is not an active resource
+            of that kind in this organization, or that no requirement asks for, is a 422. A named resource that is not free
+            is a gap and is not swapped for another. Part of what a retry is compared on only when it is sent.
+             Example: {'PERSON': [12, 15]}.
     """
 
     date: datetime.date
@@ -42,9 +52,14 @@ class ReservationCreate:
     purpose: str
     external_ref: None | str | Unset = UNSET
     quantity: int | Unset = UNSET
+    assignments: None | ReservationCreateAssignmentsType0 | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        from ..models.reservation_create_assignments_type_0 import (
+            ReservationCreateAssignmentsType0,  # noqa: PLC0415
+        )
+
         date = self.date.isoformat()
 
         start = self.start
@@ -61,6 +76,14 @@ class ReservationCreate:
 
         quantity = self.quantity
 
+        assignments: dict[str, Any] | None | Unset
+        if isinstance(self.assignments, Unset):
+            assignments = UNSET
+        elif isinstance(self.assignments, ReservationCreateAssignmentsType0):
+            assignments = self.assignments.to_dict()
+        else:
+            assignments = self.assignments
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -75,11 +98,17 @@ class ReservationCreate:
             field_dict["external_ref"] = external_ref
         if quantity is not UNSET:
             field_dict["quantity"] = quantity
+        if assignments is not UNSET:
+            field_dict["assignments"] = assignments
 
         return field_dict
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.reservation_create_assignments_type_0 import (
+            ReservationCreateAssignmentsType0,  # noqa: PLC0415
+        )
+
         d = dict(src_dict)
         date = datetime.date.fromisoformat(d.pop("date"))
 
@@ -100,6 +129,23 @@ class ReservationCreate:
 
         quantity = d.pop("quantity", UNSET)
 
+        def _parse_assignments(data: object) -> None | ReservationCreateAssignmentsType0 | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                assignments_type_0 = ReservationCreateAssignmentsType0.from_dict(data)
+
+                return assignments_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(None | ReservationCreateAssignmentsType0 | Unset, data)
+
+        assignments = _parse_assignments(d.pop("assignments", UNSET))
+
         reservation_create = cls(
             date=date,
             start=start,
@@ -107,6 +153,7 @@ class ReservationCreate:
             purpose=purpose,
             external_ref=external_ref,
             quantity=quantity,
+            assignments=assignments,
         )
 
         reservation_create.additional_properties = d

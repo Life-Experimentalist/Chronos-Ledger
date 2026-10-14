@@ -38,11 +38,15 @@ from app.models.db import (
     InstitutionalRole,
     LedgerAnnotation,
     LogVerificationState,
+    Organization,
     PlanningCycle,
     RefreshToken,
+    RequirementEnforcement,
+    RequirementOwner,
     Reservation,
     ReservationStatus,
     Resource,
+    ResourceRequirement,
     ResourceType,
     ReverseRsvpLog,
     StructuralMasterSlot,
@@ -117,6 +121,10 @@ def seed(engine):
     with Session(engine) as db:
         admin = db.get(User, SEEDED_ADMIN_ID)
         admin.initial_login_state = False
+        # Not the default, so a lost value would read as REQUIRED and differ.
+        db.query(Organization).update(
+            {Organization.default_requirement_enforcement: RequirementEnforcement.ADVISORY}
+        )
         db.add_all(
             [
                 PlanningCycle(
@@ -221,6 +229,30 @@ def seed(engine):
             ]
         )
         db.flush()
+        db.add_all(
+            [
+                ResourceRequirement(
+                    id=1,
+                    owner_kind=RequirementOwner.RESOURCE,
+                    owner_id=1,
+                    target_resource_id=2,
+                    quantity=1,
+                    before_minutes=15,
+                    after_minutes=30,
+                    enforcement=RequirementEnforcement.ADVISORY,
+                    created_at=datetime(2026, 1, 2, 3, 4, 5, 678901, tzinfo=UTC),
+                ),
+                ResourceRequirement(
+                    id=2,
+                    owner_kind=RequirementOwner.ACTIVITY,
+                    owner_id=1,
+                    target_kind=ResourceType.PERSON,
+                    quantity=2,
+                    enforcement=None,
+                    created_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+                ),
+            ]
+        )
         db.add(ActivityEnrollment(id=1, activity_id=1, member_id="BM200"))
         db.add_all(
             [
@@ -311,6 +343,7 @@ def seed(engine):
                     idempotency_key="key-2",
                     request_fingerprint="e" * 64,
                     status=ReservationStatus.CANCELLED,
+                    parent_reservation_id=1,
                     created_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
                     cancelled_at=datetime(2026, 1, 3, 0, 0, 0, 1, tzinfo=UTC),
                 ),

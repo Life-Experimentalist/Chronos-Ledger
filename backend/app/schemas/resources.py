@@ -5,7 +5,13 @@ import datetime
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.models.db import ReservationStatus, ResourceMode, ResourceType
+from app.models.db import (
+    RequirementEnforcement,
+    RequirementOwner,
+    ReservationStatus,
+    ResourceMode,
+    ResourceType,
+)
 
 
 class ResourceResponse(BaseModel):
@@ -137,12 +143,45 @@ class BusyInterval(BaseModel):
     reservation_id: int | None
 
 
+class UnmetRequirement(BaseModel):
+    """A requirement that could not be held, and why.
+
+    On a booking it is an ADVISORY gap: the booking went ahead without it.
+    On GET availability with with_requirements it is whatever would stop the
+    window being held with everything it needs, whatever the enforcement.
+    enforcement is the resolved value, the organization's default filled in
+    where the requirement did not say.
+
+    quantity is how many units or resources were missing, not how many were
+    asked for. conflicts is what stands in the way on a named target; it is
+    empty when a kind had no free resource to name.
+    """
+
+    requirement_id: int
+    owner_kind: RequirementOwner
+    owner_id: int
+    target_resource_id: int | None
+    target_kind: ResourceType | None
+    quantity: int
+    enforcement: RequirementEnforcement
+    message: str
+    conflicts: list[BusyInterval]
+
+
 class AvailabilityResponse(BaseModel):
+    """The busy intervals of a resource, and with with_requirements, whether it can be held.
+
+    requirements_met and unmet are null and empty unless with_requirements
+    was asked for. Nothing is held either way.
+    """
+
     resource_id: int
     code: str
     range_start: datetime.date = Field(alias="from")
     to: datetime.date
     busy: list[BusyInterval]
+    requirements_met: bool | None = None
+    unmet: list[UnmetRequirement] = []
 
 
 class ReservationCreate(BaseModel):
@@ -164,6 +203,11 @@ class ReservationCreate(BaseModel):
     # Unique per caller, so it finds this booking again through
     # GET /resources/reservations?external_ref=.
     external_ref: str | None = Field(default=None, min_length=1, max_length=120)
+    # Which resources to hold for the requirements that name a kind of
+    # resource rather than a resource: ROOM or PERSON mapped to the ids to
+    # use, in order. Where it says nothing, or runs out, the engine picks the
+    # first free resources of the kind by code.
+    assignments: dict[ResourceType, list[int]] | None = None
 
     @model_validator(mode="after")
     def _is_a_window_at_all(self):
@@ -200,6 +244,23 @@ class ReservationResponse(BaseModel):
     external_ref: str | None
     created_at: datetime.datetime
     cancelled_at: datetime.datetime | None
+    # The booking this hold was taken for, when a requirement made it.
+    parent_reservation_id: int | None = None
+
+
+class ReservationCreated(ReservationResponse):
+    """A new booking with what was held alongside it.
+
+    children are the holds its requirements took, at every depth, in the
+    order they were taken. unmet are the ADVISORY requirements that could not
+    be met; the booking went ahead without them. A REQUIRED one that cannot
+    be met refuses the booking instead. A replay of the same request answers
+    with the children as they stand and an empty unmet, because a gap is not
+    stored.
+    """
+
+    children: list[ReservationResponse] = []
+    unmet: list[UnmetRequirement] = []
 
 
 class ReservationUpdate(BaseModel):
@@ -289,3 +350,41 @@ class ReservationRefTaken(BaseModel):
     """The body of a 409 with RESERVATION_EXTERNAL_REF_TAKEN."""
 
     detail: ReservationRefTakenDetail
+
+
+class RequirementCreate(BaseModel):
+    """One rule: whoever uses the owner also needs the target.
+
+    Exactly one of target_resource_id and target_kind. quantity above 1 on a
+    named target needs it to be POOLED (units of the pool); on a kind it is
+    that many distinct resources. enforcement left out follows the
+    organization's default.
+    """
+
+    target_resource_id: int | None = Field(default=None, ge=1)
+    target_kind: ResourceType | None = None
+    quantity: int = Field(default=1, ge=1, le=1000)
+    before_minutes: int = Field(default=0, ge=0, le=1440)
+    after_minutes: int = Field(default=0, ge=0, le=1440)
+    enforcement: RequirementEnforcement | None = None
+
+    @model_validator(mode="after")
+    def _one_target(self):
+        if (self.target_resource_id is None) == (self.target_kind is None):
+            raise ValueError("set exactly one of target_resource_id and target_kind")
+        return self
+
+
+class RequirementResponse(BaseModel):
+    id: int
+    owner_kind: RequirementOwner
+    owner_id: int
+    target_resource_id: int | None
+    target_kind: ResourceType | None
+    quantity: int
+    before_minutes: int
+    after_minutes: int
+    enforcement: RequirementEnforcement | None
+    created_at: datetime.datetime
+
+    model_config = {"from_attributes": True}

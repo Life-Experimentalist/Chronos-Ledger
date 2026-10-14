@@ -132,6 +132,7 @@ const (
 	REFRESHTOKENINVALID         ErrorCode = "REFRESH_TOKEN_INVALID"
 	REFRESHTOKENREUSED          ErrorCode = "REFRESH_TOKEN_REUSED"
 	REFRESHTOKENUSED            ErrorCode = "REFRESH_TOKEN_USED"
+	REQUIREMENTUNSATISFIED      ErrorCode = "REQUIREMENT_UNSATISFIED"
 	RESERVATIONEXTERNALREFTAKEN ErrorCode = "RESERVATION_EXTERNAL_REF_TAKEN"
 	RESOURCEBOOKINGSWOULDNOTFIT ErrorCode = "RESOURCE_BOOKINGS_WOULD_NOT_FIT"
 	RESOURCECAPACITYEXCEEDED    ErrorCode = "RESOURCE_CAPACITY_EXCEEDED"
@@ -230,6 +231,8 @@ func (e ErrorCode) Valid() bool {
 		return true
 	case REFRESHTOKENUSED:
 		return true
+	case REQUIREMENTUNSATISFIED:
+		return true
 	case RESERVATIONEXTERNALREFTAKEN:
 		return true
 	case RESOURCEBOOKINGSWOULDNOTFIT:
@@ -324,6 +327,42 @@ func (e LogVerificationState) Valid() bool {
 	}
 }
 
+// Defines values for OrganizationResponseDefaultRequirementEnforcement.
+const (
+	OrganizationResponseDefaultRequirementEnforcementADVISORY OrganizationResponseDefaultRequirementEnforcement = "ADVISORY"
+	OrganizationResponseDefaultRequirementEnforcementREQUIRED OrganizationResponseDefaultRequirementEnforcement = "REQUIRED"
+)
+
+// Valid indicates whether the value is a known member of the OrganizationResponseDefaultRequirementEnforcement enum.
+func (e OrganizationResponseDefaultRequirementEnforcement) Valid() bool {
+	switch e {
+	case OrganizationResponseDefaultRequirementEnforcementADVISORY:
+		return true
+	case OrganizationResponseDefaultRequirementEnforcementREQUIRED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OrganizationUpdateDefaultRequirementEnforcement.
+const (
+	OrganizationUpdateDefaultRequirementEnforcementADVISORY OrganizationUpdateDefaultRequirementEnforcement = "ADVISORY"
+	OrganizationUpdateDefaultRequirementEnforcementREQUIRED OrganizationUpdateDefaultRequirementEnforcement = "REQUIRED"
+)
+
+// Valid indicates whether the value is a known member of the OrganizationUpdateDefaultRequirementEnforcement enum.
+func (e OrganizationUpdateDefaultRequirementEnforcement) Valid() bool {
+	switch e {
+	case OrganizationUpdateDefaultRequirementEnforcementADVISORY:
+		return true
+	case OrganizationUpdateDefaultRequirementEnforcementREQUIRED:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ReadinessDatabase.
 const (
 	ReadinessDatabaseOk          ReadinessDatabase = "ok"
@@ -378,18 +417,126 @@ func (e ReadinessStatus) Valid() bool {
 	}
 }
 
+// Defines values for RequirementCreateEnforcement.
+const (
+	RequirementCreateEnforcementADVISORY RequirementCreateEnforcement = "ADVISORY"
+	RequirementCreateEnforcementREQUIRED RequirementCreateEnforcement = "REQUIRED"
+)
+
+// Valid indicates whether the value is a known member of the RequirementCreateEnforcement enum.
+func (e RequirementCreateEnforcement) Valid() bool {
+	switch e {
+	case RequirementCreateEnforcementADVISORY:
+		return true
+	case RequirementCreateEnforcementREQUIRED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RequirementCreateTargetKind.
+const (
+	RequirementCreateTargetKindPERSON RequirementCreateTargetKind = "PERSON"
+	RequirementCreateTargetKindROOM   RequirementCreateTargetKind = "ROOM"
+)
+
+// Valid indicates whether the value is a known member of the RequirementCreateTargetKind enum.
+func (e RequirementCreateTargetKind) Valid() bool {
+	switch e {
+	case RequirementCreateTargetKindPERSON:
+		return true
+	case RequirementCreateTargetKindROOM:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RequirementResponseEnforcement.
+const (
+	RequirementResponseEnforcementADVISORY RequirementResponseEnforcement = "ADVISORY"
+	RequirementResponseEnforcementREQUIRED RequirementResponseEnforcement = "REQUIRED"
+)
+
+// Valid indicates whether the value is a known member of the RequirementResponseEnforcement enum.
+func (e RequirementResponseEnforcement) Valid() bool {
+	switch e {
+	case RequirementResponseEnforcementADVISORY:
+		return true
+	case RequirementResponseEnforcementREQUIRED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RequirementResponseOwnerKind.
+const (
+	RequirementResponseOwnerKindACTIVITY RequirementResponseOwnerKind = "ACTIVITY"
+	RequirementResponseOwnerKindRESOURCE RequirementResponseOwnerKind = "RESOURCE"
+)
+
+// Valid indicates whether the value is a known member of the RequirementResponseOwnerKind enum.
+func (e RequirementResponseOwnerKind) Valid() bool {
+	switch e {
+	case RequirementResponseOwnerKindACTIVITY:
+		return true
+	case RequirementResponseOwnerKindRESOURCE:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RequirementResponseTargetKind.
+const (
+	RequirementResponseTargetKindPERSON RequirementResponseTargetKind = "PERSON"
+	RequirementResponseTargetKindROOM   RequirementResponseTargetKind = "ROOM"
+)
+
+// Valid indicates whether the value is a known member of the RequirementResponseTargetKind enum.
+func (e RequirementResponseTargetKind) Valid() bool {
+	switch e {
+	case RequirementResponseTargetKindPERSON:
+		return true
+	case RequirementResponseTargetKindROOM:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReservationCreatedStatus.
+const (
+	ReservationCreatedStatusCANCELLED ReservationCreatedStatus = "CANCELLED"
+	ReservationCreatedStatusHELD      ReservationCreatedStatus = "HELD"
+)
+
+// Valid indicates whether the value is a known member of the ReservationCreatedStatus enum.
+func (e ReservationCreatedStatus) Valid() bool {
+	switch e {
+	case ReservationCreatedStatusCANCELLED:
+		return true
+	case ReservationCreatedStatusHELD:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ReservationResponseStatus.
 const (
-	CANCELLED ReservationResponseStatus = "CANCELLED"
-	HELD      ReservationResponseStatus = "HELD"
+	ReservationResponseStatusCANCELLED ReservationResponseStatus = "CANCELLED"
+	ReservationResponseStatusHELD      ReservationResponseStatus = "HELD"
 )
 
 // Valid indicates whether the value is a known member of the ReservationResponseStatus enum.
 func (e ReservationResponseStatus) Valid() bool {
 	switch e {
-	case CANCELLED:
+	case ReservationResponseStatusCANCELLED:
 		return true
-	case HELD:
+	case ReservationResponseStatusHELD:
 		return true
 	default:
 		return false
@@ -513,6 +660,60 @@ func (e RoleMapEntryResponseRoleType) Valid() bool {
 	}
 }
 
+// Defines values for UnmetRequirementEnforcement.
+const (
+	UnmetRequirementEnforcementADVISORY UnmetRequirementEnforcement = "ADVISORY"
+	UnmetRequirementEnforcementREQUIRED UnmetRequirementEnforcement = "REQUIRED"
+)
+
+// Valid indicates whether the value is a known member of the UnmetRequirementEnforcement enum.
+func (e UnmetRequirementEnforcement) Valid() bool {
+	switch e {
+	case UnmetRequirementEnforcementADVISORY:
+		return true
+	case UnmetRequirementEnforcementREQUIRED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UnmetRequirementOwnerKind.
+const (
+	UnmetRequirementOwnerKindACTIVITY UnmetRequirementOwnerKind = "ACTIVITY"
+	UnmetRequirementOwnerKindRESOURCE UnmetRequirementOwnerKind = "RESOURCE"
+)
+
+// Valid indicates whether the value is a known member of the UnmetRequirementOwnerKind enum.
+func (e UnmetRequirementOwnerKind) Valid() bool {
+	switch e {
+	case UnmetRequirementOwnerKindACTIVITY:
+		return true
+	case UnmetRequirementOwnerKindRESOURCE:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UnmetRequirementTargetKind.
+const (
+	UnmetRequirementTargetKindPERSON UnmetRequirementTargetKind = "PERSON"
+	UnmetRequirementTargetKindROOM   UnmetRequirementTargetKind = "ROOM"
+)
+
+// Valid indicates whether the value is a known member of the UnmetRequirementTargetKind enum.
+func (e UnmetRequirementTargetKind) Valid() bool {
+	switch e {
+	case UnmetRequirementTargetKindPERSON:
+		return true
+	case UnmetRequirementTargetKindROOM:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for VerificationMetric.
 const (
 	ABSENT  VerificationMetric = "ABSENT"
@@ -575,22 +776,22 @@ func (e WebhookDeliveryResponseStatus) Valid() bool {
 
 // Defines values for WebhookEventType.
 const (
-	ReservationCreated WebhookEventType = "reservation.created"
-	ReservationUpdated WebhookEventType = "reservation.updated"
-	ResourceCreated    WebhookEventType = "resource.created"
-	ResourceUpdated    WebhookEventType = "resource.updated"
+	WebhookEventTypeReservationCreated WebhookEventType = "reservation.created"
+	WebhookEventTypeReservationUpdated WebhookEventType = "reservation.updated"
+	WebhookEventTypeResourceCreated    WebhookEventType = "resource.created"
+	WebhookEventTypeResourceUpdated    WebhookEventType = "resource.updated"
 )
 
 // Valid indicates whether the value is a known member of the WebhookEventType enum.
 func (e WebhookEventType) Valid() bool {
 	switch e {
-	case ReservationCreated:
+	case WebhookEventTypeReservationCreated:
 		return true
-	case ReservationUpdated:
+	case WebhookEventTypeReservationUpdated:
 		return true
-	case ResourceCreated:
+	case WebhookEventTypeResourceCreated:
 		return true
-	case ResourceUpdated:
+	case WebhookEventTypeResourceUpdated:
 		return true
 	default:
 		return false
@@ -768,11 +969,17 @@ type AuditRecord struct {
 // AvailabilityResponse defines model for AvailabilityResponse.
 type AvailabilityResponse struct {
 	// Busy Busy intervals, not free ones. Times are naive wall clock in the organization's own timezone, with no offset and no Z.
-	Busy       *[]BusyInterval     `json:"busy,omitempty"`
-	Code       *string             `json:"code,omitempty"`
-	From       *openapi_types.Date `json:"from,omitempty"`
-	ResourceId *int                `json:"resource_id,omitempty"`
-	To         *openapi_types.Date `json:"to,omitempty"`
+	Busy *[]BusyInterval     `json:"busy,omitempty"`
+	Code *string             `json:"code,omitempty"`
+	From *openapi_types.Date `json:"from,omitempty"`
+
+	// RequirementsMet Null unless `with_requirements` was asked for. Then true when the resource itself is free for the window and nothing it requires is missing, whatever the enforcement.
+	RequirementsMet *bool               `json:"requirements_met,omitempty"`
+	ResourceId      *int                `json:"resource_id,omitempty"`
+	To              *openapi_types.Date `json:"to,omitempty"`
+
+	// Unmet Empty unless `with_requirements` was asked for. Then the requirements that could not be held for the window.
+	Unmet *[]UnmetRequirement `json:"unmet,omitempty"`
 }
 
 // BookingsWouldNotFit The body of a 409 with `RESOURCE_BOOKINGS_WOULD_NOT_FIT`: a change of mode or capacity that bookings still to come (from yesterday on) would no longer fit. reservations names them, so the caller can cancel or move them and try again.
@@ -853,17 +1060,25 @@ type ChangePasswordRequest struct {
 // Conflict Two rows that hold the same resource, or the same member, at the same moment. kind is `resource_overlap`, with resource_id set and member_id null, or `member_overlap`, with member_id set and resource_id null. Like ConflictItem.type, kind is a string so that later kinds can be added; a reader should skip a kind it does not know. date, start, end_date and end are the part of the two windows they share. items is a list rather than a pair so that a later kind can name more than two rows.
 //
 // `resource_overbooked` is a POOLED resource whose reservations together hold more than its capacity. date to end is the whole stretch in which they do, items is every reservation open in it, and capacity and taken say by how much: taken is the most held at any moment of the stretch. capacity and taken are null on the other kinds. Two reservations on a pooled resource are never a `resource_overlap`, and reservations on a SHARED resource are never reported at all.
+//
+// `requirement_unmet` is a weekly slot or a generated day, its one item, whose activity or resource requires something the window cannot have. requirement_id names the requirement and message says what is missing; both are null on the other kinds. resource_id is the row's own resource. It is a report: nothing is refused for it.
 type Conflict struct {
 	// Capacity The pool's capacity, on `resource_overbooked` only.
-	Capacity   *int               `json:"capacity,omitempty"`
-	Date       openapi_types.Date `json:"date"`
-	End        string             `json:"end"`
-	EndDate    openapi_types.Date `json:"end_date"`
-	Items      []ConflictItem     `json:"items"`
-	Kind       string             `json:"kind"`
-	MemberId   string             `json:"member_id"`
-	ResourceId int                `json:"resource_id"`
-	Start      string             `json:"start"`
+	Capacity *int               `json:"capacity,omitempty"`
+	Date     openapi_types.Date `json:"date"`
+	End      string             `json:"end"`
+	EndDate  openapi_types.Date `json:"end_date"`
+	Items    []ConflictItem     `json:"items"`
+	Kind     string             `json:"kind"`
+	MemberId string             `json:"member_id"`
+
+	// Message What is missing, on `requirement_unmet` only.
+	Message *string `json:"message,omitempty"`
+
+	// RequirementId The requirement that is not met, on `requirement_unmet` only.
+	RequirementId *int   `json:"requirement_id,omitempty"`
+	ResourceId    int    `json:"resource_id"`
+	Start         string `json:"start"`
 
 	// Taken The most units held at once, on `resource_overbooked` only.
 	Taken *int `json:"taken,omitempty"`
@@ -919,6 +1134,9 @@ type CsvImportResult struct {
 
 	// Removed What an upload with `remove_missing` set removed, from among the rows in `not_in_file`. Both lists are empty when the option is off.
 	Removed *ImportRemoved `json:"removed,omitempty"`
+
+	// RequirementsUnmet One entry per requirement of a slot in the file, or of its activity or room, that the slot's next run cannot have. A report; the import is not refused for it.
+	RequirementsUnmet *[]SlotRequirementGap `json:"requirements_unmet,omitempty"`
 
 	// RowsIngested Present when status is SUCCESS.
 	RowsIngested *int `json:"rows_ingested,omitempty"`
@@ -1348,6 +1566,25 @@ type OpenItems struct {
 	SlotsLed int `json:"slots_led"`
 }
 
+// OrganizationResponse defines model for OrganizationResponse.
+type OrganizationResponse struct {
+	DefaultRequirementEnforcement OrganizationResponseDefaultRequirementEnforcement `json:"default_requirement_enforcement"`
+	Id                            string                                            `json:"id"`
+	Name                          string                                            `json:"name"`
+}
+
+// OrganizationResponseDefaultRequirementEnforcement defines model for OrganizationResponse.DefaultRequirementEnforcement.
+type OrganizationResponseDefaultRequirementEnforcement string
+
+// OrganizationUpdate defines model for OrganizationUpdate.
+type OrganizationUpdate struct {
+	// DefaultRequirementEnforcement What a requirement with no enforcement of its own does. Read when a booking is made, so a change applies to the next booking.
+	DefaultRequirementEnforcement OrganizationUpdateDefaultRequirementEnforcement `json:"default_requirement_enforcement"`
+}
+
+// OrganizationUpdateDefaultRequirementEnforcement What a requirement with no enforcement of its own does. Read when a booking is made, so a change applies to the next booking.
+type OrganizationUpdateDefaultRequirementEnforcement string
+
 // OrphanEnrollment defines model for OrphanEnrollment.
 type OrphanEnrollment struct {
 	ActivityCode string `json:"activity_code"`
@@ -1444,6 +1681,58 @@ type RemovedSlot struct {
 	TimeWindowStart   string  `json:"time_window_start"`
 }
 
+// RequirementCreate One rule: whoever uses the owner also needs the target. Set exactly one of `target_resource_id` and `target_kind`.
+type RequirementCreate struct {
+	// AfterMinutes Turnover time held after the window. 0 when left out.
+	AfterMinutes *int `json:"after_minutes,omitempty"`
+
+	// BeforeMinutes Setup time held before the window. 0 when left out.
+	BeforeMinutes *int `json:"before_minutes,omitempty"`
+
+	// Enforcement REQUIRED refuses a booking that cannot meet it. ADVISORY books without it and lists the gap. Null, or left out, follows the organization's `default_requirement_enforcement`.
+	Enforcement *RequirementCreateEnforcement `json:"enforcement,omitempty"`
+
+	// Quantity How many. Units of the pool on a POOLED named target, which a named target of another mode cannot take above 1 (422); the number of distinct resources on a kind. 1 when left out.
+	Quantity *int `json:"quantity,omitempty"`
+
+	// TargetKind Any resource of this kind, picked at booking time.
+	TargetKind *RequirementCreateTargetKind `json:"target_kind,omitempty"`
+
+	// TargetResourceId A specific resource of this organization. Never an activity.
+	TargetResourceId *int `json:"target_resource_id,omitempty"`
+}
+
+// RequirementCreateEnforcement REQUIRED refuses a booking that cannot meet it. ADVISORY books without it and lists the gap. Null, or left out, follows the organization's `default_requirement_enforcement`.
+type RequirementCreateEnforcement string
+
+// RequirementCreateTargetKind Any resource of this kind, picked at booking time.
+type RequirementCreateTargetKind string
+
+// RequirementResponse defines model for RequirementResponse.
+type RequirementResponse struct {
+	AfterMinutes  int       `json:"after_minutes"`
+	BeforeMinutes int       `json:"before_minutes"`
+	CreatedAt     time.Time `json:"created_at"`
+
+	// Enforcement Null means the organization's default applies.
+	Enforcement      RequirementResponseEnforcement `json:"enforcement"`
+	Id               int                            `json:"id"`
+	OwnerId          int                            `json:"owner_id"`
+	OwnerKind        RequirementResponseOwnerKind   `json:"owner_kind"`
+	Quantity         int                            `json:"quantity"`
+	TargetKind       RequirementResponseTargetKind  `json:"target_kind"`
+	TargetResourceId int                            `json:"target_resource_id"`
+}
+
+// RequirementResponseEnforcement Null means the organization's default applies.
+type RequirementResponseEnforcement string
+
+// RequirementResponseOwnerKind defines model for RequirementResponse.OwnerKind.
+type RequirementResponseOwnerKind string
+
+// RequirementResponseTargetKind defines model for RequirementResponse.TargetKind.
+type RequirementResponseTargetKind string
+
 // ReservationConflict The body of a 409. What the booking ran into, not merely that it ran into something, so a caller can pick its next hour without asking availability again and diffing the answers. Nested under detail like every other error here, so one error handler reads them all.
 type ReservationConflict struct {
 	// Code What went wrong, for a program to branch on. docs/api.md says what each one means. A code is never renamed or reused for a different meaning, but new codes are added, so a client should treat one it does not know by its HTTP status. VALIDATION_FAILED is the only code whose detail is a list: FastAPI's field errors for a request that did not match the declared shape.
@@ -1456,6 +1745,9 @@ type ReservationConflict struct {
 
 // ReservationCreate defines model for ReservationCreate.
 type ReservationCreate struct {
+	// Assignments Which resources to hold for the requirements that name a kind of resource: `ROOM` or `PERSON` mapped to resource ids, used in order. Where it says nothing, or runs out, the engine picks the first free resources of the kind by code. An id that is not an active resource of that kind in this organization, or that no requirement asks for, is a 422. A named resource that is not free is a gap and is not swapped for another. Part of what a retry is compared on only when it is sent.
+	Assignments *map[string][]int `json:"assignments,omitempty"`
+
 	// Date The day the window opens on. A window that runs past midnight finishes on the day after this one.
 	Date openapi_types.Date `json:"date"`
 
@@ -1470,6 +1762,44 @@ type ReservationCreate struct {
 	Quantity *int   `json:"quantity,omitempty"`
 	Start    string `json:"start"`
 }
+
+// ReservationCreated A new booking with what its requirements held alongside it.
+type ReservationCreated struct {
+	CancelledAt *time.Time `json:"cancelled_at,omitempty"`
+
+	// Children The holds the resource's requirements took under this booking, at every depth of a chain, in the order they were taken. Empty when the resource requires nothing. A replay of the same request answers with the children as they stand now.
+	Children  *[]ReservationResponse `json:"children,omitempty"`
+	CreatedAt *time.Time             `json:"created_at,omitempty"`
+	Date      *openapi_types.Date    `json:"date,omitempty"`
+	End       *string                `json:"end,omitempty"`
+
+	// ExternalRef The caller's own identifier for the booking, or null if it was given none. A cancelled booking keeps its reference.
+	ExternalRef    *string `json:"external_ref,omitempty"`
+	Id             *int    `json:"id,omitempty"`
+	IdempotencyKey *string `json:"idempotency_key,omitempty"`
+
+	// ParentReservationId The booking this hold was taken for, when a requirement of the resource made it. Null on a booking somebody asked for. Cancelling the parent cancels the holds that name it here.
+	ParentReservationId *int `json:"parent_reservation_id,omitempty"`
+
+	// Purpose Returned only to the caller that made the booking. It is not on the availability calendar, which anyone signed in can read.
+	Purpose *string `json:"purpose,omitempty"`
+
+	// Quantity Units taken. Always 1 off a POOLED resource.
+	Quantity *int `json:"quantity,omitempty"`
+
+	// RequestedById Null once the account that booked it has been deleted. A hold outlives the service account that placed it.
+	RequestedById *string                   `json:"requested_by_id,omitempty"`
+	ResourceCode  *string                   `json:"resource_code,omitempty"`
+	ResourceId    *int                      `json:"resource_id,omitempty"`
+	Start         *string                   `json:"start,omitempty"`
+	Status        *ReservationCreatedStatus `json:"status,omitempty"`
+
+	// Unmet The ADVISORY requirements that could not be met. The booking went ahead without them. A REQUIRED one that cannot be met refuses the booking instead (`REQUIREMENT_UNSATISFIED`). Always empty on a replay, because a gap is not stored.
+	Unmet *[]UnmetRequirement `json:"unmet,omitempty"`
+}
+
+// ReservationCreatedStatus defines model for ReservationCreated.Status.
+type ReservationCreatedStatus string
 
 // ReservationRefTaken The body of a 409 with `RESERVATION_EXTERNAL_REF_TAKEN`. Names the reservation of the caller's that already carries the reference, which is the booking the caller made earlier under it and can now read, change or cancel.
 type ReservationRefTaken struct {
@@ -1492,6 +1822,9 @@ type ReservationResponse struct {
 	ExternalRef    *string `json:"external_ref,omitempty"`
 	Id             *int    `json:"id,omitempty"`
 	IdempotencyKey *string `json:"idempotency_key,omitempty"`
+
+	// ParentReservationId The booking this hold was taken for, when a requirement of the resource made it. Null on a booking somebody asked for. Cancelling the parent cancels the holds that name it here.
+	ParentReservationId *int `json:"parent_reservation_id,omitempty"`
 
 	// Purpose Returned only to the caller that made the booking. It is not on the availability calendar, which anyone signed in can read.
 	Purpose *string `json:"purpose,omitempty"`
@@ -1669,6 +2002,14 @@ type SlotDeletionResult struct {
 	LedgerRowsRemoved *int `json:"ledger_rows_removed,omitempty"`
 }
 
+// SlotRequirementGap A requirement of a slot's activity or resource that the slot's next run on the date given cannot have. A report; nothing is refused. The CSV import adds slot_id.
+type SlotRequirementGap struct {
+	Date          *openapi_types.Date `json:"date,omitempty"`
+	Message       *string             `json:"message,omitempty"`
+	RequirementId *int                `json:"requirement_id,omitempty"`
+	SlotId        *int                `json:"slot_id,omitempty"`
+}
+
 // SlotRule The value of one RFC 5545 RRULE property, with or without "RRULE:" in front, stored upper case without it. The dates it gives are calendar dates in ORG_TIMEZONE and the slot's own times are read on each of them, so a 09:00 class stays at 09:00 across a daylight saving change. FREQ must be DAILY, WEEKLY, MONTHLY or YEARLY; BYHOUR, BYMINUTE and BYSECOND are refused, since a slot runs at most once a date; UNTIL must be a local date or date-time, not one ending in Z; DTSTART, EXDATE and line breaks are not part of it. Any of these is a 422. The stored rule is at most 255 characters.
 type SlotRule = string
 
@@ -1682,6 +2023,9 @@ type SlotUpdateResult struct {
 
 	// LedgerRowsUpdated Days that were still plans and now carry the new lead or room.
 	LedgerRowsUpdated *int `json:"ledger_rows_updated,omitempty"`
+
+	// RequirementsUnmet What the slot's activity or resource requires that its next run cannot have. Empty when nothing is required.
+	RequirementsUnmet *[]SlotRequirementGap `json:"requirements_unmet,omitempty"`
 }
 
 // StaffAvailabilityResponse defines model for StaffAvailabilityResponse.
@@ -1725,6 +2069,33 @@ type TokenResponse struct {
 	TokenType *string            `json:"token_type,omitempty"`
 	UserId    *string            `json:"user_id,omitempty"`
 }
+
+// UnmetRequirement A requirement that could not be held, and why. On a booking it is an ADVISORY gap. On GET availability with `with_requirements` it is whatever would stop the window being held, whatever the enforcement.
+type UnmetRequirement struct {
+	// Conflicts What stands in the way on a named target. Empty when a kind had no free resource to name.
+	Conflicts []BusyInterval `json:"conflicts"`
+
+	// Enforcement The enforcement that applied, with the organization's default filled in where the requirement did not say.
+	Enforcement UnmetRequirementEnforcement `json:"enforcement"`
+	Message     string                      `json:"message"`
+	OwnerId     int                         `json:"owner_id"`
+	OwnerKind   UnmetRequirementOwnerKind   `json:"owner_kind"`
+
+	// Quantity How many units or resources were missing, not how many were asked for.
+	Quantity         int                        `json:"quantity"`
+	RequirementId    int                        `json:"requirement_id"`
+	TargetKind       UnmetRequirementTargetKind `json:"target_kind"`
+	TargetResourceId int                        `json:"target_resource_id"`
+}
+
+// UnmetRequirementEnforcement The enforcement that applied, with the organization's default filled in where the requirement did not say.
+type UnmetRequirementEnforcement string
+
+// UnmetRequirementOwnerKind defines model for UnmetRequirement.OwnerKind.
+type UnmetRequirementOwnerKind string
+
+// UnmetRequirementTargetKind defines model for UnmetRequirement.TargetKind.
+type UnmetRequirementTargetKind string
 
 // UserCreate defines model for UserCreate.
 type UserCreate struct {
@@ -1913,6 +2284,12 @@ type Unauthorized = ErrorResponse
 
 // UnprocessableEntity The body of every error. detail is for a person to read and code is for a program to branch on. A 409 that names what stood in the way has its own schema, with detail as an object; see ReservationConflict and ReservationRefTaken.
 type UnprocessableEntity = ErrorResponse
+
+// AdminUpdateOrganizationParams defines parameters for AdminUpdateOrganization.
+type AdminUpdateOrganizationParams struct {
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
 
 // ApiKeysRevokeParams defines parameters for ApiKeysRevoke.
 type ApiKeysRevokeParams struct {
@@ -2134,6 +2511,27 @@ type ResourcesUpdateParams struct {
 type ResourcesGetAvailabilityParams struct {
 	From openapi_types.Date `form:"from" json:"from"`
 	To   openapi_types.Date `form:"to" json:"to"`
+
+	// WithRequirements Also answer whether the resource could be held for one window together with everything it requires, as a booking would hold it, in `requirements_met` and `unmet`. Holds nothing. Needs `from` and `to` to be the same date and `start` and `end` to be given, otherwise 422.
+	WithRequirements *bool `form:"with_requirements,omitempty" json:"with_requirements,omitempty"`
+
+	// Start The window's start, with `with_requirements`.
+	Start *string `form:"start,omitempty" json:"start,omitempty"`
+
+	// End The window's end, with `with_requirements`. Earlier than start means it runs past midnight, as for a booking.
+	End *string `form:"end,omitempty" json:"end,omitempty"`
+}
+
+// ResourcesCreateRequirementParams defines parameters for ResourcesCreateRequirement.
+type ResourcesCreateRequirementParams struct {
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// ResourcesDeleteRequirementParams defines parameters for ResourcesDeleteRequirement.
+type ResourcesDeleteRequirementParams struct {
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
 // ResourcesCreateReservationParams defines parameters for ResourcesCreateReservation.
@@ -2200,6 +2598,18 @@ type ScheduleCreateEnrollmentParams struct {
 
 // ScheduleDeleteEnrollmentParams defines parameters for ScheduleDeleteEnrollment.
 type ScheduleDeleteEnrollmentParams struct {
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// ScheduleCreateActivityRequirementParams defines parameters for ScheduleCreateActivityRequirement.
+type ScheduleCreateActivityRequirementParams struct {
+	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// ScheduleDeleteActivityRequirementParams defines parameters for ScheduleDeleteActivityRequirement.
+type ScheduleDeleteActivityRequirementParams struct {
 	// IdempotencyKey Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
@@ -2426,6 +2836,9 @@ type WebhooksResumeParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// AdminUpdateOrganizationJSONRequestBody defines body for AdminUpdateOrganization for application/json ContentType.
+type AdminUpdateOrganizationJSONRequestBody = OrganizationUpdate
+
 // ApiKeysCreateJSONRequestBody defines body for ApiKeysCreate for application/json ContentType.
 type ApiKeysCreateJSONRequestBody = ApiKeyCreate
 
@@ -2495,6 +2908,9 @@ type ResourcesCreateJSONRequestBody = ResourceCreate
 // ResourcesUpdateJSONRequestBody defines body for ResourcesUpdate for application/json ContentType.
 type ResourcesUpdateJSONRequestBody = ResourceUpdate
 
+// ResourcesCreateRequirementJSONRequestBody defines body for ResourcesCreateRequirement for application/json ContentType.
+type ResourcesCreateRequirementJSONRequestBody = RequirementCreate
+
 // ResourcesCreateReservationJSONRequestBody defines body for ResourcesCreateReservation for application/json ContentType.
 type ResourcesCreateReservationJSONRequestBody = ReservationCreate
 
@@ -2509,6 +2925,9 @@ type ScheduleUpdateActivityJSONRequestBody = ActivityUpdate
 
 // ScheduleCreateEnrollmentJSONRequestBody defines body for ScheduleCreateEnrollment for application/json ContentType.
 type ScheduleCreateEnrollmentJSONRequestBody = EnrollmentCreate
+
+// ScheduleCreateActivityRequirementJSONRequestBody defines body for ScheduleCreateActivityRequirement for application/json ContentType.
+type ScheduleCreateActivityRequirementJSONRequestBody = RequirementCreate
 
 // ScheduleCreateCycleJSONRequestBody defines body for ScheduleCreateCycle for application/json ContentType.
 type ScheduleCreateCycleJSONRequestBody = PlanningCycleCreate
@@ -2767,6 +3186,31 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /api/v1/admin/export (the `AdminExport` operationId).
 	AdminExport(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminGetOrganization The caller's organization and its settings
+	//
+	// Requires `ORG_ADMIN`; an API key needs `admin:read`.
+	//
+	// Corresponds with GET /api/v1/admin/organization (the `AdminGetOrganization` operationId).
+	AdminGetOrganization(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminUpdateOrganizationWithBody Change the organization's settings
+	//
+	// Requires `ORG_ADMIN`; an API key needs `admin:write`. Today the one setting is `default_requirement_enforcement`, what a requirement with no enforcement of its own does. It applies from the next booking.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /api/v1/admin/organization (the `AdminUpdateOrganization` operationId).
+	AdminUpdateOrganizationWithBody(ctx context.Context, params *AdminUpdateOrganizationParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminUpdateOrganization Change the organization's settings
+	//
+	// Requires `ORG_ADMIN`; an API key needs `admin:write`. Today the one setting is `default_requirement_enforcement`, what a requirement with no enforcement of its own does. It applies from the next booking.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /api/v1/admin/organization (the `AdminUpdateOrganization` operationId).
+	AdminUpdateOrganization(ctx context.Context, params *AdminUpdateOrganizationParams, body AdminUpdateOrganizationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ApiKeysList List issued keys
 	//
@@ -3372,6 +3816,38 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/resources/{resource_id}/availability (the `ResourcesGetAvailability` operationId).
 	ResourcesGetAvailability(ctx context.Context, resourceId int, params *ResourcesGetAvailabilityParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ResourcesListRequirements What a resource requires
+	//
+	// Any signed-in user. The standing rules of the resource: using it also needs these. Booking the resource holds them, see `POST /api/v1/resources/{resource_id}/reservations`.
+	//
+	// Corresponds with GET /api/v1/resources/{resource_id}/requirements (the `ResourcesListRequirements` operationId).
+	ResourcesListRequirements(ctx context.Context, resourceId int, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ResourcesCreateRequirementWithBody Say that a resource requires another
+	//
+	// Requires `ORG_ADMIN`. The target is a specific resource or any resource of a kind, never an activity. A chain of requirements is followed to depth 4 when a booking is made. A requirement that would make a resource need itself, directly or through other named resources, is refused here with a 422. A second requirement of the same owner for the same target is a 409 `ALREADY_EXISTS`.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/resources/{resource_id}/requirements (the `ResourcesCreateRequirement` operationId).
+	ResourcesCreateRequirementWithBody(ctx context.Context, resourceId int, params *ResourcesCreateRequirementParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ResourcesCreateRequirement Say that a resource requires another
+	//
+	// Requires `ORG_ADMIN`. The target is a specific resource or any resource of a kind, never an activity. A chain of requirements is followed to depth 4 when a booking is made. A requirement that would make a resource need itself, directly or through other named resources, is refused here with a 422. A second requirement of the same owner for the same target is a 409 `ALREADY_EXISTS`.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/resources/{resource_id}/requirements (the `ResourcesCreateRequirement` operationId).
+	ResourcesCreateRequirement(ctx context.Context, resourceId int, params *ResourcesCreateRequirementParams, body ResourcesCreateRequirementJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ResourcesDeleteRequirement Remove a requirement of a resource
+	//
+	// Requires `ORG_ADMIN`. Holds already taken for it stay.
+	//
+	// Corresponds with DELETE /api/v1/resources/{resource_id}/requirements/{requirement_id} (the `ResourcesDeleteRequirement` operationId).
+	ResourcesDeleteRequirement(ctx context.Context, resourceId int, requirementId int, params *ResourcesDeleteRequirementParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ResourcesCreateReservationWithBody Hold a resource for one dated window
 	//
 	// Requires `ORG_ADMIN` or `UNIT_ADMIN`. A UNIT_ADMIN may hold a resource their own unit owns, or one with no unit (shared by the whole organization), and is refused a resource of another unit with 403 `OUTSIDE_UNIT`. The route an outside system uses to take a room. What it refuses is exactly what GET availability calls busy, through the same queries and the same expansion, so a caller cannot read an hour as free and then be refused it.
@@ -3385,6 +3861,8 @@ type ClientInterface interface {
 	// An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
 	//
 	// The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
+	//
+	// What the resource requires is held in the same transaction, each as its own reservation naming this one in `parent_reservation_id`, and listed in `children`. See `GET /api/v1/resources/{resource_id}/requirements`. A named resource is held for the window widened by the requirement's `before_minutes` and `after_minutes`, by its own mode. A kind is filled from `assignments`, then by the first free resources of the kind by code. A REQUIRED requirement that cannot be met holds nothing and answers 409 `REQUIREMENT_UNSATISFIED`; an ADVISORY one is left out and listed in `unmet`. A padded window that would cross midnight of the booking's last day is a 422. Cancelling the booking cancels the holds it took.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -3404,6 +3882,8 @@ type ClientInterface interface {
 	// An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
 	//
 	// The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
+	//
+	// What the resource requires is held in the same transaction, each as its own reservation naming this one in `parent_reservation_id`, and listed in `children`. See `GET /api/v1/resources/{resource_id}/requirements`. A named resource is held for the window widened by the requirement's `before_minutes` and `after_minutes`, by its own mode. A kind is filled from `assignments`, then by the first free resources of the kind by code. A REQUIRED requirement that cannot be met holds nothing and answers 409 `REQUIREMENT_UNSATISFIED`; an ADVISORY one is left out and listed in `unmet`. A padded window that would cross midnight of the booking's last day is a 422. Cancelling the booking cancels the holds it took.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -3528,6 +4008,38 @@ type ClientInterface interface {
 	//
 	// Corresponds with DELETE /api/v1/schedule/activities/{activity_id}/enrollments/{member_id} (the `ScheduleDeleteEnrollment` operationId).
 	ScheduleDeleteEnrollment(ctx context.Context, activityId int, memberId string, params *ScheduleDeleteEnrollmentParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ScheduleListActivityRequirements What an activity needs besides its room
+	//
+	// Admin only, inside the admin's unit.
+	//
+	// Corresponds with GET /api/v1/schedule/activities/{activity_id}/requirements (the `ScheduleListActivityRequirements` operationId).
+	ScheduleListActivityRequirements(ctx context.Context, activityId int, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ScheduleCreateActivityRequirementWithBody Say that an activity also needs a resource
+	//
+	// Admin only, inside the admin's unit. The timetable holds nothing for a requirement. One that a slot's dates cannot have is reported as a `requirement_unmet` in `GET /api/v1/schedule/conflicts`, in `requirements_unmet` on the slot routes and the CSV import, and in the generator's log, and no slot or day is refused for it.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/schedule/activities/{activity_id}/requirements (the `ScheduleCreateActivityRequirement` operationId).
+	ScheduleCreateActivityRequirementWithBody(ctx context.Context, activityId int, params *ScheduleCreateActivityRequirementParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ScheduleCreateActivityRequirement Say that an activity also needs a resource
+	//
+	// Admin only, inside the admin's unit. The timetable holds nothing for a requirement. One that a slot's dates cannot have is reported as a `requirement_unmet` in `GET /api/v1/schedule/conflicts`, in `requirements_unmet` on the slot routes and the CSV import, and in the generator's log, and no slot or day is refused for it.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/schedule/activities/{activity_id}/requirements (the `ScheduleCreateActivityRequirement` operationId).
+	ScheduleCreateActivityRequirement(ctx context.Context, activityId int, params *ScheduleCreateActivityRequirementParams, body ScheduleCreateActivityRequirementJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ScheduleDeleteActivityRequirement Remove a requirement of an activity
+	//
+	// Admin only, inside the admin's unit.
+	//
+	// Corresponds with DELETE /api/v1/schedule/activities/{activity_id}/requirements/{requirement_id} (the `ScheduleDeleteActivityRequirement` operationId).
+	ScheduleDeleteActivityRequirement(ctx context.Context, activityId int, requirementId int, params *ScheduleDeleteActivityRequirementParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ScheduleRetireActivity Retire an activity
 	//
@@ -3966,6 +4478,61 @@ type ClientInterface interface {
 // Corresponds with GET /api/v1/admin/export (the `AdminExport` operationId).
 func (c *Client) AdminExport(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAdminExportRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AdminGetOrganization The caller's organization and its settings
+//
+// Requires `ORG_ADMIN`; an API key needs `admin:read`.
+//
+// Corresponds with GET /api/v1/admin/organization (the `AdminGetOrganization` operationId).
+func (c *Client) AdminGetOrganization(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminGetOrganizationRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AdminUpdateOrganizationWithBody Change the organization's settings
+//
+// Requires `ORG_ADMIN`; an API key needs `admin:write`. Today the one setting is `default_requirement_enforcement`, what a requirement with no enforcement of its own does. It applies from the next booking.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /api/v1/admin/organization (the `AdminUpdateOrganization` operationId).
+func (c *Client) AdminUpdateOrganizationWithBody(ctx context.Context, params *AdminUpdateOrganizationParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminUpdateOrganizationRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AdminUpdateOrganization Change the organization's settings
+//
+// Requires `ORG_ADMIN`; an API key needs `admin:write`. Today the one setting is `default_requirement_enforcement`, what a requirement with no enforcement of its own does. It applies from the next booking.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /api/v1/admin/organization (the `AdminUpdateOrganization` operationId).
+func (c *Client) AdminUpdateOrganization(ctx context.Context, params *AdminUpdateOrganizationParams, body AdminUpdateOrganizationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminUpdateOrganizationRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5280,6 +5847,78 @@ func (c *Client) ResourcesGetAvailability(ctx context.Context, resourceId int, p
 	return c.Client.Do(req)
 }
 
+// ResourcesListRequirements What a resource requires
+//
+// Any signed-in user. The standing rules of the resource: using it also needs these. Booking the resource holds them, see `POST /api/v1/resources/{resource_id}/reservations`.
+//
+// Corresponds with GET /api/v1/resources/{resource_id}/requirements (the `ResourcesListRequirements` operationId).
+func (c *Client) ResourcesListRequirements(ctx context.Context, resourceId int, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewResourcesListRequirementsRequest(c.Server, resourceId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ResourcesCreateRequirementWithBody Say that a resource requires another
+//
+// Requires `ORG_ADMIN`. The target is a specific resource or any resource of a kind, never an activity. A chain of requirements is followed to depth 4 when a booking is made. A requirement that would make a resource need itself, directly or through other named resources, is refused here with a 422. A second requirement of the same owner for the same target is a 409 `ALREADY_EXISTS`.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/resources/{resource_id}/requirements (the `ResourcesCreateRequirement` operationId).
+func (c *Client) ResourcesCreateRequirementWithBody(ctx context.Context, resourceId int, params *ResourcesCreateRequirementParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewResourcesCreateRequirementRequestWithBody(c.Server, resourceId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ResourcesCreateRequirement Say that a resource requires another
+//
+// Requires `ORG_ADMIN`. The target is a specific resource or any resource of a kind, never an activity. A chain of requirements is followed to depth 4 when a booking is made. A requirement that would make a resource need itself, directly or through other named resources, is refused here with a 422. A second requirement of the same owner for the same target is a 409 `ALREADY_EXISTS`.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/resources/{resource_id}/requirements (the `ResourcesCreateRequirement` operationId).
+func (c *Client) ResourcesCreateRequirement(ctx context.Context, resourceId int, params *ResourcesCreateRequirementParams, body ResourcesCreateRequirementJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewResourcesCreateRequirementRequest(c.Server, resourceId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ResourcesDeleteRequirement Remove a requirement of a resource
+//
+// Requires `ORG_ADMIN`. Holds already taken for it stay.
+//
+// Corresponds with DELETE /api/v1/resources/{resource_id}/requirements/{requirement_id} (the `ResourcesDeleteRequirement` operationId).
+func (c *Client) ResourcesDeleteRequirement(ctx context.Context, resourceId int, requirementId int, params *ResourcesDeleteRequirementParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewResourcesDeleteRequirementRequest(c.Server, resourceId, requirementId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // ResourcesCreateReservationWithBody Hold a resource for one dated window
 //
 // Requires `ORG_ADMIN` or `UNIT_ADMIN`. A UNIT_ADMIN may hold a resource their own unit owns, or one with no unit (shared by the whole organization), and is refused a resource of another unit with 403 `OUTSIDE_UNIT`. The route an outside system uses to take a room. What it refuses is exactly what GET availability calls busy, through the same queries and the same expansion, so a caller cannot read an hour as free and then be refused it.
@@ -5293,6 +5932,8 @@ func (c *Client) ResourcesGetAvailability(ctx context.Context, resourceId int, p
 // An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
 //
 // The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
+//
+// What the resource requires is held in the same transaction, each as its own reservation naming this one in `parent_reservation_id`, and listed in `children`. See `GET /api/v1/resources/{resource_id}/requirements`. A named resource is held for the window widened by the requirement's `before_minutes` and `after_minutes`, by its own mode. A kind is filled from `assignments`, then by the first free resources of the kind by code. A REQUIRED requirement that cannot be met holds nothing and answers 409 `REQUIREMENT_UNSATISFIED`; an ADVISORY one is left out and listed in `unmet`. A padded window that would cross midnight of the booking's last day is a 422. Cancelling the booking cancels the holds it took.
 //
 // Takes any type of body and a specified content type.
 //
@@ -5322,6 +5963,8 @@ func (c *Client) ResourcesCreateReservationWithBody(ctx context.Context, resourc
 // An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
 //
 // The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
+//
+// What the resource requires is held in the same transaction, each as its own reservation naming this one in `parent_reservation_id`, and listed in `children`. See `GET /api/v1/resources/{resource_id}/requirements`. A named resource is held for the window widened by the requirement's `before_minutes` and `after_minutes`, by its own mode. A kind is filled from `assignments`, then by the first free resources of the kind by code. A REQUIRED requirement that cannot be met holds nothing and answers 409 `REQUIREMENT_UNSATISFIED`; an ADVISORY one is left out and listed in `unmet`. A padded window that would cross midnight of the booking's last day is a 422. Cancelling the booking cancels the holds it took.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -5577,6 +6220,78 @@ func (c *Client) ScheduleCreateEnrollment(ctx context.Context, activityId int, p
 // Corresponds with DELETE /api/v1/schedule/activities/{activity_id}/enrollments/{member_id} (the `ScheduleDeleteEnrollment` operationId).
 func (c *Client) ScheduleDeleteEnrollment(ctx context.Context, activityId int, memberId string, params *ScheduleDeleteEnrollmentParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewScheduleDeleteEnrollmentRequest(c.Server, activityId, memberId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ScheduleListActivityRequirements What an activity needs besides its room
+//
+// Admin only, inside the admin's unit.
+//
+// Corresponds with GET /api/v1/schedule/activities/{activity_id}/requirements (the `ScheduleListActivityRequirements` operationId).
+func (c *Client) ScheduleListActivityRequirements(ctx context.Context, activityId int, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewScheduleListActivityRequirementsRequest(c.Server, activityId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ScheduleCreateActivityRequirementWithBody Say that an activity also needs a resource
+//
+// Admin only, inside the admin's unit. The timetable holds nothing for a requirement. One that a slot's dates cannot have is reported as a `requirement_unmet` in `GET /api/v1/schedule/conflicts`, in `requirements_unmet` on the slot routes and the CSV import, and in the generator's log, and no slot or day is refused for it.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/schedule/activities/{activity_id}/requirements (the `ScheduleCreateActivityRequirement` operationId).
+func (c *Client) ScheduleCreateActivityRequirementWithBody(ctx context.Context, activityId int, params *ScheduleCreateActivityRequirementParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewScheduleCreateActivityRequirementRequestWithBody(c.Server, activityId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ScheduleCreateActivityRequirement Say that an activity also needs a resource
+//
+// Admin only, inside the admin's unit. The timetable holds nothing for a requirement. One that a slot's dates cannot have is reported as a `requirement_unmet` in `GET /api/v1/schedule/conflicts`, in `requirements_unmet` on the slot routes and the CSV import, and in the generator's log, and no slot or day is refused for it.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/schedule/activities/{activity_id}/requirements (the `ScheduleCreateActivityRequirement` operationId).
+func (c *Client) ScheduleCreateActivityRequirement(ctx context.Context, activityId int, params *ScheduleCreateActivityRequirementParams, body ScheduleCreateActivityRequirementJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewScheduleCreateActivityRequirementRequest(c.Server, activityId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ScheduleDeleteActivityRequirement Remove a requirement of an activity
+//
+// Admin only, inside the admin's unit.
+//
+// Corresponds with DELETE /api/v1/schedule/activities/{activity_id}/requirements/{requirement_id} (the `ScheduleDeleteActivityRequirement` operationId).
+func (c *Client) ScheduleDeleteActivityRequirement(ctx context.Context, activityId int, requirementId int, params *ScheduleDeleteActivityRequirementParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewScheduleDeleteActivityRequirementRequest(c.Server, activityId, requirementId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6548,6 +7263,88 @@ func NewAdminExportRequest(server string) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAdminGetOrganizationRequest constructs an http.Request for the AdminGetOrganization method
+func NewAdminGetOrganizationRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/organization")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAdminUpdateOrganizationRequest calls the generic AdminUpdateOrganization builder with application/json body
+func NewAdminUpdateOrganizationRequest(server string, params *AdminUpdateOrganizationParams, body AdminUpdateOrganizationJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAdminUpdateOrganizationRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewAdminUpdateOrganizationRequestWithBody constructs an http.Request for the AdminUpdateOrganization method, with any body, and a specified content type
+func NewAdminUpdateOrganizationRequestWithBody(server string, params *AdminUpdateOrganizationParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/organization")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
 	}
 
 	return req, nil
@@ -9027,6 +9824,42 @@ func NewResourcesGetAvailabilityRequest(server string, resourceId int, params *R
 			}
 		}
 
+		if params.WithRequirements != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "with_requirements", *params.WithRequirements, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Start != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "start", *params.Start, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.End != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "end", *params.End, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -9036,6 +9869,158 @@ func NewResourcesGetAvailabilityRequest(server string, resourceId int, params *R
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewResourcesListRequirementsRequest constructs an http.Request for the ResourcesListRequirements method
+func NewResourcesListRequirementsRequest(server string, resourceId int) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "resource_id", resourceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/%s/requirements", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewResourcesCreateRequirementRequest calls the generic ResourcesCreateRequirement builder with application/json body
+func NewResourcesCreateRequirementRequest(server string, resourceId int, params *ResourcesCreateRequirementParams, body ResourcesCreateRequirementJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewResourcesCreateRequirementRequestWithBody(server, resourceId, params, "application/json", bodyReader)
+}
+
+// NewResourcesCreateRequirementRequestWithBody constructs an http.Request for the ResourcesCreateRequirement method, with any body, and a specified content type
+func NewResourcesCreateRequirementRequestWithBody(server string, resourceId int, params *ResourcesCreateRequirementParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "resource_id", resourceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/%s/requirements", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewResourcesDeleteRequirementRequest constructs an http.Request for the ResourcesDeleteRequirement method
+func NewResourcesDeleteRequirementRequest(server string, resourceId int, requirementId int, params *ResourcesDeleteRequirementParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "resource_id", resourceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "requirement_id", requirementId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/resources/%s/requirements/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
 	}
 
 	return req, nil
@@ -9626,6 +10611,158 @@ func NewScheduleDeleteEnrollmentRequest(server string, activityId int, memberId 
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/schedule/activities/%s/enrollments/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewScheduleListActivityRequirementsRequest constructs an http.Request for the ScheduleListActivityRequirements method
+func NewScheduleListActivityRequirementsRequest(server string, activityId int) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "activity_id", activityId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/schedule/activities/%s/requirements", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewScheduleCreateActivityRequirementRequest calls the generic ScheduleCreateActivityRequirement builder with application/json body
+func NewScheduleCreateActivityRequirementRequest(server string, activityId int, params *ScheduleCreateActivityRequirementParams, body ScheduleCreateActivityRequirementJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewScheduleCreateActivityRequirementRequestWithBody(server, activityId, params, "application/json", bodyReader)
+}
+
+// NewScheduleCreateActivityRequirementRequestWithBody constructs an http.Request for the ScheduleCreateActivityRequirement method, with any body, and a specified content type
+func NewScheduleCreateActivityRequirementRequestWithBody(server string, activityId int, params *ScheduleCreateActivityRequirementParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "activity_id", activityId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/schedule/activities/%s/requirements", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewScheduleDeleteActivityRequirementRequest constructs an http.Request for the ScheduleDeleteActivityRequirement method
+func NewScheduleDeleteActivityRequirementRequest(server string, activityId int, requirementId int, params *ScheduleDeleteActivityRequirementParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "activity_id", activityId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "requirement_id", requirementId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/schedule/activities/%s/requirements/%s", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -11887,6 +13024,33 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/admin/export (the `AdminExport` operationId).
 	AdminExportWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminExportResponse, error)
 
+	// AdminGetOrganizationWithResponse The caller's organization and its settings
+	//
+	// Requires `ORG_ADMIN`; an API key needs `admin:read`.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/admin/organization (the `AdminGetOrganization` operationId).
+	AdminGetOrganizationWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminGetOrganizationResponse, error)
+
+	// AdminUpdateOrganizationWithBodyWithResponse Change the organization's settings
+	//
+	// Requires `ORG_ADMIN`; an API key needs `admin:write`. Today the one setting is `default_requirement_enforcement`, what a requirement with no enforcement of its own does. It applies from the next booking.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /api/v1/admin/organization (the `AdminUpdateOrganization` operationId).
+	AdminUpdateOrganizationWithBodyWithResponse(ctx context.Context, params *AdminUpdateOrganizationParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminUpdateOrganizationResponse, error)
+
+	// AdminUpdateOrganizationWithResponse Change the organization's settings
+	//
+	// Requires `ORG_ADMIN`; an API key needs `admin:write`. Today the one setting is `default_requirement_enforcement`, what a requirement with no enforcement of its own does. It applies from the next booking.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /api/v1/admin/organization (the `AdminUpdateOrganization` operationId).
+	AdminUpdateOrganizationWithResponse(ctx context.Context, params *AdminUpdateOrganizationParams, body AdminUpdateOrganizationJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminUpdateOrganizationResponse, error)
+
 	// ApiKeysListWithResponse List issued keys
 	//
 	// Requires `ORG_ADMIN`. Shows what each key is scoped to and when it runs out, which is how an unrestricted key left over from before scopes existed becomes visible.
@@ -12541,6 +13705,42 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/resources/{resource_id}/availability (the `ResourcesGetAvailability` operationId).
 	ResourcesGetAvailabilityWithResponse(ctx context.Context, resourceId int, params *ResourcesGetAvailabilityParams, reqEditors ...RequestEditorFn) (*ResourcesGetAvailabilityResponse, error)
 
+	// ResourcesListRequirementsWithResponse What a resource requires
+	//
+	// Any signed-in user. The standing rules of the resource: using it also needs these. Booking the resource holds them, see `POST /api/v1/resources/{resource_id}/reservations`.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/resources/{resource_id}/requirements (the `ResourcesListRequirements` operationId).
+	ResourcesListRequirementsWithResponse(ctx context.Context, resourceId int, reqEditors ...RequestEditorFn) (*ResourcesListRequirementsResponse, error)
+
+	// ResourcesCreateRequirementWithBodyWithResponse Say that a resource requires another
+	//
+	// Requires `ORG_ADMIN`. The target is a specific resource or any resource of a kind, never an activity. A chain of requirements is followed to depth 4 when a booking is made. A requirement that would make a resource need itself, directly or through other named resources, is refused here with a 422. A second requirement of the same owner for the same target is a 409 `ALREADY_EXISTS`.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/resources/{resource_id}/requirements (the `ResourcesCreateRequirement` operationId).
+	ResourcesCreateRequirementWithBodyWithResponse(ctx context.Context, resourceId int, params *ResourcesCreateRequirementParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ResourcesCreateRequirementResponse, error)
+
+	// ResourcesCreateRequirementWithResponse Say that a resource requires another
+	//
+	// Requires `ORG_ADMIN`. The target is a specific resource or any resource of a kind, never an activity. A chain of requirements is followed to depth 4 when a booking is made. A requirement that would make a resource need itself, directly or through other named resources, is refused here with a 422. A second requirement of the same owner for the same target is a 409 `ALREADY_EXISTS`.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/resources/{resource_id}/requirements (the `ResourcesCreateRequirement` operationId).
+	ResourcesCreateRequirementWithResponse(ctx context.Context, resourceId int, params *ResourcesCreateRequirementParams, body ResourcesCreateRequirementJSONRequestBody, reqEditors ...RequestEditorFn) (*ResourcesCreateRequirementResponse, error)
+
+	// ResourcesDeleteRequirementWithResponse Remove a requirement of a resource
+	//
+	// Requires `ORG_ADMIN`. Holds already taken for it stay.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/v1/resources/{resource_id}/requirements/{requirement_id} (the `ResourcesDeleteRequirement` operationId).
+	ResourcesDeleteRequirementWithResponse(ctx context.Context, resourceId int, requirementId int, params *ResourcesDeleteRequirementParams, reqEditors ...RequestEditorFn) (*ResourcesDeleteRequirementResponse, error)
+
 	// ResourcesCreateReservationWithBodyWithResponse Hold a resource for one dated window
 	//
 	// Requires `ORG_ADMIN` or `UNIT_ADMIN`. A UNIT_ADMIN may hold a resource their own unit owns, or one with no unit (shared by the whole organization), and is refused a resource of another unit with 403 `OUTSIDE_UNIT`. The route an outside system uses to take a room. What it refuses is exactly what GET availability calls busy, through the same queries and the same expansion, so a caller cannot read an hour as free and then be refused it.
@@ -12554,6 +13754,8 @@ type ClientWithResponsesInterface interface {
 	// An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
 	//
 	// The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
+	//
+	// What the resource requires is held in the same transaction, each as its own reservation naming this one in `parent_reservation_id`, and listed in `children`. See `GET /api/v1/resources/{resource_id}/requirements`. A named resource is held for the window widened by the requirement's `before_minutes` and `after_minutes`, by its own mode. A kind is filled from `assignments`, then by the first free resources of the kind by code. A REQUIRED requirement that cannot be met holds nothing and answers 409 `REQUIREMENT_UNSATISFIED`; an ADVISORY one is left out and listed in `unmet`. A padded window that would cross midnight of the booking's last day is a 422. Cancelling the booking cancels the holds it took.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -12573,6 +13775,8 @@ type ClientWithResponsesInterface interface {
 	// An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
 	//
 	// The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
+	//
+	// What the resource requires is held in the same transaction, each as its own reservation naming this one in `parent_reservation_id`, and listed in `children`. See `GET /api/v1/resources/{resource_id}/requirements`. A named resource is held for the window widened by the requirement's `before_minutes` and `after_minutes`, by its own mode. A kind is filled from `assignments`, then by the first free resources of the kind by code. A REQUIRED requirement that cannot be met holds nothing and answers 409 `REQUIREMENT_UNSATISFIED`; an ADVISORY one is left out and listed in `unmet`. A padded window that would cross midnight of the booking's last day is a 422. Cancelling the booking cancels the holds it took.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -12707,6 +13911,42 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with DELETE /api/v1/schedule/activities/{activity_id}/enrollments/{member_id} (the `ScheduleDeleteEnrollment` operationId).
 	ScheduleDeleteEnrollmentWithResponse(ctx context.Context, activityId int, memberId string, params *ScheduleDeleteEnrollmentParams, reqEditors ...RequestEditorFn) (*ScheduleDeleteEnrollmentResponse, error)
+
+	// ScheduleListActivityRequirementsWithResponse What an activity needs besides its room
+	//
+	// Admin only, inside the admin's unit.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/schedule/activities/{activity_id}/requirements (the `ScheduleListActivityRequirements` operationId).
+	ScheduleListActivityRequirementsWithResponse(ctx context.Context, activityId int, reqEditors ...RequestEditorFn) (*ScheduleListActivityRequirementsResponse, error)
+
+	// ScheduleCreateActivityRequirementWithBodyWithResponse Say that an activity also needs a resource
+	//
+	// Admin only, inside the admin's unit. The timetable holds nothing for a requirement. One that a slot's dates cannot have is reported as a `requirement_unmet` in `GET /api/v1/schedule/conflicts`, in `requirements_unmet` on the slot routes and the CSV import, and in the generator's log, and no slot or day is refused for it.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/schedule/activities/{activity_id}/requirements (the `ScheduleCreateActivityRequirement` operationId).
+	ScheduleCreateActivityRequirementWithBodyWithResponse(ctx context.Context, activityId int, params *ScheduleCreateActivityRequirementParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ScheduleCreateActivityRequirementResponse, error)
+
+	// ScheduleCreateActivityRequirementWithResponse Say that an activity also needs a resource
+	//
+	// Admin only, inside the admin's unit. The timetable holds nothing for a requirement. One that a slot's dates cannot have is reported as a `requirement_unmet` in `GET /api/v1/schedule/conflicts`, in `requirements_unmet` on the slot routes and the CSV import, and in the generator's log, and no slot or day is refused for it.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/schedule/activities/{activity_id}/requirements (the `ScheduleCreateActivityRequirement` operationId).
+	ScheduleCreateActivityRequirementWithResponse(ctx context.Context, activityId int, params *ScheduleCreateActivityRequirementParams, body ScheduleCreateActivityRequirementJSONRequestBody, reqEditors ...RequestEditorFn) (*ScheduleCreateActivityRequirementResponse, error)
+
+	// ScheduleDeleteActivityRequirementWithResponse Remove a requirement of an activity
+	//
+	// Admin only, inside the admin's unit.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/v1/schedule/activities/{activity_id}/requirements/{requirement_id} (the `ScheduleDeleteActivityRequirement` operationId).
+	ScheduleDeleteActivityRequirementWithResponse(ctx context.Context, activityId int, requirementId int, params *ScheduleDeleteActivityRequirementParams, reqEditors ...RequestEditorFn) (*ScheduleDeleteActivityRequirementResponse, error)
 
 	// ScheduleRetireActivityWithResponse Retire an activity
 	//
@@ -13253,6 +14493,130 @@ func (r AdminExportResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r AdminExportResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AdminGetOrganizationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OrganizationResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AdminGetOrganizationResponse) GetJSON200() *OrganizationResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r AdminGetOrganizationResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r AdminGetOrganizationResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetBody returns the raw response body bytes
+func (r AdminGetOrganizationResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminGetOrganizationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminGetOrganizationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AdminGetOrganizationResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// AdminUpdateOrganizationResponse200Headers the declared response headers of an HTTP 200 response for AdminUpdateOrganization
+type AdminUpdateOrganizationResponse200Headers struct {
+	IdempotencyReplayed *string
+}
+
+type AdminUpdateOrganizationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OrganizationResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *UnprocessableEntity
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *AdminUpdateOrganizationResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AdminUpdateOrganizationResponse) GetJSON200() *OrganizationResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r AdminUpdateOrganizationResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r AdminUpdateOrganizationResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r AdminUpdateOrganizationResponse) GetJSON422() *UnprocessableEntity {
+	return r.JSON422
+}
+
+// GetBody returns the raw response body bytes
+func (r AdminUpdateOrganizationResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminUpdateOrganizationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminUpdateOrganizationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AdminUpdateOrganizationResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -16443,13 +17807,213 @@ func (r ResourcesGetAvailabilityResponse) ContentType() string {
 	return ""
 }
 
+type ResourcesListRequirementsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]RequirementResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ResourcesListRequirementsResponse) GetJSON200() *[]RequirementResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r ResourcesListRequirementsResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r ResourcesListRequirementsResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r ResourcesListRequirementsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ResourcesListRequirementsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ResourcesListRequirementsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ResourcesListRequirementsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ResourcesCreateRequirementResponse201Headers the declared response headers of an HTTP 201 response for ResourcesCreateRequirement
+type ResourcesCreateRequirementResponse201Headers struct {
+	IdempotencyReplayed *string
+}
+
+type ResourcesCreateRequirementResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *RequirementResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *ConflictResponse
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *ErrorResponse
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *ResourcesCreateRequirementResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r ResourcesCreateRequirementResponse) GetJSON201() *RequirementResponse {
+	return r.JSON201
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r ResourcesCreateRequirementResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r ResourcesCreateRequirementResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r ResourcesCreateRequirementResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r ResourcesCreateRequirementResponse) GetJSON409() *ConflictResponse {
+	return r.JSON409
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r ResourcesCreateRequirementResponse) GetJSON422() *ErrorResponse {
+	return r.JSON422
+}
+
+// GetBody returns the raw response body bytes
+func (r ResourcesCreateRequirementResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ResourcesCreateRequirementResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ResourcesCreateRequirementResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ResourcesCreateRequirementResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ResourcesDeleteRequirementResponse204Headers the declared response headers of an HTTP 204 response for ResourcesDeleteRequirement
+type ResourcesDeleteRequirementResponse204Headers struct {
+	IdempotencyReplayed *string
+}
+
+type ResourcesDeleteRequirementResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// Headers204 the parsed response headers for an HTTP 204 response
+	Headers204 *ResourcesDeleteRequirementResponse204Headers
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r ResourcesDeleteRequirementResponse) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r ResourcesDeleteRequirementResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r ResourcesDeleteRequirementResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r ResourcesDeleteRequirementResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ResourcesDeleteRequirementResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ResourcesDeleteRequirementResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ResourcesDeleteRequirementResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ResourcesCreateReservationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *ReservationResponse
+	JSON200 *ReservationCreated
 	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *ReservationResponse
+	JSON201 *ReservationCreated
 	// JSON401 the response for an HTTP 401 `application/json` response
 	JSON401 *Unauthorized
 	// JSON403 the response for an HTTP 403 `application/json` response
@@ -16463,12 +18027,12 @@ type ResourcesCreateReservationResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ResourcesCreateReservationResponse) GetJSON200() *ReservationResponse {
+func (r ResourcesCreateReservationResponse) GetJSON200() *ReservationCreated {
 	return r.JSON200
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r ResourcesCreateReservationResponse) GetJSON201() *ReservationResponse {
+func (r ResourcesCreateReservationResponse) GetJSON201() *ReservationCreated {
 	return r.JSON201
 }
 
@@ -17163,6 +18727,192 @@ func (r ScheduleDeleteEnrollmentResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ScheduleDeleteEnrollmentResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ScheduleListActivityRequirementsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]RequirementResponse
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ScheduleListActivityRequirementsResponse) GetJSON200() *[]RequirementResponse {
+	return r.JSON200
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r ScheduleListActivityRequirementsResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r ScheduleListActivityRequirementsResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r ScheduleListActivityRequirementsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ScheduleListActivityRequirementsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ScheduleListActivityRequirementsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ScheduleListActivityRequirementsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ScheduleCreateActivityRequirementResponse201Headers the declared response headers of an HTTP 201 response for ScheduleCreateActivityRequirement
+type ScheduleCreateActivityRequirementResponse201Headers struct {
+	IdempotencyReplayed *string
+}
+
+type ScheduleCreateActivityRequirementResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *RequirementResponse
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *ErrorResponse
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *ErrorResponse
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *ScheduleCreateActivityRequirementResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r ScheduleCreateActivityRequirementResponse) GetJSON201() *RequirementResponse {
+	return r.JSON201
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r ScheduleCreateActivityRequirementResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r ScheduleCreateActivityRequirementResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r ScheduleCreateActivityRequirementResponse) GetJSON409() *ErrorResponse {
+	return r.JSON409
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r ScheduleCreateActivityRequirementResponse) GetJSON422() *ErrorResponse {
+	return r.JSON422
+}
+
+// GetBody returns the raw response body bytes
+func (r ScheduleCreateActivityRequirementResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ScheduleCreateActivityRequirementResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ScheduleCreateActivityRequirementResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ScheduleCreateActivityRequirementResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ScheduleDeleteActivityRequirementResponse204Headers the declared response headers of an HTTP 204 response for ScheduleDeleteActivityRequirement
+type ScheduleDeleteActivityRequirementResponse204Headers struct {
+	IdempotencyReplayed *string
+}
+
+type ScheduleDeleteActivityRequirementResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// Headers204 the parsed response headers for an HTTP 204 response
+	Headers204 *ScheduleDeleteActivityRequirementResponse204Headers
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r ScheduleDeleteActivityRequirementResponse) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r ScheduleDeleteActivityRequirementResponse) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetBody returns the raw response body bytes
+func (r ScheduleDeleteActivityRequirementResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ScheduleDeleteActivityRequirementResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ScheduleDeleteActivityRequirementResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ScheduleDeleteActivityRequirementResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -17902,7 +19652,8 @@ type ScheduleCreateSlotResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *struct {
-		Id *int `json:"id,omitempty"`
+		Id                *int                  `json:"id,omitempty"`
+		RequirementsUnmet *[]SlotRequirementGap `json:"requirements_unmet,omitempty"`
 	}
 	// JSON403 the response for an HTTP 403 `application/json` response
 	JSON403 *Forbidden
@@ -17918,7 +19669,8 @@ type ScheduleCreateSlotResponse struct {
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r ScheduleCreateSlotResponse) GetJSON200() *struct {
-	Id *int `json:"id,omitempty"`
+	Id                *int                  `json:"id,omitempty"`
+	RequirementsUnmet *[]SlotRequirementGap `json:"requirements_unmet,omitempty"`
 } {
 	return r.JSON200
 }
@@ -19893,6 +21645,51 @@ func (c *ClientWithResponses) AdminExportWithResponse(ctx context.Context, reqEd
 	return ParseAdminExportResponse(rsp)
 }
 
+// AdminGetOrganizationWithResponse The caller's organization and its settings
+//
+// Requires `ORG_ADMIN`; an API key needs `admin:read`.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/admin/organization (the `AdminGetOrganization` operationId).
+func (c *ClientWithResponses) AdminGetOrganizationWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminGetOrganizationResponse, error) {
+	rsp, err := c.AdminGetOrganization(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminGetOrganizationResponse(rsp)
+}
+
+// AdminUpdateOrganizationWithBodyWithResponse Change the organization's settings
+//
+// Requires `ORG_ADMIN`; an API key needs `admin:write`. Today the one setting is `default_requirement_enforcement`, what a requirement with no enforcement of its own does. It applies from the next booking.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /api/v1/admin/organization (the `AdminUpdateOrganization` operationId).
+func (c *ClientWithResponses) AdminUpdateOrganizationWithBodyWithResponse(ctx context.Context, params *AdminUpdateOrganizationParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminUpdateOrganizationResponse, error) {
+	rsp, err := c.AdminUpdateOrganizationWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminUpdateOrganizationResponse(rsp)
+}
+
+// AdminUpdateOrganizationWithResponse Change the organization's settings
+//
+// Requires `ORG_ADMIN`; an API key needs `admin:write`. Today the one setting is `default_requirement_enforcement`, what a requirement with no enforcement of its own does. It applies from the next booking.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /api/v1/admin/organization (the `AdminUpdateOrganization` operationId).
+func (c *ClientWithResponses) AdminUpdateOrganizationWithResponse(ctx context.Context, params *AdminUpdateOrganizationParams, body AdminUpdateOrganizationJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminUpdateOrganizationResponse, error) {
+	rsp, err := c.AdminUpdateOrganization(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminUpdateOrganizationResponse(rsp)
+}
+
 // ApiKeysListWithResponse List issued keys
 //
 // Requires `ORG_ADMIN`. Shows what each key is scoped to and when it runs out, which is how an unrestricted key left over from before scopes existed becomes visible.
@@ -20967,6 +22764,66 @@ func (c *ClientWithResponses) ResourcesGetAvailabilityWithResponse(ctx context.C
 	return ParseResourcesGetAvailabilityResponse(rsp)
 }
 
+// ResourcesListRequirementsWithResponse What a resource requires
+//
+// Any signed-in user. The standing rules of the resource: using it also needs these. Booking the resource holds them, see `POST /api/v1/resources/{resource_id}/reservations`.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/resources/{resource_id}/requirements (the `ResourcesListRequirements` operationId).
+func (c *ClientWithResponses) ResourcesListRequirementsWithResponse(ctx context.Context, resourceId int, reqEditors ...RequestEditorFn) (*ResourcesListRequirementsResponse, error) {
+	rsp, err := c.ResourcesListRequirements(ctx, resourceId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseResourcesListRequirementsResponse(rsp)
+}
+
+// ResourcesCreateRequirementWithBodyWithResponse Say that a resource requires another
+//
+// Requires `ORG_ADMIN`. The target is a specific resource or any resource of a kind, never an activity. A chain of requirements is followed to depth 4 when a booking is made. A requirement that would make a resource need itself, directly or through other named resources, is refused here with a 422. A second requirement of the same owner for the same target is a 409 `ALREADY_EXISTS`.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/resources/{resource_id}/requirements (the `ResourcesCreateRequirement` operationId).
+func (c *ClientWithResponses) ResourcesCreateRequirementWithBodyWithResponse(ctx context.Context, resourceId int, params *ResourcesCreateRequirementParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ResourcesCreateRequirementResponse, error) {
+	rsp, err := c.ResourcesCreateRequirementWithBody(ctx, resourceId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseResourcesCreateRequirementResponse(rsp)
+}
+
+// ResourcesCreateRequirementWithResponse Say that a resource requires another
+//
+// Requires `ORG_ADMIN`. The target is a specific resource or any resource of a kind, never an activity. A chain of requirements is followed to depth 4 when a booking is made. A requirement that would make a resource need itself, directly or through other named resources, is refused here with a 422. A second requirement of the same owner for the same target is a 409 `ALREADY_EXISTS`.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/resources/{resource_id}/requirements (the `ResourcesCreateRequirement` operationId).
+func (c *ClientWithResponses) ResourcesCreateRequirementWithResponse(ctx context.Context, resourceId int, params *ResourcesCreateRequirementParams, body ResourcesCreateRequirementJSONRequestBody, reqEditors ...RequestEditorFn) (*ResourcesCreateRequirementResponse, error) {
+	rsp, err := c.ResourcesCreateRequirement(ctx, resourceId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseResourcesCreateRequirementResponse(rsp)
+}
+
+// ResourcesDeleteRequirementWithResponse Remove a requirement of a resource
+//
+// Requires `ORG_ADMIN`. Holds already taken for it stay.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/v1/resources/{resource_id}/requirements/{requirement_id} (the `ResourcesDeleteRequirement` operationId).
+func (c *ClientWithResponses) ResourcesDeleteRequirementWithResponse(ctx context.Context, resourceId int, requirementId int, params *ResourcesDeleteRequirementParams, reqEditors ...RequestEditorFn) (*ResourcesDeleteRequirementResponse, error) {
+	rsp, err := c.ResourcesDeleteRequirement(ctx, resourceId, requirementId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseResourcesDeleteRequirementResponse(rsp)
+}
+
 // ResourcesCreateReservationWithBodyWithResponse Hold a resource for one dated window
 //
 // Requires `ORG_ADMIN` or `UNIT_ADMIN`. A UNIT_ADMIN may hold a resource their own unit owns, or one with no unit (shared by the whole organization), and is refused a resource of another unit with 403 `OUTSIDE_UNIT`. The route an outside system uses to take a room. What it refuses is exactly what GET availability calls busy, through the same queries and the same expansion, so a caller cannot read an hour as free and then be refused it.
@@ -20980,6 +22837,8 @@ func (c *ClientWithResponses) ResourcesGetAvailabilityWithResponse(ctx context.C
 // An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
 //
 // The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
+//
+// What the resource requires is held in the same transaction, each as its own reservation naming this one in `parent_reservation_id`, and listed in `children`. See `GET /api/v1/resources/{resource_id}/requirements`. A named resource is held for the window widened by the requirement's `before_minutes` and `after_minutes`, by its own mode. A kind is filled from `assignments`, then by the first free resources of the kind by code. A REQUIRED requirement that cannot be met holds nothing and answers 409 `REQUIREMENT_UNSATISFIED`; an ADVISORY one is left out and listed in `unmet`. A padded window that would cross midnight of the booking's last day is a 422. Cancelling the booking cancels the holds it took.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -21005,6 +22864,8 @@ func (c *ClientWithResponses) ResourcesCreateReservationWithBodyWithResponse(ctx
 // An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
 //
 // The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
+//
+// What the resource requires is held in the same transaction, each as its own reservation naming this one in `parent_reservation_id`, and listed in `children`. See `GET /api/v1/resources/{resource_id}/requirements`. A named resource is held for the window widened by the requirement's `before_minutes` and `after_minutes`, by its own mode. A kind is filled from `assignments`, then by the first free resources of the kind by code. A REQUIRED requirement that cannot be met holds nothing and answers 409 `REQUIREMENT_UNSATISFIED`; an ADVISORY one is left out and listed in `unmet`. A padded window that would cross midnight of the booking's last day is a 422. Cancelling the booking cancels the holds it took.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -21222,6 +23083,66 @@ func (c *ClientWithResponses) ScheduleDeleteEnrollmentWithResponse(ctx context.C
 		return nil, err
 	}
 	return ParseScheduleDeleteEnrollmentResponse(rsp)
+}
+
+// ScheduleListActivityRequirementsWithResponse What an activity needs besides its room
+//
+// Admin only, inside the admin's unit.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/schedule/activities/{activity_id}/requirements (the `ScheduleListActivityRequirements` operationId).
+func (c *ClientWithResponses) ScheduleListActivityRequirementsWithResponse(ctx context.Context, activityId int, reqEditors ...RequestEditorFn) (*ScheduleListActivityRequirementsResponse, error) {
+	rsp, err := c.ScheduleListActivityRequirements(ctx, activityId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseScheduleListActivityRequirementsResponse(rsp)
+}
+
+// ScheduleCreateActivityRequirementWithBodyWithResponse Say that an activity also needs a resource
+//
+// Admin only, inside the admin's unit. The timetable holds nothing for a requirement. One that a slot's dates cannot have is reported as a `requirement_unmet` in `GET /api/v1/schedule/conflicts`, in `requirements_unmet` on the slot routes and the CSV import, and in the generator's log, and no slot or day is refused for it.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/schedule/activities/{activity_id}/requirements (the `ScheduleCreateActivityRequirement` operationId).
+func (c *ClientWithResponses) ScheduleCreateActivityRequirementWithBodyWithResponse(ctx context.Context, activityId int, params *ScheduleCreateActivityRequirementParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ScheduleCreateActivityRequirementResponse, error) {
+	rsp, err := c.ScheduleCreateActivityRequirementWithBody(ctx, activityId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseScheduleCreateActivityRequirementResponse(rsp)
+}
+
+// ScheduleCreateActivityRequirementWithResponse Say that an activity also needs a resource
+//
+// Admin only, inside the admin's unit. The timetable holds nothing for a requirement. One that a slot's dates cannot have is reported as a `requirement_unmet` in `GET /api/v1/schedule/conflicts`, in `requirements_unmet` on the slot routes and the CSV import, and in the generator's log, and no slot or day is refused for it.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/schedule/activities/{activity_id}/requirements (the `ScheduleCreateActivityRequirement` operationId).
+func (c *ClientWithResponses) ScheduleCreateActivityRequirementWithResponse(ctx context.Context, activityId int, params *ScheduleCreateActivityRequirementParams, body ScheduleCreateActivityRequirementJSONRequestBody, reqEditors ...RequestEditorFn) (*ScheduleCreateActivityRequirementResponse, error) {
+	rsp, err := c.ScheduleCreateActivityRequirement(ctx, activityId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseScheduleCreateActivityRequirementResponse(rsp)
+}
+
+// ScheduleDeleteActivityRequirementWithResponse Remove a requirement of an activity
+//
+// Admin only, inside the admin's unit.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/v1/schedule/activities/{activity_id}/requirements/{requirement_id} (the `ScheduleDeleteActivityRequirement` operationId).
+func (c *ClientWithResponses) ScheduleDeleteActivityRequirementWithResponse(ctx context.Context, activityId int, requirementId int, params *ScheduleDeleteActivityRequirementParams, reqEditors ...RequestEditorFn) (*ScheduleDeleteActivityRequirementResponse, error) {
+	rsp, err := c.ScheduleDeleteActivityRequirement(ctx, activityId, requirementId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseScheduleDeleteActivityRequirementResponse(rsp)
 }
 
 // ScheduleRetireActivityWithResponse Retire an activity
@@ -22060,6 +23981,106 @@ func ParseAdminExportResponse(rsp *http.Response) (*AdminExportResponse, error) 
 		}
 		response.JSON422 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseAdminGetOrganizationResponse parses an HTTP response from a AdminGetOrganizationWithResponse call
+func ParseAdminGetOrganizationResponse(rsp *http.Response) (*AdminGetOrganizationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminGetOrganizationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OrganizationResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminUpdateOrganizationResponse parses an HTTP response from a AdminUpdateOrganizationWithResponse call
+func ParseAdminUpdateOrganizationResponse(rsp *http.Response) (*AdminUpdateOrganizationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminUpdateOrganizationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OrganizationResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest UnprocessableEntity
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers AdminUpdateOrganizationResponse200Headers
+		if values := rsp.Header.Values("Idempotency-Replayed"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Idempotency-Replayed", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.IdempotencyReplayed = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil
@@ -24651,6 +26672,176 @@ func ParseResourcesGetAvailabilityResponse(rsp *http.Response) (*ResourcesGetAva
 	return response, nil
 }
 
+// ParseResourcesListRequirementsResponse parses an HTTP response from a ResourcesListRequirementsWithResponse call
+func ParseResourcesListRequirementsResponse(rsp *http.Response) (*ResourcesListRequirementsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ResourcesListRequirementsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []RequirementResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseResourcesCreateRequirementResponse parses an HTTP response from a ResourcesCreateRequirementWithResponse call
+func ParseResourcesCreateRequirementResponse(rsp *http.Response) (*ResourcesCreateRequirementResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ResourcesCreateRequirementResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest RequirementResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ConflictResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers ResourcesCreateRequirementResponse201Headers
+		if values := rsp.Header.Values("Idempotency-Replayed"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Idempotency-Replayed", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.IdempotencyReplayed = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseResourcesDeleteRequirementResponse parses an HTTP response from a ResourcesDeleteRequirementWithResponse call
+func ParseResourcesDeleteRequirementResponse(rsp *http.Response) (*ResourcesDeleteRequirementResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ResourcesDeleteRequirementResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		var headers ResourcesDeleteRequirementResponse204Headers
+		if values := rsp.Header.Values("Idempotency-Replayed"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Idempotency-Replayed", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.IdempotencyReplayed = &value
+		}
+		response.Headers204 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseResourcesCreateReservationResponse parses an HTTP response from a ResourcesCreateReservationWithResponse call
 func ParseResourcesCreateReservationResponse(rsp *http.Response) (*ResourcesCreateReservationResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -24666,14 +26857,14 @@ func ParseResourcesCreateReservationResponse(rsp *http.Response) (*ResourcesCrea
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ReservationResponse
+		var dest ReservationCreated
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest ReservationResponse
+		var dest ReservationCreated
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -25266,6 +27457,162 @@ func ParseScheduleDeleteEnrollmentResponse(rsp *http.Response) (*ScheduleDeleteE
 			headers.IdempotencyReplayed = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseScheduleListActivityRequirementsResponse parses an HTTP response from a ScheduleListActivityRequirementsWithResponse call
+func ParseScheduleListActivityRequirementsResponse(rsp *http.Response) (*ScheduleListActivityRequirementsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ScheduleListActivityRequirementsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []RequirementResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseScheduleCreateActivityRequirementResponse parses an HTTP response from a ScheduleCreateActivityRequirementWithResponse call
+func ParseScheduleCreateActivityRequirementResponse(rsp *http.Response) (*ScheduleCreateActivityRequirementResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ScheduleCreateActivityRequirementResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest RequirementResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers ScheduleCreateActivityRequirementResponse201Headers
+		if values := rsp.Header.Values("Idempotency-Replayed"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Idempotency-Replayed", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.IdempotencyReplayed = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseScheduleDeleteActivityRequirementResponse parses an HTTP response from a ScheduleDeleteActivityRequirementWithResponse call
+func ParseScheduleDeleteActivityRequirementResponse(rsp *http.Response) (*ScheduleDeleteActivityRequirementResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ScheduleDeleteActivityRequirementResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		var headers ScheduleDeleteActivityRequirementResponse204Headers
+		if values := rsp.Header.Values("Idempotency-Replayed"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Idempotency-Replayed", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.IdempotencyReplayed = &value
+		}
+		response.Headers204 = &headers
 	}
 
 	return response, nil
@@ -25888,7 +28235,8 @@ func ParseScheduleCreateSlotResponse(rsp *http.Response) (*ScheduleCreateSlotRes
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Id *int `json:"id,omitempty"`
+			Id                *int                  `json:"id,omitempty"`
+			RequirementsUnmet *[]SlotRequirementGap `json:"requirements_unmet,omitempty"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err

@@ -1,7 +1,7 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
 
-"""Whole-organization operations. Today, the export (docs/portability.md)."""
+"""Whole-organization operations: the export (docs/portability.md) and the organization's settings."""
 
 import os
 import tempfile
@@ -14,6 +14,8 @@ from starlette.background import BackgroundTask
 from app.core import audit
 from app.core.database import get_db
 from app.core.security import require_roles
+from app.models.db import Organization
+from app.schemas.admin import OrganizationResponse, OrganizationUpdate
 from app.services.portability import export_archive
 
 router = APIRouter()
@@ -67,3 +69,33 @@ def export(
         filename=EXPORT_FILENAME,
         background=BackgroundTask(os.unlink, path),
     )
+
+
+@router.get(
+    "/organization", operation_id="admin.getOrganization", response_model=OrganizationResponse
+)
+def get_organization(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ORG_ADMIN")),
+):
+    """The caller's organization and the settings it carries."""
+    return db.get(Organization, current_user.organization_id)
+
+
+@router.patch(
+    "/organization", operation_id="admin.updateOrganization", response_model=OrganizationResponse
+)
+def update_organization(
+    payload: OrganizationUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ORG_ADMIN")),
+):
+    """Change what a requirement does when it does not say.
+
+    Takes effect for the next booking. Holds already taken are not revisited.
+    """
+    organization = db.get(Organization, current_user.organization_id)
+    organization.default_requirement_enforcement = payload.default_requirement_enforcement
+    db.commit()
+    db.refresh(organization)
+    return organization

@@ -638,9 +638,55 @@ export interface paths {
          *     An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
          *
          *     The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
+         *
+         *     What the resource requires is held in the same transaction, each as its own reservation naming this one in `parent_reservation_id`, and listed in `children`. See `GET /api/v1/resources/{resource_id}/requirements`. A named resource is held for the window widened by the requirement's `before_minutes` and `after_minutes`, by its own mode. A kind is filled from `assignments`, then by the first free resources of the kind by code. A REQUIRED requirement that cannot be met holds nothing and answers 409 `REQUIREMENT_UNSATISFIED`; an ADVISORY one is left out and listed in `unmet`. A padded window that would cross midnight of the booking's last day is a 422. Cancelling the booking cancels the holds it took.
          */
         post: operations["resources.createReservation"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resources/{resource_id}/requirements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a resource requires
+         * @description Any signed-in user. The standing rules of the resource: using it also needs these. Booking the resource holds them, see `POST /api/v1/resources/{resource_id}/reservations`.
+         */
+        get: operations["resources.listRequirements"];
+        put?: never;
+        /**
+         * Say that a resource requires another
+         * @description Requires `ORG_ADMIN`. The target is a specific resource or any resource of a kind, never an activity. A chain of requirements is followed to depth 4 when a booking is made. A requirement that would make a resource need itself, directly or through other named resources, is refused here with a 422. A second requirement of the same owner for the same target is a 409 `ALREADY_EXISTS`.
+         */
+        post: operations["resources.createRequirement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resources/{resource_id}/requirements/{requirement_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a requirement of a resource
+         * @description Requires `ORG_ADMIN`. Holds already taken for it stay.
+         */
+        delete: operations["resources.deleteRequirement"];
         options?: never;
         head?: never;
         patch?: never;
@@ -787,6 +833,50 @@ export interface paths {
          * @description Admin only, inside the admin's unit. Only the enrollment goes. Days belong to slots, so no day is removed, and the attendance already recorded for the member stays.
          */
         delete: operations["schedule.deleteEnrollment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schedule/activities/{activity_id}/requirements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What an activity needs besides its room
+         * @description Admin only, inside the admin's unit.
+         */
+        get: operations["schedule.listActivityRequirements"];
+        put?: never;
+        /**
+         * Say that an activity also needs a resource
+         * @description Admin only, inside the admin's unit. The timetable holds nothing for a requirement. One that a slot's dates cannot have is reported as a `requirement_unmet` in `GET /api/v1/schedule/conflicts`, in `requirements_unmet` on the slot routes and the CSV import, and in the generator's log, and no slot or day is refused for it.
+         */
+        post: operations["schedule.createActivityRequirement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schedule/activities/{activity_id}/requirements/{requirement_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a requirement of an activity
+         * @description Admin only, inside the admin's unit.
+         */
+        delete: operations["schedule.deleteActivityRequirement"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1444,6 +1534,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/organization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's organization and its settings
+         * @description Requires `ORG_ADMIN`; an API key needs `admin:read`.
+         */
+        get: operations["admin.getOrganization"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change the organization's settings
+         * @description Requires `ORG_ADMIN`; an API key needs `admin:write`. Today the one setting is `default_requirement_enforcement`, what a requirement with no enforcement of its own does. It applies from the next booking.
+         */
+        patch: operations["admin.updateOrganization"];
+        trace?: never;
+    };
     "/api/v1/audit/": {
         parameters: {
             query?: never;
@@ -1913,6 +2027,8 @@ export interface components {
             ledger_rows_kept?: number;
             /** @description The days counted in ledger_rows_kept, earliest first, each with the room it still has. Present when status is SUCCESS. */
             kept_days?: components["schemas"]["KeptDay"][];
+            /** @description One entry per requirement of a slot in the file, or of its activity or room, that the slot's next run cannot have. A report; the import is not refused for it. */
+            requirements_unmet?: components["schemas"]["SlotRequirementGap"][];
             not_in_file?: components["schemas"]["ImportOrphans"];
             removed?: components["schemas"]["ImportRemoved"];
             not_removed?: components["schemas"]["ImportNotRemoved"];
@@ -2323,6 +2439,10 @@ export interface components {
             to?: string;
             /** @description Busy intervals, not free ones. Times are naive wall clock in the organization's own timezone, with no offset and no Z. */
             busy?: components["schemas"]["BusyInterval"][];
+            /** @description Null unless `with_requirements` was asked for. Then true when the resource itself is free for the window and nothing it requires is missing, whatever the enforcement. */
+            requirements_met?: boolean | null;
+            /** @description Empty unless `with_requirements` was asked for. Then the requirements that could not be held for the window. */
+            unmet?: components["schemas"]["UnmetRequirement"][];
         };
         /** @description One of the rows taking part in a clash, with the window it holds. type is `slot` (a weekly slot on one date, id is the slot), `ledger_day` (a generated day, id is the ledger row) or `reservation` (a held booking, id is the reservation). It is a string rather than an enum so that a new kind of row can be added later; a reader should skip a type it does not know. date is the day the window opened on and end_date the day it finishes on, as in BusyInterval. */
         ConflictItem: {
@@ -2358,6 +2478,8 @@ export interface components {
          * @description Two rows that hold the same resource, or the same member, at the same moment. kind is `resource_overlap`, with resource_id set and member_id null, or `member_overlap`, with member_id set and resource_id null. Like ConflictItem.type, kind is a string so that later kinds can be added; a reader should skip a kind it does not know. date, start, end_date and end are the part of the two windows they share. items is a list rather than a pair so that a later kind can name more than two rows.
          *
          *     `resource_overbooked` is a POOLED resource whose reservations together hold more than its capacity. date to end is the whole stretch in which they do, items is every reservation open in it, and capacity and taken say by how much: taken is the most held at any moment of the stretch. capacity and taken are null on the other kinds. Two reservations on a pooled resource are never a `resource_overlap`, and reservations on a SHARED resource are never reported at all.
+         *
+         *     `requirement_unmet` is a weekly slot or a generated day, its one item, whose activity or resource requires something the window cannot have. requirement_id names the requirement and message says what is missing; both are null on the other kinds. resource_id is the row's own resource. It is a report: nothing is refused for it.
          */
         Conflict: {
             /** @example resource_overlap */
@@ -2389,6 +2511,10 @@ export interface components {
             capacity?: number | null;
             /** @description The most units held at once, on `resource_overbooked` only. */
             taken?: number | null;
+            /** @description The requirement that is not met, on `requirement_unmet` only. */
+            requirement_id?: number | null;
+            /** @description What is missing, on `requirement_unmet` only. */
+            message?: string | null;
         };
         ConflictReport: {
             /** Format: date */
@@ -2428,6 +2554,18 @@ export interface components {
              * @example 2
              */
             quantity?: number;
+            /**
+             * @description Which resources to hold for the requirements that name a kind of resource: `ROOM` or `PERSON` mapped to resource ids, used in order. Where it says nothing, or runs out, the engine picks the first free resources of the kind by code. An id that is not an active resource of that kind in this organization, or that no requirement asks for, is a 422. A named resource that is not free is a gap and is not swapped for another. Part of what a retry is compared on only when it is sent.
+             * @example {
+             *       "PERSON": [
+             *         12,
+             *         15
+             *       ]
+             *     }
+             */
+            assignments?: {
+                [key: string]: number[];
+            } | null;
         };
         /** @description What the caller may change about a reservation it already holds: its reference, for now. The window is what the conflict check and the idempotency fingerprint are built on, so moving it is a cancel and a new booking. Any other field is refused with a 422 rather than ignored. */
         ReservationUpdate: {
@@ -2462,6 +2600,88 @@ export interface components {
             created_at?: string;
             /** Format: date-time */
             cancelled_at?: string | null;
+            /** @description The booking this hold was taken for, when a requirement of the resource made it. Null on a booking somebody asked for. Cancelling the parent cancels the holds that name it here. */
+            parent_reservation_id?: number | null;
+        };
+        /** @description A new booking with what its requirements held alongside it. */
+        ReservationCreated: components["schemas"]["ReservationResponse"] & {
+            /** @description The holds the resource's requirements took under this booking, at every depth of a chain, in the order they were taken. Empty when the resource requires nothing. A replay of the same request answers with the children as they stand now. */
+            children?: components["schemas"]["ReservationResponse"][];
+            /** @description The ADVISORY requirements that could not be met. The booking went ahead without them. A REQUIRED one that cannot be met refuses the booking instead (`REQUIREMENT_UNSATISFIED`). Always empty on a replay, because a gap is not stored. */
+            unmet?: components["schemas"]["UnmetRequirement"][];
+        };
+        /** @description A requirement that could not be held, and why. On a booking it is an ADVISORY gap. On GET availability with `with_requirements` it is whatever would stop the window being held, whatever the enforcement. */
+        UnmetRequirement: {
+            requirement_id: number;
+            /** @enum {string} */
+            owner_kind: "RESOURCE" | "ACTIVITY";
+            owner_id: number;
+            target_resource_id: number | null;
+            /** @enum {string|null} */
+            target_kind: "ROOM" | "PERSON" | null;
+            /** @description How many units or resources were missing, not how many were asked for. */
+            quantity: number;
+            /**
+             * @description The enforcement that applied, with the organization's default filled in where the requirement did not say.
+             * @enum {string}
+             */
+            enforcement: "REQUIRED" | "ADVISORY";
+            message: string;
+            /** @description What stands in the way on a named target. Empty when a kind had no free resource to name. */
+            conflicts: components["schemas"]["BusyInterval"][];
+        };
+        /** @description One rule: whoever uses the owner also needs the target. Set exactly one of `target_resource_id` and `target_kind`. */
+        RequirementCreate: {
+            /** @description A specific resource of this organization. Never an activity. */
+            target_resource_id?: number | null;
+            /**
+             * @description Any resource of this kind, picked at booking time.
+             * @enum {string|null}
+             */
+            target_kind?: "ROOM" | "PERSON" | null;
+            /** @description How many. Units of the pool on a POOLED named target, which a named target of another mode cannot take above 1 (422); the number of distinct resources on a kind. 1 when left out. */
+            quantity?: number;
+            /** @description Setup time held before the window. 0 when left out. */
+            before_minutes?: number;
+            /** @description Turnover time held after the window. 0 when left out. */
+            after_minutes?: number;
+            /**
+             * @description REQUIRED refuses a booking that cannot meet it. ADVISORY books without it and lists the gap. Null, or left out, follows the organization's `default_requirement_enforcement`.
+             * @enum {string|null}
+             */
+            enforcement?: "REQUIRED" | "ADVISORY" | null;
+        };
+        RequirementResponse: {
+            id: number;
+            /** @enum {string} */
+            owner_kind: "RESOURCE" | "ACTIVITY";
+            owner_id: number;
+            target_resource_id: number | null;
+            /** @enum {string|null} */
+            target_kind: "ROOM" | "PERSON" | null;
+            quantity: number;
+            before_minutes: number;
+            after_minutes: number;
+            /**
+             * @description Null means the organization's default applies.
+             * @enum {string|null}
+             */
+            enforcement: "REQUIRED" | "ADVISORY" | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        OrganizationResponse: {
+            id: string;
+            name: string;
+            /** @enum {string} */
+            default_requirement_enforcement: "REQUIRED" | "ADVISORY";
+        };
+        OrganizationUpdate: {
+            /**
+             * @description What a requirement with no enforcement of its own does. Read when a booking is made, so a change applies to the next booking.
+             * @enum {string}
+             */
+            default_requirement_enforcement: "REQUIRED" | "ADVISORY";
         };
         /** @description The body of a 409. What the booking ran into, not merely that it ran into something, so a caller can pick its next hour without asking availability again and diffing the answers. Nested under detail like every other error here, so one error handler reads them all. */
         ReservationConflict: {
@@ -2673,7 +2893,17 @@ export interface components {
              */
             retired_at?: string | null;
         };
+        /** @description A requirement of a slot's activity or resource that the slot's next run on the date given cannot have. A report; nothing is refused. The CSV import adds slot_id. */
+        SlotRequirementGap: {
+            requirement_id?: number;
+            /** Format: date */
+            date?: string;
+            message?: string;
+            slot_id?: number;
+        };
         SlotUpdateResult: {
+            /** @description What the slot's activity or resource requires that its next run cannot have. Empty when nothing is required. */
+            requirements_unmet?: components["schemas"]["SlotRequirementGap"][];
             /** @description Days that were still plans and now carry the new lead or room. */
             ledger_rows_updated?: number;
             /** @description Days left as they were because attendance or a note has been recorded against them. They now disagree with the timetable, and that is deliberate: they record what happened. */
@@ -3030,7 +3260,7 @@ export interface components {
          * @example NOT_FOUND
          * @enum {string}
          */
-        ErrorCode: "BAD_REQUEST" | "NOT_AUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "STATE_CONFLICT" | "PAYLOAD_TOO_LARGE" | "INVALID_VALUE" | "RATE_LIMITED" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE" | "VALIDATION_FAILED" | "INVALID_CREDENTIALS" | "TOKEN_INVALID" | "API_KEY_INVALID" | "API_KEY_EXPIRED" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_DEACTIVATED" | "REFRESH_TOKEN_INVALID" | "REFRESH_TOKEN_EXPIRED" | "REFRESH_TOKEN_USED" | "REFRESH_TOKEN_REUSED" | "FEDERATED_TOKEN_INVALID" | "FEDERATED_EMAIL_MISSING" | "FEDERATED_ADMIN_REFUSED" | "FEDERATION_UNAVAILABLE" | "CURRENT_PASSWORD_INCORRECT" | "PASSWORD_UNCHANGED" | "PASSWORD_CHANGE_REQUIRED" | "INSUFFICIENT_ROLE" | "SCOPE_MISSING" | "OUTSIDE_UNIT" | "IMPERSONATION_NOT_ALLOWED" | "IMPERSONATION_REFUSED" | "RESOURCE_CONFLICT" | "ALREADY_EXISTS" | "EMAIL_TAKEN" | "USER_DEACTIVATED" | "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_KEY_IN_PROGRESS" | "RESERVATION_EXTERNAL_REF_TAKEN" | "RESOURCE_CAPACITY_EXCEEDED" | "RESOURCE_BOOKINGS_WOULD_NOT_FIT" | "LOCATION_REQUIRED" | "LOCATION_TOO_COARSE" | "OUTSIDE_GEOFENCE" | "MANAGER_NOT_SET" | "IMPORT_REJECTED" | "CHANGE_FEED_DISABLED" | "SERVER_BUSY" | "DATABASE_UNAVAILABLE" | "WEBHOOK_URL_REFUSED" | "WEBHOOK_SECRET_LIMIT";
+        ErrorCode: "BAD_REQUEST" | "NOT_AUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "STATE_CONFLICT" | "PAYLOAD_TOO_LARGE" | "INVALID_VALUE" | "RATE_LIMITED" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE" | "VALIDATION_FAILED" | "INVALID_CREDENTIALS" | "TOKEN_INVALID" | "API_KEY_INVALID" | "API_KEY_EXPIRED" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_DEACTIVATED" | "REFRESH_TOKEN_INVALID" | "REFRESH_TOKEN_EXPIRED" | "REFRESH_TOKEN_USED" | "REFRESH_TOKEN_REUSED" | "FEDERATED_TOKEN_INVALID" | "FEDERATED_EMAIL_MISSING" | "FEDERATED_ADMIN_REFUSED" | "FEDERATION_UNAVAILABLE" | "CURRENT_PASSWORD_INCORRECT" | "PASSWORD_UNCHANGED" | "PASSWORD_CHANGE_REQUIRED" | "INSUFFICIENT_ROLE" | "SCOPE_MISSING" | "OUTSIDE_UNIT" | "IMPERSONATION_NOT_ALLOWED" | "IMPERSONATION_REFUSED" | "RESOURCE_CONFLICT" | "ALREADY_EXISTS" | "EMAIL_TAKEN" | "USER_DEACTIVATED" | "IDEMPOTENCY_KEY_REUSED" | "IDEMPOTENCY_KEY_IN_PROGRESS" | "RESERVATION_EXTERNAL_REF_TAKEN" | "RESOURCE_CAPACITY_EXCEEDED" | "RESOURCE_BOOKINGS_WOULD_NOT_FIT" | "REQUIREMENT_UNSATISFIED" | "LOCATION_REQUIRED" | "LOCATION_TOO_COARSE" | "OUTSIDE_GEOFENCE" | "MANAGER_NOT_SET" | "IMPORT_REJECTED" | "CHANGE_FEED_DISABLED" | "SERVER_BUSY" | "DATABASE_UNAVAILABLE" | "WEBHOOK_URL_REFUSED" | "WEBHOOK_SECRET_LIMIT";
     };
     responses: {
         /** @description Missing or invalid JWT. */
@@ -4456,6 +4686,12 @@ export interface operations {
                 from: string;
                 /** @example 2026-01-11 */
                 to: string;
+                /** @description Also answer whether the resource could be held for one window together with everything it requires, as a booking would hold it, in `requirements_met` and `unmet`. Holds nothing. Needs `from` and `to` to be the same date and `start` and `end` to be given, otherwise 422. */
+                with_requirements?: boolean;
+                /** @description The window's start, with `with_requirements`. */
+                start?: string;
+                /** @description The window's end, with `with_requirements`. Earlier than start means it runs past midnight, as for a booking. */
+                end?: string;
             };
             header?: never;
             path: {
@@ -4511,22 +4747,22 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReservationResponse"];
+                    "application/json": components["schemas"]["ReservationCreated"];
                 };
             };
-            /** @description The hold was taken. */
+            /** @description The hold was taken, with the holds its requirements took in `children` and the advisory gaps in `unmet`. */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReservationResponse"];
+                    "application/json": components["schemas"]["ReservationCreated"];
                 };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The caller already has a reservation with that external_ref (`RESERVATION_EXTERNAL_REF_TAKEN`, ReservationRefTaken), a pool has too few units free (`RESOURCE_CAPACITY_EXCEEDED`, CapacityExceeded), or something already holds part of that window (`RESOURCE_CONFLICT`, ReservationConflict). Branch on `code`. ReservationConflict is listed last because its detail has no required fields, so a client trying each shape in turn tells them apart. */
+            /** @description The caller already has a reservation with that external_ref (`RESERVATION_EXTERNAL_REF_TAKEN`, ReservationRefTaken), a pool has too few units free (`RESOURCE_CAPACITY_EXCEEDED`, CapacityExceeded), a REQUIRED requirement cannot be met (`REQUIREMENT_UNSATISFIED`, ReservationConflict, naming what was missing), or something already holds part of that window (`RESOURCE_CONFLICT`, ReservationConflict). Branch on `code`. ReservationConflict is listed last because its detail has no required fields, so a client trying each shape in turn tells them apart. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4535,7 +4771,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReservationRefTaken"] | components["schemas"]["CapacityExceeded"] | components["schemas"]["ReservationConflict"];
                 };
             };
-            /** @description end was not after start, quantity was above 1 on a resource that is not POOLED, or the Idempotency-Key had already been used for a different request (`IDEMPOTENCY_KEY_REUSED`). */
+            /** @description end was not after start, quantity was above 1 on a resource that is not POOLED, `assignments` named a resource of the wrong kind, of no requirement or of no active resource of this organization, a requirement's padded window would cross midnight, or the Idempotency-Key had already been used for a different request (`IDEMPOTENCY_KEY_REUSED`). */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4544,6 +4780,101 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+        };
+    };
+    "resources.listRequirements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resource_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The requirements, oldest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequirementResponse"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "resources.createRequirement": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                resource_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequirementCreate"];
+            };
+        };
+        responses: {
+            /** @description The requirement was saved. */
+            201: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequirementResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description Neither or both targets, a target that is not a resource of this organization, a quantity above 1 on a named target that is not POOLED, or a cycle. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    "resources.deleteRequirement": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                resource_id: number;
+                requirement_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     "resources.cancelReservation": {
@@ -4949,6 +5280,107 @@ export interface operations {
             422: components["responses"]["UnprocessableEntity"];
         };
     };
+    "schedule.listActivityRequirements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                activity_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The requirements, oldest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequirementResponse"][];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    "schedule.createActivityRequirement": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                activity_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequirementCreate"];
+            };
+        };
+        responses: {
+            /** @description The requirement was saved. */
+            201: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequirementResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The activity already requires that target (`ALREADY_EXISTS`), or the activity is retired (`STATE_CONFLICT`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Neither or both targets, a target that is not a resource of this organization, or a quantity above 1 on a named target that is not POOLED. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    "schedule.deleteActivityRequirement": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                activity_id: number;
+                requirement_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     "schedule.listSlots": {
         parameters: {
             query?: {
@@ -4994,7 +5426,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The slot's id. */
+            /** @description The slot's id, and `requirements_unmet`: what its activity or its resource requires that the slot's next run cannot have. Empty when nothing is required. A report; the slot is saved either way. */
             200: {
                 headers: {
                     "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
@@ -5003,6 +5435,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         id?: number;
+                        requirements_unmet?: components["schemas"]["SlotRequirementGap"][];
                     };
                 };
             };
@@ -6175,6 +6608,59 @@ export interface operations {
                 };
                 content: {
                     "application/zip": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    "admin.getOrganization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The organization. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    "admin.updateOrganization": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes a retry safe. Send the same key with the same request again and the first response comes back, with `Idempotency-Replayed: true`, instead of a second effect. A key belongs to the API key, or the user, that sent it, and is remembered for `IDEMPOTENCY_RETENTION_HOURS` (24 by default). The same key with a different request is `422` with `IDEMPOTENCY_KEY_REUSED`; a retry while the first request is still running is `409` with `IDEMPOTENCY_KEY_IN_PROGRESS` and a `Retry-After`. A key outside 1 to 255 printable ASCII characters is `422` with `INVALID_VALUE`. A different `X-Chronos-Actor` counts as a different request. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationUpdate"];
+            };
+        };
+        responses: {
+            /** @description The organization as it now is. */
+            200: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationResponse"];
                 };
             };
             401: components["responses"]["Unauthorized"];

@@ -348,6 +348,14 @@ components:
             the room it still has. Present when status is SUCCESS.
           items:
             $ref: "#/components/schemas/KeptDay"
+        requirements_unmet:
+          type: array
+          description: >
+            One entry per requirement of a slot in the file, or of its
+            activity or room, that the slot's next run cannot have. A
+            report; the import is not refused for it.
+          items:
+            $ref: "#/components/schemas/SlotRequirementGap"
         not_in_file:
           $ref: "#/components/schemas/ImportOrphans"
         removed:
@@ -1139,6 +1147,20 @@ components:
             organization's own timezone, with no offset and no Z.
           items:
             $ref: "#/components/schemas/BusyInterval"
+        requirements_met:
+          type: boolean
+          nullable: true
+          description: >
+            Null unless `with_requirements` was asked for. Then true when the
+            resource itself is free for the window and nothing it requires is
+            missing, whatever the enforcement.
+        unmet:
+          type: array
+          description: >
+            Empty unless `with_requirements` was asked for. Then the
+            requirements that could not be held for the window.
+          items:
+            $ref: "#/components/schemas/UnmetRequirement"
 
     ConflictItem:
       type: object
@@ -1203,6 +1225,13 @@ components:
         kinds. Two reservations on a pooled resource are never a
         `resource_overlap`, and reservations on a SHARED resource are never
         reported at all.
+
+
+        `requirement_unmet` is a weekly slot or a generated day, its one
+        item, whose activity or resource requires something the window
+        cannot have. requirement_id names the requirement and message says
+        what is missing; both are null on the other kinds. resource_id is
+        the row's own resource. It is a report: nothing is refused for it.
       required: [kind, resource_id, member_id, date, start, end_date, end, items]
       properties:
         kind:
@@ -1242,6 +1271,14 @@ components:
           type: integer
           nullable: true
           description: The most units held at once, on `resource_overbooked` only.
+        requirement_id:
+          type: integer
+          nullable: true
+          description: The requirement that is not met, on `requirement_unmet` only.
+        message:
+          type: string
+          nullable: true
+          description: What is missing, on `requirement_unmet` only.
 
     ConflictReport:
       type: object
@@ -1315,6 +1352,24 @@ components:
             only when it is sent, so a retry that leaves it out still
             matches a booking made before the field existed.
           example: 2
+        assignments:
+          type: object
+          nullable: true
+          description: >
+            Which resources to hold for the requirements that name a kind of
+            resource: `ROOM` or `PERSON` mapped to resource ids, used in
+            order. Where it says nothing, or runs out, the engine picks the
+            first free resources of the kind by code. An id that is not an
+            active resource of that kind in this organization, or that no
+            requirement asks for, is a 422. A named resource that is not
+            free is a gap and is not swapped for another. Part of what a
+            retry is compared on only when it is sent.
+          additionalProperties:
+            type: array
+            items:
+              type: integer
+          example:
+            PERSON: [12, 15]
 
     ReservationUpdate:
       type: object
@@ -1386,6 +1441,200 @@ components:
           type: string
           format: date-time
           nullable: true
+        parent_reservation_id:
+          type: integer
+          nullable: true
+          description: >
+            The booking this hold was taken for, when a requirement of the
+            resource made it. Null on a booking somebody asked for. Cancelling
+            the parent cancels the holds that name it here.
+
+    ReservationCreated:
+      description: >
+        A new booking with what its requirements held alongside it.
+      allOf:
+        - $ref: "#/components/schemas/ReservationResponse"
+        - type: object
+          properties:
+            children:
+              type: array
+              description: >
+                The holds the resource's requirements took under this
+                booking, at every depth of a chain, in the order they were
+                taken. Empty when the resource requires nothing. A replay
+                of the same request answers with the children as they
+                stand now.
+              items:
+                $ref: "#/components/schemas/ReservationResponse"
+            unmet:
+              type: array
+              description: >
+                The ADVISORY requirements that could not be met. The booking
+                went ahead without them. A REQUIRED one that cannot be met
+                refuses the booking instead (`REQUIREMENT_UNSATISFIED`).
+                Always empty on a replay, because a gap is not stored.
+              items:
+                $ref: "#/components/schemas/UnmetRequirement"
+
+    UnmetRequirement:
+      type: object
+      description: >
+        A requirement that could not be held, and why. On a booking it is an
+        ADVISORY gap. On GET availability with `with_requirements` it is
+        whatever would stop the window being held, whatever the enforcement.
+      required:
+        - requirement_id
+        - owner_kind
+        - owner_id
+        - target_resource_id
+        - target_kind
+        - quantity
+        - enforcement
+        - message
+        - conflicts
+      properties:
+        requirement_id:
+          type: integer
+        owner_kind:
+          type: string
+          enum: [RESOURCE, ACTIVITY]
+        owner_id:
+          type: integer
+        target_resource_id:
+          type: integer
+          nullable: true
+        target_kind:
+          type: string
+          enum: [ROOM, PERSON]
+          nullable: true
+        quantity:
+          type: integer
+          description: How many units or resources were missing, not how many were asked for.
+        enforcement:
+          type: string
+          enum: [REQUIRED, ADVISORY]
+          description: >
+            The enforcement that applied, with the organization's default
+            filled in where the requirement did not say.
+        message:
+          type: string
+        conflicts:
+          type: array
+          description: >
+            What stands in the way on a named target. Empty when a kind had
+            no free resource to name.
+          items:
+            $ref: "#/components/schemas/BusyInterval"
+
+    RequirementCreate:
+      type: object
+      description: >
+        One rule: whoever uses the owner also needs the target. Set exactly
+        one of `target_resource_id` and `target_kind`.
+      properties:
+        target_resource_id:
+          type: integer
+          nullable: true
+          description: >
+            A specific resource of this organization. Never an activity.
+        target_kind:
+          type: string
+          enum: [ROOM, PERSON]
+          nullable: true
+          description: Any resource of this kind, picked at booking time.
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          description: >
+            How many. Units of the pool on a POOLED named target, which a
+            named target of another mode cannot take above 1 (422); the
+            number of distinct resources on a kind. 1 when left out.
+        before_minutes:
+          type: integer
+          minimum: 0
+          maximum: 1440
+          description: Setup time held before the window. 0 when left out.
+        after_minutes:
+          type: integer
+          minimum: 0
+          maximum: 1440
+          description: Turnover time held after the window. 0 when left out.
+        enforcement:
+          type: string
+          enum: [REQUIRED, ADVISORY]
+          nullable: true
+          description: >
+            REQUIRED refuses a booking that cannot meet it. ADVISORY books
+            without it and lists the gap. Null, or left out, follows the
+            organization's `default_requirement_enforcement`.
+
+    RequirementResponse:
+      type: object
+      required:
+        - id
+        - owner_kind
+        - owner_id
+        - target_resource_id
+        - target_kind
+        - quantity
+        - before_minutes
+        - after_minutes
+        - enforcement
+        - created_at
+      properties:
+        id:
+          type: integer
+        owner_kind:
+          type: string
+          enum: [RESOURCE, ACTIVITY]
+        owner_id:
+          type: integer
+        target_resource_id:
+          type: integer
+          nullable: true
+        target_kind:
+          type: string
+          enum: [ROOM, PERSON]
+          nullable: true
+        quantity:
+          type: integer
+        before_minutes:
+          type: integer
+        after_minutes:
+          type: integer
+        enforcement:
+          type: string
+          enum: [REQUIRED, ADVISORY]
+          nullable: true
+          description: Null means the organization's default applies.
+        created_at:
+          type: string
+          format: date-time
+
+    OrganizationResponse:
+      type: object
+      required: [id, name, default_requirement_enforcement]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        default_requirement_enforcement:
+          type: string
+          enum: [REQUIRED, ADVISORY]
+
+    OrganizationUpdate:
+      type: object
+      additionalProperties: false
+      required: [default_requirement_enforcement]
+      properties:
+        default_requirement_enforcement:
+          type: string
+          enum: [REQUIRED, ADVISORY]
+          description: >
+            What a requirement with no enforcement of its own does. Read when
+            a booking is made, so a change applies to the next booking.
 
     ReservationConflict:
       type: object
@@ -1799,9 +2048,33 @@ components:
             When the slot was retired, on its own or with its activity. Null
             while it is live.
 
+    SlotRequirementGap:
+      type: object
+      description: >
+        A requirement of a slot's activity or resource that the slot's next
+        run on the date given cannot have. A report; nothing is refused.
+        The CSV import adds slot_id.
+      properties:
+        requirement_id:
+          type: integer
+        date:
+          type: string
+          format: date
+        message:
+          type: string
+        slot_id:
+          type: integer
+
     SlotUpdateResult:
       type: object
       properties:
+        requirements_unmet:
+          type: array
+          description: >
+            What the slot's activity or resource requires that its next run
+            cannot have. Empty when nothing is required.
+          items:
+            $ref: "#/components/schemas/SlotRequirementGap"
         ledger_rows_updated:
           type: integer
           description: Days that were still plans and now carry the new lead or room.
@@ -2539,6 +2812,7 @@ components:
         - RESERVATION_EXTERNAL_REF_TAKEN
         - RESOURCE_CAPACITY_EXCEEDED
         - RESOURCE_BOOKINGS_WOULD_NOT_FIT
+        - REQUIREMENT_UNSATISFIED
         - LOCATION_REQUIRED
         - LOCATION_TOO_COARSE
         - OUTSIDE_GEOFENCE
@@ -4280,6 +4554,34 @@ paths:
             type: string
             format: date
           example: "2026-01-11"
+        - name: with_requirements
+          in: query
+          required: false
+          description: >
+            Also answer whether the resource could be held for one window
+            together with everything it requires, as a booking would hold it,
+            in `requirements_met` and `unmet`. Holds nothing. Needs `from`
+            and `to` to be the same date and `start` and `end` to be given,
+            otherwise 422.
+          schema:
+            type: boolean
+            default: false
+        - name: start
+          in: query
+          required: false
+          description: The window's start, with `with_requirements`.
+          schema:
+            type: string
+            format: time
+        - name: end
+          in: query
+          required: false
+          description: >
+            The window's end, with `with_requirements`. Earlier than start
+            means it runs past midnight, as for a booking.
+          schema:
+            type: string
+            format: time
       responses:
         "200":
           description: The busy intervals in the range.
@@ -4354,6 +4656,19 @@ paths:
         moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`.
         SHARED refuses nothing. A quantity above 1 on a resource that is
         not POOLED is a 422.
+
+
+        What the resource requires is held in the same transaction, each as
+        its own reservation naming this one in `parent_reservation_id`, and
+        listed in `children`. See `GET /api/v1/resources/{resource_id}/requirements`.
+        A named resource is held for the window widened by the requirement's
+        `before_minutes` and `after_minutes`, by its own mode. A kind is
+        filled from `assignments`, then by the first free resources of the
+        kind by code. A REQUIRED requirement that cannot be met holds
+        nothing and answers 409 `REQUIREMENT_UNSATISFIED`; an ADVISORY one is
+        left out and listed in `unmet`. A padded window that would cross
+        midnight of the booking's last day is a 422. Cancelling the booking
+        cancels the holds it took.
       parameters:
         - name: resource_id
           in: path
@@ -4382,11 +4697,13 @@ paths:
               $ref: "#/components/schemas/ReservationCreate"
       responses:
         "201":
-          description: The hold was taken.
+          description: >
+            The hold was taken, with the holds its requirements took in
+            `children` and the advisory gaps in `unmet`.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ReservationResponse"
+                $ref: "#/components/schemas/ReservationCreated"
         "200":
           description: >
             The same key and the same body arrived again. This is the original
@@ -4395,7 +4712,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ReservationResponse"
+                $ref: "#/components/schemas/ReservationCreated"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -4407,7 +4724,9 @@ paths:
             The caller already has a reservation with that external_ref
             (`RESERVATION_EXTERNAL_REF_TAKEN`, ReservationRefTaken), a
             pool has too few units free (`RESOURCE_CAPACITY_EXCEEDED`,
-            CapacityExceeded), or something already holds part of that
+            CapacityExceeded), a REQUIRED requirement cannot be met
+            (`REQUIREMENT_UNSATISFIED`, ReservationConflict, naming what was
+            missing), or something already holds part of that
             window (`RESOURCE_CONFLICT`, ReservationConflict). Branch on
             `code`. ReservationConflict is listed last because its detail
             has no required fields, so a client trying each shape in turn
@@ -4422,12 +4741,128 @@ paths:
         "422":
           description: >
             end was not after start, quantity was above 1 on a resource
-            that is not POOLED, or the Idempotency-Key had already been used
+            that is not POOLED, `assignments` named a resource of the wrong
+            kind, of no requirement or of no active resource of this
+            organization, a requirement's padded window would cross
+            midnight, or the Idempotency-Key had already been used
             for a different request (`IDEMPOTENCY_KEY_REUSED`).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/resources/{resource_id}/requirements:
+    get:
+      operationId: resources.listRequirements
+      tags: [Resources]
+      summary: What a resource requires
+      description: >
+        Any signed-in user. The standing rules of the resource: using it also
+        needs these. Booking the resource holds them, see
+        `POST /api/v1/resources/{resource_id}/reservations`.
+      parameters:
+        - name: resource_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The requirements, oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RequirementResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    post:
+      operationId: resources.createRequirement
+      tags: [Resources]
+      summary: Say that a resource requires another
+      description: >
+        Requires `ORG_ADMIN`. The target is a specific resource or any
+        resource of a kind, never an activity. A chain of requirements is
+        followed to depth 4 when a booking is made. A requirement that would
+        make a resource need itself, directly or through other named
+        resources, is refused here with a 422. A second requirement of the
+        same owner for the same target is a 409 `ALREADY_EXISTS`.
+      parameters:
+        - name: resource_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequirementCreate"
+      responses:
+        "201":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: The requirement was saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequirementResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          description: >
+            Neither or both targets, a target that is not a resource of this
+            organization, a quantity above 1 on a named target that is not
+            POOLED, or a cycle.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/resources/{resource_id}/requirements/{requirement_id}:
+    delete:
+      operationId: resources.deleteRequirement
+      tags: [Resources]
+      summary: Remove a requirement of a resource
+      description: >
+        Requires `ORG_ADMIN`. Holds already taken for it stay.
+      parameters:
+        - name: resource_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: requirement_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: Removed.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/v1/resources/{resource_id}/reservations/{reservation_id}:
     patch:
@@ -4899,6 +5334,116 @@ paths:
         "422":
           $ref: "#/components/responses/UnprocessableEntity"
 
+  /api/v1/schedule/activities/{activity_id}/requirements:
+    get:
+      operationId: schedule.listActivityRequirements
+      tags: [Schedule]
+      summary: What an activity needs besides its room
+      description: Admin only, inside the admin's unit.
+      parameters:
+        - name: activity_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The requirements, oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RequirementResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    post:
+      operationId: schedule.createActivityRequirement
+      tags: [Schedule]
+      summary: Say that an activity also needs a resource
+      description: >
+        Admin only, inside the admin's unit. The timetable holds nothing for
+        a requirement. One that a slot's dates cannot have is reported as a
+        `requirement_unmet` in `GET /api/v1/schedule/conflicts`, in
+        `requirements_unmet` on the slot routes and the CSV import, and in
+        the generator's log, and no slot or day is refused for it.
+      parameters:
+        - name: activity_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequirementCreate"
+      responses:
+        "201":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: The requirement was saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequirementResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            The activity already requires that target (`ALREADY_EXISTS`), or
+            the activity is retired (`STATE_CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            Neither or both targets, a target that is not a resource of this
+            organization, or a quantity above 1 on a named target that is not
+            POOLED.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/schedule/activities/{activity_id}/requirements/{requirement_id}:
+    delete:
+      operationId: schedule.deleteActivityRequirement
+      tags: [Schedule]
+      summary: Remove a requirement of an activity
+      description: Admin only, inside the admin's unit.
+      parameters:
+        - name: activity_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: requirement_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: Removed.
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/v1/schedule/slots:
     get:
       operationId: schedule.listSlots
@@ -4981,7 +5526,10 @@ paths:
           headers:
             Idempotency-Replayed:
               $ref: "#/components/headers/IdempotencyReplayed"
-          description: The slot's id.
+          description: >
+            The slot's id, and `requirements_unmet`: what its activity or its
+            resource requires that the slot's next run cannot have. Empty
+            when nothing is required. A report; the slot is saved either way.
           content:
             application/json:
               schema:
@@ -4989,6 +5537,10 @@ paths:
                 properties:
                   id:
                     type: integer
+                  requirements_unmet:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SlotRequirementGap"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -6455,6 +7007,56 @@ paths:
               schema:
                 type: string
                 format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/v1/admin/organization:
+    get:
+      operationId: admin.getOrganization
+      tags: [Admin]
+      summary: The caller's organization and its settings
+      description: Requires `ORG_ADMIN`; an API key needs `admin:read`.
+      responses:
+        "200":
+          description: The organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    patch:
+      operationId: admin.updateOrganization
+      tags: [Admin]
+      summary: Change the organization's settings
+      description: >
+        Requires `ORG_ADMIN`; an API key needs `admin:write`. Today the one
+        setting is `default_requirement_enforcement`, what a requirement with
+        no enforcement of its own does. It applies from the next booking.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizationUpdate"
+      responses:
+        "200":
+          headers:
+            Idempotency-Replayed:
+              $ref: "#/components/headers/IdempotencyReplayed"
+          description: The organization as it now is.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":

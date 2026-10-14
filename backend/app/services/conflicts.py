@@ -45,6 +45,13 @@ reservation, because a class takes the whole pool, and two reservations do
 not clash in pairs at all: what is reported is a resource_overbooked, a
 stretch in which the reservations together hold more than the capacity,
 naming every one of them that is open in it.
+
+A requirement_unmet is the third kind and a different sort of thing: not two
+rows in each other's way but one row that needs something it cannot have. It
+is found for a weekly slot or a generated day whose activity or resource has
+requirements (app.services.requirements), by the dry run the booking route
+shares, and names that one row. The timetable never holds the extra
+resources, so this is a report and nothing is refused.
 """
 
 import datetime
@@ -68,6 +75,7 @@ from app.models.db import (
     User,
 )
 from app.services.availability import pool_peak, pool_stretches
+from app.services.requirements import owners_with_requirements, unmet_for_window
 
 # A quarter of a year. Smaller than the 366 days availability allows because
 # this expands every resource and every member at once rather than one
@@ -77,6 +85,7 @@ MAX_CONFLICT_RANGE_DAYS = 92
 RESOURCE_OVERLAP = "resource_overlap"
 RESOURCE_OVERBOOKED = "resource_overbooked"
 MEMBER_OVERLAP = "member_overlap"
+REQUIREMENT_UNMET = "requirement_unmet"
 
 SLOT = "slot"
 LEDGER_DAY = "ledger_day"
@@ -147,6 +156,8 @@ def _report(kind: str, starts, ends, items: list[dict], **subject) -> dict:
         "items": items,
         "capacity": subject.get("capacity"),
         "taken": subject.get("taken"),
+        "requirement_id": subject.get("requirement_id"),
+        "message": subject.get("message"),
         "_starts": starts,
     }
 
@@ -334,6 +345,33 @@ def find_conflicts(db: Session, from_date: datetime.date, to_date: datetime.date
             if first[2]["activity_id"] == second[2]["activity_id"]:
                 continue
             conflicts.append(_conflict(MEMBER_OVERLAP, first, second, member_id=member_id))
+
+    needing = owners_with_requirements(db)
+    if needing:
+        for starts, ends, item in entries:
+            if item["type"] == RESERVATION:
+                continue
+            activity_id = (
+                item["activity_id"] if ("ACTIVITY", item["activity_id"]) in needing else None
+            )
+            resource_id = (
+                item["resource_id"] if ("RESOURCE", item["resource_id"]) in needing else None
+            )
+            if activity_id is None and resource_id is None:
+                continue
+            window = (item["date"], item["start"], item["end"])
+            for gap in unmet_for_window(db, activity_id, resource_id, window):
+                conflicts.append(
+                    _report(
+                        REQUIREMENT_UNMET,
+                        starts,
+                        ends,
+                        [item],
+                        resource_id=item["resource_id"],
+                        requirement_id=gap["requirement_id"],
+                        message=gap["message"],
+                    )
+                )
 
     conflicts.sort(key=_report_key)
     for conflict in conflicts:

@@ -143,7 +143,7 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 // one is made when idempotencyKey is empty, and the same key goes out on every
 // retry: a retry never takes a second hold. Pass your own key when a retry can
 // come from outside the process, for example after a crash.
-func (c *Client) CreateReservation(ctx context.Context, resourceID int, body generated.ReservationCreate, idempotencyKey string) (*generated.ReservationResponse, error) {
+func (c *Client) CreateReservation(ctx context.Context, resourceID int, body generated.ReservationCreate, idempotencyKey string) (*generated.ReservationCreated, error) {
 	if idempotencyKey == "" {
 		idempotencyKey = newKey()
 	}
