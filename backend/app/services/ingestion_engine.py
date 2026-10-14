@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core import recurrence
 from app.core.emails import normalize_email
+from app.core.errors import ChronosError
 from app.core.security import generate_password, hash_password
 from app.models.db import (
     Activity,
@@ -25,7 +26,7 @@ from app.services.availability import (
     held_against_slot,
     slots_against_slot,
 )
-from app.services.master_slot import propagate_slot_corrections
+from app.services.master_slot import delete_slot, propagate_slot_corrections
 from app.services.resource import get_or_create_room
 
 logger = logging.getLogger(__name__)
@@ -114,7 +115,9 @@ class ChronosIngestionEngine:
     def __init__(self, db: Session):
         self.db = db
 
-    def process_member_centric_matrix(self, file_path: str, cycle_id: int) -> dict[str, Any]:
+    def process_member_centric_matrix(
+        self, file_path: str, cycle_id: int, remove_missing: bool = False
+    ) -> dict[str, Any]:
         # Here and not at the top: pandas is a third of the time the app takes
         # to import and most of its memory, for a route an organization calls
         # a few times a term.
@@ -503,6 +506,17 @@ class ChronosIngestionEngine:
             kept: list = []
             propagation = propagate_slot_corrections(list(corrected.values()), self.db, kept=kept)
             orphans = self._orphans(cycle_id, units, seen_slots, seen_enrollments)
+            # Off, the two reports are empty and nothing below runs. On, they
+            # are worked out from the orphan report just built, so what goes
+            # is never anything that report did not name.
+            removed, not_removed = (
+                self._remove_orphans(cycle_id, orphans)
+                if remove_missing
+                else (
+                    {"slots": [], "enrollments": []},
+                    {"slots": []},
+                )
+            )
             # Read before the commit, which expires every row it holds.
             kept_days = _kept_days(kept)
 
@@ -515,6 +529,8 @@ class ChronosIngestionEngine:
                 "not_in_file": orphans,
                 **propagation,
                 "kept_days": kept_days,
+                "removed": removed,
+                "not_removed": not_removed,
             }
 
         except ValueError as e:
@@ -543,6 +559,63 @@ class ChronosIngestionEngine:
                 ),
             }
 
+    def _remove_orphans(
+        self, cycle_id: int, orphans: dict[str, list[dict[str, Any]]]
+    ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
+        """Remove what the orphan report names, as far as the rules allow.
+
+        A slot goes the way DELETE /schedule/slots/{id} takes it: days from
+        today on are plans and are withdrawn, days already past stay with
+        their records. Where that delete would refuse, because a day ahead
+        carries attendance or a note, the slot is left and listed with the
+        reason, rather than failing an import that is otherwise sound.
+
+        An enrollment goes the way DELETE .../enrollments/{member_id} takes
+        it, which touches nothing but the roster row. Days belong to slots and
+        attendance to days, so what a member has recorded stays.
+
+        Nothing is committed here; it is part of the import's transaction.
+        """
+        removed: dict[str, list[dict[str, Any]]] = {"slots": [], "enrollments": []}
+        not_removed: dict[str, list[dict[str, Any]]] = {"slots": []}
+
+        slots = {
+            slot.id: slot
+            for slot in self.db.query(StructuralMasterSlot).filter(
+                StructuralMasterSlot.id.in_([s["id"] for s in orphans["slots"]])
+            )
+        }
+        for report in orphans["slots"]:
+            try:
+                withdrawn, detached = delete_slot(slots[report["id"]], self.db)
+            except ChronosError as refusal:
+                not_removed["slots"].append({**report, "reason": refusal.detail})
+                continue
+            removed["slots"].append(
+                {**report, "ledger_rows_removed": withdrawn, "ledger_rows_detached": detached}
+            )
+
+        activity_ids = {
+            code: activity_id
+            for activity_id, code in self.db.query(Activity.id, Activity.activity_code).filter(
+                Activity.cycle_id == cycle_id,
+                Activity.activity_code.in_({e["activity_code"] for e in orphans["enrollments"]}),
+            )
+        }
+        for report in orphans["enrollments"]:
+            enrollment = (
+                self.db.query(ActivityEnrollment)
+                .filter(
+                    ActivityEnrollment.activity_id == activity_ids[report["activity_code"]],
+                    ActivityEnrollment.member_id == report["member_id"],
+                )
+                .one()
+            )
+            self.db.delete(enrollment)
+            removed["enrollments"].append(report)
+
+        return removed, not_removed
+
     def _orphans(
         self,
         cycle_id: int,
@@ -552,11 +625,13 @@ class ChronosIngestionEngine:
     ) -> dict[str, list[dict[str, Any]]]:
         """What the cycle holds that this file did not mention.
 
-        A report and never an action. The import has no way to tell a class
-        that ended from a file that only covers half the timetable, and a
-        partial upload treated as authoritative would delete every enrollment
-        it happened not to list. So this names the rows and leaves them alone,
-        and somebody decides.
+        A report, and an action only when the upload asks for it. The import
+        has no way to tell a class that ended from a file that only covers half
+        the timetable, and a partial upload treated as authoritative would
+        delete every enrollment it happened not to list. So by default this
+        names the rows and leaves them alone, and somebody decides. With
+        remove_missing set, _remove_orphans acts on this report and on
+        nothing wider.
 
         Scoped to the units the file names, not to the whole cycle. A file
         covering CSE would otherwise report every ECE class as missing, every

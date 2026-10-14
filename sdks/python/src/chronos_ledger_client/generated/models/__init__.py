@@ -57,7 +57,9 @@ from .guest_extension_request import GuestExtensionRequest
 from .guest_response import GuestResponse
 from .guest_visit_status import GuestVisitStatus
 from .health_check_response_200 import HealthCheckResponse200
+from .import_not_removed import ImportNotRemoved
 from .import_orphans import ImportOrphans
+from .import_removed import ImportRemoved
 from .ingestion_generate_ledger_response_200 import IngestionGenerateLedgerResponse200
 from .ingestion_upload_csv_body import IngestionUploadCsvBody
 from .institutional_role import InstitutionalRole
@@ -75,6 +77,7 @@ from .login_request import LoginRequest
 from .master_slot_create import MasterSlotCreate
 from .master_slot_response import MasterSlotResponse
 from .master_slot_update import MasterSlotUpdate
+from .not_removed_slot import NotRemovedSlot
 from .open_items import OpenItems
 from .orphan_enrollment import OrphanEnrollment
 from .orphan_slot import OrphanSlot
@@ -87,6 +90,7 @@ from .readiness_database import ReadinessDatabase
 from .readiness_redis import ReadinessRedis
 from .readiness_status import ReadinessStatus
 from .refresh_request import RefreshRequest
+from .removed_slot import RemovedSlot
 from .reservation_conflict import ReservationConflict
 from .reservation_conflict_detail import ReservationConflictDetail
 from .reservation_create import ReservationCreate
@@ -198,7 +202,9 @@ __all__ = (
     "GuestResponse",
     "GuestVisitStatus",
     "HealthCheckResponse200",
+    "ImportNotRemoved",
     "ImportOrphans",
+    "ImportRemoved",
     "IngestionGenerateLedgerResponse200",
     "IngestionUploadCsvBody",
     "InstitutionalRole",
@@ -216,6 +222,7 @@ __all__ = (
     "MasterSlotCreate",
     "MasterSlotResponse",
     "MasterSlotUpdate",
+    "NotRemovedSlot",
     "OpenItems",
     "OrphanEnrollment",
     "OrphanSlot",
@@ -228,6 +235,7 @@ __all__ = (
     "ReadinessRedis",
     "ReadinessStatus",
     "RefreshRequest",
+    "RemovedSlot",
     "ReservationConflict",
     "ReservationConflictDetail",
     "ReservationCreate",

@@ -50,7 +50,12 @@ from app.services.availability import (
 )
 from app.services.conflicts import MAX_CONFLICT_RANGE_DAYS, find_conflicts
 from app.services.location_resolver import determine_staff_current_states
-from app.services.master_slot import propagate_slot_corrections, rows_in_use
+from app.services.master_slot import (
+    delete_slot,
+    propagate_slot_corrections,
+    rows_in_use,
+    withdraw_planned_days,
+)
 from app.services.resource import get_or_create_room
 
 logger = logging.getLogger(__name__)
@@ -931,7 +936,7 @@ def update_master_slot(
 
     removed = 0
     if (rule, dtstart) != (slot.rrule, slot.dtstart):
-        removed = _withdraw_planned_days(slot, db, "given another rule or start")
+        removed = withdraw_planned_days(slot, db, "given another rule or start")
 
     if moving_to is not None:
         slot.resource_id = moving_to.id
@@ -984,16 +989,7 @@ def delete_master_slot(
     ensure_unit_scope(current_user, slot.activity.unit_code)
     _refuse_if_retired(slot, "Slot")
 
-    detached = (
-        db.query(DailyLedger)
-        .filter(
-            DailyLedger.master_slot_id == slot.id,
-            DailyLedger.target_date < org_today(),
-        )
-        .count()
-    )
-    removed = _withdraw_planned_days(slot, db, "deleted")
-    db.delete(slot)
+    removed, detached = delete_slot(slot, db)
     db.commit()
     return {"ledger_rows_removed": removed, "ledger_rows_detached": detached}
 
@@ -1036,38 +1032,6 @@ def retire_master_slot(
         "ledger_rows_removed": removed,
         "ledger_rows_kept": kept,
     }
-
-
-def _withdraw_planned_days(slot: StructuralMasterSlot, db: Session, why: str) -> int:
-    """Remove the days this slot has laid down that have not happened yet.
-
-    Today counts as not yet happened. A day nobody has marked is a plan and
-    withdrawing it costs nothing; a day somebody has marked is a record, and
-    rather than quietly keep it as a class that no longer exists anywhere in
-    the timetable, the whole request is refused and the dates are named.
-    """
-    planned = (
-        db.query(DailyLedger)
-        .filter(
-            DailyLedger.master_slot_id == slot.id,
-            DailyLedger.target_date >= org_today(),
-        )
-        .all()
-    )
-    blocked = rows_in_use([row.id for row in planned], db)
-    if blocked:
-        dates = sorted(str(row.target_date) for row in planned if row.id in blocked)
-        raise ChronosError(
-            status_code=409,
-            detail=(
-                f"This slot cannot be {why} while days it has produced carry "
-                f"attendance or notes: {', '.join(dates)}"
-            ),
-            code=ErrorCode.STATE_CONFLICT,
-        )
-    for row in planned:
-        db.delete(row)
-    return len(planned)
 
 
 # ── Daily Ledger ──────────────────────────────────────────────────────────────

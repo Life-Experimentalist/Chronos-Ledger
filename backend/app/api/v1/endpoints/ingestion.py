@@ -28,6 +28,9 @@ _CHUNK_BYTES = 1024 * 1024
 @router.post("/upload-csv", operation_id="ingestion.uploadCsv")
 def upload_csv(
     cycle_id: int,
+    # Off by default, so a client that has never heard of it sees what it
+    # always saw. See the orphan report for what it acts on.
+    remove_missing: bool = False,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     # The matrix rewrites offerings and registrations across every unit,
@@ -67,7 +70,9 @@ def upload_csv(
                 f.write(chunk)
 
         engine = ChronosIngestionEngine(db)
-        result = engine.process_member_centric_matrix(tmp_path, cycle_id)
+        result = engine.process_member_centric_matrix(
+            tmp_path, cycle_id, remove_missing=remove_missing
+        )
 
         if result["status"] == "FAILED":
             raise ChronosError(

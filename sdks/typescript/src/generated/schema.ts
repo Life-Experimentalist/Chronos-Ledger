@@ -1388,7 +1388,7 @@ export interface paths {
          * @description Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`. A row's weekday becomes the rule FREQ=WEEKLY;BYDAY=.. on its slot, starting on the first such date in the cycle.
          *     Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent, re-uploading the same CSV is safe: an existing member keeps their password.
          *
-         *     Never removes. Slots and enrollments the cycle holds that the file does not mention come back in `not_in_file` for somebody to act on, which is what makes a partial upload safe.
+         *     Removes nothing unless `remove_missing` is set. Slots and enrollments the file does not mention come back in `not_in_file` for somebody to act on, which is what makes a partial upload safe. With `remove_missing=true` the upload also removes exactly those, and reports what it removed in `removed` and what it could not remove in `not_removed`. They are the rows of this cycle, in the units the file names, that the file does not list; a unit the file does not name, or another cycle, is never touched. A slot goes the way `DELETE /schedule/slots/{id}` removes one: its days from today on are withdrawn and its past days stay. A slot with attendance or a note on a day ahead is left and listed in `not_removed` with the reason, and the rest of the import carries on. An enrollment goes the way `DELETE /schedule/activities/{id}/enrollments/{member_id}` removes one, and the attendance already recorded for the member stays. The removal is part of the import's transaction, and the rows are checked before the removal runs, so a row that needs a room a missing slot holds is refused: upload without the option first, or remove that slot yourself.
          *
          *     A row that would put a class in a room already taken for that window, by a booking, by another class, or by a day already generated onto it, is refused with 422 and the whole file is rolled back, which is what every other bad row in an import does. Rows are checked against each other as well as against what is already stored, so one file cannot put two classes in one room at one hour. The check only looks where a row would actually move a class, so re-uploading a file that describes the timetable as it already stands is not refused by what is sitting on it.
          *
@@ -1914,6 +1914,8 @@ export interface components {
             /** @description The days counted in ledger_rows_kept, earliest first, each with the room it still has. Present when status is SUCCESS. */
             kept_days?: components["schemas"]["KeptDay"][];
             not_in_file?: components["schemas"]["ImportOrphans"];
+            removed?: components["schemas"]["ImportRemoved"];
+            not_removed?: components["schemas"]["ImportNotRemoved"];
             /** @description Present when status is FAILED. */
             error_log?: string;
         };
@@ -1932,7 +1934,7 @@ export interface components {
             room: string | null;
         };
         /**
-         * @description What the cycle holds that this file did not mention. A report and never an action: a file covering half a timetable cannot be told apart from a timetable that lost half its classes, so nothing here is removed and somebody decides.
+         * @description What the cycle holds that this file did not mention. A report, and an action only when the upload sets `remove_missing`: a file covering half a timetable cannot be told apart from a timetable that lost half its classes, so by default nothing here is removed and somebody decides.
          *
          *     Scoped to the units named in the file, not to the whole cycle, so a file covering one unit does not report every class in every other unit each time it is uploaded.
          */
@@ -1960,6 +1962,27 @@ export interface components {
         OrphanEnrollment: {
             member_id: string;
             activity_code: string;
+        };
+        /** @description What an upload with `remove_missing` set removed, from among the rows in `not_in_file`. Both lists are empty when the option is off. */
+        ImportRemoved: {
+            slots: components["schemas"]["RemovedSlot"][];
+            enrollments: components["schemas"]["OrphanEnrollment"][];
+        };
+        /** @description A slot the upload removed, as it was listed in `not_in_file`. */
+        RemovedSlot: components["schemas"]["OrphanSlot"] & {
+            /** @description Days from today on that the slot had produced, now withdrawn. */
+            ledger_rows_removed: number;
+            /** @description Days already past, kept with everything recorded on them and no longer pointing at a slot. */
+            ledger_rows_detached: number;
+        };
+        /** @description What an upload with `remove_missing` set listed for removal and left in place. Empty when the option is off. */
+        ImportNotRemoved: {
+            slots: components["schemas"]["NotRemovedSlot"][];
+        };
+        /** @description A slot the upload did not remove, as it was listed in `not_in_file`. It stays on the timetable with all its days. */
+        NotRemovedSlot: components["schemas"]["OrphanSlot"] & {
+            /** @description Why it was left, naming the dates of the days ahead that carry attendance or a note. Act on it with `POST /schedule/slots/{id}/retire`, which keeps those days. */
+            reason: string;
         };
         PasswordResetResponse: {
             user_id: string;
@@ -6040,6 +6063,8 @@ export interface operations {
             query: {
                 /** @description Target planning cycle ID. */
                 cycle_id: number;
+                /** @description Also remove the slots and enrollments the response lists in `not_in_file`. Off by default, and with it off the upload removes nothing and `removed` and `not_removed` come back empty. */
+                remove_missing?: boolean;
             };
             header?: never;
             path?: never;

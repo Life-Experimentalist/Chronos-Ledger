@@ -411,6 +411,8 @@ def test_the_import_reply_is_what_it_was(client, db, seed_users):
         "ledger_rows_updated",
         "ledger_rows_kept",
         "kept_days",
+        "removed",
+        "not_removed",
     }
 
 
