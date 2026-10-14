@@ -1083,6 +1083,9 @@ Removes a class nothing uses, answering `204`. `ROOM` and `PERSON` are `409`
 asks for, is `409` `RESOURCE_CLASS_IN_USE`, whether the class is active or not.
 Switch it off with `PATCH` to stop new uses and keep the old ones.
 
+An API key reaches these routes with the scopes `resource-classes:read` and
+`resource-classes:write`, apart from `resources:read` and `resources:write`.
+
 A `resource_type` or `target_kind` that is not an active class of the caller's
 organization is `422` `UNKNOWN_RESOURCE_CLASS`. The answer is the same for a
 code nobody made, one that is switched off and one that belongs to another
@@ -1587,8 +1590,8 @@ Cancelling a booking also cancels the holds its requirements took, see
 A requirement says that using one thing also needs another. The owner is a
 resource (the operating theatre always needs a cleaning crew) or an activity
 (this surgery list needs two nurses). The target is one named resource, or any
-resource of a class, such as `ROOM` or `PERSON` or one the organization made. An activity is never a target, because
-only a resource can be held. The two owners have the same three routes, the
+resource of a class, such as `ROOM` or `PERSON` or one the organization made.
+An activity is never a target, because only a resource can be held. The two owners have the same three routes, the
 activity ones under `/schedule/activities/{id}`; the activity ones follow the
 role and unit rules of the other activity routes, and the resource ones follow
 the other resource writes: `GET` for any signed-in user, `POST` and `DELETE`
