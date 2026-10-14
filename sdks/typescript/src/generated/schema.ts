@@ -1433,7 +1433,7 @@ export interface paths {
         };
         /**
          * The organization's data as one archive
-         * @description Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON Lines file per table, described in docs/portability.md. Password hashes, API key hashes, calendar feed tokens and visit code hashes are always left out; an archive with them comes only from `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every export is written to the audit log, although it is a read. `chronos-engine import` loads the archive into an empty database.
+         * @description Requires `ORG_ADMIN`; an API key needs `admin:read`. A zip holding `manifest.json` and one JSON Lines file per table, described in docs/portability.md, with the caller's organization's rows only. `chronos-engine export` writes every organization. Password hashes, API key hashes, calendar feed tokens and visit code hashes are always left out; an archive with them comes only from `chronos-engine export --include-secrets`. Refresh tokens and the signing key are never in it. Every export is written to the audit log, although it is a read. `chronos-engine import` loads the archive into an empty database.
          */
         get: operations["admin.export"];
         put?: never;
@@ -1717,7 +1717,7 @@ export interface paths {
         };
         /**
          * Count of people with an open websocket, on every instance
-         * @description Requires `ORG_ADMIN`. The count is organization-wide, and there is nothing in it a unit admin could be shown only their own share of. A person counts once however many instances they are connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis counts only its own sockets.
+         * @description Requires `ORG_ADMIN`. The count is of the caller's organization, and there is nothing in it a unit admin could be shown only their own share of. A person counts once however many instances they are connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis counts only its own sockets.
          */
         get: operations["ws.getStats"];
         put?: never;
@@ -1959,6 +1959,8 @@ export interface components {
              * @description When the account was deactivated, or null while it is active.
              */
             deactivated_at?: string | null;
+            /** @description The organization the account belongs to. Everything the account reads and writes is in this organization. */
+            organization_id?: string;
         };
         /** @description What still names a deactivated account. Deactivating changes none of it and is never refused because of it; calling deactivate again counts afresh. */
         OpenItems: {
@@ -4270,7 +4272,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            /** @description A resource with that code already exists. */
+            /** @description A resource with that code already exists in the caller's organization. */
             409: {
                 headers: {
                     [name: string]: unknown;

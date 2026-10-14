@@ -61,10 +61,10 @@ def sync_detailed(
 ) -> Response[ErrorResponse | WsGetStatsResponse200]:
     """Count of people with an open websocket, on every instance
 
-     Requires `ORG_ADMIN`. The count is organization-wide, and there is nothing in it a unit admin could
-    be shown only their own share of. A person counts once however many instances they are connected to.
-    The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis
-    counts only its own sockets.
+     Requires `ORG_ADMIN`. The count is of the caller's organization, and there is nothing in it a unit
+    admin could be shown only their own share of. A person counts once however many instances they are
+    connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot
+    reach Redis counts only its own sockets.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -89,10 +89,10 @@ def sync(
 ) -> ErrorResponse | WsGetStatsResponse200 | None:
     """Count of people with an open websocket, on every instance
 
-     Requires `ORG_ADMIN`. The count is organization-wide, and there is nothing in it a unit admin could
-    be shown only their own share of. A person counts once however many instances they are connected to.
-    The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis
-    counts only its own sockets.
+     Requires `ORG_ADMIN`. The count is of the caller's organization, and there is nothing in it a unit
+    admin could be shown only their own share of. A person counts once however many instances they are
+    connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot
+    reach Redis counts only its own sockets.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -113,10 +113,10 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | WsGetStatsResponse200]:
     """Count of people with an open websocket, on every instance
 
-     Requires `ORG_ADMIN`. The count is organization-wide, and there is nothing in it a unit admin could
-    be shown only their own share of. A person counts once however many instances they are connected to.
-    The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis
-    counts only its own sockets.
+     Requires `ORG_ADMIN`. The count is of the caller's organization, and there is nothing in it a unit
+    admin could be shown only their own share of. A person counts once however many instances they are
+    connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot
+    reach Redis counts only its own sockets.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -139,10 +139,10 @@ async def asyncio(
 ) -> ErrorResponse | WsGetStatsResponse200 | None:
     """Count of people with an open websocket, on every instance
 
-     Requires `ORG_ADMIN`. The count is organization-wide, and there is nothing in it a unit admin could
-    be shown only their own share of. A person counts once however many instances they are connected to.
-    The other instances' figures can be up to 15 seconds old, and an instance that cannot reach Redis
-    counts only its own sockets.
+     Requires `ORG_ADMIN`. The count is of the caller's organization, and there is nothing in it a unit
+    admin could be shown only their own share of. A person counts once however many instances they are
+    connected to. The other instances' figures can be up to 15 seconds old, and an instance that cannot
+    reach Redis counts only its own sockets.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
