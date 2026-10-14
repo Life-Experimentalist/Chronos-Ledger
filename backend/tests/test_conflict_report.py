@@ -207,6 +207,15 @@ def test_a_lead_leading_two_activities_at_once_clashes_once(client, db, seed_use
     assert (clash["start"], clash["end"]) == ("09:30:00", "10:00:00")
 
 
+def test_an_unsubstituted_day_leads_with_the_lead_it_was_generated_with(client, db, seed_users):
+    day = _day(db, _activity(db, "LE118"), _room(db, "LH-138"), _t(9), _t(10), lead_id="FAC001")
+    slot = _slot(db, _activity(db, "LE119"), _room(db, "LH-139"), _t(9, 30), _t(10, 30), "FAC001")
+
+    conflicts = _report(client, _admin(client))
+
+    assert _pairs(conflicts, "lead_overlap") == [{("ledger_day", day.id), ("slot", slot.id)}]
+
+
 def test_a_substituted_day_does_not_clash_for_the_lead_it_was_taken_from(client, db, seed_users):
     # FAC001 would clash with the slot, but the day is covered by ADM001.
     _slot(db, _activity(db, "LE103"), _room(db, "LH-122"), _t(9), _t(10), "FAC001")

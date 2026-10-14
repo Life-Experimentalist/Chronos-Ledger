@@ -1734,7 +1734,7 @@ busy, by the same rules, so the two never disagree:
 
 A generated day and the slot that produced it, on the same date, are one
 class: only the day counts. Two windows of one activity are never a member
-clash, since that is one activity, and nor are they a lead clash. Only members
+clash, since that is one activity, nor are they a lead clash. Only members
 and leads whose accounts are active are checked.
 
 The lead of a weekly slot is its `primary_lead_id`. The lead of a generated
