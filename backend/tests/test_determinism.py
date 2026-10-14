@@ -31,7 +31,7 @@ from app.models.db import (
     StructuralMasterSlot,
     User,
 )
-from tests.conftest import _HASHES, TestingSessionLocal, engine
+from tests.conftest import _HASHES, TestingSessionLocal, engine, weekly
 
 START = "2026-09-07T08:00:00+05:30"
 # Past 23:00 and midnight in Kolkata, and past the two 03:xx purges.
@@ -99,7 +99,7 @@ def _fresh_database():
     db.flush()
     db.add(
         StructuralMasterSlot(
-            day_of_week_index=2,
+            **weekly(2),
             time_window_start=datetime.time(9, 0),
             time_window_end=datetime.time(10, 0),
             activity_id=offering.id,

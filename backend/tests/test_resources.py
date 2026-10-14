@@ -10,6 +10,7 @@ and every write path resolving through it rather than inventing a spelling.
 
 import datetime
 
+from app.core.recurrence import weekly_rule
 from app.core.time import org_today
 from app.cron.ledger_generator import generate_daily_ledger_entries
 from app.models.db import (
@@ -165,7 +166,7 @@ def test_a_slot_created_through_the_api_gets_a_resource(client, db, seed_users):
         "/api/v1/schedule/slots",
         headers=headers,
         json={
-            "day_of_week_index": 3,
+            "rrule": weekly_rule(3),
             "time_window_start": "14:00:00",
             "time_window_end": "15:00:00",
             "activity_id": activity.id,

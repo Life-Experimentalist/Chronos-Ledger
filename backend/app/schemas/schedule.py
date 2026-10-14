@@ -5,6 +5,7 @@ from datetime import date, datetime, time
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.core import recurrence
 from app.models.db import DynamicState, ExecutionMode
 from app.schemas.resources import BusyInterval
 
@@ -131,13 +132,28 @@ class EnrollmentResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+def _rule(value):
+    """The rule as stored, for the two slot bodies. None passes through."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("rrule must be a string")
+    return recurrence.normalize(value)
+
+
 class MasterSlotCreate(BaseModel):
-    day_of_week_index: int = Field(ge=1, le=7)
+    # An RFC 5545 RRULE value in ORG_TIMEZONE's calendar, FREQ=WEEKLY;BYDAY=MO
+    # for every Monday. dtstart defaults to the cycle's first date and is
+    # moved forward to the rule's first occurrence on or after it.
+    rrule: str = Field(max_length=recurrence.MAX_RULE_LENGTH + len("RRULE:"))
+    dtstart: date | None = None
     time_window_start: time
     time_window_end: time
     activity_id: int
     primary_lead_id: str | None = None
     target_room_identifier: str
+
+    _rrule_is_a_rule = field_validator("rrule")(_rule)
 
     @model_validator(mode="after")
     def _is_a_window_at_all(self):
@@ -167,23 +183,26 @@ class MasterSlotUpdate(BaseModel):
     the merged values can tell.
     """
 
-    day_of_week_index: int | None = Field(default=None, ge=1, le=7)
+    rrule: str | None = Field(default=None, max_length=recurrence.MAX_RULE_LENGTH + len("RRULE:"))
+    dtstart: date | None = None
     time_window_start: time | None = None
     time_window_end: time | None = None
     primary_lead_id: str | None = None
     target_room_identifier: str | None = None
 
     @field_validator(
-        "day_of_week_index", "time_window_start", "time_window_end", "target_room_identifier"
+        "rrule", "dtstart", "time_window_start", "time_window_end", "target_room_identifier"
     )
     @classmethod
     def _cannot_be_cleared(cls, value):
         # Only the lead may be taken off a slot: it cannot run without a
-        # weekday, both times and a room. A default is never validated, so a
-        # field left out does not get here, only a null somebody sent.
+        # rule, a start, both times and a room. A default is never validated,
+        # so a field left out does not get here, only a null somebody sent.
         if value is None:
             raise ValueError("cannot be null")
         return value
+
+    _rrule_is_a_rule = field_validator("rrule")(_rule)
 
 
 class DailyLedgerUpdate(BaseModel):

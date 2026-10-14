@@ -24,7 +24,7 @@ from app.core.time import org_now, org_today, org_tomorrow
 from app.cron.ledger_generator import generate_daily_ledger_entries
 from app.models.db import Activity, PlanningCycle, StructuralMasterSlot
 from app.services.resource import get_or_create_room
-from tests.conftest import ADMIN_PASSWORD, login
+from tests.conftest import ADMIN_PASSWORD, login, weekly
 
 # UTC+14 and UTC-11. Always a different date from each other.
 FURTHEST_AHEAD = "Pacific/Kiritimati"
@@ -122,7 +122,7 @@ def _class_running_every_day(db) -> None:
     for weekday in range(1, 8):
         db.add(
             StructuralMasterSlot(
-                day_of_week_index=weekday,
+                **weekly(weekday),
                 time_window_start=datetime.time(9, 0),
                 time_window_end=datetime.time(10, 0),
                 activity_id=activity.id,

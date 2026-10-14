@@ -843,11 +843,11 @@ export interface paths {
          * Change a master slot, and the days it has already produced
          * @description Admin only. A new window, lead or room is copied onto the days that are still plans, while days carrying attendance or a note are counted and left alone. Only days after today are moved, so a class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say 09:00.
          *
-         *     Moving the slot to another weekday is the one change that cannot be copied across, because the days already generated sit on the old weekday. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
+         *     A new rrule or dtstart is the one change that cannot be copied across, because the days already generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
          *
          *     Also refused with 409 where the room it would move to is already taken for part of the window it would move to, by a booking or by another class. The slot's own window is not counted against it, so widening one is not refused by the window it replaces. A refusal changes nothing: the room is resolved and the clashes are checked before any day is withdrawn or any field is written.
          *
-         *     A change that leaves the room, weekday and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
+         *     A change that leaves the room, rule and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
          *
          *     A day already generated on that room in part of the window refuses the change as well, with no cycle gate on either side, because such a day still puts somebody at a door whatever its cycle now says. The check is made before anything is written and again if the database refuses the write anyway: two admins moving two classes onto one room at the same moment both pass the first ask, and the loser is told what beat it rather than handed a 500.
          */
@@ -1385,7 +1385,7 @@ export interface paths {
         put?: never;
         /**
          * Bulk import schedule from CSV
-         * @description Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`.
+         * @description Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`. A row's weekday becomes the rule FREQ=WEEKLY;BYDAY=.. on its slot, starting on the first such date in the cycle.
          *     Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent, re-uploading the same CSV is safe: an existing member keeps their password.
          *
          *     Never removes. Slots and enrollments the cycle holds that the file does not mention come back in `not_in_file` for somebody to act on, which is what makes a partial upload safe.
@@ -1928,6 +1928,14 @@ export interface components {
             /** @description What DELETE /schedule/slots/{slot_id} takes, if it should go. */
             id: number;
             activity_code: string;
+            /** @example FREQ=WEEKLY;BYDAY=MO */
+            rrule: string;
+            /** Format: date */
+            dtstart: string;
+            /**
+             * @deprecated
+             * @description The ISO weekday of the slot's first date. Use rrule and dtstart. Sent through 0.17 and then removed.
+             */
             day_of_week_index: number;
             /** Format: time */
             time_window_start: string;
@@ -2549,8 +2557,12 @@ export interface components {
             member_id?: string;
         };
         MasterSlotCreate: {
-            /** @description ISO weekday, 1 = Monday through 7 = Sunday. */
-            day_of_week_index: number;
+            rrule: components["schemas"]["SlotRule"];
+            /**
+             * Format: date
+             * @description The date the rule starts from, in ORG_TIMEZONE. Moved forward to the rule's first date on or after it, and that is what is stored. Absent means the start of the activity's cycle. A rule with no date left on or after it is a 422 with code INVALID_VALUE.
+             */
+            dtstart?: string | null;
             /**
              * Format: time
              * @example 09:00:00
@@ -2572,7 +2584,12 @@ export interface components {
         };
         /** @description Every field is optional and only the fields present are changed. Only primary_lead_id may be null, which takes the lead off the slot; a null for any other field is a 422. activity_id is absent on purpose: every day the slot has produced carries its own copy of the activity, so pointing the slot at another one is a delete and a create, not an edit. */
         MasterSlotUpdate: {
-            day_of_week_index?: number;
+            rrule?: components["schemas"]["SlotRule"];
+            /**
+             * Format: date
+             * @description Moved forward to the rule's first date on or after it. A new rrule sent without a dtstart starts again from the start of the cycle, not from the old dtstart.
+             */
+            dtstart?: string;
             /** Format: time */
             time_window_start?: string;
             /** Format: time */
@@ -2580,8 +2597,24 @@ export interface components {
             primary_lead_id?: string | null;
             target_room_identifier?: string;
         };
+        /**
+         * @description The value of one RFC 5545 RRULE property, with or without "RRULE:" in front, stored upper case without it. The dates it gives are calendar dates in ORG_TIMEZONE and the slot's own times are read on each of them, so a 09:00 class stays at 09:00 across a daylight saving change. FREQ must be DAILY, WEEKLY, MONTHLY or YEARLY; BYHOUR, BYMINUTE and BYSECOND are refused, since a slot runs at most once a date; UNTIL must be a local date or date-time, not one ending in Z; DTSTART, EXDATE and line breaks are not part of it. Any of these is a 422. The stored rule is at most 255 characters.
+         * @example FREQ=WEEKLY;BYDAY=MO
+         */
+        SlotRule: string;
         MasterSlotResponse: {
             id?: number;
+            /** @example FREQ=WEEKLY;BYDAY=MO */
+            rrule?: string;
+            /**
+             * Format: date
+             * @description The first date the rule gives. Always one of its dates.
+             */
+            dtstart?: string;
+            /**
+             * @deprecated
+             * @description The ISO weekday of the slot's first date, worked out from rrule and dtstart. Sent through 0.17 and then removed. A rule on several weekdays has more than one, and this names only the first.
+             */
             day_of_week_index?: number;
             /** Format: time */
             time_window_start?: string;
@@ -2604,7 +2637,7 @@ export interface components {
             ledger_rows_updated?: number;
             /** @description Days left as they were because attendance or a note has been recorded against them. They now disagree with the timetable, and that is deliberate: they record what happened. */
             ledger_rows_kept?: number;
-            /** @description Days withdrawn because the slot moved to another weekday and they sit on the old one. Zero for every other change. */
+            /** @description Days withdrawn because the slot was given another rrule or dtstart and they sit on dates it no longer gives. Zero for every other change. */
             ledger_rows_removed?: number;
         };
         SlotDeletionResult: {

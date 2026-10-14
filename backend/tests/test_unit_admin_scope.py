@@ -10,6 +10,7 @@ batch-mark their attendance, and upload the institution-wide CSV matrix.
 
 import datetime
 
+from app.core.recurrence import weekly_rule
 from app.core.security import hash_password
 from app.core.time import org_today
 from app.models.db import (
@@ -131,7 +132,7 @@ def test_cannot_schedule_slot_for_another_units_activity(client, db, seed_users)
     offerings, _ = _seed_unit_world(db)
     headers = _unit_admin(client)
     slot = {
-        "day_of_week_index": 1,
+        "rrule": weekly_rule(1),
         "time_window_start": "10:00:00",
         "time_window_end": "11:00:00",
         "activity_id": offerings["ECE"].id,

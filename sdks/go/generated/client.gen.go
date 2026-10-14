@@ -1212,9 +1212,12 @@ type LoginRequest struct {
 type MasterSlotCreate struct {
 	ActivityId int `json:"activity_id"`
 
-	// DayOfWeekIndex ISO weekday, 1 = Monday through 7 = Sunday.
-	DayOfWeekIndex int     `json:"day_of_week_index"`
-	PrimaryLeadId  *string `json:"primary_lead_id,omitempty"`
+	// Dtstart The date the rule starts from, in ORG_TIMEZONE. Moved forward to the rule's first date on or after it, and that is what is stored. Absent means the start of the activity's cycle. A rule with no date left on or after it is a 422 with code INVALID_VALUE.
+	Dtstart       *openapi_types.Date `json:"dtstart,omitempty"`
+	PrimaryLeadId *string             `json:"primary_lead_id,omitempty"`
+
+	// Rrule The value of one RFC 5545 RRULE property, with or without "RRULE:" in front, stored upper case without it. The dates it gives are calendar dates in ORG_TIMEZONE and the slot's own times are read on each of them, so a 09:00 class stays at 09:00 across a daylight saving change. FREQ must be DAILY, WEEKLY, MONTHLY or YEARLY; BYHOUR, BYMINUTE and BYSECOND are refused, since a slot runs at most once a date; UNTIL must be a local date or date-time, not one ending in Z; DTSTART, EXDATE and line breaks are not part of it. Any of these is a 422. The stored rule is at most 255 characters.
+	Rrule SlotRule `json:"rrule"`
 
 	// TargetRoomIdentifier The room's name. Resolved to a resource, creating one on first sight, so a room does not have to be registered before a timetable can name it. Surrounding spaces are stripped.
 	TargetRoomIdentifier string `json:"target_room_identifier"`
@@ -1226,16 +1229,23 @@ type MasterSlotCreate struct {
 
 // MasterSlotResponse defines model for MasterSlotResponse.
 type MasterSlotResponse struct {
-	ActivityId     *int    `json:"activity_id,omitempty"`
-	DayOfWeekIndex *int    `json:"day_of_week_index,omitempty"`
-	Id             *int    `json:"id,omitempty"`
-	PrimaryLeadId  *string `json:"primary_lead_id,omitempty"`
+	ActivityId *int `json:"activity_id,omitempty"`
+
+	// DayOfWeekIndex The ISO weekday of the slot's first date, worked out from rrule and dtstart. Sent through 0.17 and then removed. A rule on several weekdays has more than one, and this names only the first.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	DayOfWeekIndex *int `json:"day_of_week_index,omitempty"`
+
+	// Dtstart The first date the rule gives. Always one of its dates.
+	Dtstart       *openapi_types.Date `json:"dtstart,omitempty"`
+	Id            *int                `json:"id,omitempty"`
+	PrimaryLeadId *string             `json:"primary_lead_id,omitempty"`
 
 	// ResourceId Prefer this over target_room_identifier.
 	ResourceId *int `json:"resource_id,omitempty"`
 
 	// RetiredAt When the slot was retired, on its own or with its activity. Null while it is live.
 	RetiredAt *time.Time `json:"retired_at,omitempty"`
+	Rrule     *string    `json:"rrule,omitempty"`
 
 	// TargetRoomIdentifier The room's name, mirrored from the resource. Being retired.
 	TargetRoomIdentifier *string `json:"target_room_identifier,omitempty"`
@@ -1245,11 +1255,15 @@ type MasterSlotResponse struct {
 
 // MasterSlotUpdate Every field is optional and only the fields present are changed. Only primary_lead_id may be null, which takes the lead off the slot; a null for any other field is a 422. activity_id is absent on purpose: every day the slot has produced carries its own copy of the activity, so pointing the slot at another one is a delete and a create, not an edit.
 type MasterSlotUpdate struct {
-	DayOfWeekIndex       *int    `json:"day_of_week_index,omitempty"`
-	PrimaryLeadId        *string `json:"primary_lead_id,omitempty"`
-	TargetRoomIdentifier *string `json:"target_room_identifier,omitempty"`
-	TimeWindowEnd        *string `json:"time_window_end,omitempty"`
-	TimeWindowStart      *string `json:"time_window_start,omitempty"`
+	// Dtstart Moved forward to the rule's first date on or after it. A new rrule sent without a dtstart starts again from the start of the cycle, not from the old dtstart.
+	Dtstart       *openapi_types.Date `json:"dtstart,omitempty"`
+	PrimaryLeadId *string             `json:"primary_lead_id,omitempty"`
+
+	// Rrule The value of one RFC 5545 RRULE property, with or without "RRULE:" in front, stored upper case without it. The dates it gives are calendar dates in ORG_TIMEZONE and the slot's own times are read on each of them, so a 09:00 class stays at 09:00 across a daylight saving change. FREQ must be DAILY, WEEKLY, MONTHLY or YEARLY; BYHOUR, BYMINUTE and BYSECOND are refused, since a slot runs at most once a date; UNTIL must be a local date or date-time, not one ending in Z; DTSTART, EXDATE and line breaks are not part of it. Any of these is a 422. The stored rule is at most 255 characters.
+	Rrule                *SlotRule `json:"rrule,omitempty"`
+	TargetRoomIdentifier *string   `json:"target_room_identifier,omitempty"`
+	TimeWindowEnd        *string   `json:"time_window_end,omitempty"`
+	TimeWindowStart      *string   `json:"time_window_start,omitempty"`
 }
 
 // OpenItems What still names a deactivated account. Deactivating changes none of it and is never refused because of it; calling deactivate again counts afresh.
@@ -1275,12 +1289,17 @@ type OrphanEnrollment struct {
 
 // OrphanSlot defines model for OrphanSlot.
 type OrphanSlot struct {
-	ActivityCode   string `json:"activity_code"`
-	DayOfWeekIndex int    `json:"day_of_week_index"`
+	ActivityCode string `json:"activity_code"`
+
+	// DayOfWeekIndex The ISO weekday of the slot's first date. Use rrule and dtstart. Sent through 0.17 and then removed.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	DayOfWeekIndex int                `json:"day_of_week_index"`
+	Dtstart        openapi_types.Date `json:"dtstart"`
 
 	// Id What DELETE /schedule/slots/{slot_id} takes, if it should go.
 	Id              int     `json:"id"`
 	Room            *string `json:"room,omitempty"`
+	Rrule           string  `json:"rrule"`
 	TimeWindowStart string  `json:"time_window_start"`
 }
 
@@ -1561,12 +1580,15 @@ type SlotDeletionResult struct {
 	LedgerRowsRemoved *int `json:"ledger_rows_removed,omitempty"`
 }
 
+// SlotRule The value of one RFC 5545 RRULE property, with or without "RRULE:" in front, stored upper case without it. The dates it gives are calendar dates in ORG_TIMEZONE and the slot's own times are read on each of them, so a 09:00 class stays at 09:00 across a daylight saving change. FREQ must be DAILY, WEEKLY, MONTHLY or YEARLY; BYHOUR, BYMINUTE and BYSECOND are refused, since a slot runs at most once a date; UNTIL must be a local date or date-time, not one ending in Z; DTSTART, EXDATE and line breaks are not part of it. Any of these is a 422. The stored rule is at most 255 characters.
+type SlotRule = string
+
 // SlotUpdateResult defines model for SlotUpdateResult.
 type SlotUpdateResult struct {
 	// LedgerRowsKept Days left as they were because attendance or a note has been recorded against them. They now disagree with the timetable, and that is deliberate: they record what happened.
 	LedgerRowsKept *int `json:"ledger_rows_kept,omitempty"`
 
-	// LedgerRowsRemoved Days withdrawn because the slot moved to another weekday and they sit on the old one. Zero for every other change.
+	// LedgerRowsRemoved Days withdrawn because the slot was given another rrule or dtstart and they sit on dates it no longer gives. Zero for every other change.
 	LedgerRowsRemoved *int `json:"ledger_rows_removed,omitempty"`
 
 	// LedgerRowsUpdated Days that were still plans and now carry the new lead or room.
@@ -3175,7 +3197,7 @@ type ClientInterface interface {
 
 	// IngestionUploadCsvWithBody Bulk import schedule from CSV
 	//
-	// Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`.
+	// Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`. A row's weekday becomes the rule FREQ=WEEKLY;BYDAY=.. on its slot, starting on the first such date in the cycle.
 	// Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent, re-uploading the same CSV is safe: an existing member keeps their password.
 	//
 	// Never removes. Slots and enrollments the cycle holds that the file does not mention come back in `not_in_file` for somebody to act on, which is what makes a partial upload safe.
@@ -3558,11 +3580,11 @@ type ClientInterface interface {
 	//
 	// Admin only. A new window, lead or room is copied onto the days that are still plans, while days carrying attendance or a note are counted and left alone. Only days after today are moved, so a class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say 09:00.
 	//
-	// Moving the slot to another weekday is the one change that cannot be copied across, because the days already generated sit on the old weekday. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
+	// A new rrule or dtstart is the one change that cannot be copied across, because the days already generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
 	//
 	// Also refused with 409 where the room it would move to is already taken for part of the window it would move to, by a booking or by another class. The slot's own window is not counted against it, so widening one is not refused by the window it replaces. A refusal changes nothing: the room is resolved and the clashes are checked before any day is withdrawn or any field is written.
 	//
-	// A change that leaves the room, weekday and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
+	// A change that leaves the room, rule and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
 	//
 	// A day already generated on that room in part of the window refuses the change as well, with no cycle gate on either side, because such a day still puts somebody at a door whatever its cycle now says. The check is made before anything is written and again if the database refuses the write anyway: two admins moving two classes onto one room at the same moment both pass the first ask, and the loser is told what beat it rather than handed a 500.
 	//
@@ -3575,11 +3597,11 @@ type ClientInterface interface {
 	//
 	// Admin only. A new window, lead or room is copied onto the days that are still plans, while days carrying attendance or a note are counted and left alone. Only days after today are moved, so a class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say 09:00.
 	//
-	// Moving the slot to another weekday is the one change that cannot be copied across, because the days already generated sit on the old weekday. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
+	// A new rrule or dtstart is the one change that cannot be copied across, because the days already generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
 	//
 	// Also refused with 409 where the room it would move to is already taken for part of the window it would move to, by a booking or by another class. The slot's own window is not counted against it, so widening one is not refused by the window it replaces. A refusal changes nothing: the room is resolved and the clashes are checked before any day is withdrawn or any field is written.
 	//
-	// A change that leaves the room, weekday and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
+	// A change that leaves the room, rule and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
 	//
 	// A day already generated on that room in part of the window refuses the change as well, with no cycle gate on either side, because such a day still puts somebody at a door whatever its cycle now says. The check is made before anything is written and again if the database refuses the write anyway: two admins moving two classes onto one room at the same moment both pass the first ask, and the loser is told what beat it rather than handed a 500.
 	//
@@ -5003,7 +5025,7 @@ func (c *Client) IngestionGenerateLedger(ctx context.Context, params *IngestionG
 
 // IngestionUploadCsvWithBody Bulk import schedule from CSV
 //
-// Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`.
+// Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`. A row's weekday becomes the rule FREQ=WEEKLY;BYDAY=.. on its slot, starting on the first such date in the cycle.
 // Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent, re-uploading the same CSV is safe: an existing member keeps their password.
 //
 // Never removes. Slots and enrollments the cycle holds that the file does not mention come back in `not_in_file` for somebody to act on, which is what makes a partial upload safe.
@@ -5776,11 +5798,11 @@ func (c *Client) ScheduleDeleteSlot(ctx context.Context, slotId int, params *Sch
 //
 // Admin only. A new window, lead or room is copied onto the days that are still plans, while days carrying attendance or a note are counted and left alone. Only days after today are moved, so a class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say 09:00.
 //
-// Moving the slot to another weekday is the one change that cannot be copied across, because the days already generated sit on the old weekday. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
+// A new rrule or dtstart is the one change that cannot be copied across, because the days already generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
 //
 // Also refused with 409 where the room it would move to is already taken for part of the window it would move to, by a booking or by another class. The slot's own window is not counted against it, so widening one is not refused by the window it replaces. A refusal changes nothing: the room is resolved and the clashes are checked before any day is withdrawn or any field is written.
 //
-// A change that leaves the room, weekday and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
+// A change that leaves the room, rule and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
 //
 // A day already generated on that room in part of the window refuses the change as well, with no cycle gate on either side, because such a day still puts somebody at a door whatever its cycle now says. The check is made before anything is written and again if the database refuses the write anyway: two admins moving two classes onto one room at the same moment both pass the first ask, and the loser is told what beat it rather than handed a 500.
 //
@@ -5803,11 +5825,11 @@ func (c *Client) ScheduleUpdateSlotWithBody(ctx context.Context, slotId int, par
 //
 // Admin only. A new window, lead or room is copied onto the days that are still plans, while days carrying attendance or a note are counted and left alone. Only days after today are moved, so a class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say 09:00.
 //
-// Moving the slot to another weekday is the one change that cannot be copied across, because the days already generated sit on the old weekday. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
+// A new rrule or dtstart is the one change that cannot be copied across, because the days already generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
 //
 // Also refused with 409 where the room it would move to is already taken for part of the window it would move to, by a booking or by another class. The slot's own window is not counted against it, so widening one is not refused by the window it replaces. A refusal changes nothing: the room is resolved and the clashes are checked before any day is withdrawn or any field is written.
 //
-// A change that leaves the room, weekday and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
+// A change that leaves the room, rule and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
 //
 // A day already generated on that room in part of the window refuses the change as well, with no cycle gate on either side, because such a day still puts somebody at a door whatever its cycle now says. The check is made before anything is written and again if the database refuses the write anyway: two admins moving two classes onto one room at the same moment both pass the first ask, and the loser is told what beat it rather than handed a 500.
 //
@@ -12326,7 +12348,7 @@ type ClientWithResponsesInterface interface {
 
 	// IngestionUploadCsvWithBodyWithResponse Bulk import schedule from CSV
 	//
-	// Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`.
+	// Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`. A row's weekday becomes the rule FREQ=WEEKLY;BYDAY=.. on its slot, starting on the first such date in the cycle.
 	// Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent, re-uploading the same CSV is safe: an existing member keeps their password.
 	//
 	// Never removes. Slots and enrollments the cycle holds that the file does not mention come back in `not_in_file` for somebody to act on, which is what makes a partial upload safe.
@@ -12745,11 +12767,11 @@ type ClientWithResponsesInterface interface {
 	//
 	// Admin only. A new window, lead or room is copied onto the days that are still plans, while days carrying attendance or a note are counted and left alone. Only days after today are moved, so a class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say 09:00.
 	//
-	// Moving the slot to another weekday is the one change that cannot be copied across, because the days already generated sit on the old weekday. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
+	// A new rrule or dtstart is the one change that cannot be copied across, because the days already generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
 	//
 	// Also refused with 409 where the room it would move to is already taken for part of the window it would move to, by a booking or by another class. The slot's own window is not counted against it, so widening one is not refused by the window it replaces. A refusal changes nothing: the room is resolved and the clashes are checked before any day is withdrawn or any field is written.
 	//
-	// A change that leaves the room, weekday and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
+	// A change that leaves the room, rule and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
 	//
 	// A day already generated on that room in part of the window refuses the change as well, with no cycle gate on either side, because such a day still puts somebody at a door whatever its cycle now says. The check is made before anything is written and again if the database refuses the write anyway: two admins moving two classes onto one room at the same moment both pass the first ask, and the loser is told what beat it rather than handed a 500.
 	//
@@ -12762,11 +12784,11 @@ type ClientWithResponsesInterface interface {
 	//
 	// Admin only. A new window, lead or room is copied onto the days that are still plans, while days carrying attendance or a note are counted and left alone. Only days after today are moved, so a class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say 09:00.
 	//
-	// Moving the slot to another weekday is the one change that cannot be copied across, because the days already generated sit on the old weekday. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
+	// A new rrule or dtstart is the one change that cannot be copied across, because the days already generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
 	//
 	// Also refused with 409 where the room it would move to is already taken for part of the window it would move to, by a booking or by another class. The slot's own window is not counted against it, so widening one is not refused by the window it replaces. A refusal changes nothing: the room is resolved and the clashes are checked before any day is withdrawn or any field is written.
 	//
-	// A change that leaves the room, weekday and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
+	// A change that leaves the room, rule and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
 	//
 	// A day already generated on that room in part of the window refuses the change as well, with no cycle gate on either side, because such a day still puts somebody at a door whatever its cycle now says. The check is made before anything is written and again if the database refuses the write anyway: two admins moving two classes onto one room at the same moment both pass the first ask, and the loser is told what beat it rather than handed a 500.
 	//
@@ -20704,7 +20726,7 @@ func (c *ClientWithResponses) IngestionGenerateLedgerWithResponse(ctx context.Co
 
 // IngestionUploadCsvWithBodyWithResponse Bulk import schedule from CSV
 //
-// Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`.
+// Requires `ORG_ADMIN`. The matrix rewrites activities and registrations across every unit, so a unit-scoped admin cannot upload it. The CSV must contain these columns (case-sensitive): `member_id`, `member_name`, `member_email`, `activity_code`, `activity_title`, `unit`, `day_of_week_index` (ISO 8601: 1=Monday .. 7=Sunday), `time_window_start` (HH:MM), `time_window_end` (HH:MM), `lead_id`, `room`. A row's weekday becomes the rule FREQ=WEEKLY;BYDAY=.. on its slot, starting on the first such date in the cycle.
 // Creates/updates: Users, ActivityOfferings, StructuralMasterSlots, ActivityRegistrations. Idempotent, re-uploading the same CSV is safe: an existing member keeps their password.
 //
 // Never removes. Slots and enrollments the cycle holds that the file does not mention come back in `not_in_file` for somebody to act on, which is what makes a partial upload safe.
@@ -21357,11 +21379,11 @@ func (c *ClientWithResponses) ScheduleDeleteSlotWithResponse(ctx context.Context
 //
 // Admin only. A new window, lead or room is copied onto the days that are still plans, while days carrying attendance or a note are counted and left alone. Only days after today are moved, so a class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say 09:00.
 //
-// Moving the slot to another weekday is the one change that cannot be copied across, because the days already generated sit on the old weekday. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
+// A new rrule or dtstart is the one change that cannot be copied across, because the days already generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
 //
 // Also refused with 409 where the room it would move to is already taken for part of the window it would move to, by a booking or by another class. The slot's own window is not counted against it, so widening one is not refused by the window it replaces. A refusal changes nothing: the room is resolved and the clashes are checked before any day is withdrawn or any field is written.
 //
-// A change that leaves the room, weekday and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
+// A change that leaves the room, rule and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
 //
 // A day already generated on that room in part of the window refuses the change as well, with no cycle gate on either side, because such a day still puts somebody at a door whatever its cycle now says. The check is made before anything is written and again if the database refuses the write anyway: two admins moving two classes onto one room at the same moment both pass the first ask, and the loser is told what beat it rather than handed a 500.
 //
@@ -21380,11 +21402,11 @@ func (c *ClientWithResponses) ScheduleUpdateSlotWithBodyWithResponse(ctx context
 //
 // Admin only. A new window, lead or room is copied onto the days that are still plans, while days carrying attendance or a note are counted and left alone. Only days after today are moved, so a class shifted to 10:00 runs at 10:00 from tomorrow and the days it already ran at 09:00 still say 09:00.
 //
-// Moving the slot to another weekday is the one change that cannot be copied across, because the days already generated sit on the old weekday. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
+// A new rrule or dtstart is the one change that cannot be copied across, because the days already generated sit on the dates of the old rule. Those are withdrawn for the generator to lay down again, and the request is refused with 409 if any of them has been marked.
 //
 // Also refused with 409 where the room it would move to is already taken for part of the window it would move to, by a booking or by another class. The slot's own window is not counted against it, so widening one is not refused by the window it replaces. A refusal changes nothing: the room is resolved and the clashes are checked before any day is withdrawn or any field is written.
 //
-// A change that leaves the room, weekday and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
+// A change that leaves the room, rule and window alone is not checked, so a new lead can be set on a slot a hold is already sitting on. Such a hold predates this rule or was written straight into the database, and refusing would leave the lead unfixable short of cancelling somebody else's booking.
 //
 // A day already generated on that room in part of the window refuses the change as well, with no cycle gate on either side, because such a day still puts somebody at a door whatever its cycle now says. The check is made before anything is written and again if the database refuses the write anyway: two admins moving two classes onto one room at the same moment both pass the first ask, and the loser is told what beat it rather than handed a 500.
 //

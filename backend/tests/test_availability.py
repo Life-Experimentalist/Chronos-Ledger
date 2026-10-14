@@ -13,7 +13,7 @@ expansion has to agree with: which cycles count.
 import datetime
 
 from app.models.db import Activity, PlanningCycle, Resource, ResourceType, StructuralMasterSlot
-from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, login
+from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, login, weekly
 
 # Explicit dates, never "today plus one": a weekday computed from the day the
 # suite happens to run is a test that only tests something two days in seven.
@@ -52,7 +52,7 @@ def _slot(db, room, cycle, code="CS101", day=1, start="09:00", end="10:00"):
     db.add(activity)
     db.flush()
     slot = StructuralMasterSlot(
-        day_of_week_index=day,
+        **weekly(day),
         time_window_start=datetime.time.fromisoformat(start),
         time_window_end=datetime.time.fromisoformat(end),
         activity_id=activity.id,

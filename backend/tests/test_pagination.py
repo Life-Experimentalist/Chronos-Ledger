@@ -25,7 +25,7 @@ from app.models.db import (
     StructuralMasterSlot,
     User,
 )
-from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, login
+from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, login, weekly
 
 UNIT_ADMIN_PASSWORD = "UnitAdminPass123!"
 _UNIT_ADMIN_HASH = hash_password(UNIT_ADMIN_PASSWORD)
@@ -108,7 +108,7 @@ def lists(db, seed_users, monkeypatch):
     for n, activity in enumerate(activities):
         db.add(
             StructuralMasterSlot(
-                day_of_week_index=n + 1,
+                **weekly(n + 1),
                 time_window_start=datetime.time(9),
                 time_window_end=datetime.time(10),
                 activity_id=activity.id,

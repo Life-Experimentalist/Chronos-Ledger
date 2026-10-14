@@ -17,7 +17,10 @@ class MasterSlotResponse:
     """
     Attributes:
         id (int | Unset):
-        day_of_week_index (int | Unset):
+        rrule (str | Unset):  Example: FREQ=WEEKLY;BYDAY=MO.
+        dtstart (datetime.date | Unset): The first date the rule gives. Always one of its dates.
+        day_of_week_index (int | Unset): The ISO weekday of the slot's first date, worked out from rrule and dtstart.
+            Sent through 0.17 and then removed. A rule on several weekdays has more than one, and this names only the first.
         time_window_start (str | Unset):
         time_window_end (str | Unset):
         activity_id (int | Unset):
@@ -29,6 +32,8 @@ class MasterSlotResponse:
     """
 
     id: int | Unset = UNSET
+    rrule: str | Unset = UNSET
+    dtstart: datetime.date | Unset = UNSET
     day_of_week_index: int | Unset = UNSET
     time_window_start: str | Unset = UNSET
     time_window_end: str | Unset = UNSET
@@ -41,6 +46,12 @@ class MasterSlotResponse:
 
     def to_dict(self) -> dict[str, Any]:
         id = self.id
+
+        rrule = self.rrule
+
+        dtstart: str | Unset = UNSET
+        if not isinstance(self.dtstart, Unset):
+            dtstart = self.dtstart.isoformat()
 
         day_of_week_index = self.day_of_week_index
 
@@ -81,6 +92,10 @@ class MasterSlotResponse:
         field_dict.update({})
         if id is not UNSET:
             field_dict["id"] = id
+        if rrule is not UNSET:
+            field_dict["rrule"] = rrule
+        if dtstart is not UNSET:
+            field_dict["dtstart"] = dtstart
         if day_of_week_index is not UNSET:
             field_dict["day_of_week_index"] = day_of_week_index
         if time_window_start is not UNSET:
@@ -104,6 +119,15 @@ class MasterSlotResponse:
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
         id = d.pop("id", UNSET)
+
+        rrule = d.pop("rrule", UNSET)
+
+        _dtstart = d.pop("dtstart", UNSET)
+        dtstart: datetime.date | Unset
+        if isinstance(_dtstart, Unset):
+            dtstart = UNSET
+        else:
+            dtstart = datetime.date.fromisoformat(_dtstart)
 
         day_of_week_index = d.pop("day_of_week_index", UNSET)
 
@@ -159,6 +183,8 @@ class MasterSlotResponse:
 
         master_slot_response = cls(
             id=id,
+            rrule=rrule,
+            dtstart=dtstart,
             day_of_week_index=day_of_week_index,
             time_window_start=time_window_start,
             time_window_end=time_window_end,

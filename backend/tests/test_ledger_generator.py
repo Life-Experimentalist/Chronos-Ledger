@@ -17,6 +17,7 @@ from app.models.db import (
     ReverseRsvpLog,
     StructuralMasterSlot,
 )
+from tests.conftest import weekly
 
 # 2026-09-07 is a Monday: isoweekday() == 1.
 MONDAY = datetime.date(2026, 9, 7)
@@ -40,7 +41,7 @@ def _build_slot(db, seed_users, active=True, day_index=1):
     db.add(offering)
     db.flush()
     slot = StructuralMasterSlot(
-        day_of_week_index=day_index,
+        **weekly(day_index),
         time_window_start=datetime.time(9, 0),
         time_window_end=datetime.time(10, 0),
         activity_id=offering.id,
@@ -165,7 +166,7 @@ def test_the_startup_catch_up_writes_what_a_restart_missed(db, seed_users, monke
     """
     monday = _build_slot(db, seed_users, day_index=1)
     tuesday = StructuralMasterSlot(
-        day_of_week_index=2,
+        **weekly(2),
         time_window_start=datetime.time(9, 0),
         time_window_end=datetime.time(10, 0),
         activity_id=monday.activity_id,
