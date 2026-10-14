@@ -789,6 +789,9 @@ type CsvImportResult struct {
 	// ErrorLog Present when status is FAILED.
 	ErrorLog *string `json:"error_log,omitempty"`
 
+	// KeptDays The days counted in ledger_rows_kept, earliest first, each with the room it still has. Present when status is SUCCESS.
+	KeptDays *[]KeptDay `json:"kept_days,omitempty"`
+
 	// LedgerRowsKept Days left alone because attendance or a note has been recorded against them. They now disagree with the timetable on purpose: they record what happened. Days already past are never touched and are not counted here.
 	LedgerRowsKept *int `json:"ledger_rows_kept,omitempty"`
 
@@ -1077,6 +1080,22 @@ type IssuerUpdate struct {
 	Audience    *string `json:"audience,omitempty"`
 	DisplayName *string `json:"display_name,omitempty"`
 	Enabled     *bool   `json:"enabled,omitempty"`
+}
+
+// KeptDay A day a re-import left as it was, because attendance or a note has been recorded against it. It keeps the room, lead and window it was held with.
+type KeptDay struct {
+	ActivityCode string             `json:"activity_code"`
+	Date         openapi_types.Date `json:"date"`
+
+	// Id The ledger entry, as GET /schedule/ledger returns it.
+	Id int `json:"id"`
+
+	// MasterSlotId The slot the file corrected.
+	MasterSlotId int `json:"master_slot_id"`
+
+	// Room The room the day still has, not the one the file names.
+	Room            string `json:"room"`
+	TimeWindowStart string `json:"time_window_start"`
 }
 
 // LinkCreate defines model for LinkCreate.

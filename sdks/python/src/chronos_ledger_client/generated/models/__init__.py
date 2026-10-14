@@ -63,6 +63,7 @@ from .issuer_key_response import IssuerKeyResponse
 from .issuer_key_retire import IssuerKeyRetire
 from .issuer_response import IssuerResponse
 from .issuer_update import IssuerUpdate
+from .kept_day import KeptDay
 from .link_create import LinkCreate
 from .link_response import LinkResponse
 from .log_verification_state import LogVerificationState
@@ -196,6 +197,7 @@ __all__ = (
     "IssuerKeyRetire",
     "IssuerResponse",
     "IssuerUpdate",
+    "KeptDay",
     "LinkCreate",
     "LinkResponse",
     "LoginRequest",

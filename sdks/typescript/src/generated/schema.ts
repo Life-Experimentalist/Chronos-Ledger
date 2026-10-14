@@ -1907,9 +1907,25 @@ export interface components {
             ledger_rows_updated?: number;
             /** @description Days left alone because attendance or a note has been recorded against them. They now disagree with the timetable on purpose: they record what happened. Days already past are never touched and are not counted here. */
             ledger_rows_kept?: number;
+            /** @description The days counted in ledger_rows_kept, earliest first, each with the room it still has. Present when status is SUCCESS. */
+            kept_days?: components["schemas"]["KeptDay"][];
             not_in_file?: components["schemas"]["ImportOrphans"];
             /** @description Present when status is FAILED. */
             error_log?: string;
+        };
+        /** @description A day a re-import left as it was, because attendance or a note has been recorded against it. It keeps the room, lead and window it was held with. */
+        KeptDay: {
+            /** @description The ledger entry, as GET /schedule/ledger returns it. */
+            id: number;
+            /** Format: date */
+            date: string;
+            activity_code: string;
+            /** @description The slot the file corrected. */
+            master_slot_id: number;
+            /** Format: time */
+            time_window_start: string;
+            /** @description The room the day still has, not the one the file names. */
+            room: string | null;
         };
         /**
          * @description What the cycle holds that this file did not mention. A report and never an action: a file covering half a timetable cannot be told apart from a timetable that lost half its classes, so nothing here is removed and somebody decides.

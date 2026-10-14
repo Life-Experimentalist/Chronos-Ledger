@@ -11,6 +11,7 @@ from ..types import UNSET, Unset
 
 if TYPE_CHECKING:
     from ..models.import_orphans import ImportOrphans
+    from ..models.kept_day import KeptDay
     from ..models.provisioned_credential import ProvisionedCredential
 
 
@@ -35,6 +36,8 @@ class CsvImportResult:
         ledger_rows_kept (int | Unset): Days left alone because attendance or a note has been recorded against them.
             They now disagree with the timetable on purpose: they record what happened. Days already past are never touched
             and are not counted here.
+        kept_days (list[KeptDay] | Unset): The days counted in ledger_rows_kept, earliest first, each with the room it
+            still has. Present when status is SUCCESS.
         not_in_file (ImportOrphans | Unset): What the cycle holds that this file did not mention. A report and never an
             action: a file covering half a timetable cannot be told apart from a timetable that lost half its classes, so
             nothing here is removed and somebody decides.
@@ -50,6 +53,7 @@ class CsvImportResult:
     slots_corrected: int | Unset = UNSET
     ledger_rows_updated: int | Unset = UNSET
     ledger_rows_kept: int | Unset = UNSET
+    kept_days: list[KeptDay] | Unset = UNSET
     not_in_file: ImportOrphans | Unset = UNSET
     error_log: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
@@ -71,6 +75,13 @@ class CsvImportResult:
         ledger_rows_updated = self.ledger_rows_updated
 
         ledger_rows_kept = self.ledger_rows_kept
+
+        kept_days: list[dict[str, Any]] | Unset = UNSET
+        if not isinstance(self.kept_days, Unset):
+            kept_days = []
+            for kept_days_item_data in self.kept_days:
+                kept_days_item = kept_days_item_data.to_dict()
+                kept_days.append(kept_days_item)
 
         not_in_file: dict[str, Any] | Unset = UNSET
         if not isinstance(self.not_in_file, Unset):
@@ -95,6 +106,8 @@ class CsvImportResult:
             field_dict["ledger_rows_updated"] = ledger_rows_updated
         if ledger_rows_kept is not UNSET:
             field_dict["ledger_rows_kept"] = ledger_rows_kept
+        if kept_days is not UNSET:
+            field_dict["kept_days"] = kept_days
         if not_in_file is not UNSET:
             field_dict["not_in_file"] = not_in_file
         if error_log is not UNSET:
@@ -105,6 +118,7 @@ class CsvImportResult:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.import_orphans import ImportOrphans  # noqa: PLC0415
+        from ..models.kept_day import KeptDay  # noqa: PLC0415
         from ..models.provisioned_credential import ProvisionedCredential  # noqa: PLC0415
 
         d = dict(src_dict)
@@ -129,6 +143,15 @@ class CsvImportResult:
 
         ledger_rows_kept = d.pop("ledger_rows_kept", UNSET)
 
+        _kept_days = d.pop("kept_days", UNSET)
+        kept_days: list[KeptDay] | Unset = UNSET
+        if _kept_days is not UNSET:
+            kept_days = []
+            for kept_days_item_data in _kept_days:
+                kept_days_item = KeptDay.from_dict(kept_days_item_data)
+
+                kept_days.append(kept_days_item)
+
         _not_in_file = d.pop("not_in_file", UNSET)
         not_in_file: ImportOrphans | Unset
         if isinstance(_not_in_file, Unset):
@@ -145,6 +168,7 @@ class CsvImportResult:
             slots_corrected=slots_corrected,
             ledger_rows_updated=ledger_rows_updated,
             ledger_rows_kept=ledger_rows_kept,
+            kept_days=kept_days,
             not_in_file=not_in_file,
             error_log=error_log,
         )
