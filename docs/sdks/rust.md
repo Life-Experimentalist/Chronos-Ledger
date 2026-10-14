@@ -2,24 +2,30 @@
 
 <!-- Copyright 2026 Chronos Ledger Contributors (Apache 2.0) -->
 
-Crate `chronos-ledger-client`, in [`sdks/rust`](../../sdks/rust). The calls are
+Crate `chronosledger-client`, in [`sdks/rust`](../../sdks/rust). The calls are
 generated from [openapi.yaml](../openapi.yaml) by `progenitor`, pinned to one
 version, from `build.rs` on every build. Built on `reqwest` and `tokio`; Rust
 1.88 or newer.
 
 ## Install
 
-The crate is not on crates.io yet. Use it from a checkout:
+From 0.18.0 the crate is on crates.io:
+
+```bash
+cargo add chronosledger-client
+```
+
+Until then, use it from a checkout:
 
 ```toml
 [dependencies]
-chronos-ledger-client = { path = "../Chronos-Ledger/sdks/rust" }
+chronosledger-client = { path = "../Chronos-Ledger/sdks/rust" }
 ```
 
 ## Construct a client
 
 ```rust
-use chronos_ledger_client::{ClientBuilder, Error};
+use chronosledger_client::{ClientBuilder, Error};
 
 let client = ClientBuilder::new("https://chronos.example.org")
     .api_key(std::env::var("CHRONOS_API_KEY")?)
@@ -94,7 +100,7 @@ timeout per attempt.
 
 ```rust
 use futures::TryStreamExt;
-use chronos_ledger_client::paginate;
+use chronosledger_client::paginate;
 
 let users: Vec<_> = paginate(100, |limit, offset| {
     let client = client.clone();

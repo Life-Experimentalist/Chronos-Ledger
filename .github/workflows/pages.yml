@@ -10,6 +10,7 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
+      - 'docker-compose.prod.yml'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -41,6 +42,15 @@ jobs:
           cp docs/index.html docs/logo.svg docs/icon.png docs/favicon-32.png              docs/apple-touch-icon.png docs/robots.txt docs/sitemap.xml _site/
           # The CLI install scripts, served as https://chronos.vkrishna04.me/install.sh
           cp docs/install.sh docs/install.ps1 _site/
+          # The production compose file, served as https://chronos.vkrishna04.me/compose.yml
+          cp docker-compose.prod.yml _site/compose.yml
+          # Go vanity import: go get chronos.vkrishna04.me/sdks/go
+          mkdir -p _site/sdks/go
+          cp docs/sdks/go/index.html _site/sdks/go/index.html
+          # Short links: /docs and /releases
+          mkdir -p _site/docs _site/releases
+          cp docs/_short/docs/index.html _site/docs/index.html
+          cp docs/_short/releases/index.html _site/releases/index.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5

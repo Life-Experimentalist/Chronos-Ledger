@@ -36,7 +36,7 @@ impl<T> From<progenitor_client::ResponseValue<Vec<T>>> for Page<T> {
 /// a page comes back empty, or after the first error, which is yielded last.
 ///
 /// ```ignore
-/// let users = chronos_ledger_client::paginate(100, |limit, offset| {
+/// let users = chronosledger_client::paginate(100, |limit, offset| {
 ///     let client = client.clone();
 ///     async move {
 ///         let page = client.users_list().limit(limit).offset(offset).send().await?;

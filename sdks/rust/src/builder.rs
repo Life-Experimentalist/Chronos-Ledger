@@ -14,7 +14,7 @@ use crate::{
 /// Sets up a [`Client`].
 ///
 /// ```ignore
-/// let client = chronos_ledger_client::ClientBuilder::new("https://chronos.example.org")
+/// let client = chronosledger_client::ClientBuilder::new("https://chronos.example.org")
 ///     .api_key("clk_...")
 ///     .build()?;
 /// let users = client.users_list().send().await;

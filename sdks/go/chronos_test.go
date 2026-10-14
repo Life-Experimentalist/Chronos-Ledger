@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Life-Experimentalist/Chronos-Ledger/sdks/go/generated"
+	"chronos.vkrishna04.me/sdks/go/generated"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 

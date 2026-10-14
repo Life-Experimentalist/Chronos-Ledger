@@ -127,7 +127,7 @@ impl std::error::Error for Error {}
 /// retry layer, and becomes `Error::Api` here:
 ///
 /// ```ignore
-/// let users = client.users_list().send().await.map_err(chronos_ledger_client::Error::from)?;
+/// let users = client.users_list().send().await.map_err(chronosledger_client::Error::from)?;
 /// ```
 impl From<progenitor_client::Error<()>> for Error {
     fn from(error: progenitor_client::Error<()>) -> Self {

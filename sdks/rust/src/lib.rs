@@ -8,7 +8,7 @@
 //! retry is safe, how to page, and one error type.
 //!
 //! ```ignore
-//! use chronos_ledger_client::{ClientBuilder, Error};
+//! use chronosledger_client::{ClientBuilder, Error};
 //!
 //! let client = ClientBuilder::new("https://chronos.example.org")
 //!     .api_key("clk_...")

@@ -1,5 +1,5 @@
 [package]
-name = "chronos-ledger-client"
+name = "chronosledger-client"
 # release-please writes this line (release-please-config.json).
 version = "0.17.0"
 edition = "2021"
