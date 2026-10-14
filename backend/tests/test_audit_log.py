@@ -1,6 +1,7 @@
 # Copyright 2026 Chronos Ledger Contributors
 # Licensed under the Apache License, Version 2.0
-"""Every write through the API leaves one audit record, and nothing else does.
+"""Every write through the API leaves one audit record, and so does a read of the
+conflict report; no other read does.
 
 The record says when, which account, which key, the method, the path and the
 status. It never holds a body. GET /audit reads them back for an ORG_ADMIN.
@@ -11,12 +12,15 @@ from datetime import UTC
 
 import pytest
 
+from app.core.audit import AUDITED_READS
 from app.core.security import hash_api_key
+from app.main import app
 from app.models.db import ApiKey, AuditRecord
 from tests.conftest import ADMIN_PASSWORD, MEMBER_PASSWORD, login
 
 CYCLES = "/api/v1/schedule/cycles"
 AUDIT = "/api/v1/audit/"
+CONFLICTS = "/api/v1/schedule/conflicts"
 SCOPED_KEY = "ck_test_schedule_read_only_key_000000"
 
 
@@ -46,6 +50,78 @@ def test_a_read_is_not_recorded(client, db, seed_users):
     headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
     assert client.get(CYCLES, headers=headers).status_code == 200
     assert _records(db) == []
+
+
+def _range():
+    today = datetime.date.today()
+    return {"from": str(today), "to": str(today + datetime.timedelta(days=7))}
+
+
+def test_the_audited_read_is_the_conflict_report_route():
+    paths = {
+        path
+        for path, item in app.openapi()["paths"].items()
+        for op in item.values()
+        if op.get("operationId") == "schedule.listConflicts"
+    }
+    assert paths == AUDITED_READS == {CONFLICTS}
+
+
+def test_a_read_of_the_conflict_report_is_recorded(client, db, seed_users):
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    assert client.get(CONFLICTS, headers=headers, params=_range()).status_code == 200
+    [record] = _records(db, CONFLICTS)
+    assert (record.actor_id, record.api_key_id) == ("ADM001", None)
+    assert (record.method, record.status_code) == ("GET", 200)
+
+
+def test_each_read_of_the_conflict_report_is_its_own_record(client, db, seed_users):
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    for _ in range(2):
+        assert client.get(CONFLICTS, headers=headers, params=_range()).status_code == 200
+    assert len(_records(db, CONFLICTS)) == 2
+
+
+def test_a_read_of_the_conflict_report_refused_for_role_is_recorded(client, db, seed_users):
+    headers = login(client, "member@test.internal", MEMBER_PASSWORD)
+    assert client.get(CONFLICTS, headers=headers, params=_range()).status_code == 403
+    [record] = _records(db, CONFLICTS)
+    assert (record.actor_id, record.status_code) == ("STU001", 403)
+
+
+def test_a_read_of_the_conflict_report_with_no_credentials_is_recorded(client, db, seed_users):
+    assert client.get(CONFLICTS, params=_range()).status_code == 401
+    [record] = _records(db, CONFLICTS)
+    assert (record.actor_id, record.status_code) == (None, 401)
+
+
+def test_a_read_of_the_conflict_report_with_a_bad_range_is_recorded(client, db, seed_users):
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    assert client.get(CONFLICTS, headers=headers, params={"from": "nonsense"}).status_code == 422
+    [record] = _records(db, CONFLICTS)
+    assert (record.actor_id, record.status_code) == ("ADM001", 422)
+
+
+def test_the_range_asked_for_is_not_stored(client, db, seed_users):
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    client.get(CONFLICTS, headers=headers, params={"from": "2031-03-01", "to": "2031-03-07"})
+    db.expire_all()
+    stored = " ".join(str(v) for r in db.query(AuditRecord).all() for v in vars(r).values())
+    assert "2031" not in stored
+
+
+def test_a_head_request_to_the_conflict_report_is_not_recorded(client, db, seed_users):
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    client.head(CONFLICTS, headers=headers, params=_range())
+    assert _records(db, CONFLICTS) == []
+
+
+def test_the_conflict_report_reads_back_through_the_audit_log(client, db, seed_users):
+    headers = login(client, "admin@test.internal", ADMIN_PASSWORD)
+    client.get(CONFLICTS, headers=headers, params=_range())
+    rows = client.get(AUDIT, headers=headers).json()
+    [row] = [r for r in rows if r["path"] == CONFLICTS]
+    assert (row["method"], row["status_code"], row["actor_id"]) == ("GET", 200, "ADM001")
 
 
 def test_a_login_is_recorded_and_its_password_is_not(client, db, seed_users):

@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
+from ..types import UNSET, Unset
+
 if TYPE_CHECKING:
     from ..models.conflict_item import ConflictItem
 
@@ -22,6 +24,12 @@ class Conflict:
     date, start, end_date and end are the part of the two windows they share. items is a list rather than a pair so that
     a later kind can name more than two rows.
 
+    `resource_overbooked` is a POOLED resource whose reservations together hold more than its capacity. date to end is
+    the whole stretch in which they do, items is every reservation open in it, and capacity and taken say by how much:
+    taken is the most held at any moment of the stretch. capacity and taken are null on the other kinds. Two
+    reservations on a pooled resource are never a `resource_overlap`, and reservations on a SHARED resource are never
+    reported at all.
+
         Attributes:
             kind (str):  Example: resource_overlap.
             resource_id (int | None):
@@ -31,6 +39,8 @@ class Conflict:
             end_date (datetime.date):  Example: 2026-01-05.
             end (str):  Example: 10:00:00.
             items (list[ConflictItem]):
+            capacity (int | None | Unset): The pool's capacity, on `resource_overbooked` only.
+            taken (int | None | Unset): The most units held at once, on `resource_overbooked` only.
     """
 
     kind: str
@@ -41,6 +51,8 @@ class Conflict:
     end_date: datetime.date
     end: str
     items: list[ConflictItem]
+    capacity: int | None | Unset = UNSET
+    taken: int | None | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -65,6 +77,18 @@ class Conflict:
             items_item = items_item_data.to_dict()
             items.append(items_item)
 
+        capacity: int | None | Unset
+        if isinstance(self.capacity, Unset):
+            capacity = UNSET
+        else:
+            capacity = self.capacity
+
+        taken: int | None | Unset
+        if isinstance(self.taken, Unset):
+            taken = UNSET
+        else:
+            taken = self.taken
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -79,6 +103,10 @@ class Conflict:
                 "items": items,
             }
         )
+        if capacity is not UNSET:
+            field_dict["capacity"] = capacity
+        if taken is not UNSET:
+            field_dict["taken"] = taken
 
         return field_dict
 
@@ -118,6 +146,24 @@ class Conflict:
 
             items.append(items_item)
 
+        def _parse_capacity(data: object) -> int | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(int | None | Unset, data)
+
+        capacity = _parse_capacity(d.pop("capacity", UNSET))
+
+        def _parse_taken(data: object) -> int | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(int | None | Unset, data)
+
+        taken = _parse_taken(d.pop("taken", UNSET))
+
         conflict = cls(
             kind=kind,
             resource_id=resource_id,
@@ -127,6 +173,8 @@ class Conflict:
             end_date=end_date,
             end=end,
             items=items,
+            capacity=capacity,
+            taken=taken,
         )
 
         conflict.additional_properties = d

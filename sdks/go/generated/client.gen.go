@@ -131,6 +131,8 @@ const (
 	REFRESHTOKENREUSED          ErrorCode = "REFRESH_TOKEN_REUSED"
 	REFRESHTOKENUSED            ErrorCode = "REFRESH_TOKEN_USED"
 	RESERVATIONEXTERNALREFTAKEN ErrorCode = "RESERVATION_EXTERNAL_REF_TAKEN"
+	RESOURCEBOOKINGSWOULDNOTFIT ErrorCode = "RESOURCE_BOOKINGS_WOULD_NOT_FIT"
+	RESOURCECAPACITYEXCEEDED    ErrorCode = "RESOURCE_CAPACITY_EXCEEDED"
 	RESOURCECONFLICT            ErrorCode = "RESOURCE_CONFLICT"
 	SCOPEMISSING                ErrorCode = "SCOPE_MISSING"
 	SERVERBUSY                  ErrorCode = "SERVER_BUSY"
@@ -223,6 +225,10 @@ func (e ErrorCode) Valid() bool {
 	case REFRESHTOKENUSED:
 		return true
 	case RESERVATIONEXTERNALREFTAKEN:
+		return true
+	case RESOURCEBOOKINGSWOULDNOTFIT:
+		return true
+	case RESOURCECAPACITYEXCEEDED:
 		return true
 	case RESOURCECONFLICT:
 		return true
@@ -384,6 +390,48 @@ func (e ReservationResponseStatus) Valid() bool {
 	}
 }
 
+// Defines values for ResourceCreateMode.
+const (
+	ResourceCreateModeEXCLUSIVE ResourceCreateMode = "EXCLUSIVE"
+	ResourceCreateModePOOLED    ResourceCreateMode = "POOLED"
+	ResourceCreateModeSHARED    ResourceCreateMode = "SHARED"
+)
+
+// Valid indicates whether the value is a known member of the ResourceCreateMode enum.
+func (e ResourceCreateMode) Valid() bool {
+	switch e {
+	case ResourceCreateModeEXCLUSIVE:
+		return true
+	case ResourceCreateModePOOLED:
+		return true
+	case ResourceCreateModeSHARED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ResourceResponseMode.
+const (
+	ResourceResponseModeEXCLUSIVE ResourceResponseMode = "EXCLUSIVE"
+	ResourceResponseModePOOLED    ResourceResponseMode = "POOLED"
+	ResourceResponseModeSHARED    ResourceResponseMode = "SHARED"
+)
+
+// Valid indicates whether the value is a known member of the ResourceResponseMode enum.
+func (e ResourceResponseMode) Valid() bool {
+	switch e {
+	case ResourceResponseModeEXCLUSIVE:
+		return true
+	case ResourceResponseModePOOLED:
+		return true
+	case ResourceResponseModeSHARED:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ResourceResponseResourceType.
 const (
 	ResourceResponseResourceTypePERSON ResourceResponseResourceType = "PERSON"
@@ -396,6 +444,27 @@ func (e ResourceResponseResourceType) Valid() bool {
 	case ResourceResponseResourceTypePERSON:
 		return true
 	case ResourceResponseResourceTypeROOM:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ResourceUpdateMode.
+const (
+	ResourceUpdateModeEXCLUSIVE ResourceUpdateMode = "EXCLUSIVE"
+	ResourceUpdateModePOOLED    ResourceUpdateMode = "POOLED"
+	ResourceUpdateModeSHARED    ResourceUpdateMode = "SHARED"
+)
+
+// Valid indicates whether the value is a known member of the ResourceUpdateMode enum.
+func (e ResourceUpdateMode) Valid() bool {
+	switch e {
+	case ResourceUpdateModeEXCLUSIVE:
+		return true
+	case ResourceUpdateModePOOLED:
+		return true
+	case ResourceUpdateModeSHARED:
 		return true
 	default:
 		return false
@@ -697,6 +766,16 @@ type AvailabilityResponse struct {
 	To         *openapi_types.Date `json:"to,omitempty"`
 }
 
+// BookingsWouldNotFit The body of a 409 with `RESOURCE_BOOKINGS_WOULD_NOT_FIT`: a change of mode or capacity that bookings still to come (from yesterday on) would no longer fit. reservations names them, so the caller can cancel or move them and try again.
+type BookingsWouldNotFit struct {
+	// Code What went wrong, for a program to branch on. docs/api.md says what each one means. A code is never renamed or reused for a different meaning, but new codes are added, so a client should treat one it does not know by its HTTP status. VALIDATION_FAILED is the only code whose detail is a list: FastAPI's field errors for a request that did not match the declared shape.
+	Code   ErrorCode `json:"code"`
+	Detail struct {
+		Message      string                `json:"message"`
+		Reservations []ReservationResponse `json:"reservations"`
+	} `json:"detail"`
+}
+
 // BusyInterval One window in which a resource is taken, by a weekly slot or by a reservation. Which kind it is can be read off the fields that are filled in: a slot carries the activity fields and a null reservation_id, and a reservation carries the reverse. What a booking is for is deliberately not here, because this is readable by anyone signed in.
 //
 // The date is the day the window opened on and end_date the day it finishes on. They differ when the window ran past midnight, and then the date can fall before the range that returned the interval: a booking dated Monday from 22:00 to 06:00 is on Tuesday's calendar.
@@ -713,6 +792,19 @@ type BusyInterval struct {
 	MasterSlotId  *int                `json:"master_slot_id,omitempty"`
 	ReservationId *int                `json:"reservation_id,omitempty"`
 	Start         *string             `json:"start,omitempty"`
+}
+
+// CapacityExceeded The body of a 409 with `RESOURCE_CAPACITY_EXCEEDED`: a POOLED resource has not got quantity units free for the whole window. conflicts are the bookings that hold it, as in ReservationConflict. taken is the most they hold at any one moment of the window, so capacity minus taken is the most this window could still have.
+type CapacityExceeded struct {
+	// Code What went wrong, for a program to branch on. docs/api.md says what each one means. A code is never renamed or reused for a different meaning, but new codes are added, so a client should treat one it does not know by its HTTP status. VALIDATION_FAILED is the only code whose detail is a list: FastAPI's field errors for a request that did not match the declared shape.
+	Code   ErrorCode `json:"code"`
+	Detail struct {
+		Capacity  int            `json:"capacity"`
+		Conflicts []BusyInterval `json:"conflicts"`
+		Message   string         `json:"message"`
+		Requested int            `json:"requested"`
+		Taken     int            `json:"taken"`
+	} `json:"detail"`
 }
 
 // Change One thing that changed, and what it now holds. `resource` and `reservation` are the row as it stands, one of them filled in according to `entity_kind`, so an entry can be applied without a second request. Both are null in the full log, which is the markers alone.
@@ -750,7 +842,11 @@ type ChangePasswordRequest struct {
 }
 
 // Conflict Two rows that hold the same resource, or the same member, at the same moment. kind is `resource_overlap`, with resource_id set and member_id null, or `member_overlap`, with member_id set and resource_id null. Like ConflictItem.type, kind is a string so that later kinds can be added; a reader should skip a kind it does not know. date, start, end_date and end are the part of the two windows they share. items is a list rather than a pair so that a later kind can name more than two rows.
+//
+// `resource_overbooked` is a POOLED resource whose reservations together hold more than its capacity. date to end is the whole stretch in which they do, items is every reservation open in it, and capacity and taken say by how much: taken is the most held at any moment of the stretch. capacity and taken are null on the other kinds. Two reservations on a pooled resource are never a `resource_overlap`, and reservations on a SHARED resource are never reported at all.
 type Conflict struct {
+	// Capacity The pool's capacity, on `resource_overbooked` only.
+	Capacity   *int               `json:"capacity,omitempty"`
 	Date       openapi_types.Date `json:"date"`
 	End        string             `json:"end"`
 	EndDate    openapi_types.Date `json:"end_date"`
@@ -759,6 +855,9 @@ type Conflict struct {
 	MemberId   string             `json:"member_id"`
 	ResourceId int                `json:"resource_id"`
 	Start      string             `json:"start"`
+
+	// Taken The most units held at once, on `resource_overbooked` only.
+	Taken *int `json:"taken,omitempty"`
 }
 
 // ConflictItem One of the rows taking part in a clash, with the window it holds. type is `slot` (a weekly slot on one date, id is the slot), `ledger_day` (a generated day, id is the ledger row) or `reservation` (a held booking, id is the reservation). It is a string rather than an enum so that a new kind of row can be added later; a reader should skip a type it does not know. date is the day the window opened on and end_date the day it finishes on, as in BusyInterval.
@@ -1277,7 +1376,10 @@ type ReservationCreate struct {
 	// ExternalRef The caller's own identifier for the booking, kept exactly as sent. Unique per caller: a second booking under a reference the caller already used, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN`. Find the booking again with `GET /api/v1/resources/reservations?external_ref=`. Optional, and any number of bookings may leave it unset.
 	ExternalRef *string `json:"external_ref,omitempty"`
 	Purpose     string  `json:"purpose"`
-	Start       string  `json:"start"`
+
+	// Quantity How many units of a POOLED resource to take, 1 when left out. Above 1 on any other resource is a 422. Part of what a retry is compared on only when it is sent, so a retry that leaves it out still matches a booking made before the field existed.
+	Quantity *int   `json:"quantity,omitempty"`
+	Start    string `json:"start"`
 }
 
 // ReservationRefTaken The body of a 409 with `RESERVATION_EXTERNAL_REF_TAKEN`. Names the reservation of the caller's that already carries the reference, which is the booking the caller made earlier under it and can now read, change or cancel.
@@ -1305,6 +1407,9 @@ type ReservationResponse struct {
 	// Purpose Returned only to the caller that made the booking. It is not on the availability calendar, which anyone signed in can read.
 	Purpose *string `json:"purpose,omitempty"`
 
+	// Quantity Units taken. Always 1 off a POOLED resource.
+	Quantity *int `json:"quantity,omitempty"`
+
 	// RequestedById Null once the account that booked it has been deleted. A hold outlives the service account that placed it.
 	RequestedById *string                    `json:"requested_by_id,omitempty"`
 	ResourceCode  *string                    `json:"resource_code,omitempty"`
@@ -1325,7 +1430,9 @@ type ReservationUpdate struct {
 // ResourceCreate A room. Every string is trimmed first, code included, the same as the importer trims a room name, so this room and the same name in a later CSV are one row.
 type ResourceCreate struct {
 	AltitudeTarget *float32 `json:"altitude_target,omitempty"`
-	Capacity       *int     `json:"capacity,omitempty"`
+
+	// Capacity Required, and at least 1, when mode is POOLED.
+	Capacity *int `json:"capacity,omitempty"`
 
 	// Code The importer's match key, unique across every resource. Not editable afterwards.
 	Code string `json:"code"`
@@ -1336,27 +1443,41 @@ type ResourceCreate struct {
 	// Latitude Set together with longitude, or not at all.
 	Latitude  *float32 `json:"latitude,omitempty"`
 	Longitude *float32 `json:"longitude,omitempty"`
-	UnitCode  *string  `json:"unit_code,omitempty"`
+
+	// Mode See ResourceResponse.mode. EXCLUSIVE when left out.
+	Mode     *ResourceCreateMode `json:"mode,omitempty"`
+	UnitCode *string             `json:"unit_code,omitempty"`
 }
+
+// ResourceCreateMode See ResourceResponse.mode. EXCLUSIVE when left out.
+type ResourceCreateMode string
 
 // ResourceResponse defines model for ResourceResponse.
 type ResourceResponse struct {
 	Active         *bool    `json:"active,omitempty"`
 	AltitudeTarget *float32 `json:"altitude_target,omitempty"`
-	Capacity       *int     `json:"capacity,omitempty"`
+
+	// Capacity How many people a room holds, or on a POOLED resource how many units the pool has.
+	Capacity *int `json:"capacity,omitempty"`
 
 	// Code The importer's match key. Not editable.
-	Code         *string                       `json:"code,omitempty"`
-	Id           *int                          `json:"id,omitempty"`
-	Label        *string                       `json:"label,omitempty"`
-	Latitude     *float32                      `json:"latitude,omitempty"`
-	Longitude    *float32                      `json:"longitude,omitempty"`
+	Code      *string  `json:"code,omitempty"`
+	Id        *int     `json:"id,omitempty"`
+	Label     *string  `json:"label,omitempty"`
+	Latitude  *float32 `json:"latitude,omitempty"`
+	Longitude *float32 `json:"longitude,omitempty"`
+
+	// Mode How a reservation takes the resource. EXCLUSIVE, the default, is one booking at a time. POOLED is capacity interchangeable units, of which a booking takes its quantity, refused with `RESOURCE_CAPACITY_EXCEEDED` when the bookings already there leave too few at some moment of the window. SHARED records who is there and refuses nobody. The mode governs reservations only: the timetable on any resource is one class at a time, and a class on a pooled resource takes the whole pool.
+	Mode         *ResourceResponseMode         `json:"mode,omitempty"`
 	ResourceType *ResourceResponseResourceType `json:"resource_type,omitempty"`
 	UnitCode     *string                       `json:"unit_code,omitempty"`
 
 	// UserId Set when this resource is a person.
 	UserId *string `json:"user_id,omitempty"`
 }
+
+// ResourceResponseMode How a reservation takes the resource. EXCLUSIVE, the default, is one booking at a time. POOLED is capacity interchangeable units, of which a booking takes its quantity, refused with `RESOURCE_CAPACITY_EXCEEDED` when the bookings already there leave too few at some moment of the window. SHARED records who is there and refuses nobody. The mode governs reservations only: the timetable on any resource is one class at a time, and a class on a pooled resource takes the whole pool.
+type ResourceResponseMode string
 
 // ResourceResponseResourceType defines model for ResourceResponse.ResourceType.
 type ResourceResponseResourceType string
@@ -1367,13 +1488,21 @@ type ResourceUpdate struct {
 
 	// AltitudeTarget Optional. Without it the fence is horizontal only.
 	AltitudeTarget *float32 `json:"altitude_target,omitempty"`
-	Capacity       *int     `json:"capacity,omitempty"`
-	Label          *string  `json:"label,omitempty"`
+
+	// Capacity A POOLED resource keeps a capacity of at least 1. A cut the bookings still to come would no longer fit is a 409 with `RESOURCE_BOOKINGS_WOULD_NOT_FIT`.
+	Capacity *int    `json:"capacity,omitempty"`
+	Label    *string `json:"label,omitempty"`
 
 	// Latitude Set or cleared together with longitude. Setting the pair is what switches geofencing on for sessions held here.
 	Latitude  *float32 `json:"latitude,omitempty"`
 	Longitude *float32 `json:"longitude,omitempty"`
+
+	// Mode See ResourceResponse.mode. Cannot be null. A change the bookings still to come would no longer fit is a 409 with `RESOURCE_BOOKINGS_WOULD_NOT_FIT` naming them; one that fits is written onto them.
+	Mode *ResourceUpdateMode `json:"mode,omitempty"`
 }
+
+// ResourceUpdateMode See ResourceResponse.mode. Cannot be null. A change the bookings still to come would no longer fit is a 409 with `RESOURCE_BOOKINGS_WOULD_NOT_FIT` naming them; one that fits is written onto them.
+type ResourceUpdateMode string
 
 // RetireResult What retiring an activity or a slot did to the days ahead. Days from today onward that nobody has marked or annotated are removed; the ones carrying attendance or a note are kept. Days before today are records and are not touched.
 type RetireResult struct {
@@ -2339,6 +2468,32 @@ func (t *ResourcesCreateReservation409JSONResponseBody) MergeReservationRefTaken
 	return err
 }
 
+// AsCapacityExceeded returns the union data inside the ResourcesCreateReservation409JSONResponseBody as a CapacityExceeded
+func (t ResourcesCreateReservation409JSONResponseBody) AsCapacityExceeded() (CapacityExceeded, error) {
+	var body CapacityExceeded
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCapacityExceeded overwrites any union data inside the ResourcesCreateReservation409JSONResponseBody as the provided CapacityExceeded
+func (t *ResourcesCreateReservation409JSONResponseBody) FromCapacityExceeded(v CapacityExceeded) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeCapacityExceeded performs a merge with any union data inside the ResourcesCreateReservation409JSONResponseBody, using the provided CapacityExceeded
+func (t *ResourcesCreateReservation409JSONResponseBody) MergeCapacityExceeded(v CapacityExceeded) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 // AsReservationConflict returns the union data inside the ResourcesCreateReservation409JSONResponseBody as a ReservationConflict
 func (t ResourcesCreateReservation409JSONResponseBody) AsReservationConflict() (ReservationConflict, error) {
 	var body ReservationConflict
@@ -2663,7 +2818,7 @@ type ClientInterface interface {
 
 	// AuditList Writes made through the API, newest first
 	//
-	// Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
+	// Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, and one per GET of the conflict report (`schedule.listConflicts`), including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
 	//
 	// Corresponds with GET /api/v1/audit/ (the `AuditList` operationId).
 	AuditList(ctx context.Context, params *AuditListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3093,7 +3248,7 @@ type ClientInterface interface {
 
 	// ResourcesUpdateWithBody Update a resource
 	//
-	// Fill in what a CSV could not know: capacity, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there.
+	// Fill in what a CSV could not know: capacity, mode, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there. A change of mode or capacity is checked against the bookings still to come and refused with 409 if any would no longer fit.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -3102,7 +3257,7 @@ type ClientInterface interface {
 
 	// ResourcesUpdate Update a resource
 	//
-	// Fill in what a CSV could not know: capacity, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there.
+	// Fill in what a CSV could not know: capacity, mode, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there. A change of mode or capacity is checked against the bookings still to come and refused with 409 if any would no longer fit.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -3116,6 +3271,8 @@ type ClientInterface interface {
 	// A generated day counts whatever its cycle now says: closing a cycle leaves behind the days already past and any ahead that carry attendance or a note, deleting a slot leaves behind the days attendance was marked on, and the database refuses a second booking on top of either. Where a day and the slot it came from both cover a date you get the day, once, because the day is the row that holds the hour and keeps its window when the slot is corrected later. Dates the generator has not reached yet come from the slot. An inactive resource still answers: retiring a room does not clear its calendar.
 	//
 	// A busy interval's date can be the day before `from`. A booking that runs past midnight is dated the day it opened on and occupies the morning after, so a caller asking about Tuesday is told about a hold dated Monday that ends at six. Read each interval by its own date and end_date and not by the range that returned it: grouping by date alone files that hold under a day nobody asked about, and discarding anything outside the range shows a ward as free while it is staffed.
+	//
+	// The resource's mode changes which reservations count. On a POOLED resource one booking does not make it busy: each stretch in which the bookings together hold the whole pool is reported instead, as an interval with every id null. On a SHARED resource reservations are never reported.
 	//
 	// Corresponds with GET /api/v1/resources/{resource_id}/availability (the `ResourcesGetAvailability` operationId).
 	ResourcesGetAvailability(ctx context.Context, resourceId int, params *ResourcesGetAvailabilityParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3131,6 +3288,8 @@ type ClientInterface interface {
 	// A weekly slot reads its two times by the same rule, so an overnight booking is checked against night shifts on the timetable as well as against day ones.
 	//
 	// An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
+	//
+	// The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -3148,6 +3307,8 @@ type ClientInterface interface {
 	// A weekly slot reads its two times by the same rule, so an overnight booking is checked against night shifts on the timetable as well as against day ones.
 	//
 	// An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
+	//
+	// The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -4035,7 +4196,7 @@ func (c *Client) AttendanceMark(ctx context.Context, params *AttendanceMarkParam
 
 // AuditList Writes made through the API, newest first
 //
-// Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
+// Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, and one per GET of the conflict report (`schedule.listConflicts`), including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
 //
 // Corresponds with GET /api/v1/audit/ (the `AuditList` operationId).
 func (c *Client) AuditList(ctx context.Context, params *AuditListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -4965,7 +5126,7 @@ func (c *Client) ResourcesListReservations(ctx context.Context, params *Resource
 
 // ResourcesUpdateWithBody Update a resource
 //
-// Fill in what a CSV could not know: capacity, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there.
+// Fill in what a CSV could not know: capacity, mode, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there. A change of mode or capacity is checked against the bookings still to come and refused with 409 if any would no longer fit.
 //
 // Takes any type of body and a specified content type.
 //
@@ -4984,7 +5145,7 @@ func (c *Client) ResourcesUpdateWithBody(ctx context.Context, resourceId int, pa
 
 // ResourcesUpdate Update a resource
 //
-// Fill in what a CSV could not know: capacity, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there.
+// Fill in what a CSV could not know: capacity, mode, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there. A change of mode or capacity is checked against the bookings still to come and refused with 409 if any would no longer fit.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -5008,6 +5169,8 @@ func (c *Client) ResourcesUpdate(ctx context.Context, resourceId int, params *Re
 // A generated day counts whatever its cycle now says: closing a cycle leaves behind the days already past and any ahead that carry attendance or a note, deleting a slot leaves behind the days attendance was marked on, and the database refuses a second booking on top of either. Where a day and the slot it came from both cover a date you get the day, once, because the day is the row that holds the hour and keeps its window when the slot is corrected later. Dates the generator has not reached yet come from the slot. An inactive resource still answers: retiring a room does not clear its calendar.
 //
 // A busy interval's date can be the day before `from`. A booking that runs past midnight is dated the day it opened on and occupies the morning after, so a caller asking about Tuesday is told about a hold dated Monday that ends at six. Read each interval by its own date and end_date and not by the range that returned it: grouping by date alone files that hold under a day nobody asked about, and discarding anything outside the range shows a ward as free while it is staffed.
+//
+// The resource's mode changes which reservations count. On a POOLED resource one booking does not make it busy: each stretch in which the bookings together hold the whole pool is reported instead, as an interval with every id null. On a SHARED resource reservations are never reported.
 //
 // Corresponds with GET /api/v1/resources/{resource_id}/availability (the `ResourcesGetAvailability` operationId).
 func (c *Client) ResourcesGetAvailability(ctx context.Context, resourceId int, params *ResourcesGetAvailabilityParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -5033,6 +5196,8 @@ func (c *Client) ResourcesGetAvailability(ctx context.Context, resourceId int, p
 // A weekly slot reads its two times by the same rule, so an overnight booking is checked against night shifts on the timetable as well as against day ones.
 //
 // An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
+//
+// The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
 //
 // Takes any type of body and a specified content type.
 //
@@ -5060,6 +5225,8 @@ func (c *Client) ResourcesCreateReservationWithBody(ctx context.Context, resourc
 // A weekly slot reads its two times by the same rule, so an overnight booking is checked against night shifts on the timetable as well as against day ones.
 //
 // An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
+//
+// The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -11768,7 +11935,7 @@ type ClientWithResponsesInterface interface {
 
 	// AuditListWithResponse Writes made through the API, newest first
 	//
-	// Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
+	// Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, and one per GET of the conflict report (`schedule.listConflicts`), including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -12236,7 +12403,7 @@ type ClientWithResponsesInterface interface {
 
 	// ResourcesUpdateWithBodyWithResponse Update a resource
 	//
-	// Fill in what a CSV could not know: capacity, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there.
+	// Fill in what a CSV could not know: capacity, mode, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there. A change of mode or capacity is checked against the bookings still to come and refused with 409 if any would no longer fit.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -12245,7 +12412,7 @@ type ClientWithResponsesInterface interface {
 
 	// ResourcesUpdateWithResponse Update a resource
 	//
-	// Fill in what a CSV could not know: capacity, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there.
+	// Fill in what a CSV could not know: capacity, mode, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there. A change of mode or capacity is checked against the bookings still to come and refused with 409 if any would no longer fit.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -12259,6 +12426,8 @@ type ClientWithResponsesInterface interface {
 	// A generated day counts whatever its cycle now says: closing a cycle leaves behind the days already past and any ahead that carry attendance or a note, deleting a slot leaves behind the days attendance was marked on, and the database refuses a second booking on top of either. Where a day and the slot it came from both cover a date you get the day, once, because the day is the row that holds the hour and keeps its window when the slot is corrected later. Dates the generator has not reached yet come from the slot. An inactive resource still answers: retiring a room does not clear its calendar.
 	//
 	// A busy interval's date can be the day before `from`. A booking that runs past midnight is dated the day it opened on and occupies the morning after, so a caller asking about Tuesday is told about a hold dated Monday that ends at six. Read each interval by its own date and end_date and not by the range that returned it: grouping by date alone files that hold under a day nobody asked about, and discarding anything outside the range shows a ward as free while it is staffed.
+	//
+	// The resource's mode changes which reservations count. On a POOLED resource one booking does not make it busy: each stretch in which the bookings together hold the whole pool is reported instead, as an interval with every id null. On a SHARED resource reservations are never reported.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -12277,6 +12446,8 @@ type ClientWithResponsesInterface interface {
 	//
 	// An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
 	//
+	// The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
+	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/resources/{resource_id}/reservations (the `ResourcesCreateReservation` operationId).
@@ -12293,6 +12464,8 @@ type ClientWithResponsesInterface interface {
 	// A weekly slot reads its two times by the same rule, so an overnight booking is checked against night shifts on the timetable as well as against day ones.
 	//
 	// An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
+	//
+	// The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -16034,6 +16207,8 @@ type ResourcesUpdateResponse struct {
 	JSON403 *Forbidden
 	// JSON404 the response for an HTTP 404 `application/json` response
 	JSON404 *NotFound
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *BookingsWouldNotFit
 	// JSON422 the response for an HTTP 422 `application/json` response
 	JSON422 *ErrorResponse
 	// Headers200 the parsed response headers for an HTTP 200 response
@@ -16058,6 +16233,11 @@ func (r ResourcesUpdateResponse) GetJSON403() *Forbidden {
 // GetJSON404 returns the response for an HTTP 404 `application/json` response
 func (r ResourcesUpdateResponse) GetJSON404() *NotFound {
 	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r ResourcesUpdateResponse) GetJSON409() *BookingsWouldNotFit {
+	return r.JSON409
 }
 
 // GetJSON422 returns the response for an HTTP 422 `application/json` response
@@ -19863,7 +20043,7 @@ func (c *ClientWithResponses) AttendanceMarkWithResponse(ctx context.Context, pa
 
 // AuditListWithResponse Writes made through the API, newest first
 //
-// Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
+// Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per request under `/api/v1` with a method other than GET, HEAD or OPTIONS, and one per GET of the conflict report (`schedule.listConflicts`), including refused ones. Bodies are never stored. `from` and `to` are dates in the organization's timezone, both included.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -20631,7 +20811,7 @@ func (c *ClientWithResponses) ResourcesListReservationsWithResponse(ctx context.
 
 // ResourcesUpdateWithBodyWithResponse Update a resource
 //
-// Fill in what a CSV could not know: capacity, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there.
+// Fill in what a CSV could not know: capacity, mode, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there. A change of mode or capacity is checked against the bookings still to come and refused with 409 if any would no longer fit.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -20646,7 +20826,7 @@ func (c *ClientWithResponses) ResourcesUpdateWithBodyWithResponse(ctx context.Co
 
 // ResourcesUpdateWithResponse Update a resource
 //
-// Fill in what a CSV could not know: capacity, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there.
+// Fill in what a CSV could not know: capacity, mode, and where the room physically is. Setting latitude and longitude is what switches geofencing on for every session held there. A change of mode or capacity is checked against the bookings still to come and refused with 409 if any would no longer fit.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -20666,6 +20846,8 @@ func (c *ClientWithResponses) ResourcesUpdateWithResponse(ctx context.Context, r
 // A generated day counts whatever its cycle now says: closing a cycle leaves behind the days already past and any ahead that carry attendance or a note, deleting a slot leaves behind the days attendance was marked on, and the database refuses a second booking on top of either. Where a day and the slot it came from both cover a date you get the day, once, because the day is the row that holds the hour and keeps its window when the slot is corrected later. Dates the generator has not reached yet come from the slot. An inactive resource still answers: retiring a room does not clear its calendar.
 //
 // A busy interval's date can be the day before `from`. A booking that runs past midnight is dated the day it opened on and occupies the morning after, so a caller asking about Tuesday is told about a hold dated Monday that ends at six. Read each interval by its own date and end_date and not by the range that returned it: grouping by date alone files that hold under a day nobody asked about, and discarding anything outside the range shows a ward as free while it is staffed.
+//
+// The resource's mode changes which reservations count. On a POOLED resource one booking does not make it busy: each stretch in which the bookings together hold the whole pool is reported instead, as an interval with every id null. On a SHARED resource reservations are never reported.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -20690,6 +20872,8 @@ func (c *ClientWithResponses) ResourcesGetAvailabilityWithResponse(ctx context.C
 //
 // An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
 //
+// The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
+//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/resources/{resource_id}/reservations (the `ResourcesCreateReservation` operationId).
@@ -20712,6 +20896,8 @@ func (c *ClientWithResponses) ResourcesCreateReservationWithBodyWithResponse(ctx
 // A weekly slot reads its two times by the same rule, so an overnight booking is checked against night shifts on the timetable as well as against day ones.
 //
 // An `external_ref` already on one of the caller's reservations, cancelled or not, is a 409 with `RESERVATION_EXTERNAL_REF_TAKEN` and the id of that reservation in `detail.reservation_id`. The reference is checked after the Idempotency-Key, so a retry under the same key and the same body is still a `200` with the original hold, and before the window, so the same booking sent again under a new key is told it already exists rather than that the window is taken. Two requests racing for one reference get one booking and the same 409 for the loser. A cancelled reservation keeps its reference: clear or change it with PATCH before booking under it again.
+//
+// The resource's mode decides what is in the way. EXCLUSIVE is all of the above. POOLED refuses a window the timetable holds, because a class takes the whole pool, and otherwise takes `quantity` units when the bookings already there leave that many free at every moment of the window; otherwise 409 `RESOURCE_CAPACITY_EXCEEDED`. SHARED refuses nothing. A quantity above 1 on a resource that is not POOLED is a 422.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24278,6 +24464,13 @@ func ParseResourcesUpdateResponse(rsp *http.Response) (*ResourcesUpdateResponse,
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest BookingsWouldNotFit
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest ErrorResponse

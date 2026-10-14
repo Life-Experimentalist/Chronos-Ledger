@@ -6,6 +6,7 @@ from typing import Any, TypeVar, cast
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
+from ..models.resource_create_mode import ResourceCreateMode
 from ..types import UNSET, Unset
 
 T = TypeVar("T", bound="ResourceCreate")
@@ -21,7 +22,8 @@ class ResourceCreate:
                  Example: LH-3.
             label (str | Unset): Defaults to the code, which is what an imported room gets. Example: Lecture Hall 3.
             unit_code (None | str | Unset):
-            capacity (int | None | Unset):
+            capacity (int | None | Unset): Required, and at least 1, when mode is POOLED.
+            mode (ResourceCreateMode | Unset): See ResourceResponse.mode. EXCLUSIVE when left out.
             latitude (float | None | Unset): Set together with longitude, or not at all.
             longitude (float | None | Unset):
             altitude_target (float | None | Unset):
@@ -31,6 +33,7 @@ class ResourceCreate:
     label: str | Unset = UNSET
     unit_code: None | str | Unset = UNSET
     capacity: int | None | Unset = UNSET
+    mode: ResourceCreateMode | Unset = UNSET
     latitude: float | None | Unset = UNSET
     longitude: float | None | Unset = UNSET
     altitude_target: float | None | Unset = UNSET
@@ -52,6 +55,10 @@ class ResourceCreate:
             capacity = UNSET
         else:
             capacity = self.capacity
+
+        mode: str | Unset = UNSET
+        if not isinstance(self.mode, Unset):
+            mode = self.mode.value
 
         latitude: float | None | Unset
         if isinstance(self.latitude, Unset):
@@ -84,6 +91,8 @@ class ResourceCreate:
             field_dict["unit_code"] = unit_code
         if capacity is not UNSET:
             field_dict["capacity"] = capacity
+        if mode is not UNSET:
+            field_dict["mode"] = mode
         if latitude is not UNSET:
             field_dict["latitude"] = latitude
         if longitude is not UNSET:
@@ -118,6 +127,13 @@ class ResourceCreate:
 
         capacity = _parse_capacity(d.pop("capacity", UNSET))
 
+        _mode = d.pop("mode", UNSET)
+        mode: ResourceCreateMode | Unset
+        if isinstance(_mode, Unset):
+            mode = UNSET
+        else:
+            mode = ResourceCreateMode(_mode)
+
         def _parse_latitude(data: object) -> float | None | Unset:
             if data is None:
                 return data
@@ -150,6 +166,7 @@ class ResourceCreate:
             label=label,
             unit_code=unit_code,
             capacity=capacity,
+            mode=mode,
             latitude=latitude,
             longitude=longitude,
             altitude_target=altitude_target,

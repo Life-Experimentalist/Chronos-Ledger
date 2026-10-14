@@ -10,6 +10,35 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.16.0](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.15.0...v0.16.0) (2026-10-14)
+
+
+### Features
+
+* **activities:** create, edit and retire activities through the API ([#84](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/84)) ([dbe48e7](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/dbe48e7cafdbce33e2d64dd259117a56950f6977))
+* **api:** a stable error code on every error ([#79](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/79)) ([eb5dd4e](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/eb5dd4e8a62b17328d640fdc550634fa60a084b5))
+* **api:** Idempotency-Key on every write ([#82](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/82)) ([cd62cd2](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/cd62cd2057b3ccdeeb447fc058ffd84b8200bfa5))
+* **audit:** record every read of the conflict report ([#100](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/100)) ([a37e4f6](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/a37e4f69a15d0141fb4bb70b3227a1cae8ed7754))
+* **contract:** failure modes written down, each with a test ([#92](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/92)) ([ce29c5c](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/ce29c5caf18d89b3dccf288e644d7f307eb758ea))
+* **deploy:** Helm chart ([#88](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/88)) ([c0589b9](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/c0589b9ddd64215ca27c0a1735f4d7982408a939))
+* **engine:** keep a rolling horizon of ledger days materialized ([#77](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/77)) ([8e3f2ec](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/8e3f2ecd9c2309e9490a6649996fb83f15465509))
+* **portability:** versioned export and import of the whole organization ([#81](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/81)) ([fefafbe](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/fefafbe267fc6252ad7102fa838811c13de4af6a))
+* **reservations:** external_ref, unique per caller ([#83](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/83)) ([c3a9f58](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/c3a9f58a6f5e514ced8e333a7a25f2a5e6cc03c9))
+* **resources:** exclusive, pooled and shared resources ([#94](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/94)) ([7ff1694](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/7ff16945007693aaa21d5826183f0a96b031ef10))
+* **schedule:** conflict report ([#80](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/80)) ([22087cd](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/22087cd74f55b8799abfc08ce32c434071df0dd8))
+* **sdks:** Go and Rust clients generated from the spec ([#89](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/89)) ([8dd8867](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/8dd88677c7c0b0d480f5a727ab145496c90ae88a))
+* **sdks:** Python and TypeScript clients retry and refresh like Go and Rust ([#101](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/101)) ([927de24](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/927de243becc6f18681461addce159ae00c34541))
+* **sdks:** retries with full jitter and an Idempotency-Key on every write ([#87](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/87)) ([27a2771](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/27a27717db207eb91923c3306f43f41be7f711f6))
+* **webhooks:** signed outgoing webhooks from the change feed ([#85](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/85)) ([6b8e5f8](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/6b8e5f8deb9b1ee7b096770b707eaa0a8fb3b814))
+
+
+### Bug Fixes
+
+* **api:** a reused Idempotency-Key with a different body is a 422 everywhere ([#86](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/86)) ([2615d75](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/2615d75ace9701c398562cd4457a5dd78b94cde3))
+* **release:** the Helm chart's appVersion moves with each release ([#102](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/102)) ([f6588c8](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/f6588c83e000bb00afc7d45c9703caffaa52f0ff))
+* **schema:** refuse a database missing model columns; schema version 4 ([#99](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/99)) ([4ba315f](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/4ba315f90ab45b180595bd5a3152fe9b53a3054d))
+* **webhooks:** count failed deliveries in the database so replicas do not lose one ([#90](https://github.com/Life-Experimentalist/Chronos-Ledger/issues/90)) ([d87aaed](https://github.com/Life-Experimentalist/Chronos-Ledger/commit/d87aaed2558f8b23dae08e301e8e21951ab6d1e6))
+
 ## [0.15.0](https://github.com/Life-Experimentalist/Chronos-Ledger/compare/v0.14.0...v0.15.0) (2026-10-12)
 
 

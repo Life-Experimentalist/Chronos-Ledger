@@ -712,14 +712,14 @@ def test_an_admin_can_cancel_a_hold_it_did_not_take(client, db, seed_users):
 
 def _issue_key(client, headers, **extra):
     """A key bound to the seeded admin, which is how an integration arrives."""
-    payload = {"label": "PulseWard", "user_id": "ADM001", **extra}
+    payload = {"label": "Integration", "user_id": "ADM001", **extra}
     res = client.post("/api/v1/api-keys/", json=payload, headers=headers)
     assert res.status_code == 201, res.text
     return {"X-API-Key": res.json()["api_key"]}
 
 
 def test_an_integration_books_with_a_key_and_no_password(client, db, seed_users):
-    """The path PulseWard actually uses, start to finish.
+    """The path an integrating system takes, start to finish.
 
     Every other test here signs in with a password. An integration never
     does: it holds a scoped key, and the scope for this route is derived

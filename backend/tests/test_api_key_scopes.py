@@ -18,7 +18,7 @@ PAST = datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=1)
 
 
 def _create(client, headers, **extra):
-    payload = {"label": "PulseWard", "user_id": "ADM001", **extra}
+    payload = {"label": "Integration", "user_id": "ADM001", **extra}
     return client.post("/api/v1/api-keys/", json=payload, headers=headers)
 
 

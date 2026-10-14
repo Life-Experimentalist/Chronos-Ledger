@@ -124,7 +124,7 @@ nothing inside the stack changes.
 describe, which is the quickest way to confirm an upgrade landed:
 
 ```json
-{"status": "healthy", "service": "chronos-ledger", "version": "0.15.0", "schema_version": "3"}
+{"status": "healthy", "service": "chronos-ledger", "version": "0.17.0", "schema_version": "5"}
 ```
 
 There are no migrations before the first real deployment. The app container
@@ -132,7 +132,8 @@ builds whatever tables are missing when it starts
 (`backend/app/core/schema.py::ensure_schema`) and changes nothing that is
 already there, so a database made by a release with one `schema_version` is
 not upgraded to the next: 0.15 does not upgrade a 0.14 database, and the
-app refuses to start on one. When the
+app refuses to start on one. It also refuses to start on a database
+whose tables lack columns the models have, and names them. When the
 number changes between releases, either restore a backup taken on the
 matching release (see Database Backup) or recreate the database (remove the
 volume, or drop and create it) and start again on an empty one. Several
