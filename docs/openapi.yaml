@@ -6232,6 +6232,7 @@ paths:
       description: >
         Requires `ORG_ADMIN`; an API key needs `audit:read`. One record per
         request under `/api/v1` with a method other than GET, HEAD or OPTIONS,
+        and one per GET of the conflict report (`schedule.listConflicts`),
         including refused ones. Bodies are never stored. `from` and `to` are
         dates in the organization's timezone, both included.
       parameters:

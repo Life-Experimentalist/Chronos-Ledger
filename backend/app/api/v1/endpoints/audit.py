@@ -26,7 +26,7 @@ def list_audit_records(
     db: Session = Depends(get_db),
     _=Depends(require_roles("ORG_ADMIN")),
 ):
-    """The writes made through the API, newest first.
+    """The writes made through the API, and reads of the conflict report, newest first.
 
     from and to are dates in the organization's timezone, both included, so
     a day means the day as the people working in it count it.
