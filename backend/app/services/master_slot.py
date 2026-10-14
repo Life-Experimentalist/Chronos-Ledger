@@ -40,7 +40,9 @@ def rows_in_use(row_ids: list[int], db: Session) -> set[int]:
     return used
 
 
-def propagate_slot_corrections(slots: list[StructuralMasterSlot], db: Session) -> dict[str, int]:
+def propagate_slot_corrections(
+    slots: list[StructuralMasterSlot], db: Session, kept: list[DailyLedger] | None = None
+) -> dict[str, int]:
     """Copy each slot's lead and room onto the days it has already produced.
 
     A ledger row starts life as a plan and becomes a record the moment
@@ -63,6 +65,9 @@ def propagate_slot_corrections(slots: list[StructuralMasterSlot], db: Session) -
     The room comparison is on resource_id, not on the room's name: renaming
     a room is one row in resources and must not read as every day of every
     class having moved.
+
+    kept, when given, gets the rows left alone appended to it, for a caller
+    that has to say which days they were and not only how many.
     """
     if not slots:
         return {"ledger_rows_updated": 0, "ledger_rows_kept": 0}
@@ -84,6 +89,8 @@ def propagate_slot_corrections(slots: list[StructuralMasterSlot], db: Session) -
     updated = 0
     for row in rows:
         if row.id in in_use:
+            if kept is not None:
+                kept.append(row)
             continue
         slot = by_id[row.master_slot_id]
         if row.resource_id != slot.resource_id:

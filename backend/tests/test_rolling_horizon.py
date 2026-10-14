@@ -410,6 +410,7 @@ def test_the_import_reply_is_what_it_was(client, db, seed_users):
         "not_in_file",
         "ledger_rows_updated",
         "ledger_rows_kept",
+        "kept_days",
     }
 
 

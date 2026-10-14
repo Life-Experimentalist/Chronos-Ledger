@@ -86,6 +86,30 @@ def _chunked(values) -> list[list]:
     return [values[i : i + 1000] for i in range(0, len(values), 1000)]
 
 
+def _kept_days(rows) -> list[dict[str, Any]]:
+    """The days counted in ledger_rows_kept, as the report lists them.
+
+    A count says something was left alone and not what. These are days
+    somebody has marked or annotated, so they keep the room, lead and
+    window they were held with, and whoever uploaded the file needs to
+    know which ones now disagree with the timetable they just sent.
+    """
+    return sorted(
+        (
+            {
+                "id": row.id,
+                "date": row.target_date.isoformat(),
+                "activity_code": row.activity.activity_code,
+                "master_slot_id": row.master_slot_id,
+                "time_window_start": str(row.time_window_start),
+                "room": row.resource.code if row.resource else row.target_room_identifier,
+            }
+            for row in rows
+        ),
+        key=lambda day: (day["date"], day["time_window_start"], day["id"]),
+    )
+
+
 class ChronosIngestionEngine:
     def __init__(self, db: Session):
         self.db = db
@@ -476,8 +500,11 @@ class ChronosIngestionEngine:
             # Past the rows. What fails from here is not any one row's fault and
             # must not be reported against whichever one the loop stopped on.
             line = 0
-            propagation = propagate_slot_corrections(list(corrected.values()), self.db)
+            kept: list = []
+            propagation = propagate_slot_corrections(list(corrected.values()), self.db, kept=kept)
             orphans = self._orphans(cycle_id, units, seen_slots, seen_enrollments)
+            # Read before the commit, which expires every row it holds.
+            kept_days = _kept_days(kept)
 
             self.db.commit()
             return {
@@ -487,6 +514,7 @@ class ChronosIngestionEngine:
                 "slots_corrected": len(corrected),
                 "not_in_file": orphans,
                 **propagation,
+                "kept_days": kept_days,
             }
 
         except ValueError as e:

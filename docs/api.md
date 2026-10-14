@@ -2140,9 +2140,10 @@ Import is idempotent, and a re-upload is how a timetable is corrected in
 bulk. A slot matching an existing one on activity, weekly rule and start time
 has its end time, lead and room brought into line, and the days already
 generated from it follow. The exception is a day somebody has already
-marked or annotated: those are counted in `ledger_rows_kept` and left
-disagreeing with the timetable on purpose, because they record what
-happened rather than what was planned. A member who already exists keeps
+marked or annotated: those are counted in `ledger_rows_kept`, listed in
+`kept_days` with the room each still has, and left disagreeing with the
+timetable on purpose, because they record what happened rather than what
+was planned. A member who already exists keeps
 their password, and somebody promoted to STAFF since the last import stays
 STAFF.
 
@@ -2199,6 +2200,9 @@ enrollments the cycle holds that the file does not mention come back in
   "slots_corrected": 2,
   "ledger_rows_updated": 5,
   "ledger_rows_kept": 1,
+  "kept_days": [
+    { "id": 5120, "date": "2026-01-12", "activity_code": "MA201", "master_slot_id": 64, "time_window_start": "09:00:00", "room": "LH-201" }
+  ],
   "not_in_file": {
     "slots": [
       { "id": 87, "activity_code": "PH101", "rrule": "FREQ=WEEKLY;BYDAY=WE", "dtstart": "2026-01-07", "day_of_week_index": 3, "time_window_start": "11:00:00", "room": "LH-305" }

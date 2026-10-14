@@ -320,12 +320,46 @@ components:
             against them. They now disagree with the timetable on purpose:
             they record what happened. Days already past are never touched
             and are not counted here.
+        kept_days:
+          type: array
+          description: >
+            The days counted in ledger_rows_kept, earliest first, each with
+            the room it still has. Present when status is SUCCESS.
+          items:
+            $ref: "#/components/schemas/KeptDay"
         not_in_file:
           $ref: "#/components/schemas/ImportOrphans"
         error_log:
           type: string
           description: Present when status is FAILED.
       required: [status]
+
+    KeptDay:
+      type: object
+      description: >
+        A day a re-import left as it was, because attendance or a note has
+        been recorded against it. It keeps the room, lead and window it
+        was held with.
+      properties:
+        id:
+          type: integer
+          description: The ledger entry, as GET /schedule/ledger returns it.
+        date:
+          type: string
+          format: date
+        activity_code:
+          type: string
+        master_slot_id:
+          type: integer
+          description: The slot the file corrected.
+        time_window_start:
+          type: string
+          format: time
+        room:
+          type: string
+          nullable: true
+          description: The room the day still has, not the one the file names.
+      required: [id, date, activity_code, master_slot_id, time_window_start, room]
 
     ImportOrphans:
       type: object
