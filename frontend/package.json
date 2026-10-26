@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "10.2.9",
-    "@hookform/resolvers": "5.9.1",
+    "@hookform/resolvers": "6.0.0",
     "axios": "1.20.0",
     "clsx": "2.1.1",
     "date-fns": "4.4.0",
@@ -24,9 +24,9 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-dropzone": "20.1.2",
-    "react-hook-form": "7.89.0",
+    "react-hook-form": "7.90.0",
     "tailwind-merge": "2.6.1",
-    "zod": "4.6.5",
+    "zod": "4.6.7",
     "zustand": "5.0.15"
   },
   "devDependencies": {
